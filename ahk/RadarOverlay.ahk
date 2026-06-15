@@ -1689,6 +1689,11 @@ class RadarOverlay extends GdiOverlayBase
                 this._DrawPixelCircle(sx, sy, 14, bi["color"])
 
             nm := nd.Has("name") ? nd["name"] : ""
+            ; Hop pill "N→": maps to clear from the accessible frontier to reach a
+            ; locked node (0 = accessible/completed, no pill).
+            hops := nd.Has("hops") ? nd["hops"] : 0
+            if (hops >= 1)
+                nm := hops "→ " nm
             if (nm != "")
                 this._DrawText(sx + 16, sy - 6, nm, COL_NAME)
 

@@ -1151,38 +1151,18 @@ TryBuildAtlasRender(snap)
         return
     }
     nodes := AtlasReadNodes(g_reader, panel, 5000)
-    outNodes := []
-    gridMap := Map()                       ; "gx,gy" -> rendered node (for edges)
-    for nd in nodes
-    {
-        if !g_reader.IsProbablyValidPointer(nd["uiElemPtr"])
-            continue
-        sp := _AtlasElemScreenPos(g_reader, nd["uiElemPtr"], rect)
-        if !sp
-            continue
-        ; Keep nodes within a generous margin (one full window beyond each edge) so
-        ; connection lines to just-off-screen neighbours still draw (clipped to the
-        ; window). Only truly absurd projections are rejected as garbage.
-        if (sp["x"] < rect["x"] - rect["w"] || sp["x"] > rect["x"] + 2 * rect["w"]
-            || sp["y"] < rect["y"] - rect["h"] || sp["y"] > rect["y"] + 2 * rect["h"])
-            continue
-        outNd := Map("x", sp["x"], "y", sp["y"], "gridX", nd["gridX"], "gridY", nd["gridY"],
-            "name", nd["name"], "biomeId", nd["biomeId"],
-            "status", nd.Has("status") ? nd["status"] : 0,
-            "content", _AtlasResolveContent(g_reader, nd["uiElemPtr"]))  ; on-screen only
-        outNodes.Push(outNd)
-        gridMap[nd["gridX"] "," nd["gridY"]] := outNd
-    }
-    if !outNodes.Length
+    if !nodes.Length
     {
         g_atlasRender := 0
         return
     }
 
-    ; Connections: panel-level edge vector (src grid + dst grid as ints, 16B each).
-    ; Map each edge's endpoints to on-screen node positions via gridMap; edges to
-    ; off-screen nodes are skipped. Confirmed offset (GameHelper2): 0x5A8.
-    conns := []
+    ; ── Read the edge vector once (panel-level, 20B/edge). Build the full adjacency
+    ; over ALL read nodes for hop routing, plus keep the edges for on-screen lines. ──
+    nodeSet := Map()                       ; "gx,gy" -> status (every read node)
+    for nd in nodes
+        nodeSet[nd["gridX"] "," nd["gridY"]] := nd.Has("status") ? nd["status"] : 0
+    edges := [], adj := Map()
     cvOff := g_atlasOff["PanelConnVecOffset"]
     stride := g_atlasOff["ConnEdgeStride"]   ; 20: int Unknown + Source(8) + Target(8)
     srcOff := g_atlasOff["ConnSrcOffset"]    ; 4
@@ -1202,14 +1182,82 @@ TryBuildAtlasRender(snap)
                 e += 1
                 sk := NumGet(eb.Ptr, base + srcOff, "Int") "," NumGet(eb.Ptr, base + srcOff + 4, "Int")
                 dk := NumGet(eb.Ptr, base + dstOff, "Int") "," NumGet(eb.Ptr, base + dstOff + 4, "Int")
-                if (gridMap.Has(sk) && gridMap.Has(dk))
-                {
-                    a := gridMap[sk], b := gridMap[dk]
-                    conns.Push(Map("x1", a["x"], "y1", a["y"], "x2", b["x"], "y2", b["y"]))
-                }
+                if !(nodeSet.Has(sk) && nodeSet.Has(dk))
+                    continue
+                edges.Push([sk, dk])
+                if !adj.Has(sk)
+                    adj[sk] := []
+                if !adj.Has(dk)
+                    adj[dk] := []
+                adj[sk].Push(dk)
+                adj[dk].Push(sk)
             }
         }
     }
+
+    ; ── Multi-source BFS from the accessible frontier (AccessibleNow = bit0 set,
+    ; bit1 clear) → hop distance per node ("N→" = maps to clear to reach it). ──
+    dist := Map(), queue := []
+    for gk, stv in nodeSet
+        if ((stv & 0x01) && !(stv & 0x02))
+        {
+            dist[gk] := 0
+            queue.Push(gk)
+        }
+    qh := 1
+    while (qh <= queue.Length)
+    {
+        gk := queue[qh], qh += 1
+        d := dist[gk]
+        if !adj.Has(gk)
+            continue
+        for nb in adj[gk]
+            if !dist.Has(nb)
+            {
+                dist[nb] := d + 1
+                queue.Push(nb)
+            }
+    }
+
+    ; ── Project on-screen nodes; attach hops for locked (None) reachable nodes. ──
+    outNodes := []
+    gridMap := Map()
+    for nd in nodes
+    {
+        if !g_reader.IsProbablyValidPointer(nd["uiElemPtr"])
+            continue
+        sp := _AtlasElemScreenPos(g_reader, nd["uiElemPtr"], rect)
+        if !sp
+            continue
+        ; Keep nodes within a generous margin (one full window beyond each edge) so
+        ; connection lines to just-off-screen neighbours still draw (clipped to the
+        ; window). Only truly absurd projections are rejected as garbage.
+        if (sp["x"] < rect["x"] - rect["w"] || sp["x"] > rect["x"] + 2 * rect["w"]
+            || sp["y"] < rect["y"] - rect["h"] || sp["y"] > rect["y"] + 2 * rect["h"])
+            continue
+        gk := nd["gridX"] "," nd["gridY"]
+        st := nd.Has("status") ? nd["status"] : 0
+        hops := (!(st & 0x03) && dist.Has(gk)) ? dist[gk] : 0   ; locked + reachable only
+        outNd := Map("x", sp["x"], "y", sp["y"], "gridX", nd["gridX"], "gridY", nd["gridY"],
+            "name", nd["name"], "biomeId", nd["biomeId"], "status", st, "hops", hops,
+            "content", _AtlasResolveContent(g_reader, nd["uiElemPtr"]))  ; on-screen only
+        outNodes.Push(outNd)
+        gridMap[gk] := outNd
+    }
+    if !outNodes.Length
+    {
+        g_atlasRender := 0
+        return
+    }
+
+    ; ── On-screen connection lines (both endpoints visible). ──
+    conns := []
+    for pair in edges
+        if (gridMap.Has(pair[1]) && gridMap.Has(pair[2]))
+        {
+            a := gridMap[pair[1]], b := gridMap[pair[2]]
+            conns.Push(Map("x1", a["x"], "y1", a["y"], "x2", b["x"], "y2", b["y"]))
+        }
 
     g_atlasRender := Map("nodes", outNodes, "connections", conns)
 }
