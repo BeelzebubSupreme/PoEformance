@@ -3928,6 +3928,12 @@
     <div class="pill inactive clickable" id="pill-hud" onclick="ahkCall('TogglePlayerHud')" data-tip="Toggle Player HUD" data-icon="♥">
       <div class="dot"></div><span id="pill-hud-text">HUD ON</span>
     </div>
+    <!-- Atlas map overlay — draws the endgame-atlas node graph (names, biomes,
+         state, connections, content, hop pills) while the Atlas is open. State /
+         label set from the header push (d.atlasOverlay). -->
+    <div class="pill inactive clickable" id="pill-atlas" onclick="ahkCall('ToggleAtlasOverlay')" data-tip="Toggle Atlas Overlay" data-icon="🗺">
+      <div class="dot"></div><span id="pill-atlas-text">Atlas OFF</span>
+    </div>
     <!-- Overlay visibility scope — toggles whether the play overlays follow tool
          focus too (default) or are restricted to the PoE2 window only. State /
          label set from the header push (d.overlayPoeOnly). -->
@@ -7882,6 +7888,12 @@
         const on = d.playerHud !== false && d.playerHud !== 'false';
         pillHud.className = 'pill clickable ' + (on ? 'active' : 'inactive');
         document.getElementById('pill-hud-text').textContent = 'HUD ' + (on ? 'ON' : 'OFF');
+      }
+      const pillAtlas = document.getElementById('pill-atlas');
+      if (pillAtlas) {
+        const on = d.atlasOverlay === true || d.atlasOverlay === 'true';
+        pillAtlas.className = 'pill clickable ' + (on ? 'active' : 'inactive');
+        document.getElementById('pill-atlas-text').textContent = 'Atlas ' + (on ? 'ON' : 'OFF');
       }
       // Overlay visibility scope pill — gold/active when overlays are restricted
       // to the PoE2 window only; inactive when they also follow our tool's focus.
