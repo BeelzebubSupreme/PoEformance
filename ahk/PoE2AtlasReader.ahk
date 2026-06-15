@@ -34,7 +34,10 @@ LoadAtlasOffsets()
         "NodeMapDataOffset",   0x2A0,       ; C = *(B + 0x2A0): EndgameMaps row (map data)
         "NodeBiomeOffset",     0x2CE,       ; byte biome id (on B)
         "NodeStatusOffset",    0x2CF,       ; byte state on B: bit0 accessible, bit1 completed
-        "PanelConnVecOffset",  0x5A8)       ; panel-level StdVector of edges (src+dst grid ints)
+        "PanelConnVecOffset",  0x5A8,       ; panel-level StdVector of edges
+        "ConnEdgeStride",      20,          ; edge: int Unknown(4) + Source(8) + Target(8)
+        "ConnSrcOffset",       4,           ; Source grid (x,y) within an edge entry
+        "ConnDstOffset",       12)          ; Target grid (x,y) within an edge entry
 }
 
 ; Locates the endgame Atlas panel from the UI root via the GameHelper2 child path
@@ -506,14 +509,18 @@ AtlasDumpDebug(reader, snap)
     if (shown = 0)
         txt .= "  (none populated — visible nodes unrevealed, or mapData offset needs a revealed node)`n"
 
-    ; Connections: panel-level vector of edges (src grid + dst grid as ints, 16B each).
+    ; Connections: panel-level vector of edges, struct = int Unknown + Source(8) +
+    ; Target(8) = 20B/edge (GameHelper2 AtlasNodeConnectionEdgeOffsets).
     cvOff := g_atlasOff["PanelConnVecOffset"]
+    estride := g_atlasOff["ConnEdgeStride"]
+    esrc := g_atlasOff["ConnSrcOffset"]
+    edst := g_atlasOff["ConnDstOffset"]
     cvf := reader.Mem.ReadInt64(panel + cvOff)
     cvl := reader.Mem.ReadInt64(panel + cvOff + 8)
     cvBytes := (cvf > 0 && cvl > cvf && (cvl - cvf) < 0x100000) ? (cvl - cvf) : 0
-    txt .= Format("`nconnections vec @ +0x{:X}: bytes={} (~{} edges @16B)  first 6 edges:`n",
-        cvOff, cvBytes, cvBytes // 16)
-    if (cvBytes >= 16)
+    txt .= Format("`nconnections vec @ +0x{:X}: bytes={} (~{} edges @{}B)  first 6 edges:`n",
+        cvOff, cvBytes, cvBytes // estride, estride)
+    if (cvBytes >= estride)
     {
         ; Coverage check: how many edges reference grids that exist in the read node
         ; set. bothPresent should be drawable; missing endpoints mean the vector
@@ -521,15 +528,16 @@ AtlasDumpDebug(reader, snap)
         gridSet := Map()
         for _, nd in nodes
             gridSet[nd["gridX"] "," nd["gridY"]] := 1
-        eAll := reader.Mem.ReadBytes(cvf, Min(cvBytes, 16 * 4000))
+        eAll := reader.Mem.ReadBytes(cvf, Min(cvBytes, estride * 4000))
         both := 0, srcMiss := 0, dstMiss := 0, total := 0
         if eAll
         {
-            e := 0, lim := Min(cvBytes // 16, 4000)
+            e := 0, lim := Min(cvBytes // estride, 4000)
             while (e < lim)
             {
-                sk := NumGet(eAll.Ptr, e*16+0, "Int") "," NumGet(eAll.Ptr, e*16+4, "Int")
-                dk := NumGet(eAll.Ptr, e*16+8, "Int") "," NumGet(eAll.Ptr, e*16+12, "Int")
+                base := e * estride
+                sk := NumGet(eAll.Ptr, base+esrc, "Int") "," NumGet(eAll.Ptr, base+esrc+4, "Int")
+                dk := NumGet(eAll.Ptr, base+edst, "Int") "," NumGet(eAll.Ptr, base+edst+4, "Int")
                 hasS := gridSet.Has(sk), hasD := gridSet.Has(dk)
                 if (hasS && hasD)
                     both += 1
@@ -545,15 +553,16 @@ AtlasDumpDebug(reader, snap)
         }
         txt .= Format("edge coverage (vs {} read nodes): both={} srcMiss={} dstMiss={} of {}`n",
             nodes.Length, both, srcMiss, dstMiss, total)
-        eb := reader.Mem.ReadBytes(cvf, Min(cvBytes, 16 * 6))
+        eb := reader.Mem.ReadBytes(cvf, Min(cvBytes, estride * 6))
         if eb
         {
             e := 0
-            while (e < 6 && e * 16 < cvBytes)
+            while (e < 6 && e * estride < cvBytes)
             {
+                base := e * estride
                 txt .= Format("  edge[{}]: ({},{}) -> ({},{})`n", e,
-                    NumGet(eb.Ptr, e*16+0, "Int"), NumGet(eb.Ptr, e*16+4, "Int"),
-                    NumGet(eb.Ptr, e*16+8, "Int"), NumGet(eb.Ptr, e*16+12, "Int"))
+                    NumGet(eb.Ptr, base+esrc, "Int"), NumGet(eb.Ptr, base+esrc+4, "Int"),
+                    NumGet(eb.Ptr, base+edst, "Int"), NumGet(eb.Ptr, base+edst+4, "Int"))
                 e += 1
             }
         }
@@ -1029,21 +1038,24 @@ TryBuildAtlasRender(snap)
     ; off-screen nodes are skipped. Confirmed offset (GameHelper2): 0x5A8.
     conns := []
     cvOff := g_atlasOff["PanelConnVecOffset"]
+    stride := g_atlasOff["ConnEdgeStride"]   ; 20: int Unknown + Source(8) + Target(8)
+    srcOff := g_atlasOff["ConnSrcOffset"]    ; 4
+    dstOff := g_atlasOff["ConnDstOffset"]    ; 12
     cvf := g_reader.Mem.ReadInt64(panel + cvOff)
     cvl := g_reader.Mem.ReadInt64(panel + cvOff + 8)
-    edgeCount := (cvf > 0 && cvl > cvf && (cvl - cvf) < 0x100000) ? (cvl - cvf) // 16 : 0
-    if (edgeCount > 0 && edgeCount <= 8000)
+    edgeCount := (cvf > 0 && cvl > cvf && (cvl - cvf) < 0x100000) ? (cvl - cvf) // stride : 0
+    if (edgeCount > 0 && edgeCount <= 20000)
     {
-        eb := g_reader.Mem.ReadBytes(cvf, edgeCount * 16)
+        eb := g_reader.Mem.ReadBytes(cvf, edgeCount * stride)
         if eb
         {
             e := 0
             while (e < edgeCount)
             {
-                base := e * 16
+                base := e * stride
                 e += 1
-                sk := NumGet(eb.Ptr, base, "Int") "," NumGet(eb.Ptr, base + 4, "Int")
-                dk := NumGet(eb.Ptr, base + 8, "Int") "," NumGet(eb.Ptr, base + 12, "Int")
+                sk := NumGet(eb.Ptr, base + srcOff, "Int") "," NumGet(eb.Ptr, base + srcOff + 4, "Int")
+                dk := NumGet(eb.Ptr, base + dstOff, "Int") "," NumGet(eb.Ptr, base + dstOff + 4, "Int")
                 if (gridMap.Has(sk) && gridMap.Has(dk))
                 {
                     a := gridMap[sk], b := gridMap[dk]
