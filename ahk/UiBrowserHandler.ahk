@@ -376,14 +376,11 @@ PushUiBrowserState()
         sid := StrReplace(sid, '"', '\"')
         fnt := StrReplace(elem["fontName"], "\", "\\")
         fnt := StrReplace(fnt, '"', '\"')
-        tsty := StrReplace(elem.Has("textStyle") ? elem["textStyle"] : "", "\", "\\")
-        tsty := StrReplace(tsty, '"', '\"')
         scLabelJ := StrReplace(scLabel, '"', '\"')
         propsJson := '{'
             . '"address":"' . Format("0x{:X}", g_uiBrowserCurrentPtr) . '"'
             . ',"stringId":"' . sid . '"'
             . ',"fontName":"' . fnt . '"'
-            . ',"textStyle":"' . tsty . '"'
             . ',"isVisible":' . (elem["isVisible"] ? "true" : "false")
             . ',"effectiveVisible":' . (effVisible ? "true" : "false")
             . ',"shouldModifyPos":' . (elem["shouldModifyPos"] ? "true" : "false")

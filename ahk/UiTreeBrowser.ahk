@@ -107,7 +107,6 @@ UiTree_ReadElement(reader, elemPtr)
     scaleIndex := NumGet(hdr.Ptr, 0x18A, "UChar")
     stringId   := reader.ReadStdWStringAt(elemPtr + PoE2Offsets.UiElementBase["StringIdPtr"])
     fontName   := reader.ReadStdWStringAt(elemPtr + PoE2Offsets.UiElementBase["FontNamePtr"])
-    textStyle  := reader.ReadStdWStringAt(elemPtr + PoE2Offsets.UiElementBase["TextStylePtr"])
     flags      := NumGet(hdr.Ptr, 0x180, "UInt")
     isVisible  := ((flags >> 11) & 1) ? true : false
     sizeW      := NumGet(hdr.Ptr, 0x288, "Float")
@@ -126,7 +125,6 @@ UiTree_ReadElement(reader, elemPtr)
         "address",         elemPtr,
         "stringId",        stringId,
         "fontName",        fontName,
-        "textStyle",       textStyle,
         "isVisible",       isVisible,
         "shouldModifyPos", shouldModifyPos,
         "flags",           flags,

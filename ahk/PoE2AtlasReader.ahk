@@ -529,7 +529,8 @@ AtlasDumpDebug(reader, snap)
                 u["count"], u["anyVis"], u["minDepth"], Round(u["maxW"]), Round(u["maxH"]), u["sid"])
 
         ; WString-offset scan on the largest visible elements — surveys the string
-        ; fields this patch (0x0C8 font, 0x0F8 text-style, 0x140 the real StringId).
+        ; fields this patch (0x0C8 font family, 0x0F8 StringId; 0.5.x ids are often
+        ; style/template names like "Normal"/"Large").
         scanN := Min(cand.Length, 3)
         i := 1
         while (i <= scanN)
