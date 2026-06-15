@@ -195,12 +195,38 @@ AtlasFindPanel(reader, rootPtr, wantList := "", maxVisit := 8000)
     panel := _AtlasResolveChildPath(reader, rootPtr, g_atlasOff["PanelChildPath"])
     if !reader.IsProbablyValidPointer(panel)
         return 0
-    ; Gate: an open atlas has many node children; a closed tab has very few.
+    ; Gate: an open atlas has many node children; a closed tab has very few. The
+    ; node UI persists in memory while hidden, so ALSO require the panel to be
+    ; hierarchically visible — otherwise the overlay would keep drawing after the
+    ; atlas is closed (e.g. back in the hideout).
     cfOff := PoE2Offsets.UiElementBase["ChildrenFirst"]
     cFirst := reader.Mem.ReadInt64(panel + cfOff)
     cLast := reader.Mem.ReadInt64(panel + cfOff + 8)
     n := (cFirst > 0 && cLast > cFirst) ? (cLast - cFirst) // 8 : 0
-    return (n >= 8) ? panel : 0
+    if (n < 8)
+        return 0
+    return _AtlasIsHierVisible(reader, panel, rootPtr) ? panel : 0
+}
+
+; True if elemPtr and every ancestor up to root have the IS_VISIBLE flag (bit 11)
+; set — i.e. the element is actually shown, not just locally flagged. Used to tell
+; an open atlas from one whose node UI merely persists in memory while hidden.
+_AtlasIsHierVisible(reader, elemPtr, rootPtr)
+{
+    flagsOff := PoE2Offsets.UiElementBase["Flags"]
+    parentOff := PoE2Offsets.UiElementBase["ParentPtr"]
+    cur := elemPtr
+    Loop 16
+    {
+        if !reader.IsProbablyValidPointer(cur)
+            return false
+        if !((reader.Mem.ReadUInt(cur + flagsOff) >> 11) & 1)
+            return false
+        if (cur = rootPtr)
+            return true
+        cur := reader.Mem.ReadPtr(cur + parentOff)
+    }
+    return true
 }
 
 ; Reads the atlas nodes (model: yokkenUA/Atlas GameStructures.cs). Each direct
