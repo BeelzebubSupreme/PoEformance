@@ -528,9 +528,8 @@ AtlasDumpDebug(reader, snap)
             txt .= Format("  {:3}  {:3}  {:5}  {:5}  {:5}  {}`n",
                 u["count"], u["anyVis"], u["minDepth"], Round(u["maxW"]), Round(u["maxH"]), u["sid"])
 
-        ; WString-offset scan on the largest visible elements — verifies whether
-        ; StringIdPtr (0x0F8) is still right this patch and reveals any better-named
-        ; field (Normal/Large/NormalSC look font/style-like, not panel ids).
+        ; WString-offset scan on the largest visible elements — surveys the string
+        ; fields this patch (0x0C8 font, 0x0F8 text-style, 0x140 the real StringId).
         scanN := Min(cand.Length, 3)
         i := 1
         while (i <= scanN)

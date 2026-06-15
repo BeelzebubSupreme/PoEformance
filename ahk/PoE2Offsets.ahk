@@ -486,7 +486,7 @@ class PoE2Offsets
         "PositionModifier", 0x0F0,  ; StdTuple2D<float> — added to parent pos when child's ShouldModifyPos (bit10) is set
         "RelativePosition", 0x118,  ; StdTuple2D<float> — position relative to parent (UI coords, base 2560×1600)
         "LocalScaleMultiplier", 0x130,  ; float — scale factor applied to children
-        "StringIdPtr", 0x0F8,  ; StdWString — UI element identifier (e.g. "LeftPanel", "UltimatumTitle"). 0x140 was the pre-patch offset.
+        "StringIdPtr", 0x140,  ; StdWString — UI element identifier (e.g. "LeftPanel", "WorldMap"). Matches GameHelper2 UiElementBaseOffset. NOTE: 0x0F8 is the text/font-style field ("Normal"/"Large"/"PathOfExile.Panel.Title"), NOT the id.
         "FontNamePtr", 0x0C8,  ; StdWString — font family used for text rendering (e.g. "Fontin", "Fontin Smallcaps")
         "Flags", 0x180,  ; uint — bit 10 = SHOULD_MODIFY_POS, bit 11 = IS_VISIBLE
         "ScaleIndex", 0x18A,  ; byte — 1/2/3 for GameWindowScale lookup
