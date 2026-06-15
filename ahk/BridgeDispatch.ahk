@@ -115,14 +115,6 @@ _DispatchBridgeCall(method, args)
             SetTimer(OnDumpEntitiesClicked, -1)
         case "DumpAtlas":
             SetTimer(OnDumpAtlasClicked, -1)
-        case "SetAtlasOverlay":
-            global g_atlasOverlayEnabled, g_atlasRender
-            av := (args.Length >= 1) ? args[1] : 0
-            g_atlasOverlayEnabled := (av = "true" || av = true || av = 1) ? true : false
-            if !g_atlasOverlayEnabled
-                g_atlasRender := 0   ; stop drawing immediately
-            try IniWrite(g_atlasOverlayEnabled ? "1" : "0", A_ScriptDir "\poeformance_config.ini", "Atlas", "overlayEnabled")
-            SetTimer(PushHeaderToWebView, -50)   ; keep the top-bar pill in sync
         case "ToggleAtlasOverlay":
             global g_atlasOverlayEnabled, g_atlasRender
             g_atlasOverlayEnabled := !g_atlasOverlayEnabled
