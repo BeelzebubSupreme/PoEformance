@@ -1,0 +1,71 @@
+# atlas_map_content.tsv - badge content id -> in-game name
+# source: yokkenUA/Atlas json/mapcontent.json (EndgameMapContent.tsv; id = row+100, 1000=Corruption)
+# key = low 16 bits of (badge UiElement + 0x188); columns: content_id	name
+# generated: 2026-06-15T17:14:15Z
+100	Powerful Map Boss
+101	Breach
+102	Expedition
+103	Delirium
+104	Ritual
+105	Irradiated
+106	Overrun by the Abyssal
+107	Vaal Beacons
+108	Abyss
+109	Notable Location
+110	[DNT] Breach City - Not Shown to Players
+111	Great Beast
+112	Essence Trove
+113	Monstrous Treasure
+114	Spirit Guide
+115	Arcane Hordes
+116	Hunting Grounds
+117	Nature Shrines
+118	Crystalised Twinning
+119	Indomitable Essence
+120	Azmeri Energisation
+121	Spirit Migration
+122	Sacred Spirit
+123	Ancient Trove
+124	Twice-Locked Boxes
+125	Power of Faith
+126	Large Congregation
+127	Zealous Reverence
+128	Persistent Devotion
+129	Rites of the Rogues
+130	Surprising Alliances
+131	Azmeri Bloodline
+132	Twinned Terrors
+133	Scattered Stones
+134	Map Area Modified
+135	Fleeing Exile
+136	Breach Hive
+137	Simulacrum
+138	Chaotic Cacophony
+139	Affluent Armies
+140	Monstrous Treasure
+141	Trialmaster's Trainee
+142	Sekhema's Student
+143	Azmeri Champion
+144	Gigantic Uprising
+145	Glimmering Mutation
+146	Stolen Power
+147	Headhunters
+148	Swarming Spirits
+149	Power Struggle
+150	Corrupted Mirage
+151	Energized Ley Lines
+152	Exceptional Find
+153	Water Influence
+154	Mountain Influence
+155	Grass Influence
+156	Forest Influence
+157	Swamp Influence
+158	Desert Influence
+159	Immured Fury
+160	Mirage of Riches
+161	Wisdom's Teachings
+162	Tight Pockets
+163	Fragment of Immortality
+164	Prosperous Populous
+165	Echoes of Power
+1000	Corruption

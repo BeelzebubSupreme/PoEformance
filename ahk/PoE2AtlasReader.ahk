@@ -19,6 +19,7 @@
 ; Seeded by LoadAtlasOffsets() — module-top initializers can be skipped by the
 ; AHK v2 include order, so the real values are assigned in that init function.
 global g_atlasOff := Map()
+global g_atlasTokenNames := Map()   ; class-1 content token (u32) -> display name
 
 ; Seeds g_atlasOff with the confirmed offsets. Called once at startup from the
 ; main script (after AtlasData_Load). The atlas panel is reached by the UI child
@@ -26,7 +27,7 @@ global g_atlasOff := Map()
 ; fixed offsets inside each child element; connections are a panel-level vector.
 LoadAtlasOffsets()
 {
-    global g_atlasOff
+    global g_atlasOff, g_atlasTokenNames
     g_atlasOff := Map(
         "PanelChildPath",      [22, 0, 6],  ; GameUi -> child 22 -> 0 -> 6
         "NodeGridOffset",      0x320,       ; StdTuple2D<int> grid position (on the node element)
@@ -37,7 +38,149 @@ LoadAtlasOffsets()
         "PanelConnVecOffset",  0x5A8,       ; panel-level StdVector of edges
         "ConnEdgeStride",      20,          ; edge: int Unknown(4) + Source(8) + Target(8)
         "ConnSrcOffset",       4,           ; Source grid (x,y) within an edge entry
-        "ConnDstOffset",       12)          ; Target grid (x,y) within an edge entry
+        "ConnDstOffset",       12,          ; Target grid (x,y) within an edge entry
+        "ContentVecBegin",     0x350,       ; class-1 content token StdVector<u32> .First (on node)
+        "ContentVecEnd",       0x358,       ; .Last (+8)
+        "BadgeContentIdOffset", 0x188)      ; class-2 badge id u32 (on each node[0][0] child)
+
+    ; Class-1 content tokens (u32) -> display name (yokkenUA/Atlas ContentTokenNames).
+    ; Unknown/building-block tokens are intentionally unmapped (left undrawn).
+    g_atlasTokenNames := Map(
+        0x00404C57, "Powerful Map Boss", 0x004067C0, "Grand Mirror",
+        0x0040686A, "Delirium",          0x0040686B, "Abyss", 0x0080686B, "Abyss",
+        0x0040686C, "Ritual",            0x0040686D, "Vaal Beacons", 0x0040686E, "Breach",
+        0x004064FF, "Water Influence",   0x00406501, "Grass Influence",
+        0x00406502, "Forest Influence",  0x00406503, "Swamp Influence",
+        0x00406504, "Desert Influence",
+        0x19006351, "Azmeri Bloodline",  0x00400890, "Azmeri Bloodline",
+        0x004064DF, "Azmeri Bloodline",  0xFA00610E, "Azmeri Energisation",
+        0x01400A8C, "Swarming Spirits",  0x19006630, "Spirit Migration",
+        0x02806631, "Spirit Migration",  0x1900634C, "Indomitable Essence",
+        0x00C01247, "Indomitable Essence", 0x00C05E27, "Scattered Stones",
+        0x00C06349, "Power Struggle",    0x1900320E, "Arcane Hordes",
+        0x0C8004D8, "Affluent Armies",   0x19006202, "Rites of the Rogues",
+        0x00800963, "Rites of the Rogues", 0x00801282, "Corrupted Mirage",
+        0x0040675E, "Glimmering Mutation", 0x0040153B, "Ancient Trove",
+        0x00400962, "Ancient Trove",     0xFA00635D, "Exceptional Find",
+        0x00406396, "Exceptional Find",  0x00406397, "Exceptional Find",
+        0x00406398, "Exceptional Find",  0x00406399, "Exceptional Find",
+        0x004065FF, "Exceptional Find",  0x004065F0, "(atlas skill point)")
+}
+
+; Lazily loads data/atlas_map_content.tsv (content_id<TAB>name) into a cached
+; Map(id -> name) for class-2 badge content. Mirrors GetWorldAreaNameMap.
+GetAtlasMapContentMap()
+{
+    static cachedMap := 0
+    static cachedSig := ""
+    mapPath := A_ScriptDir "\data\atlas_map_content.tsv"
+    if !FileExist(mapPath)
+        return Map()
+    sig := FileGetSize(mapPath) "|" FileGetTime(mapPath, "M")
+    if (cachedMap && cachedSig = sig)
+        return cachedMap
+    loaded := Map()
+    Loop Read, mapPath
+    {
+        line := Trim(A_LoopReadLine)
+        if (line = "" || SubStr(line, 1, 1) = "#" || SubStr(line, 1, 1) = ";")
+            continue
+        parts := StrSplit(line, "`t")
+        if (parts.Length < 2)
+            continue
+        k := Trim(parts[1]), v := Trim(parts[2])
+        if (k != "" && v != "" && !loaded.Has(k))
+            loaded[k] := v
+    }
+    cachedMap := loaded
+    cachedSig := sig
+    return cachedMap
+}
+
+; Resolves a class-2 badge content id (low 16 bits) to its name. Ids 0 or >1000
+; are not displayed; unknown ids fall through to "#<id>". Returns the name or "".
+ResolveMapContentName(id)
+{
+    if (id <= 0 || id > 1000)
+        return ""
+    m := GetAtlasMapContentMap()
+    return m.Has(id "") ? m[id ""] : "#" id
+}
+
+; Appends a content display name to out (deduped), skipping empties and the
+; parenthesised non-content markers (e.g. "(atlas skill point)").
+_AtlasAddContent(out, seen, s)
+{
+    if (s = "" || SubStr(s, 1, 1) = "(")
+        return
+    if !seen.Has(s)
+    {
+        seen[s] := 1
+        out.Push(s)
+    }
+}
+
+; Joins an array of strings with sep. Returns the joined string (empty if none).
+_AtlasJoin(arr, sep)
+{
+    s := ""
+    for i, v in arr
+        s .= (i > 1 ? sep : "") v
+    return s
+}
+
+; Resolves a node's content markers into display names (yokkenUA/Atlas model).
+; Two disjoint sources: class-1 tokens (StdVector<u32> @ node+0x350) via
+; g_atlasTokenNames, and class-2 badges (u32 @ child+0x188 for each child under
+; node[0][0]) via atlas_map_content.tsv. Returns a deduped array of names.
+_AtlasResolveContent(reader, nodeAddr)
+{
+    global g_atlasOff, g_atlasTokenNames
+    out := [], seen := Map()
+    ub := PoE2Offsets.UiElementBase
+
+    ; class-1 tokens: u32 vector on the node element
+    beg := reader.Mem.ReadInt64(nodeAddr + g_atlasOff["ContentVecBegin"])
+    fin := reader.Mem.ReadInt64(nodeAddr + g_atlasOff["ContentVecEnd"])
+    if (beg > 0 && fin > beg && (fin - beg) < 0x200)
+    {
+        cnt := (fin - beg) // 4
+        tb := reader.Mem.ReadBytes(beg, cnt * 4)
+        if tb
+        {
+            i := 0
+            while (i < cnt)
+            {
+                tok := NumGet(tb.Ptr, i * 4, "UInt")
+                i += 1
+                if g_atlasTokenNames.Has(tok)
+                    _AtlasAddContent(out, seen, g_atlasTokenNames[tok])
+            }
+        }
+    }
+
+    ; class-2 badges: node[0][0] children, u32 @ child+0x188 (low 16 bits = content id)
+    a00 := _AtlasResolveChildPath(reader, nodeAddr, [0, 0])
+    if a00
+    {
+        cf := reader.Mem.ReadInt64(a00 + ub["ChildrenFirst"])
+        cl := reader.Mem.ReadInt64(a00 + ub["ChildrenFirst"] + 8)
+        bn := (cf > 0 && cl > cf) ? (cl - cf) // 8 : 0
+        if (bn > 0 && bn <= 16)
+        {
+            j := 0
+            while (j < bn)
+            {
+                bc := reader.Mem.ReadPtr(cf + j * 8)
+                j += 1
+                if !reader.IsProbablyValidPointer(bc)
+                    continue
+                id := reader.Mem.ReadUInt(bc + g_atlasOff["BadgeContentIdOffset"]) & 0xFFFF
+                _AtlasAddContent(out, seen, ResolveMapContentName(id))
+            }
+        }
+    }
+    return out
 }
 
 ; Locates the endgame Atlas panel from the UI root via the GameHelper2 child path
@@ -482,14 +625,16 @@ AtlasDumpDebug(reader, snap)
     txt .= Format("nodes={} | withMapData={} biome>0={} status>0={}`n",
         nodes.Length, withMap, withBiome, withStatus)
 
-    txt .= "`nfirst 24 nodes (grid / biome / status / name):`n"
+    txt .= "`nfirst 24 nodes (grid / biome / status / name [content]):`n"
     shown := 0
     for _, nd in nodes
     {
         if (shown >= 24)
             break
-        txt .= Format("  ({:4},{:4})  b={:3} st=0x{:02X}  {}`n",
-            nd["gridX"], nd["gridY"], nd["biomeId"], nd["status"], nd["name"])
+        content := _AtlasResolveContent(reader, nd["uiElemPtr"])
+        ctxt := content.Length ? ("  [" _AtlasJoin(content, ", ") "]") : ""
+        txt .= Format("  ({:4},{:4})  b={:3} st=0x{:02X}  {}{}`n",
+            nd["gridX"], nd["gridY"], nd["biomeId"], nd["status"], nd["name"], ctxt)
         shown += 1
     }
 
@@ -1023,7 +1168,8 @@ TryBuildAtlasRender(snap)
             continue
         outNd := Map("x", sp["x"], "y", sp["y"], "gridX", nd["gridX"], "gridY", nd["gridY"],
             "name", nd["name"], "biomeId", nd["biomeId"],
-            "status", nd.Has("status") ? nd["status"] : 0)
+            "status", nd.Has("status") ? nd["status"] : 0,
+            "content", _AtlasResolveContent(g_reader, nd["uiElemPtr"]))  ; on-screen only
         outNodes.Push(outNd)
         gridMap[nd["gridX"] "," nd["gridY"]] := outNd
     }
