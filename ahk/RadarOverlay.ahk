@@ -1666,7 +1666,7 @@ class RadarOverlay extends GdiOverlayBase
             {
                 if (c is Map && c.Has("x1"))
                     this._DrawLine(Round(c["x1"] - ox), Round(c["y1"] - oy),
-                        Round(c["x2"] - ox), Round(c["y2"] - oy), COL_CONN, 1)
+                        Round(c["x2"] - ox), Round(c["y2"] - oy), COL_CONN, 2)
             }
         }
 
