@@ -376,11 +376,14 @@ PushUiBrowserState()
         sid := StrReplace(sid, '"', '\"')
         fnt := StrReplace(elem["fontName"], "\", "\\")
         fnt := StrReplace(fnt, '"', '\"')
+        tsty := StrReplace(elem.Has("textStyle") ? elem["textStyle"] : "", "\", "\\")
+        tsty := StrReplace(tsty, '"', '\"')
         scLabelJ := StrReplace(scLabel, '"', '\"')
         propsJson := '{'
             . '"address":"' . Format("0x{:X}", g_uiBrowserCurrentPtr) . '"'
             . ',"stringId":"' . sid . '"'
             . ',"fontName":"' . fnt . '"'
+            . ',"textStyle":"' . tsty . '"'
             . ',"isVisible":' . (elem["isVisible"] ? "true" : "false")
             . ',"effectiveVisible":' . (effVisible ? "true" : "false")
             . ',"shouldModifyPos":' . (elem["shouldModifyPos"] ? "true" : "false")
@@ -439,4 +442,64 @@ UiBrowserClearHighlight()
 {
     global g_uiBrowserHighlight
     g_uiBrowserHighlight := 0
+}
+
+; RE aid: dumps every readable wide-string field of the currently-selected UI
+; element — the element struct itself (0x000..0x400) plus one level of pointer
+; deref into side allocations (0.5.x moved some fields off the element) — to
+; debug\uielem_scan_*.txt. Used to locate a cleaner element StringId offset than
+; 0x0F8. No parameters; writes a file and shows its path. No return value.
+UiBrowseScanStrings()
+{
+    global g_uiBrowserCurrentPtr, g_reader
+    if !(IsObject(g_reader) && g_reader.IsProbablyValidPointer(g_uiBrowserCurrentPtr))
+    {
+        try MsgBox("No element selected / game not connected.", "Scan Strings", 0x10)
+        return
+    }
+    elem := g_uiBrowserCurrentPtr
+    outDir := A_ScriptDir "\debug"
+    if !DirExist(outDir)
+        DirCreate(outDir)
+    outPath := outDir "\uielem_scan_" FormatTime(A_Now, "yyyyMMdd_HHmmss") ".txt"
+
+    sid := ""
+    try sid := g_reader.ReadStdWStringAt(elem + PoE2Offsets.UiElementBase["StringIdPtr"])
+    txt := "UI element string scan`n"
+    txt .= Format("elem: 0x{:X}   (StringId@0x0F8 = '{}')`n", elem, sid)
+
+    ; ── Direct wide-string fields on the element struct ──
+    txt .= "`n--- direct wstring fields (elem + 0x000..0x400, 8-aligned) ---`n"
+    o := 0
+    while (o < 0x400)
+    {
+        s := ""
+        try s := g_reader.ReadStdWStringAt(elem + o, 64)
+        if (s != "" && _AtlasPrintable(s))
+            txt .= Format("  +0x{:03X}: '{}'`n", o, s)
+        o += 8
+    }
+
+    ; ── One level of pointer deref: scan each pointed object for wstrings ──
+    txt .= "`n--- via pointer fields (deref elem+0x000..0x400 -> scan target +0x000..0x100) ---`n"
+    o := 0
+    while (o < 0x400)
+    {
+        p := g_reader.Mem.ReadPtr(elem + o)
+        o += 8
+        if (!g_reader.IsProbablyValidPointer(p) || p = elem || p >= 0x7FF000000000)
+            continue
+        po := 0
+        while (po < 0x100)
+        {
+            s := ""
+            try s := g_reader.ReadStdWStringAt(p + po, 64)
+            if (s != "" && _AtlasPrintable(s))
+                txt .= Format("  +0x{:03X} -> *()+0x{:03X}: '{}'`n", o - 8, po, s)
+            po += 8
+        }
+    }
+
+    FileAppend(txt, outPath, "UTF-8")
+    try MsgBox("UI element string scan written to:`n" outPath, "Scan Strings", 0x40)
 }

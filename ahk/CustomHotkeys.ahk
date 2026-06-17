@@ -641,6 +641,7 @@ _HotkeysBuildDebugRecord(hk, a, ai, snap)
             counts := _HotkeysCountByRarity(snap, wr, "world")
             rec["counts"] := counts
             rec["lines"].Push("@range(" wr ") N:" counts["normal"] " M:" counts["magic"] " R:" counts["rare"] " U:" counts["unique"] " =" counts["total"])
+            _HotkeysPushCountDiag(rec, snap, wr, "world")
         }
         else if (mode = "worldCursor")
         {
@@ -654,6 +655,7 @@ _HotkeysBuildDebugRecord(hk, a, ai, snap)
             counts := _HotkeysCountByRarity(snap, wr, "worldCursor")
             rec["counts"] := counts
             rec["lines"].Push("@cursorRange(" wr ") N:" counts["normal"] " M:" counts["magic"] " R:" counts["rare"] " U:" counts["unique"] " =" counts["total"])
+            _HotkeysPushCountDiag(rec, snap, wr, "worldCursor")
         }
         else
         {
@@ -662,14 +664,30 @@ _HotkeysBuildDebugRecord(hk, a, ai, snap)
             counts := _HotkeysCountByRarity(snap, px, mode)
             rec["counts"] := counts
             rec["lines"].Push("@" mode " N:" counts["normal"] " M:" counts["magic"] " R:" counts["rare"] " U:" counts["unique"] " =" counts["total"])
+            _HotkeysPushCountDiag(rec, snap, px, mode)
         }
     }
     else if (t = "aim")
     {
-        px := a.Has("radius") ? (a["radius"] + 0) : 150
-        mode := (a.Has("radiusMode") && a["radiusMode"] = "cursor") ? "cursor" : "player"
-        rec[(mode = "cursor") ? "circleCursorPx" : "circlePlayerPx"] := px
-        rec["lines"].Push("aim radius " px "px @" mode)
+        mode := a.Has("radiusMode") ? a["radiusMode"] : "player"
+        if (mode = "world")
+        {
+            wr := a.Has("worldRadius") ? (a["worldRadius"] + 0) : 1000
+            rec["circlePlayerWorld"] := wr
+            rec["lines"].Push("aim @range(" wr ")")
+        }
+        else if (mode = "worldCursor")
+        {
+            wr := a.Has("worldRadius") ? (a["worldRadius"] + 0) : 1000
+            rec["circleCursorWorld"] := wr
+            rec["lines"].Push("aim @cursorRange(" wr ")")
+        }
+        else
+        {
+            px := a.Has("radius") ? (a["radius"] + 0) : 150
+            rec[(mode = "cursor") ? "circleCursorPx" : "circlePlayerPx"] := px
+            rec["lines"].Push("aim radius " px "px @" mode)
+        }
     }
     else if (t = "charges")
     {
@@ -807,6 +825,86 @@ _HotkeysCountByRarity(snap, radius, mode)
         out["total"] += 1
     }
     return out
+}
+
+; Debug breakdown for a monster-count gate: walks the same sample/filters as
+; _HotkeysCountByRarity but tallies how many entities pass each stage, so the
+; overlay can show WHY a count is 0. Returns Map("sample","mon","tgt","pos",
+; "inR","min") — min = the smallest distance seen (px for cursor/player, world
+; units for world modes), or -1 if none.
+_HotkeysCountDiag(snap, radius, mode)
+{
+    d := Map("sample", 0, "mon", 0, "tgt", 0, "pos", 0, "inR", 0, "min", -1)
+    if !snap
+        return d
+    octx := 0, cwp := 0
+    if (mode = "worldCursor")
+        cwp := _HotkeysCursorWorldPos(snap)
+    else if (mode != "world")
+        octx := _HotkeysPxOrigin(snap, mode)
+    for entry in _HotkeysAwakeSample(snap)
+    {
+        d["sample"] += 1
+        entity := entry.Has("entity") ? entry["entity"] : 0
+        if !(entity && entity is Map)
+            continue
+        if !InStr(entity.Has("path") ? StrLower(entity["path"]) : "", "metadata/monsters/")
+            continue
+        d["mon"] += 1
+        dc := entity.Has("decodedComponents") ? entity["decodedComponents"] : 0
+        if !(dc && dc is Map) || !_HotkeysIsTargetable(dc)
+            continue
+        d["tgt"] += 1
+        if (mode = "world")
+        {
+            dist := entry.Has("distance") ? entry["distance"] : -1
+            if (dist < 0)
+                continue
+            d["pos"] += 1
+            if (d["min"] < 0 || dist < d["min"])
+                d["min"] := Round(dist)
+            if (dist <= radius)
+                d["inR"] += 1
+            continue
+        }
+        render := dc.Has("render") ? dc["render"] : 0
+        wp := (render && render is Map && render.Has("worldPosition")) ? render["worldPosition"] : 0
+        if !(wp && wp is Map)
+            continue
+        d["pos"] += 1
+        if (mode = "worldCursor")
+        {
+            if !cwp
+                continue
+            ddx := (wp.Has("x") ? wp["x"] : 0) - cwp["x"]
+            ddy := (wp.Has("y") ? wp["y"] : 0) - cwp["y"]
+            dd := Sqrt(ddx * ddx + ddy * ddy)
+        }
+        else
+        {
+            if !octx
+                continue
+            dd := _HotkeysPxDist(octx, wp.Has("x") ? wp["x"] : 0, wp.Has("y") ? wp["y"] : 0, wp.Has("z") ? wp["z"] : 0)
+        }
+        if (d["min"] < 0 || dd < d["min"])
+            d["min"] := Round(dd)
+        if (dd <= radius)
+            d["inR"] += 1
+    }
+    return d
+}
+
+; Formats _HotkeysCountDiag into a readable overlay line and pushes it onto a
+; debug record. Reads: sample = entities scanned; mon = under metadata/monsters/;
+; tgt = also targetable; pos = also have a world position to project; inR = within
+; the radius; min = nearest distance seen (px for cursor/player, world units else).
+_HotkeysPushCountDiag(rec, snap, radius, mode)
+{
+    unit := (mode = "world" || mode = "worldCursor") ? "" : "px"
+    d := _HotkeysCountDiag(snap, radius, mode)
+    rec["lines"].Push("diag sample=" d["sample"] " mon=" d["mon"] " tgt=" d["tgt"]
+        . " pos=" d["pos"] " inR=" d["inR"] " min=" (d["min"] < 0 ? "-" : d["min"] unit)
+        . " (r=" radius unit ")")
 }
 
 ; Shared isometric projection origin for the radar-style ground projection used BOTH by the
@@ -1109,8 +1207,11 @@ _HotkeysRunActions(hk, context, depth)
                 _HotkeysDoChain(a, context, depth)
                 hadEffect := true
             case "aim":
-                _HotkeysDoAim(hk, a, snap)
-                hadEffect := true
+                ; Aim only counts as "the effect" when it pressed the output
+                ; itself (press=on). A move-only aim leaves hadEffect false so the
+                ; bound output still auto-fires below — i.e. aim + cast.
+                if _HotkeysDoAim(hk, a, snap)
+                    hadEffect := true
         }
     }
     ; Conditions-only hotkey: no effect action ran, so fire the bound output once.
@@ -1542,96 +1643,103 @@ _HotkeysDoChain(a, context, depth)
 ;             "rarity", "...", "chestType", "...", "name", "...",
 ;             "metadataPath", "...", "radius", r, "holdMs", ms,
 ;             "press", 0|1, "scanAll", 0|1)
+; Returns true only when it actually PRESSED the output key (press=on + a target
+; was found), so the caller knows whether the bound output still needs to fire.
+; A move-only aim (press off) returns false → the hotkey's auto-output still
+; fires afterwards, so "aim at the monster + cast" works without a Press toggle.
 _HotkeysDoAim(hk, a, snap)
 {
     if !snap
-        return
+        return false
     gameHwnd := ResolvePoEWindow()
     if !gameHwnd
-        return
+        return false
 
     target := _HotkeysSelectAimTarget(a, snap)
     if !target
-        return
+        return false
 
-    inGs := snap.Has("inGameState") ? snap["inGameState"] : 0
-    w2sMatrix := (inGs && inGs.Has("w2sMatrix")) ? inGs["w2sMatrix"] : 0
-    area := (inGs && inGs.Has("areaInstance")) ? inGs["areaInstance"] : 0
-    prc := (area && area.Has("playerRenderComponent")) ? area["playerRenderComponent"] : 0
-    pwp := (prc && prc is Map && prc.Has("worldPosition")) ? prc["worldPosition"] : 0
-    pX := (pwp && pwp.Has("x")) ? pwp["x"] : 0
-    pY := (pwp && pwp.Has("y")) ? pwp["y"] : 0
-    pZ := (pwp && pwp.Has("z")) ? pwp["z"] : 0
-
-    ; Aim clicks land in the 3D WORLD, so they MUST go through the live camera
-    ; world-to-screen matrix — the same discipline CombatAutomation uses. The
-    ; isometric fallback inside _WorldToScreen targets the radar/minimap layout
-    ; (player-centred iso), NOT the camera; clicking via it lands where the
-    ; entity shows ON THE MAP instead of on the actual monster. So require a
-    ; trustworthy camera anchor (valid 16-float matrix + the player projecting
-    ; near the screen centre) and skip the whole action when it isn't available
-    ; rather than fire a blind iso-fallback click.
+    ; Project the target to the screen with the SAME player-relative isometric
+    ; projection the radar dots, the range rings and the monster-count gate use
+    ; (_HotkeysIsoOrigin + the ex/ey formula from _HotkeysPxDist). The W2S camera
+    ; matrix proved unreliable for points away from the player (see the note on
+    ; RadarOverlay._DrawWorldRing), so an earlier matrix-based aim landed where
+    ; the entity shows on the map rather than on the monster. This iso projection
+    ; is centred on the player's on-screen position and is tunable via the Combat
+    ; "world-to-screen scale" slider (g_combatW2SScale), matching the visible ring.
+    octx := _HotkeysIsoOrigin(snap)
+    if !octx
+        return false
+    dx := target["x"] - octx["px"]
+    dy := target["y"] - octx["py"]
+    screenX := Round(octx["psx"] + (dx - dy) * octx["sx"])
+    screenY := Round(octx["psy"] - (dx + dy) * octx["sy"])
+    ; Safety clamp to the game's client area (margin) so a bad projection can
+    ; never move the cursor onto another window / off-screen.
     rect := NavClientRect(gameHwnd)
-    if !(rect && w2sMatrix && Type(w2sMatrix) = "Array" && w2sMatrix.Length = 16 && pX != 0)
-        return
-    camAnchor := NavAnchor(pX, pY, pZ, w2sMatrix, rect)
-    if !camAnchor["ok"]
-        return
-
-    combatInfo := Map(
-        "nearestWorldX", target["x"],
-        "nearestWorldY", target["y"],
-        "nearestWorldZ", target["z"],
-        "w2sMatrix", w2sMatrix,
-        "playerWorldX", pX,
-        "playerWorldY", pY,
-        "playerWorldZ", pZ
-    )
-
-    ; Pass the anchor so behind-camera targets are rejected (w-sign) and any
-    ; off-screen result is clamped along the player ray, not the iso fallback.
-    screenPos := _WorldToScreen(combatInfo, gameHwnd, camAnchor)
-    if !screenPos
-        return
-    _MoveMouseToTarget(screenPos)
-
-    if (a.Has("press") && a["press"])
+    if (rect)
     {
-        holdMs := a.Has("holdMs") ? (a["holdMs"] + 0) : 0
-        outKey := _HotkeysResolveKey(hk)
-        if (holdMs > 0)
-        {
-            key := Trim(outKey)
-            if (key != "" && _HotkeysKeyDown(key))
-            {
-                _HotkeysMarkFired(hk, key)
-                SetTimer(() => _HotkeysKeyUp(key), -holdMs)
-            }
-        }
-        else
-        {
-            _HotkeysSendKey(outKey)
-            _HotkeysMarkFired(hk, outKey)
-        }
+        m := 4
+        screenX := Max(rect["x"] + m, Min(screenX, rect["x"] + rect["w"] - m))
+        screenY := Max(rect["y"] + m, Min(screenY, rect["y"] + rect["h"] - m))
     }
+    _MoveMouseToTarget(Map("x", screenX, "y", screenY))
+
+    ; Move-only aim: report false so the caller still auto-fires the bound output
+    ; (cursor is now on the monster, so the output casts there).
+    if !(a.Has("press") && a["press"])
+        return false
+
+    holdMs := a.Has("holdMs") ? (a["holdMs"] + 0) : 0
+    outKey := _HotkeysResolveKey(hk)
+    if (holdMs > 0)
+    {
+        key := Trim(outKey)
+        if (key != "" && _HotkeysKeyDown(key))
+        {
+            _HotkeysMarkFired(hk, key)
+            SetTimer(() => _HotkeysKeyUp(key), -holdMs)
+            return true
+        }
+        return false
+    }
+    _HotkeysSendKey(outKey)
+    _HotkeysMarkFired(hk, outKey)
+    return true
 }
 
-; Selects the nearest entity matching the aim filter within a screen-pixel
-; radius of the chosen origin (mouse cursor or the player's on-screen position).
+; Selects the nearest entity matching the aim filter within the configured
+; radius of the chosen origin. Mirrors the monster-count radius modes:
+;   "cursor"/"player" → screen-pixel radius (iso projection, action "radius");
+;   "world"           → world-unit distance to the PLAYER (action "worldRadius");
+;   "worldCursor"     → world-unit distance to the cursor's ground point (exp.).
 ; Returns Map("x","y","z") of the target world position, or 0.
 _HotkeysSelectAimTarget(a, snap)
 {
-    radius := a.Has("radius") ? (a["radius"] + 0) : 150
     scanAll := a.Has("scanAll") && a["scanAll"]
     targetType := a.Has("targetType") ? a["targetType"] : "monster"
-    ; Radius origin: pixel distance measured either from the cursor or from the
-    ; player's projected screen position (both in screen pixels).
-    originMode := (a.Has("radiusMode") && a["radiusMode"] = "cursor") ? "cursor" : "player"
-    worldPre := 4000   ; cheap world pre-filter before projecting
+    mode := a.Has("radiusMode") ? a["radiusMode"] : "player"
+    isWorld := (mode = "world" || mode = "worldCursor")
+    radius := isWorld
+        ? (a.Has("worldRadius") ? (a["worldRadius"] + 0) : 1000)
+        : (a.Has("radius") ? (a["radius"] + 0) : 150)
+    worldPre := 4000   ; cheap world pre-filter before measuring
 
-    octx := _HotkeysPxOrigin(snap, originMode)
-    if !octx
-        return 0
+    ; Distance origin per mode: iso px-origin (cursor/player) or the cursor's
+    ; unprojected ground point (worldCursor); "world" uses entry["distance"].
+    octx := 0, cwp := 0
+    if (mode = "worldCursor")
+    {
+        cwp := _HotkeysCursorWorldPos(snap)
+        if !cwp
+            return 0
+    }
+    else if (mode != "world")
+    {
+        octx := _HotkeysPxOrigin(snap, (mode = "cursor") ? "cursor" : "player")
+        if !octx
+            return 0
+    }
 
     bestDist := radius + 1
     best := 0
@@ -1654,7 +1762,15 @@ _HotkeysSelectAimTarget(a, snap)
         wy := wp.Has("y") ? wp["y"] : 0
         wz := wp.Has("z") ? wp["z"] : 0
 
-        metric := _HotkeysPxDist(octx, wx, wy, wz)
+        if (mode = "world")
+            metric := dist
+        else if (mode = "worldCursor")
+        {
+            ddx := wx - cwp["x"], ddy := wy - cwp["y"]
+            metric := Sqrt(ddx * ddx + ddy * ddy)
+        }
+        else
+            metric := _HotkeysPxDist(octx, wx, wy, wz)
         if (metric < 0 || metric > radius)
             continue
         if (metric < bestDist)

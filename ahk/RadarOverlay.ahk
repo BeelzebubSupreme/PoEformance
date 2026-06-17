@@ -247,7 +247,16 @@ class RadarOverlay extends GdiOverlayBase
     ; radar on/off toggle (g_radarEnabled).
     ShouldShow(ctx)
     {
-        global g_radarEnabled
+        global g_radarEnabled, g_atlasOverlayEnabled, g_atlasRender
+        ; Atlas overlay: the world-atlas is a fullscreen panel, so the shared play
+        ; gate is closed while it's open — but we still want to draw the node graph
+        ; over it. Show (foreground only) whenever the atlas snapshot is populated.
+        ; The map layers stay gated on ctx.gate["allowed"] in Draw, so only the
+        ; atlas layer (_FinishFrame -> _RenderAtlas) renders here.
+        if (IsSet(g_atlasOverlayEnabled) && g_atlasOverlayEnabled
+            && IsSet(g_atlasRender) && (g_atlasRender is Map)
+            && (ctx.gameActive || ctx.keepWhenBackground))
+            return true
         radarOn := (IsSet(g_radarEnabled) ? g_radarEnabled : true)
         if !radarOn
             return false
@@ -1647,6 +1656,7 @@ class RadarOverlay extends GdiOverlayBase
         COL_CONN := 0x707070    ; node-graph connections (grey, BGR)
         COL_NAME := 0x8AD6F0    ; map names (gold-ish, BGR)
         COL_PATH := 0xFFC040    ; player → target route (cyan, BGR)
+        COL_CONTENT := 0x40A0FF ; content markers (orange, BGR)
 
         ; Node-graph connections (under everything else).
         conns := g_atlasRender.Has("connections") ? g_atlasRender["connections"] : 0
@@ -1656,7 +1666,7 @@ class RadarOverlay extends GdiOverlayBase
             {
                 if (c is Map && c.Has("x1"))
                     this._DrawLine(Round(c["x1"] - ox), Round(c["y1"] - oy),
-                        Round(c["x2"] - ox), Round(c["y2"] - oy), COL_CONN, 1)
+                        Round(c["x2"] - ox), Round(c["y2"] - oy), COL_CONN, 2)
             }
         }
 
@@ -1667,24 +1677,37 @@ class RadarOverlay extends GdiOverlayBase
                 continue
             sx := Round(nd["x"] - ox), sy := Round(nd["y"] - oy)
 
+            ; Always-on node marker, colored by atlas state so every node is
+            ; visible. Status byte bits: bit1 = completed (blue), bit0 = accessible
+            ; (green), otherwise locked (grey).
+            st := nd.Has("status") ? nd["status"] : 0
+            mkCol := (st & 0x02) ? 0xE0A040 : (st & 0x01) ? 0x40E0A0 : 0x808080
+            this._DrawPixelCircle(sx, sy, 4, mkCol)
+
             bi := AtlasBiome(nd.Has("biomeId") ? nd["biomeId"] : -1)
             if (bi && bi["show"])
                 this._DrawPixelCircle(sx, sy, 14, bi["color"])
 
             nm := nd.Has("name") ? nd["name"] : ""
+            ; Hop pill "N→": maps to clear from the accessible frontier to reach a
+            ; locked node (0 = accessible/completed, no pill).
+            hops := nd.Has("hops") ? nd["hops"] : 0
+            if (hops >= 1)
+                nm := hops "→ " nm
             if (nm != "")
                 this._DrawText(sx + 16, sy - 6, nm, COL_NAME)
 
+            ; Content markers (towers/bosses/league mechanics), resolved to display
+            ; names by the reader. Stacked below the map name in a content colour.
             if (nd.Has("content") && nd["content"] is Array)
             {
-                bx := sx + 16, by := sy + 8
-                for tag in nd["content"]
+                cby := sy + 8
+                for cname in nd["content"]
                 {
-                    ci := AtlasContent(tag)
-                    if !(ci && ci["show"])
+                    if (cname = "")
                         continue
-                    this._DrawText(bx, by, "[" ci["abbrev"] "]", ci["bg"])
-                    bx += (StrLen(ci["abbrev"]) + 2) * 8
+                    this._DrawText(sx + 16, cby, cname, COL_CONTENT)
+                    cby += 14
                 }
             }
         }

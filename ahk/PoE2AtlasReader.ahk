@@ -15,127 +15,356 @@
 ; Included by InGameStateMonitor.ahk
 
 ; Candidate offsets from the reference plugin (GameStructures.cs). VERIFY for PoE2.
-global g_atlasOff := Map(
-    "AtlasNodesFirst", 0x510,   ; StdVector<AtlasNodeEntry> First ptr
-    "AtlasNodesLast",  0x518,   ; StdVector<AtlasNodeEntry> Last ptr (+8)
-    "AtlasConnFirst",  0x528,   ; StdVector<AtlasNodeConnections> First ptr
-    "AtlasConnLast",   0x530,   ; (+8)
-    "EntryStride",     0x18,    ; AtlasNodeEntry: GridPos(8) + UiElemPtr(8) + Unknown(8)
-    "EntryGridX",      0x00,
-    "EntryGridY",      0x04,
-    "EntryUiElemPtr",  0x08,
-    "NodeNameAddr",    0x270,   ; AtlasNode.NodeNameAddress (IntPtr) -> +0x8 -> wide buffer
-    "NodeNameBuf",     0x08,
-    "NodeFlags",       0x290,   ; ushort AtlasNodeState (bit flags: accessible / completed)
-    "NodeBiomeId",     0x293    ; byte biome id
-)
+; Confirmed atlas offsets (GameHelper2 AtlasMapNode / ImportantUiElements).
+; Seeded by LoadAtlasOffsets() — module-top initializers can be skipped by the
+; AHK v2 include order, so the real values are assigned in that init function.
+global g_atlasOff := Map()
+global g_atlasTokenNames := Map()   ; class-1 content token (u32) -> display name
 
-; UI-tree search: locate the Atlas/World panel UiElement by its StringId.
-; Walks children breadth-first from rootPtr (an UiElement) reading each
-; element's StringId (StdWString @ UiElementBase.StringIdPtr). Returns the
-; matching element pointer, or 0. Bounded by maxVisit to stay responsive.
-; Params: reader (g_reader), rootPtr, wantList (array of lowercase substrings).
-AtlasFindPanel(reader, rootPtr, wantList, maxVisit := 8000)
+; Seeds g_atlasOff with the confirmed offsets. Called once at startup from the
+; main script (after AtlasData_Load). The atlas panel is reached by the UI child
+; path GameUi->22->0->6; its CHILDREN are the node elements; node fields live at
+; fixed offsets inside each child element; connections are a panel-level vector.
+LoadAtlasOffsets()
 {
-    if !(IsObject(reader) && reader.IsProbablyValidPointer(rootPtr))
-        return 0
-    childFirstOff := PoE2Offsets.UiElementBase["ChildrenFirst"]   ; 0x010
-    childLastOff := childFirstOff + 0x08                          ; 0x018
-    sidOff := PoE2Offsets.UiElementBase["StringIdPtr"]            ; 0x0F8
+    global g_atlasOff, g_atlasTokenNames
+    g_atlasOff := Map(
+        "PanelChildPath",      [22, 0, 6],  ; GameUi -> child 22 -> 0 -> 6
+        "NodeGridOffset",      0x320,       ; StdTuple2D<int> grid position (on the node element)
+        "NodeDataBlockOffset", 0x20,        ; B = *(A + 0x20), where A = *(node + 0x10)
+        "NodeMapDataOffset",   0x2A0,       ; C = *(B + 0x2A0): EndgameMaps row (map data)
+        "NodeBiomeOffset",     0x2CE,       ; byte biome id (on B)
+        "NodeStatusOffset",    0x2CF,       ; byte state on B: bit0 accessible, bit1 completed
+        "PanelConnVecOffset",  0x5A8,       ; panel-level StdVector of edges
+        "ConnEdgeStride",      20,          ; edge: int Unknown(4) + Source(8) + Target(8)
+        "ConnSrcOffset",       4,           ; Source grid (x,y) within an edge entry
+        "ConnDstOffset",       12,          ; Target grid (x,y) within an edge entry
+        "ContentVecBegin",     0x350,       ; class-1 content token StdVector<u32> .First (on node)
+        "ContentVecEnd",       0x358,       ; .Last (+8)
+        "BadgeContentIdOffset", 0x188)      ; class-2 badge id u32 (on each node[0][0] child)
 
-    queue := [rootPtr]
-    visited := 0
-    while (queue.Length > 0 && visited < maxVisit)
-    {
-        el := queue.RemoveAt(1)
-        if !reader.IsProbablyValidPointer(el)
-            continue
-        visited += 1
-
-        sid := ""
-        try sid := reader.ReadStdWStringAt(el + sidOff, 64)
-        if (sid != "")
-        {
-            low := StrLower(sid)
-            for _, want in wantList
-            {
-                if InStr(low, want)
-                    return el
-            }
-        }
-
-        ; Enqueue children (StdVector of UiElement pointers).
-        cFirst := reader.Mem.ReadInt64(el + childFirstOff)
-        cLast := reader.Mem.ReadInt64(el + childLastOff)
-        if (cFirst <= 0 || cLast <= cFirst)
-            continue
-        n := (cLast - cFirst) // 8
-        if (n <= 0 || n > 10000)
-            continue
-        i := 0
-        while (i < n)
-        {
-            child := reader.Mem.ReadPtr(cFirst + i * 8)
-            if reader.IsProbablyValidPointer(child)
-                queue.Push(child)
-            i += 1
-        }
-    }
-    return 0
+    ; Class-1 content tokens (u32) -> display name (yokkenUA/Atlas ContentTokenNames).
+    ; Unknown/building-block tokens are intentionally unmapped (left undrawn).
+    g_atlasTokenNames := Map(
+        0x00404C57, "Powerful Map Boss", 0x004067C0, "Grand Mirror",
+        0x0040686A, "Delirium",          0x0040686B, "Abyss", 0x0080686B, "Abyss",
+        0x0040686C, "Ritual",            0x0040686D, "Vaal Beacons", 0x0040686E, "Breach",
+        0x004064FF, "Water Influence",   0x00406501, "Grass Influence",
+        0x00406502, "Forest Influence",  0x00406503, "Swamp Influence",
+        0x00406504, "Desert Influence",
+        0x19006351, "Azmeri Bloodline",  0x00400890, "Azmeri Bloodline",
+        0x004064DF, "Azmeri Bloodline",  0xFA00610E, "Azmeri Energisation",
+        0x01400A8C, "Swarming Spirits",  0x19006630, "Spirit Migration",
+        0x02806631, "Spirit Migration",  0x1900634C, "Indomitable Essence",
+        0x00C01247, "Indomitable Essence", 0x00C05E27, "Scattered Stones",
+        0x00C06349, "Power Struggle",    0x1900320E, "Arcane Hordes",
+        0x0C8004D8, "Affluent Armies",   0x19006202, "Rites of the Rogues",
+        0x00800963, "Rites of the Rogues", 0x00801282, "Corrupted Mirage",
+        0x0040675E, "Glimmering Mutation", 0x0040153B, "Ancient Trove",
+        0x00400962, "Ancient Trove",     0xFA00635D, "Exceptional Find",
+        0x00406396, "Exceptional Find",  0x00406397, "Exceptional Find",
+        0x00406398, "Exceptional Find",  0x00406399, "Exceptional Find",
+        0x004065FF, "Exceptional Find",  0x004065F0, "(atlas skill point)")
 }
 
-; Parses the AtlasNodes vector at panelPtr using g_atlasOff. Returns an array of
-; Map("gridX","gridY","uiElemPtr","flags","biomeId","name"), capped at maxNodes.
+; Lazily loads data/atlas_map_content.tsv (content_id<TAB>name) into a cached
+; Map(id -> name) for class-2 badge content. Mirrors GetWorldAreaNameMap.
+GetAtlasMapContentMap()
+{
+    static cachedMap := 0
+    static cachedSig := ""
+    mapPath := A_ScriptDir "\data\atlas_map_content.tsv"
+    if !FileExist(mapPath)
+        return Map()
+    sig := FileGetSize(mapPath) "|" FileGetTime(mapPath, "M")
+    if (cachedMap && cachedSig = sig)
+        return cachedMap
+    loaded := Map()
+    Loop Read, mapPath
+    {
+        line := Trim(A_LoopReadLine)
+        if (line = "" || SubStr(line, 1, 1) = "#" || SubStr(line, 1, 1) = ";")
+            continue
+        parts := StrSplit(line, "`t")
+        if (parts.Length < 2)
+            continue
+        k := Trim(parts[1]), v := Trim(parts[2])
+        if (k != "" && v != "" && !loaded.Has(k))
+            loaded[k] := v
+    }
+    cachedMap := loaded
+    cachedSig := sig
+    return cachedMap
+}
+
+; Resolves a class-2 badge content id (low 16 bits) to its name. Ids 0 or >1000
+; are not displayed; unknown ids fall through to "#<id>". Returns the name or "".
+ResolveMapContentName(id)
+{
+    if (id <= 0 || id > 1000)
+        return ""
+    m := GetAtlasMapContentMap()
+    return m.Has(id "") ? m[id ""] : "#" id
+}
+
+; Appends a content display name to out (deduped), skipping empties and the
+; parenthesised non-content markers (e.g. "(atlas skill point)").
+_AtlasAddContent(out, seen, s)
+{
+    if (s = "" || SubStr(s, 1, 1) = "(")
+        return
+    if !seen.Has(s)
+    {
+        seen[s] := 1
+        out.Push(s)
+    }
+}
+
+; Joins an array of strings with sep. Returns the joined string (empty if none).
+_AtlasJoin(arr, sep)
+{
+    s := ""
+    for i, v in arr
+        s .= (i > 1 ? sep : "") v
+    return s
+}
+
+; Resolves a node's content markers into display names (yokkenUA/Atlas model).
+; Two disjoint sources: class-1 tokens (StdVector<u32> @ node+0x350) via
+; g_atlasTokenNames, and class-2 badges (u32 @ child+0x188 for each child under
+; node[0][0]) via atlas_map_content.tsv. Returns a deduped array of names.
+_AtlasResolveContent(reader, nodeAddr)
+{
+    global g_atlasOff, g_atlasTokenNames
+    out := [], seen := Map()
+    ub := PoE2Offsets.UiElementBase
+
+    ; class-1 tokens: u32 vector on the node element
+    beg := reader.Mem.ReadInt64(nodeAddr + g_atlasOff["ContentVecBegin"])
+    fin := reader.Mem.ReadInt64(nodeAddr + g_atlasOff["ContentVecEnd"])
+    if (beg > 0 && fin > beg && (fin - beg) < 0x200)
+    {
+        cnt := (fin - beg) // 4
+        tb := reader.Mem.ReadBytes(beg, cnt * 4)
+        if tb
+        {
+            i := 0
+            while (i < cnt)
+            {
+                tok := NumGet(tb.Ptr, i * 4, "UInt")
+                i += 1
+                if g_atlasTokenNames.Has(tok)
+                    _AtlasAddContent(out, seen, g_atlasTokenNames[tok])
+            }
+        }
+    }
+
+    ; class-2 badges: node[0][0] children, u32 @ child+0x188 (low 16 bits = content id)
+    a00 := _AtlasResolveChildPath(reader, nodeAddr, [0, 0])
+    if a00
+    {
+        cf := reader.Mem.ReadInt64(a00 + ub["ChildrenFirst"])
+        cl := reader.Mem.ReadInt64(a00 + ub["ChildrenFirst"] + 8)
+        bn := (cf > 0 && cl > cf) ? (cl - cf) // 8 : 0
+        if (bn > 0 && bn <= 16)
+        {
+            j := 0
+            while (j < bn)
+            {
+                bc := reader.Mem.ReadPtr(cf + j * 8)
+                j += 1
+                if !reader.IsProbablyValidPointer(bc)
+                    continue
+                id := reader.Mem.ReadUInt(bc + g_atlasOff["BadgeContentIdOffset"]) & 0xFFFF
+                _AtlasAddContent(out, seen, ResolveMapContentName(id))
+            }
+        }
+    }
+    return out
+}
+
+; Locates the endgame Atlas panel from the UI root via the GameHelper2 child path
+; (GameUi -> 22 -> 0 -> 6). Returns the panel element ptr, or 0 if the atlas isn't
+; open (path unresolved or too few node children). wantList/maxVisit are kept for
+; call-site compatibility but unused.
+AtlasFindPanel(reader, rootPtr, wantList := "", maxVisit := 8000)
+{
+    global g_atlasOff
+    if !(IsObject(reader) && reader.IsProbablyValidPointer(rootPtr))
+        return 0
+    panel := _AtlasResolveChildPath(reader, rootPtr, g_atlasOff["PanelChildPath"])
+    if !reader.IsProbablyValidPointer(panel)
+        return 0
+    ; Gate: an open atlas has many node children; a closed tab has very few. The
+    ; node UI persists in memory while hidden, so ALSO require the panel to be
+    ; hierarchically visible — otherwise the overlay would keep drawing after the
+    ; atlas is closed (e.g. back in the hideout).
+    cfOff := PoE2Offsets.UiElementBase["ChildrenFirst"]
+    cFirst := reader.Mem.ReadInt64(panel + cfOff)
+    cLast := reader.Mem.ReadInt64(panel + cfOff + 8)
+    n := (cFirst > 0 && cLast > cFirst) ? (cLast - cFirst) // 8 : 0
+    if (n < 8)
+        return 0
+    return _AtlasIsHierVisible(reader, panel, rootPtr) ? panel : 0
+}
+
+; True if elemPtr and every ancestor up to root have the IS_VISIBLE flag (bit 11)
+; set — i.e. the element is actually shown, not just locally flagged. Used to tell
+; an open atlas from one whose node UI merely persists in memory while hidden.
+_AtlasIsHierVisible(reader, elemPtr, rootPtr)
+{
+    flagsOff := PoE2Offsets.UiElementBase["Flags"]
+    parentOff := PoE2Offsets.UiElementBase["ParentPtr"]
+    cur := elemPtr
+    Loop 16
+    {
+        if !reader.IsProbablyValidPointer(cur)
+            return false
+        if !((reader.Mem.ReadUInt(cur + flagsOff) >> 11) & 1)
+            return false
+        if (cur = rootPtr)
+            return true
+        cur := reader.Mem.ReadPtr(cur + parentOff)
+    }
+    return true
+}
+
+; Reads the atlas nodes (model: yokkenUA/Atlas GameStructures.cs). Each direct
+; CHILD of the atlas panel is a node element; its gridPosition is at +0x320. The
+; biome/status/map-data live in a sub-allocation chain off the node:
+;   A = *(node+0x10), B = *(A+0x20), C = *(B+0x2A0).
+; biome=byte(B+0x2CE), status=byte(B+0x2CF, bit0 accessible / bit1 completed),
+; name = wide string at *(*(C+0)+0). uiElemPtr (the child) drives screen position.
+; Returns an array of node Maps, capped at maxNodes.
 AtlasReadNodes(reader, panelPtr, maxNodes := 2000)
 {
+    global g_atlasOff
     out := []
     if !(IsObject(reader) && reader.IsProbablyValidPointer(panelPtr))
         return out
-    first := reader.Mem.ReadInt64(panelPtr + g_atlasOff["AtlasNodesFirst"])
-    last := reader.Mem.ReadInt64(panelPtr + g_atlasOff["AtlasNodesLast"])
-    if (first <= 0 || last <= first)
+    cfOff := PoE2Offsets.UiElementBase["ChildrenFirst"]   ; 0x10
+    cFirst := reader.Mem.ReadInt64(panelPtr + cfOff)
+    cLast := reader.Mem.ReadInt64(panelPtr + cfOff + 8)
+    n := (cFirst > 0 && cLast > cFirst) ? (cLast - cFirst) // 8 : 0
+    if (n <= 0 || n > 50000)
         return out
-    stride := g_atlasOff["EntryStride"]
-    count := (last - first) // stride
-    if (count <= 0 || count > 100000)
-        return out
-    count := Min(count, maxNodes)
+
+    gridOff := g_atlasOff["NodeGridOffset"]
+    dataBlkOff := g_atlasOff["NodeDataBlockOffset"]
+    mapDataOff := g_atlasOff["NodeMapDataOffset"]
+    biomeOff := g_atlasOff["NodeBiomeOffset"]
+    statusOff := g_atlasOff["NodeStatusOffset"]
 
     i := 0
-    while (i < count)
+    while (i < n && out.Length < maxNodes)
     {
-        entry := first + i * stride
+        c := reader.Mem.ReadPtr(cFirst + i * 8)
         i += 1
-        eb := reader.Mem.ReadBytes(entry, stride)
-        if !eb
+        if !reader.IsProbablyValidPointer(c)
             continue
-        gx := NumGet(eb.Ptr, g_atlasOff["EntryGridX"], "Int")
-        gy := NumGet(eb.Ptr, g_atlasOff["EntryGridY"], "Int")
-        uiElem := NumGet(eb.Ptr, g_atlasOff["EntryUiElemPtr"], "Int64")
+        gp := reader.Mem.ReadBytes(c + gridOff, 8)
+        if !gp
+            continue
+        gx := NumGet(gp.Ptr, 0, "Int")
+        gy := NumGet(gp.Ptr, 4, "Int")
 
-        flags := 0
-        biome := 0
-        name := ""
-        if reader.IsProbablyValidPointer(uiElem)
+        biome := 0, status := 0, mapData := 0, name := ""
+        aPtr := reader.Mem.ReadPtr(c + cfOff)             ; A = *(node + 0x10)
+        if reader.IsProbablyValidPointer(aPtr)
         {
-            nb := reader.Mem.ReadBytes(uiElem + g_atlasOff["NodeFlags"], 0x08)
-            if nb
+            bPtr := reader.Mem.ReadPtr(aPtr + dataBlkOff) ; B = *(A + 0x20)
+            if reader.IsProbablyValidPointer(bPtr)
             {
-                flags := NumGet(nb.Ptr, 0, "UShort")
-                biome := NumGet(nb.Ptr, g_atlasOff["NodeBiomeId"] - g_atlasOff["NodeFlags"], "UChar")
-            }
-            nameStruct := reader.Mem.ReadPtr(uiElem + g_atlasOff["NodeNameAddr"])
-            if reader.IsProbablyValidPointer(nameStruct)
-            {
-                bufPtr := reader.Mem.ReadPtr(nameStruct + g_atlasOff["NodeNameBuf"])
-                if reader.IsProbablyValidPointer(bufPtr)
-                    name := _AtlasReadWide(reader, bufPtr, 64)
+                biome := reader.Mem.ReadUChar(bPtr + biomeOff)
+                status := reader.Mem.ReadUChar(bPtr + statusOff)
+                cPtr := reader.Mem.ReadPtr(bPtr + mapDataOff)   ; C = *(B + 0x2A0)
+                if reader.IsProbablyValidPointer(cPtr)
+                {
+                    mapData := cPtr
+                    hdr := reader.Mem.ReadPtr(cPtr)             ; *(C + 0)
+                    if reader.IsProbablyValidPointer(hdr)
+                    {
+                        buf := reader.Mem.ReadPtr(hdr)         ; *(hdr + 0) -> UTF-16 buffer
+                        if reader.IsProbablyValidPointer(buf)
+                            name := _AtlasReadWide(reader, buf, 64)
+                    }
+                }
             }
         }
-        out.Push(Map("gridX", gx, "gridY", gy, "uiElemPtr", uiElem,
-            "flags", flags, "biomeId", biome, "name", name))
+        out.Push(Map("gridX", gx, "gridY", gy, "uiElemPtr", c,
+            "flags", status, "status", status, "biomeId", biome,
+            "mapData", mapData, "mapId", name, "name", ResolveWorldAreaName(name)))
     }
     return out
+}
+
+; Lazily loads data/world_area_name_map.tsv (key<TAB>display_name, '#'/';' comment
+; lines) into a cached Map(key -> name). Mirrors GetMonsterNameMap. Re-reads when
+; the file's size/mtime change. Returns the Map (empty if the file is absent).
+GetWorldAreaNameMap()
+{
+    static cachedMap := 0
+    static cachedSig := ""
+    mapPath := A_ScriptDir "\data\world_area_name_map.tsv"
+    if !FileExist(mapPath)
+        return Map()
+    sig := FileGetSize(mapPath) "|" FileGetTime(mapPath, "M")
+    if (cachedMap && cachedSig = sig)
+        return cachedMap
+    loaded := Map()
+    Loop Read, mapPath
+    {
+        line := Trim(A_LoopReadLine)
+        if (line = "")
+            continue
+        first := SubStr(line, 1, 1)
+        if (first = "#" || first = ";")
+            continue
+        parts := StrSplit(line, "`t")
+        if (parts.Length < 2)
+            continue
+        k := Trim(parts[1]), v := Trim(parts[2])
+        if (k != "" && v != "" && !loaded.Has(k))
+            loaded[k] := v
+    }
+    cachedMap := loaded
+    cachedSig := sig
+    return cachedMap
+}
+
+; Resolves an internal atlas MapId ("MapSevenWaters", or a full metadata path) to
+; a display name via world_area_name_map.tsv, trying the id as-is and its basename
+; (after the last '/'). Falls back to the camelCase prettifier when the id isn't in
+; the table (or the table is absent). Returns the display name.
+ResolveWorldAreaName(mapId)
+{
+    if (mapId = "")
+        return ""
+    m := GetWorldAreaNameMap()
+    if (m.Count)
+    {
+        if m.Has(mapId)
+            return m[mapId]
+        if (RegExMatch(mapId, ".*/([^/]+)$", &mm) && m.Has(mm[1]))
+            return m[mm[1]]
+    }
+    return _AtlasPrettifyName(mapId)
+}
+
+; Turns an internal atlas MapId ("MapSevenWaters", "MapUniqueUntaintedParadise")
+; into a readable label ("Seven Waters", "Untainted Paradise") by stripping the
+; Map/Unique prefixes and splitting camelCase. Returns the prettified string.
+; Fallback for ids missing from world_area_name_map.tsv.
+_AtlasPrettifyName(id)
+{
+    if (id = "")
+        return ""
+    s := id
+    if (SubStr(s, 1, 3) = "Map")
+        s := SubStr(s, 4)
+    if (SubStr(s, 1, 6) = "Unique")
+        s := SubStr(s, 7)
+    return RegExReplace(s, "(?<=[a-z0-9])(?=[A-Z])", " ")
 }
 
 ; Reads up to maxChars UTF-16 chars from a raw buffer pointer (not a StdWString).
@@ -188,22 +417,14 @@ _AtlasHexDump(reader, addr, size)
 ; Returns the output path, or "" on failure.
 AtlasDumpDebug(reader, snap)
 {
+    global g_atlasOff
     if !(IsObject(reader) && snap && snap.Has("inGameState"))
         return ""
-    inGs := snap["inGameState"]
-    root := 0
-    for _, k in ["activeGameUiPtr", "gameUiPtr", "uiRootPtr"]
-    {
-        if (inGs.Has(k) && reader.IsProbablyValidPointer(inGs[k]))
-        {
-            root := inGs[k]
-            break
-        }
-    }
+    root := _AtlasResolveUiRoot(reader, snap)
     if !root
         return ""
 
-    panel := AtlasFindPanel(reader, root, ["worldpanel", "atlas"])
+    panel := AtlasFindPanel(reader, root, ["worldpanel", "atlas", "worldmap", "atlasmap"])
     outDir := A_ScriptDir "\debug"
     if !DirExist(outDir)
         DirCreate(outDir)
@@ -213,43 +434,857 @@ AtlasDumpDebug(reader, snap)
     txt .= "root UI ptr: " Format("0x{:X}", root) "`n"
     if !panel
     {
-        txt .= "`n!! Atlas/World panel NOT found by StringId (worldpanel/atlas).`n"
-        txt .= "   Open the Atlas/World map first, then dump again. If it is open,`n"
-        txt .= "   the StringId differs — widen the search list in AtlasDumpDebug().`n"
+        txt .= "`n!! Atlas/World panel NOT found by StringId (worldpanel/atlas/worldmap/atlasmap).`n"
+        txt .= "   Enumerating UI elements under the root so the real panel StringId`n"
+        txt .= "   can be identified. Make sure the Atlas was open, then send this file.`n"
+
+        ; ── Reference-based location (GameHelper2 ImportantUiElements.cs) ─────────
+        ; Atlas = GameUi -> child 22 -> child 0 -> child 6;  WorldMap = [22,0].
+        ; The indices drift per patch, so list the root children to confirm which
+        ; index is the world-travel panel for THIS build, then resolve the paths
+        ; and scan the atlas panel for its Descriptions (node) list.
+        txt .= "`n=== reference child-path location (GameHelper2: Atlas = root->22->0->6) ===`n"
+        txt .= "root children (identify the world-map panel index by size/children):`n"
+        txt .= _AtlasDumpChildren(reader, root, 40)
+
+        wm := _AtlasResolveChildPath(reader, root, [22, 0])
+        txt .= Format("`nWorldMap [22,0] -> 0x{:X}`n", wm)
+        if wm
+            txt .= _AtlasDumpChildren(reader, wm, 40)
+
+        at := _AtlasResolveChildPath(reader, root, [22, 0, 6])
+        txt .= Format("`nAtlas [22,0,6] -> 0x{:X}`n", at)
+        if at
+        {
+            txt .= _AtlasDumpChildren(reader, at, 16)
+            txt .= "vector scan @ Atlas panel (look for the Descriptions/node list):`n"
+            txt .= _AtlasScanVectors(reader, at, 0x800)
+        }
+
+        ids := _AtlasEnumStringIds(reader, root, 8000)
+
+        ; Visible, panel-sized candidates (large + on screen), area-sorted desc.
+        cand := []
+        for _, r in ids
+            if (r["vis"] && r["w"] >= 200 && r["h"] >= 150)
+                cand.Push(r)
+        Loop cand.Length - 1                      ; selection sort by area desc
+        {
+            mi := A_Index
+            j := A_Index + 1
+            while (j <= cand.Length)
+            {
+                if (cand[j]["w"] * cand[j]["h"] > cand[mi]["w"] * cand[mi]["h"])
+                    mi := j
+                j += 1
+            }
+            if (mi != A_Index)
+            {
+                tmp := cand[A_Index], cand[A_Index] := cand[mi], cand[mi] := tmp
+            }
+        }
+        txt .= Format("`n--- visible panel-sized elements ({} of {} named) ---`n", cand.Length, ids.Length)
+        txt .= "  depth  w      h     stringId`n"
+        for _, r in cand
+            txt .= Format("  {:5}  {:5}  {:5}  {}`n", r["depth"], Round(r["w"]), Round(r["h"]), r["sid"])
+
+        ; Full unique StringId vocabulary (deduped), sorted by max element area —
+        ; the atlas container surfaces near the top even with a generic name.
+        uni := Map()
+        for _, r in ids
+        {
+            key := StrLower(r["sid"])
+            if !uni.Has(key)
+                uni[key] := Map("sid", r["sid"], "count", 0, "maxW", 0, "maxH", 0, "anyVis", 0, "minDepth", 999)
+            u := uni[key]
+            u["count"] += 1
+            if (r["w"] > u["maxW"])
+                u["maxW"] := r["w"]
+            if (r["h"] > u["maxH"])
+                u["maxH"] := r["h"]
+            if (r["vis"])
+                u["anyVis"] := 1
+            if (r["depth"] < u["minDepth"])
+                u["minDepth"] := r["depth"]
+        }
+        arr := []
+        for _, u in uni
+            arr.Push(u)
+        Loop arr.Length - 1                       ; selection sort by max area desc
+        {
+            mi := A_Index, j := A_Index + 1
+            while (j <= arr.Length)
+            {
+                if (arr[j]["maxW"] * arr[j]["maxH"] > arr[mi]["maxW"] * arr[mi]["maxH"])
+                    mi := j
+                j += 1
+            }
+            if (mi != A_Index)
+                tmp := arr[A_Index], arr[A_Index] := arr[mi], arr[mi] := tmp
+        }
+        txt .= Format("`n--- all {} unique StringIds (by max area) ---`n", arr.Length)
+        txt .= "  cnt  vis  depth  maxW   maxH   stringId`n"
+        for _, u in arr
+            txt .= Format("  {:3}  {:3}  {:5}  {:5}  {:5}  {}`n",
+                u["count"], u["anyVis"], u["minDepth"], Round(u["maxW"]), Round(u["maxH"]), u["sid"])
+
+        ; WString-offset scan on the largest visible elements — surveys the string
+        ; fields this patch (0x098 StringId, 0x0C8 font family, 0x0F8 text-style).
+        scanN := Min(cand.Length, 3)
+        i := 1
+        while (i <= scanN)
+        {
+            ep := cand[i]["ptr"]
+            txt .= Format("`n--- WString scan @ 0x{:X} (w={} h={} depth={}) ---`n",
+                ep, Round(cand[i]["w"]), Round(cand[i]["h"]), cand[i]["depth"])
+            off := 0xB0
+            while (off <= 0x168)
+            {
+                s := ""
+                try s := reader.ReadStdWStringAt(ep + off, 48)
+                if (s != "" && _AtlasPrintable(s))
+                    txt .= Format("  +0x{:03X}: {}`n", off, s)
+                off += 8
+            }
+            i += 1
+        }
+
+        ; Locate the atlas panel the way the rest of the codebase does — by its
+        ; FIXED offset in the root UI struct (cf. MapParent @ 0x748), not by name.
+        ; Walk the parent chains of the largest visible containers up to the root,
+        ; then report which root offset stores each chain pointer. The shallowest
+        ; match (the child-of-root) is the stable AtlasPanel anchor to read.
+        wanted := Map()
+        topN := Min(cand.Length, 4)
+        ti := 1
+        while (ti <= topN)
+        {
+            cur := cand[ti]["ptr"], hops := 0
+            while (reader.IsProbablyValidPointer(cur) && hops < 12)
+            {
+                wanted[cur] := Format("cand#{} hop{} {}x{}", ti, hops, Round(cand[ti]["w"]), Round(cand[ti]["h"]))
+                p := reader.Mem.ReadPtr(cur + PoE2Offsets.UiElementBase["ParentPtr"])
+                if (p = root || !reader.IsProbablyValidPointer(p))
+                    break
+                cur := p
+                hops += 1
+            }
+            ti += 1
+        }
+        txt .= "`n--- root-struct offsets holding the atlas container chain ---`n"
+        rootHits := []
+        buf := reader.Mem.ReadBytes(root, 0x1600)
+        if !buf
+            txt .= "  (could not read root struct)`n"
+        else
+        {
+            off := 0, found := 0
+            while (off < 0x1600)
+            {
+                v := NumGet(buf.Ptr, off, "Int64")
+                if wanted.Has(v)
+                {
+                    txt .= Format("  root+0x{:04X} -> 0x{:X}  ({})`n", off, v, wanted[v])
+                    rootHits.Push(v)
+                    found += 1
+                }
+                off += 8
+            }
+            if !found
+                txt .= "  (no chain pointer in root+0..0x1600 — panel attaches deeper)`n"
+        }
+
+        ; ── Locate the node array: scan each candidate panel struct for StdVector
+        ; (first,last) pairs, and report its UI-children count. The atlas node DATA
+        ; vector should surface as a vector with a large/plausible element count.
+        probe := []
+        seenP := Map()
+        for _, p in rootHits
+            if (!seenP.Has(p)) {
+                seenP[p] := 1
+                probe.Push(p)
+            }
+        for _, c in [cand.Length >= 1 ? cand[1]["ptr"] : 0, cand.Length >= 2 ? cand[2]["ptr"] : 0]
+            if (c && !seenP.Has(c)) {
+                seenP[c] := 1
+                probe.Push(c)
+            }
+        for _, p in probe
+        {
+            cf := reader.Mem.ReadInt64(p + 0x10)
+            cl := reader.Mem.ReadInt64(p + 0x18)
+            childN := (cf > 0 && cl > cf) ? (cl - cf) // 8 : 0
+            txt .= Format("`n--- vector scan @ 0x{:X} (uiChildren={}) ---`n", p, childN)
+            txt .= _AtlasScanVectors(reader, p, 0x800)
+        }
+
+        ; ── Decisive check: read GameHelper2 node fields from each candidate panel.
+        ; The atlas is whichever panel's children have valid mapData/biome/grid.
+        txt .= "`n=== atlas node-field probe (mapData 0x2A0 / biome 0x2CE / status 0x2CF / grid 0x320 / conn 0x5A8) ===`n"
+        txt .= "Atlas [22,0,6]:`n"
+        txt .= at ? _AtlasProbeNodeFields(reader, at, 8) : "  (path unresolved)`n"
+        pj := 1
+        while (pj <= Min(cand.Length, 5))
+        {
+            txt .= Format("cand#{} {}x{}:`n", pj, Round(cand[pj]["w"]), Round(cand[pj]["h"]))
+            txt .= _AtlasProbeNodeFields(reader, cand[pj]["ptr"], 6)
+            pj += 1
+        }
+
         FileAppend(txt, outPath, "UTF-8")
         return outPath
     }
-    txt .= "panel ptr:   " Format("0x{:X}", panel) "`n"
+    txt .= "panel ptr:   " Format("0x{:X}", panel) "  (Atlas = root->22->0->6)`n"
 
-    first := reader.Mem.ReadInt64(panel + g_atlasOff["AtlasNodesFirst"])
-    last := reader.Mem.ReadInt64(panel + g_atlasOff["AtlasNodesLast"])
-    stride := g_atlasOff["EntryStride"]
-    rawCount := (first > 0 && last > first) ? (last - first) // stride : 0
-    txt .= Format("AtlasNodes vector @ +0x{:X}: first=0x{:X} last=0x{:X} count={}`n",
-        g_atlasOff["AtlasNodesFirst"], first, last, rawCount)
-
-    nodes := AtlasReadNodes(reader, panel, 60)
-    txt .= "parsed nodes (first " nodes.Length "):`n"
-    txt .= "  grid      flags  biome  name`n"
+    nodes := AtlasReadNodes(reader, panel, 5000)
+    withMap := 0, withBiome := 0, withStatus := 0
     for _, nd in nodes
     {
-        txt .= Format("  ({:4},{:4})  0x{:04X}  {:3}    {}`n",
-            nd["gridX"], nd["gridY"], nd["flags"], nd["biomeId"], nd["name"])
+        if nd["mapData"]
+            withMap += 1
+        if (nd["biomeId"] > 0)
+            withBiome += 1
+        if (nd["status"] > 0)
+            withStatus += 1
+    }
+    txt .= Format("nodes={} | withMapData={} biome>0={} status>0={}`n",
+        nodes.Length, withMap, withBiome, withStatus)
+
+    txt .= "`nfirst 24 nodes (grid / biome / status / name [content]):`n"
+    shown := 0
+    for _, nd in nodes
+    {
+        if (shown >= 24)
+            break
+        content := _AtlasResolveContent(reader, nd["uiElemPtr"])
+        ctxt := content.Length ? ("  [" _AtlasJoin(content, ", ") "]") : ""
+        txt .= Format("  ({:4},{:4})  b={:3} st=0x{:02X}  {}{}`n",
+            nd["gridX"], nd["gridY"], nd["biomeId"], nd["status"], nd["name"], ctxt)
+        shown += 1
     }
 
-    ; Raw hex for offset verification.
-    txt .= "`n--- RAW: panel +0x500..+0x540 (locate node/conn vectors) ---`n"
-    txt .= _AtlasHexDump(reader, panel + 0x500, 0x40)
-    if (nodes.Length > 0 && reader.IsProbablyValidPointer(nodes[1]["uiElemPtr"]))
+    txt .= "`npopulated nodes (mapData != 0, up to 10) — confirms biome/status/mapData:`n"
+    shown := 0
+    for _, nd in nodes
     {
-        node1 := nodes[1]["uiElemPtr"]
-        txt .= "`n--- RAW: first node UiElem +0x260..+0x2A0 (name/flags/biome) ---`n"
-        txt .= "node1 ptr: " Format("0x{:X}", node1) "`n"
-        txt .= _AtlasHexDump(reader, node1 + 0x260, 0x40)
+        if (shown >= 10)
+            break
+        if !nd["mapData"]
+            continue
+        txt .= Format("  ({:4},{:4})  b={:3} st={} mapData=0x{:X}`n  map head: ",
+            nd["gridX"], nd["gridY"], nd["biomeId"], nd["status"], nd["mapData"])
+        txt .= _AtlasHexDump(reader, nd["mapData"], 0x30)   ; for MapId/name (stage 2)
+        shown += 1
+    }
+    if (shown = 0)
+        txt .= "  (none populated — visible nodes unrevealed, or mapData offset needs a revealed node)`n"
+
+    ; Connections: panel-level vector of edges, struct = int Unknown + Source(8) +
+    ; Target(8) = 20B/edge (GameHelper2 AtlasNodeConnectionEdgeOffsets).
+    cvOff := g_atlasOff["PanelConnVecOffset"]
+    estride := g_atlasOff["ConnEdgeStride"]
+    esrc := g_atlasOff["ConnSrcOffset"]
+    edst := g_atlasOff["ConnDstOffset"]
+    cvf := reader.Mem.ReadInt64(panel + cvOff)
+    cvl := reader.Mem.ReadInt64(panel + cvOff + 8)
+    cvBytes := (cvf > 0 && cvl > cvf && (cvl - cvf) < 0x100000) ? (cvl - cvf) : 0
+    txt .= Format("`nconnections vec @ +0x{:X}: bytes={} (~{} edges @{}B)  first 6 edges:`n",
+        cvOff, cvBytes, cvBytes // estride, estride)
+    if (cvBytes >= estride)
+    {
+        ; Coverage check: how many edges reference grids that exist in the read node
+        ; set. bothPresent should be drawable; missing endpoints mean the vector
+        ; references non-instantiated nodes (off the loaded region).
+        gridSet := Map()
+        for _, nd in nodes
+            gridSet[nd["gridX"] "," nd["gridY"]] := 1
+        eAll := reader.Mem.ReadBytes(cvf, Min(cvBytes, estride * 4000))
+        both := 0, srcMiss := 0, dstMiss := 0, total := 0
+        if eAll
+        {
+            e := 0, lim := Min(cvBytes // estride, 4000)
+            while (e < lim)
+            {
+                base := e * estride
+                sk := NumGet(eAll.Ptr, base+esrc, "Int") "," NumGet(eAll.Ptr, base+esrc+4, "Int")
+                dk := NumGet(eAll.Ptr, base+edst, "Int") "," NumGet(eAll.Ptr, base+edst+4, "Int")
+                hasS := gridSet.Has(sk), hasD := gridSet.Has(dk)
+                if (hasS && hasD)
+                    both += 1
+                else if (!hasS && !hasD)
+                    srcMiss += 1, dstMiss += 1
+                else if (!hasS)
+                    srcMiss += 1
+                else
+                    dstMiss += 1
+                total += 1
+                e += 1
+            }
+        }
+        txt .= Format("edge coverage (vs {} read nodes): both={} srcMiss={} dstMiss={} of {}`n",
+            nodes.Length, both, srcMiss, dstMiss, total)
+        eb := reader.Mem.ReadBytes(cvf, Min(cvBytes, estride * 6))
+        if eb
+        {
+            e := 0
+            while (e < 6 && e * estride < cvBytes)
+            {
+                base := e * estride
+                txt .= Format("  edge[{}]: ({},{}) -> ({},{})`n", e,
+                    NumGet(eb.Ptr, base+esrc, "Int"), NumGet(eb.Ptr, base+esrc+4, "Int"),
+                    NumGet(eb.Ptr, base+edst, "Int"), NumGet(eb.Ptr, base+edst+4, "Int"))
+                e += 1
+            }
+        }
     }
 
     FileAppend(txt, outPath, "UTF-8")
     return outPath
+}
+
+; Peeks the first element of a candidate vector to classify it (address-
+; independent). For an 8-byte (pointer) stride it derefs entry[0] and reports
+; whether it looks like a UiElement (valid parent ptr) plus its size and any
+; style/string at 0xF8; for wider strides it shows the inline element's leading
+; int64 / float fields (e.g. grid or world coordinates). Returns a short label.
+_AtlasPeekEntry(reader, first, stride)
+{
+    ub := PoE2Offsets.UiElementBase
+    if (stride = 8)
+    {
+        p := reader.Mem.ReadPtr(first)
+        if !reader.IsProbablyValidPointer(p)
+            return Format("[0]=0x{:X} (non-ptr)", p)
+        par := reader.Mem.ReadPtr(p + ub["ParentPtr"])
+        sid := ""
+        try sid := reader.ReadStdWStringAt(p + ub["StringIdPtr"], 32)
+        kind := reader.IsProbablyValidPointer(par) ? "elem" : "obj "
+        w := reader.Mem.ReadFloat(p + ub["UnscaledSize"])
+        h := reader.Mem.ReadFloat(p + ub["UnscaledSize"] + 4)
+        return Format("[0]->0x{:X} {} sz={}x{} sid='{}'", p, kind, Round(w), Round(h), sid)
+    }
+    b := reader.Mem.ReadBytes(first, 0x20)
+    if !b
+        return "[0]=read-fail"
+    return Format("[0] i64=0x{:X},0x{:X} f=[{:.1f},{:.1f},{:.1f},{:.1f}]",
+        NumGet(b.Ptr, 0, "Int64"), NumGet(b.Ptr, 8, "Int64"),
+        NumGet(b.Ptr, 0, "Float"), NumGet(b.Ptr, 4, "Float"),
+        NumGet(b.Ptr, 8, "Float"), NumGet(b.Ptr, 12, "Float"))
+}
+
+; Scans a struct for StdVector-like (first,last) pointer pairs: both heap ptrs,
+; last > first, span divisible by a plausible element stride with a sane element
+; count. Returns formatted lines — used to locate the atlas node array inside a
+; panel struct without knowing the exact field offset. base/range define the scan.
+_AtlasScanVectors(reader, base, range := 0x800)
+{
+    buf := reader.Mem.ReadBytes(base, range + 16)
+    if !buf
+        return "  (read fail)`n"
+    strides := [8, 16, 0x18, 0x20, 0x28, 0x30, 0x38, 0x40, 0x48, 0x50]
+    out := ""
+    off := 0
+    while (off < range)
+    {
+        v0 := NumGet(buf.Ptr, off, "Int64")
+        v1 := NumGet(buf.Ptr, off + 8, "Int64")
+        if (reader.IsProbablyValidPointer(v0) && reader.IsProbablyValidPointer(v1)
+            && v1 > v0 && (v1 - v0) < 0x400000)
+        {
+            span := v1 - v0
+            for _, st in strides
+            {
+                if (Mod(span, st) = 0)
+                {
+                    cnt := span // st
+                    if (cnt >= 4 && cnt <= 8000)
+                    {
+                        out .= Format("  +0x{:03X}: first=0x{:X} stride=0x{:02X} count={:5}  {}`n",
+                            off, v0, st, cnt, _AtlasPeekEntry(reader, v0, st))
+                        break
+                    }
+                }
+            }
+        }
+        off += 8
+    }
+    return (out != "") ? out : "  (no vector-like pairs)`n"
+}
+
+; True if s is a short, fully printable-ASCII string — filters WString-offset
+; scan hits (real identifiers) from random heap garbage. Returns true/false.
+_AtlasPrintable(s)
+{
+    if (StrLen(s) < 2 || StrLen(s) > 40)
+        return false
+    Loop Parse, s
+    {
+        c := Ord(A_LoopField)
+        if (c < 0x20 || c > 0x7E)
+            return false
+    }
+    return true
+}
+
+; BFS the UI tree from rootPtr, collecting every UiElement that has a non-empty
+; StringId. Each record is Map("ptr","sid","vis","w","h","depth"). Walks at most
+; maxVisit elements. Used by the Atlas dump to reveal the real panel StringId when
+; the expected ids don't match (mirrors AtlasFindPanel's traversal).
+_AtlasEnumStringIds(reader, rootPtr, maxVisit := 8000)
+{
+    out := []
+    if !(IsObject(reader) && reader.IsProbablyValidPointer(rootPtr))
+        return out
+    ub := PoE2Offsets.UiElementBase
+    childFirstOff := ub["ChildrenFirst"]
+    childLastOff := childFirstOff + 0x08
+    sidOff := ub["StringIdPtr"]
+    flagsOff := ub["Flags"]
+    sizeOff := ub["UnscaledSize"]
+
+    queue := [rootPtr]
+    depths := [0]
+    visited := 0
+    while (queue.Length > 0 && visited < maxVisit)
+    {
+        el := queue.RemoveAt(1)
+        dep := depths.RemoveAt(1)
+        if !reader.IsProbablyValidPointer(el)
+            continue
+        visited += 1
+
+        sid := ""
+        try sid := reader.ReadStdWStringAt(el + sidOff, 64)
+        if (sid != "")
+        {
+            flags := reader.Mem.ReadUInt(el + flagsOff)
+            out.Push(Map("ptr", el, "sid", sid,
+                "vis", ((flags >> 11) & 1) ? 1 : 0,
+                "w", reader.Mem.ReadFloat(el + sizeOff),
+                "h", reader.Mem.ReadFloat(el + sizeOff + 4),
+                "depth", dep))
+        }
+
+        cFirst := reader.Mem.ReadInt64(el + childFirstOff)
+        cLast := reader.Mem.ReadInt64(el + childLastOff)
+        if (cFirst <= 0 || cLast <= cFirst)
+            continue
+        n := (cLast - cFirst) // 8
+        if (n <= 0 || n > 10000)
+            continue
+        i := 0
+        while (i < n)
+        {
+            child := reader.Mem.ReadPtr(cFirst + i * 8)
+            if reader.IsProbablyValidPointer(child)
+            {
+                queue.Push(child)
+                depths.Push(dep + 1)
+            }
+            i += 1
+        }
+    }
+    return out
+}
+
+; Resolves the active UI-root UiElement (KB/M, else controller) from a snapshot —
+; the BFS starting point for the Atlas panel search. Derives it live from the
+; InGameState address so it never depends on what the radar snapshot happened to
+; cache. Returns a pointer, or 0.
+_AtlasResolveUiRoot(reader, snap)
+{
+    if !(IsObject(reader) && snap && snap.Has("inGameState"))
+        return 0
+    inGs := snap["inGameState"]
+    if !(inGs is Map && inGs.Has("address") && reader.IsProbablyValidPointer(inGs["address"]))
+        return 0
+    addr := inGs["address"]
+    root := reader.Mem.ReadPtr(addr + PoE2Offsets.InGameState["UiRootStructPtr"])
+    if reader.IsProbablyValidPointer(root)
+        return root
+    root := reader.Mem.ReadPtr(addr + PoE2Offsets.InGameState["GamepadUiRootStructPtr"])
+    return reader.IsProbablyValidPointer(root) ? root : 0
+}
+
+; Scans a byte-offset window across ALL node elements to locate fields whose
+; GameHelper2 offsets have drifted. Reports byte offsets that behave like a small
+; enum (few distinct small values incl. nonzero — biome is inherent & varied, so
+; it surfaces here; status shows 0/1/2) and qword offsets that look like an
+; optional pointer (a mix of valid heap ptrs and nulls — mapData). Returns text.
+_AtlasFieldScan(reader, nodes, loOff, hiOff)
+{
+    span := hiOff - loOff
+    bufs := []
+    for _, nd in nodes
+    {
+        c := nd["uiElemPtr"]
+        if reader.IsProbablyValidPointer(c)
+        {
+            b := reader.Mem.ReadBytes(c + loOff, span)
+            if b
+                bufs.Push(b)
+        }
+    }
+    out := Format("  scanned {} node structs, window 0x{:X}..0x{:X}`n", bufs.Length, loOff, hiOff)
+    if !bufs.Length
+        return out
+
+    out .= "  enum-like byte fields (offset: value×count):`n"
+    o := 0
+    while (o < span)
+    {
+        vals := Map()
+        for _, b in bufs
+        {
+            v := NumGet(b.Ptr, o, "UChar")
+            vals[v] := (vals.Has(v) ? vals[v] : 0) + 1
+        }
+        if (vals.Count >= 2 && vals.Count <= 16)
+        {
+            mx := 0
+            for v, _ in vals
+                if (v > mx)
+                    mx := v
+            if (mx > 0 && mx <= 64)
+            {
+                lst := ""
+                for v, cnt in vals
+                    lst .= Format("{}×{} ", v, cnt)
+                out .= Format("    +0x{:03X}: {}`n", loOff + o, lst)
+            }
+        }
+        o += 1
+    }
+
+    out .= "  optional-pointer qwords (offset: valid/null):`n"
+    o := 0
+    while (o + 8 <= span)
+    {
+        valid := 0, zero := 0, other := 0
+        for _, b in bufs
+        {
+            v := NumGet(b.Ptr, o, "Int64")
+            if (v = 0)
+                zero += 1
+            else if (reader.IsProbablyValidPointer(v) && v < 0x7FF000000000)
+                valid += 1
+            else
+                other += 1
+        }
+        if (valid >= 1 && zero >= 1 && other = 0 && (loOff + o) != 0x320)
+            out .= Format("    +0x{:03X}: valid={} null={}`n", loOff + o, valid, zero)
+        o += 8
+    }
+    return out
+}
+
+; Reads the GameHelper2 atlas-node fields from a panel's first children to verify
+; which candidate panel is the real endgame Atlas and that the offsets resolve to
+; sane values. Offsets (GameHelper2 ImportantUiElements.cs): mapData 0x2A0,
+; biomeId 0x2CE, status 0x2CF, gridPosition 0x320 (int,int), connections vec 0x5A8.
+; A real node has a valid mapData ptr, a small biome byte and plausible grid ints.
+_AtlasProbeNodeFields(reader, panelPtr, maxN := 8)
+{
+    ub := PoE2Offsets.UiElementBase
+    if !reader.IsProbablyValidPointer(panelPtr)
+        return "  (invalid panel)`n"
+    cf := reader.Mem.ReadInt64(panelPtr + ub["ChildrenFirst"])
+    cl := reader.Mem.ReadInt64(panelPtr + ub["ChildrenFirst"] + 8)
+    n := (cf > 0 && cl > cf) ? (cl - cf) // 8 : 0
+    out := Format("  panel 0x{:X}  children={}`n", panelPtr, n)
+    i := 0
+    while (i < n && i < maxN)
+    {
+        c := reader.Mem.ReadPtr(cf + i * 8)
+        if reader.IsProbablyValidPointer(c)
+        {
+            mapData := reader.Mem.ReadPtr(c + 0x2A0)
+            biome := reader.Mem.ReadUChar(c + 0x2CE)
+            status := reader.Mem.ReadUChar(c + 0x2CF)
+            gp := reader.Mem.ReadBytes(c + 0x320, 8)
+            gx := gp ? NumGet(gp.Ptr, 0, "Int") : 0
+            gy := gp ? NumGet(gp.Ptr, 4, "Int") : 0
+            cvf := reader.Mem.ReadInt64(c + 0x5A8)
+            cvl := reader.Mem.ReadInt64(c + 0x5A8 + 8)
+            connBytes := (cvf > 0 && cvl > cvf && (cvl - cvf) < 0x10000) ? (cvl - cvf) : 0
+            w := reader.Mem.ReadFloat(c + ub["UnscaledSize"])
+            h := reader.Mem.ReadFloat(c + ub["UnscaledSize"] + 4)
+            out .= Format("  [{:2}] 0x{:X} sz={}x{} mapData={} biome={} st={} grid=({},{}) conn={}`n",
+                i, c, Round(w), Round(h),
+                (reader.IsProbablyValidPointer(mapData) ? Format("0x{:X}", mapData) : "-"),
+                biome, status, gx, gy, connBytes)
+        }
+        i += 1
+    }
+    return out
+}
+
+; Walks a UiElement child-index path (e.g. [22,0,6]) from base via the children
+; vector at ChildrenFirst (0x10). This is how GameHelper2 locates the atlas panel.
+; Returns the resolved element pointer, or 0 if any index is out of range.
+_AtlasResolveChildPath(reader, base, path)
+{
+    cur := base
+    for _, idx in path
+    {
+        if !reader.IsProbablyValidPointer(cur)
+            return 0
+        cf := reader.Mem.ReadInt64(cur + PoE2Offsets.UiElementBase["ChildrenFirst"])
+        cl := reader.Mem.ReadInt64(cur + PoE2Offsets.UiElementBase["ChildrenFirst"] + 8)
+        n := (cf > 0 && cl > cf) ? (cl - cf) // 8 : 0
+        if (idx < 0 || idx >= n)
+            return 0
+        cur := reader.Mem.ReadPtr(cf + idx * 8)
+    }
+    return reader.IsProbablyValidPointer(cur) ? cur : 0
+}
+
+; Lists a UiElement's direct children (index, ptr, visibility, size, grandchild
+; count) — used to identify the world-map / atlas child index for the current
+; patch when the reference indices drift. Returns formatted text.
+_AtlasDumpChildren(reader, elem, maxN := 40)
+{
+    ub := PoE2Offsets.UiElementBase
+    if !reader.IsProbablyValidPointer(elem)
+        return "  (invalid element)`n"
+    cf := reader.Mem.ReadInt64(elem + ub["ChildrenFirst"])
+    cl := reader.Mem.ReadInt64(elem + ub["ChildrenFirst"] + 8)
+    n := (cf > 0 && cl > cf) ? (cl - cf) // 8 : 0
+    out := Format("  ({} children)`n", n)
+    i := 0
+    while (i < n && i < maxN)
+    {
+        c := reader.Mem.ReadPtr(cf + i * 8)
+        if reader.IsProbablyValidPointer(c)
+        {
+            flags := reader.Mem.ReadUInt(c + ub["Flags"])
+            w := reader.Mem.ReadFloat(c + ub["UnscaledSize"])
+            h := reader.Mem.ReadFloat(c + ub["UnscaledSize"] + 4)
+            gcf := reader.Mem.ReadInt64(c + ub["ChildrenFirst"])
+            gcl := reader.Mem.ReadInt64(c + ub["ChildrenFirst"] + 8)
+            gn := (gcf > 0 && gcl > gcf) ? (gcl - gcf) // 8 : 0
+            out .= Format("  [{:2}] 0x{:X} vis={} sz={}x{} children={}`n",
+                i, c, ((flags >> 11) & 1), Round(w), Round(h), gn)
+        }
+        else
+            out .= Format("  [{:2}] 0x{:X} (invalid)`n", i, c)
+        i += 1
+    }
+    return out
+}
+
+; Computes the ABSOLUTE screen position of a UI element by walking its parent
+; chain (accumulating RelativePosition, plus the parent's PositionModifier when
+; the child's ShouldModifyPos flag is set) and applying GameWindowScale — the
+; same math ReadMapUiElementData / the radar use for the map element. rect is the
+; client rect (NavClientRect: x,y,w,h). Returns Map("x","y") or 0.
+; NOTE: the GameWindowScale branch (esp. scaleIdx 3) is a tuning point to verify
+; in-game once the node offsets are confirmed.
+_AtlasElemScreenPos(reader, elemPtr, rect)
+{
+    if !(reader.IsProbablyValidPointer(elemPtr) && rect)
+        return 0
+    ub := PoE2Offsets.UiElementBase
+    relOff := ub["RelativePosition"]
+    chain := []
+    cur := elemPtr
+    Loop 12
+    {
+        if !reader.IsProbablyValidPointer(cur)
+            break
+        chain.Push(Map(
+            "relX", reader.Mem.ReadFloat(cur + relOff),
+            "relY", reader.Mem.ReadFloat(cur + relOff + 4),
+            "flags", reader.Mem.ReadUInt(cur + ub["Flags"]),
+            "pmX", reader.Mem.ReadFloat(cur + ub["PositionModifier"]),
+            "pmY", reader.Mem.ReadFloat(cur + ub["PositionModifier"] + 4)))
+        parent := reader.Mem.ReadPtr(cur + ub["ParentPtr"])
+        if !reader.IsProbablyValidPointer(parent)
+            break
+        cur := parent
+    }
+    N := chain.Length
+    if (N = 0)
+        return 0
+    accX := chain[N]["relX"], accY := chain[N]["relY"]
+    Loop N - 1
+    {
+        ci := N - A_Index            ; walk root-1 … element
+        ch := chain[ci], pa := chain[ci + 1]
+        if (ch["flags"] >> 10) & 1   ; ShouldModifyPos = bit 10
+        {
+            accX += pa["pmX"]
+            accY += pa["pmY"]
+        }
+        accX += ch["relX"]
+        accY += ch["relY"]
+    }
+    sfX := rect["w"] / 2560.0        ; UI design reference is 2560×1600
+    sfY := rect["h"] / 1600.0
+    si := reader.Mem.ReadUChar(elemPtr + ub["ScaleIndex"])
+    lm := reader.Mem.ReadFloat(elemPtr + ub["LocalScaleMultiplier"])
+    if (lm <= 0)
+        lm := 1.0
+    if (si = 1)
+        usX := lm * sfX, usY := lm * sfX
+    else if (si = 2)
+        usX := lm * sfY, usY := lm * sfY
+    else if (si = 3)
+        usX := lm * sfX, usY := lm * sfY
+    else
+        usX := lm, usY := lm
+    ; Use the element CENTRE (top-left + half size), matching the plugin's
+    ; GetClientRect().Center, so markers sit on the node icons rather than their
+    ; top-left corner.
+    sizeW := reader.Mem.ReadFloat(elemPtr + ub["UnscaledSize"])
+    sizeH := reader.Mem.ReadFloat(elemPtr + ub["UnscaledSize"] + 4)
+    return Map("x", rect["x"] + (accX + sizeW * 0.5) * usX,
+               "y", rect["y"] + (accY + sizeH * 0.5) * usY)
+}
+
+; Per-tick (throttled, self-gated) builder that bridges the reader to the radar's
+; _RenderAtlas: resolve the Atlas panel, read its nodes, project each to absolute
+; screen coords via its UiElement, and publish g_atlasRender. Clears g_atlasRender
+; (nothing drawn) when the overlay is off or the Atlas panel isn't open. Reads run
+; on the main thread, so this is throttled to ~300 ms (the BFS + node walk isn't
+; cheap). Connections / content tags / routing come in a later phase once the node
+; offsets are confirmed via AtlasDumpDebug.
+TryBuildAtlasRender(snap)
+{
+    global g_reader, g_atlasRender, g_atlasBuildTick, g_atlasOverlayEnabled, g_atlasOff
+    if !(IsSet(g_atlasOverlayEnabled) && g_atlasOverlayEnabled)
+        return
+    if !(IsObject(g_reader) && snap && snap.Has("inGameState"))
+        return
+    now := A_TickCount
+    if (IsSet(g_atlasBuildTick) && (now - g_atlasBuildTick) < 300)
+        return
+    g_atlasBuildTick := now
+
+    root := _AtlasResolveUiRoot(g_reader, snap)
+    panel := root ? AtlasFindPanel(g_reader, root, ["worldpanel", "atlas"]) : 0
+    if !panel
+    {
+        g_atlasRender := 0       ; atlas not open / not found
+        return
+    }
+    gameHwnd := ResolvePoEWindow()
+    rect := gameHwnd ? NavClientRect(gameHwnd) : 0
+    if !rect
+    {
+        g_atlasRender := 0
+        return
+    }
+    nodes := AtlasReadNodes(g_reader, panel, 5000)
+    if !nodes.Length
+    {
+        g_atlasRender := 0
+        return
+    }
+
+    ; ── Read the edge vector once (panel-level, 20B/edge). Build the full adjacency
+    ; over ALL read nodes for hop routing, plus keep the edges for on-screen lines. ──
+    nodeSet := Map()                       ; "gx,gy" -> status (every read node)
+    for nd in nodes
+        nodeSet[nd["gridX"] "," nd["gridY"]] := nd.Has("status") ? nd["status"] : 0
+    edges := [], adj := Map()
+    cvOff := g_atlasOff["PanelConnVecOffset"]
+    stride := g_atlasOff["ConnEdgeStride"]   ; 20: int Unknown + Source(8) + Target(8)
+    srcOff := g_atlasOff["ConnSrcOffset"]    ; 4
+    dstOff := g_atlasOff["ConnDstOffset"]    ; 12
+    cvf := g_reader.Mem.ReadInt64(panel + cvOff)
+    cvl := g_reader.Mem.ReadInt64(panel + cvOff + 8)
+    edgeCount := (cvf > 0 && cvl > cvf && (cvl - cvf) < 0x100000) ? (cvl - cvf) // stride : 0
+    if (edgeCount > 0 && edgeCount <= 20000)
+    {
+        eb := g_reader.Mem.ReadBytes(cvf, edgeCount * stride)
+        if eb
+        {
+            e := 0
+            while (e < edgeCount)
+            {
+                base := e * stride
+                e += 1
+                sk := NumGet(eb.Ptr, base + srcOff, "Int") "," NumGet(eb.Ptr, base + srcOff + 4, "Int")
+                dk := NumGet(eb.Ptr, base + dstOff, "Int") "," NumGet(eb.Ptr, base + dstOff + 4, "Int")
+                if !(nodeSet.Has(sk) && nodeSet.Has(dk))
+                    continue
+                edges.Push([sk, dk])
+                if !adj.Has(sk)
+                    adj[sk] := []
+                if !adj.Has(dk)
+                    adj[dk] := []
+                adj[sk].Push(dk)
+                adj[dk].Push(sk)
+            }
+        }
+    }
+
+    ; ── Multi-source BFS from the accessible frontier (AccessibleNow = bit0 set,
+    ; bit1 clear) → hop distance per node ("N→" = maps to clear to reach it). ──
+    dist := Map(), queue := []
+    for gk, stv in nodeSet
+        if ((stv & 0x01) && !(stv & 0x02))
+        {
+            dist[gk] := 0
+            queue.Push(gk)
+        }
+    qh := 1
+    while (qh <= queue.Length)
+    {
+        gk := queue[qh], qh += 1
+        d := dist[gk]
+        if !adj.Has(gk)
+            continue
+        for nb in adj[gk]
+            if !dist.Has(nb)
+            {
+                dist[nb] := d + 1
+                queue.Push(nb)
+            }
+    }
+
+    ; ── Project on-screen nodes; attach hops for locked (None) reachable nodes. ──
+    outNodes := []
+    gridMap := Map()
+    for nd in nodes
+    {
+        if !g_reader.IsProbablyValidPointer(nd["uiElemPtr"])
+            continue
+        sp := _AtlasElemScreenPos(g_reader, nd["uiElemPtr"], rect)
+        if !sp
+            continue
+        ; Keep nodes within a generous margin (one full window beyond each edge) so
+        ; connection lines to just-off-screen neighbours still draw (clipped to the
+        ; window). Only truly absurd projections are rejected as garbage.
+        if (sp["x"] < rect["x"] - rect["w"] || sp["x"] > rect["x"] + 2 * rect["w"]
+            || sp["y"] < rect["y"] - rect["h"] || sp["y"] > rect["y"] + 2 * rect["h"])
+            continue
+        gk := nd["gridX"] "," nd["gridY"]
+        st := nd.Has("status") ? nd["status"] : 0
+        hops := (!(st & 0x03) && dist.Has(gk)) ? dist[gk] : 0   ; locked + reachable only
+        outNd := Map("x", sp["x"], "y", sp["y"], "gridX", nd["gridX"], "gridY", nd["gridY"],
+            "name", nd["name"], "biomeId", nd["biomeId"], "status", st, "hops", hops,
+            "content", _AtlasResolveContent(g_reader, nd["uiElemPtr"]))  ; on-screen only
+        outNodes.Push(outNd)
+        gridMap[gk] := outNd
+    }
+    if !outNodes.Length
+    {
+        g_atlasRender := 0
+        return
+    }
+
+    ; ── On-screen connection lines (both endpoints visible). ──
+    conns := []
+    for pair in edges
+        if (gridMap.Has(pair[1]) && gridMap.Has(pair[2]))
+        {
+            a := gridMap[pair[1]], b := gridMap[pair[2]]
+            conns.Push(Map("x1", a["x"], "y1", a["y"], "x2", b["x"], "y2", b["y"]))
+        }
+
+    g_atlasRender := Map("nodes", outNodes, "connections", conns)
 }
 
 ; Bridge handler: triggered from the UI ("Dump Atlas" button / ahkCall).

@@ -115,6 +115,13 @@ _DispatchBridgeCall(method, args)
             SetTimer(OnDumpEntitiesClicked, -1)
         case "DumpAtlas":
             SetTimer(OnDumpAtlasClicked, -1)
+        case "ToggleAtlasOverlay":
+            global g_atlasOverlayEnabled, g_atlasRender
+            g_atlasOverlayEnabled := !g_atlasOverlayEnabled
+            if !g_atlasOverlayEnabled
+                g_atlasRender := 0
+            try IniWrite(g_atlasOverlayEnabled ? "1" : "0", A_ScriptDir "\poeformance_config.ini", "Atlas", "overlayEnabled")
+            SetTimer(PushHeaderToWebView, -50)
         case "HighlightEntity":
             g_highlightedEntityPath := (args.Length >= 1) ? args[1] : ""
         case "ClearEntityHighlight":
@@ -672,6 +679,8 @@ _DispatchBridgeCall(method, args)
             SetTimer(() => UiBrowseSearch(q), -1)
         case "UiBrowserClearHighlight":
             SetTimer(() => UiBrowserClearHighlight(), -1)
+        case "UiBrowseScanStrings":
+            SetTimer(() => UiBrowseScanStrings(), -1)
         case "RefreshItemSizes":
             ; Shell out to ggpk-tools/PoeDataExtract on a timer — runs
             ; ~200 ms..2 s end-to-end and pumps a status message back

@@ -3928,6 +3928,12 @@
     <div class="pill inactive clickable" id="pill-hud" onclick="ahkCall('TogglePlayerHud')" data-tip="Toggle Player HUD" data-icon="♥">
       <div class="dot"></div><span id="pill-hud-text">HUD ON</span>
     </div>
+    <!-- Atlas map overlay — draws the endgame-atlas node graph (names, biomes,
+         state, connections, content, hop pills) while the Atlas is open. State /
+         label set from the header push (d.atlasOverlay). -->
+    <div class="pill inactive clickable" id="pill-atlas" onclick="ahkCall('ToggleAtlasOverlay')" data-tip="Toggle Atlas Overlay" data-icon="🗺">
+      <div class="dot"></div><span id="pill-atlas-text">Atlas OFF</span>
+    </div>
     <!-- Overlay visibility scope — toggles whether the play overlays follow tool
          focus too (default) or are restricted to the PoE2 window only. State /
          label set from the header push (d.overlayPoeOnly). -->
@@ -4235,6 +4241,7 @@
           <button class="uib-btn" onclick="ahkCall('UiBrowseRoot')" data-tip="Root">⌂ Root</button>
           <button class="uib-btn" onclick="ahkCall('UiBrowseRoot')" data-tip="GameUI">⊞ GameUI</button>
           <button class="uib-btn" onclick="uibCopyInfo()" data-tip="Copy element info as text">📋 Copy Info</button>
+          <button class="uib-btn" onclick="ahkCall('UiBrowseScanStrings')" data-tip="RE: dump all readable wide-string fields of this element (struct + 1-level deref) to debug\uielem_scan_*.txt — to locate the real StringId offset">🔍 Scan Strings</button>
         </div>
         <div id="uib-search-row">
           <input id="uib-search-input" type="text" placeholder="Search StringId…"
@@ -4396,7 +4403,6 @@
               <button class="cfg-btn" onclick="ahkCall('WatchNpc')">👁 Add NPC Watch</button>
               <button class="cfg-btn" onclick="ahkCall('ToggleTreePane')">🌲 Toggle Tree Pane</button>
               <button class="cfg-btn" onclick="ahkCall('DumpEntities')">💾 Dump Entities</button>
-              <button class="cfg-btn" title="Atlas RE: open the Atlas/World map, then dump node data + raw hex to debug\atlas_debug_*.txt" onclick="ahkCall('DumpAtlas')">🗺 Dump Atlas</button>
             </div>
           </details>
         </div>
@@ -5553,6 +5559,18 @@
           <div style="color:var(--subtext);font-size:12px;">Esc to cancel</div>
         </div>
       </div>
+      <!-- Delete confirmation for groups / hotkeys (with an optional export-first). -->
+      <div id="hk-confirm" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;align-items:center;justify-content:center;" onclick="if(event.target===this)hkConfirmCancel()">
+        <div style="background:var(--surface);border:1px solid var(--codex-rule);border-radius:6px;padding:22px 26px;max-width:440px;color:var(--text);box-shadow:0 10px 34px rgba(0,0,0,.55);">
+          <div style="font-family:var(--codex-display);letter-spacing:.06em;text-transform:uppercase;color:var(--codex-blood-hi);font-size:14px;margin-bottom:8px;">Confirm deletion</div>
+          <div id="hk-confirm-msg" style="font-family:var(--codex-serif);font-size:13px;color:var(--codex-text);margin-bottom:18px;line-height:1.45;"></div>
+          <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+            <button class="hk-btn" title="Keep it — close without deleting" onclick="hkConfirmCancel()">Cancel</button>
+            <button class="hk-btn" id="hk-confirm-export" title="Save a JSON backup to hotkeys_export/ before deleting" onclick="hkConfirmExport()">⤓ Export first</button>
+            <button class="hk-btn danger" title="Permanently delete" onclick="hkConfirmDo()">✕ Delete</button>
+          </div>
+        </div>
+      </div>
     </div>
 
   </div><!-- /content -->
@@ -5625,6 +5643,10 @@
       var m = document.getElementById('patch-modal');
       if (m) m.classList.remove('open');
     }
+    // Suppress the WebView's default right-click context menu everywhere in the
+    // app (it exposes browser actions like reload/save that don't belong here).
+    // Mouse-button capture uses mousedown, not contextmenu, so it still works.
+    window.addEventListener('contextmenu', function (e) { e.preventDefault(); }, true);
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') {
         var m = document.getElementById('patch-modal');
@@ -6225,7 +6247,7 @@
             <span class="hk-spacer"></span>
             <button class="hk-btn hk-icon-btn" title="Add a new hotkey to this group" onclick="hkAddHotkey(${gi})"><svg class="hk-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></button>
             <button class="hk-btn hk-icon-btn" title="Export this group to hotkeys_export/" onclick="hkExportGroup(${gi})"><svg class="hk-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10m0 0l-4-4m4 4l4-4M5 19h14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-            <button class="hk-btn hk-icon-btn danger hk-always" title="Delete this group and all its hotkeys" onclick="hkDelGroup(${gi})"><svg class="hk-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></button>
+            <button class="hk-btn hk-icon-btn danger hk-always" title="Delete this group and all its hotkeys" onclick="hkAskDelete('group',${gi})"><svg class="hk-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></button>
           </div>
           ${body}
         </div>`;
@@ -6396,7 +6418,7 @@
             <span class="hk-cap"><label class="toggle"><input type="checkbox" ${hkBool(mods.gamepadLT) ? 'checked' : ''}
                    onchange="hkSetMod(${gi},${hi},'gamepadLT',this.checked?1:0)"><span class="toggle-slider"></span></label>LT</span>`}
             <span class="hk-spacer"></span>
-            <button class="hk-btn danger hk-always" title="Delete this hotkey" onclick="hkDelHk(${gi},${hi})">✕</button>
+            <button class="hk-btn danger hk-always" title="Delete this hotkey" onclick="hkAskDelete('hotkey',${gi},${hi})">✕</button>
           </div>
           ${body}
         </div>`;
@@ -6582,6 +6604,55 @@
       const a = hkConfig[gi].hotkeys[hi].actions[ai];
       if (a) ahkCall('ExportHotkeysItem', 'action', a.type || 'action', JSON.stringify(a, null, 2));
     }
+    // Exports a single hotkey wrapped in a one-hotkey group, so it re-imports via
+    // the "⤒ Import group" button (there is no standalone hotkey importer).
+    function hkExportHotkey(gi, hi) {
+      const hk = hkConfig[gi] && hkConfig[gi].hotkeys[hi];
+      if (!hk) return;
+      const grp = { name: hk.name || 'hotkey', enabled: 1, hotkeys: [hk] };
+      ahkCall('ExportHotkeysItem', 'group', hk.name || 'hotkey', JSON.stringify(grp, null, 2));
+    }
+
+    // ── Delete confirmation (groups / hotkeys) ─────────────────────────────────
+    // Clicking a group/hotkey ✕ opens a modal (warn + optional export) instead of
+    // deleting immediately. The pending target is captured by index; nothing
+    // re-renders until the user confirms, so the indices stay valid.
+    let hkConfirmTarget = null;
+    function hkAskDelete(kind, gi, hi) {
+      hkConfirmTarget = { kind, gi, hi };
+      const msgEl = document.getElementById('hk-confirm-msg');
+      const expBtn = document.getElementById('hk-confirm-export');
+      if (expBtn) expBtn.textContent = '⤓ Export first';
+      if (kind === 'group') {
+        const g = hkConfig[gi]; const n = (g && g.hotkeys ? g.hotkeys.length : 0);
+        msgEl.innerHTML = `Delete the group <b>“${hkEsc(g ? g.name : '')}”</b> and its `
+          + `<b>${n}</b> hotkey${n === 1 ? '' : 's'}? This cannot be undone.`;
+      } else {
+        const hk = hkConfig[gi] && hkConfig[gi].hotkeys[hi];
+        msgEl.innerHTML = `Delete the hotkey <b>“${hkEsc(hk ? hk.name : '')}”</b>? This cannot be undone.`;
+      }
+      document.getElementById('hk-confirm').style.display = 'flex';
+    }
+    function hkConfirmCancel() {
+      hkConfirmTarget = null;
+      document.getElementById('hk-confirm').style.display = 'none';
+    }
+    // Export the pending target (group or hotkey) but keep the dialog open so the
+    // user can still confirm or cancel afterwards.
+    function hkConfirmExport() {
+      if (!hkConfirmTarget) return;
+      const t = hkConfirmTarget;
+      if (t.kind === 'group') hkExportGroup(t.gi); else hkExportHotkey(t.gi, t.hi);
+      const expBtn = document.getElementById('hk-confirm-export');
+      if (expBtn) { expBtn.textContent = '⤓ Exported ✓'; setTimeout(() => { if (expBtn) expBtn.textContent = '⤓ Export first'; }, 2000); }
+    }
+    function hkConfirmDo() {
+      if (!hkConfirmTarget) return;
+      const t = hkConfirmTarget;
+      hkConfirmTarget = null;
+      document.getElementById('hk-confirm').style.display = 'none';
+      if (t.kind === 'group') hkDelGroup(t.gi); else hkDelHk(t.gi, t.hi);
+    }
 
     function hkRenderAction(a, gi, hi, ai) {
       const t = a.type || '';
@@ -6668,10 +6739,16 @@
           const pressed = !!a.press;
           const holdBlock = `<span class="${pressed ? '' : 'hk-disabled'}" title="${pressed ? 'How long to hold the output key down after aiming, in milliseconds' : 'Enable "Press key" to use Hold(ms)'}">`
                + `Hold(ms) ${hkNum(a, 'holdMs', 0, gi, hi, ai, 'How long to hold the output key down after aiming, in milliseconds')}</span>`;
+          // Radius field swaps px ↔ world range with the mode, like monster count.
+          const aimMode = a.radiusMode || 'player';
+          const aimWorld = (aimMode === 'world' || aimMode === 'worldCursor');
+          const aimRadiusField = aimWorld
+            ? `Range ${hkNum(a, 'worldRadius', 1000, gi, hi, ai, 'Search radius in world units (zoom-independent — matches the actual game distance; no scale tuning needed)')} `
+            : `Radius(px) ${hkNum(a, 'radius', 150, gi, hi, ai, 'Search radius in screen pixels (depends on the world-to-screen scale)')} `;
           body = `Target ${targetSel} ${filt}`
-               + `Radius(px) ${hkNum(a, 'radius', 150, gi, hi, ai, 'Radius in screen pixels to search for an aim target')} `
-               + `${hkSel(a, 'radiusMode', [['cursor', 'around cursor'], ['player', 'around player']], gi, hi, ai, 'Measure the radius around the mouse cursor or around the player')} `
-               + `${hkChk(a, 'press', 'Press key', gi, hi, ai, 'After aiming, also press the output key (enables Hold(ms))')} `
+               + aimRadiusField
+               + `${hkSel(a, 'radiusMode', [['cursor', 'around cursor (px)'], ['player', 'around player (px)'], ['world', 'around player (range)'], ['worldCursor', 'around cursor (range) ⚠ experimental']], gi, hi, ai, 'Pixel radius (cursor/player) or a zoom-independent world-unit range around the player (or — experimental — around the cursor)')} `
+               + `${hkChk(a, 'press', 'Press key', gi, hi, ai, 'After aiming, also press the output key (enables Hold(ms)). Off = the cursor just moves and the bound output still fires once.')} `
                + holdBlock;
           break;
         }
@@ -6823,7 +6900,7 @@
         case 'buff':         return { type, buffName: '', mode: 'present', minStacks: 0, minTimeLeftMs: 0 };
         case 'charges':      return { type, chargeType: 'power', op: '>=', value: 1 };
         case 'monsterCount': return { type, rarity: 'any', radiusMode: 'player', radius: 120, op: '>=', value: 1 };
-        case 'aim':          return { type, targetType: 'monster', rarity: 'any', radius: 150, radiusMode: 'cursor', chestType: '', chestTypeCustom: 0, name: '', metadataPath: '', press: 1, holdMs: 0, scanAll: 0 };
+        case 'aim':          return { type, targetType: 'monster', rarity: 'any', radius: 150, worldRadius: 1000, radiusMode: 'cursor', chestType: '', chestTypeCustom: 0, name: '', metadataPath: '', press: 1, holdMs: 0, scanAll: 0 };
         default:             return { type: 'key', mode: 'press' };
       }
     }
@@ -7810,6 +7887,12 @@
         const on = d.playerHud !== false && d.playerHud !== 'false';
         pillHud.className = 'pill clickable ' + (on ? 'active' : 'inactive');
         document.getElementById('pill-hud-text').textContent = 'HUD ' + (on ? 'ON' : 'OFF');
+      }
+      const pillAtlas = document.getElementById('pill-atlas');
+      if (pillAtlas) {
+        const on = d.atlasOverlay === true || d.atlasOverlay === 'true';
+        pillAtlas.className = 'pill clickable ' + (on ? 'active' : 'inactive');
+        document.getElementById('pill-atlas-text').textContent = 'Atlas ' + (on ? 'ON' : 'OFF');
       }
       // Overlay visibility scope pill — gold/active when overlays are restricted
       // to the PoE2 window only; inactive when they also follow our tool's focus.
@@ -9161,6 +9244,7 @@
 
     <div class="uib-prop-section" style="color:#7be07b">--- Extra ---</div>
     <div class="uib-prop-row"><span class="uib-prop-key">Font Name</span><span class="uib-prop-val" style="color:#7be07b">${p.fontName ? '"' + escHtml(p.fontName) + '"' : '<span style="color:#666">(none)</span>'}</span></div>
+    <div class="uib-prop-row"><span class="uib-prop-key">Text Style</span><span class="uib-prop-val" style="color:#7be07b">${p.textStyle ? '"' + escHtml(p.textStyle) + '"' : '<span style="color:#666">(none)</span>'}</span></div>
     <div class="uib-prop-row"><span class="uib-prop-key">Vtable</span>${hv(p.vtable || '')}</div>`;
     }
 
@@ -9190,6 +9274,7 @@
         `Flags:         ${p.flags || ''}`,
         `Background:    ${p.bgColor || ''}`,
         `Font Name:     "${p.fontName || ''}"`,
+        `Text Style:    "${p.textStyle || ''}"`,
         `Vtable:        ${p.vtable || ''}`,
       ];
       const text = lines.join('\n');
