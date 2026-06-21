@@ -116,6 +116,12 @@ PushHotkeyBindingsToWebView()
     if !g_webViewReady
         return
 
+    ; Refresh the live skill-bar key + skill-name maps right here — the local player
+    ; is reliably resolvable at push time (same context as _CollectActiveSkillNames
+    ; below), unlike the deferred area-change tick — so the pushed skillSlots always
+    ; carry current keys AND skill names.
+    try RefreshSkillBarKeys()
+
     ; Flask slots — PoE2 only uses slots 1 (life) and 2 (mana) as user-pressable
     ; flasks; slots 3-5 are charms that trigger automatically (no hotkey).
     flaskArr := []

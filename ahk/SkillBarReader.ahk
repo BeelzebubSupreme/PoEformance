@@ -356,12 +356,11 @@ RefreshSkillBarKeys()
     return cnt
 }
 
-; Refreshes the skill-bar keys from the live UI and pushes the hotkey bindings to
-; the WebView. Used as the area-change handler target so the Hotkeys tab auto-fills
-; its skill slots whenever a new area is entered.
+; Pushes the hotkey bindings to the WebView (which itself refreshes the live
+; skill-bar maps first). Used as the area-change handler target so the Hotkeys tab
+; auto-fills its skill slots whenever a new area is entered.
 _SkillKeysRefreshAndPush()
 {
-    try RefreshSkillBarKeys()
     try PushHotkeyBindingsToWebView()
 }
 

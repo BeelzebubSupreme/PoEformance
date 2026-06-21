@@ -6168,6 +6168,19 @@
       try { hkBindings = JSON.parse(jsonStr); } catch (e) { return; }
       if (!hkBindings || typeof hkBindings !== 'object') hkBindings = { flaskSlots: [], skillSlots: [], skillNames: [], chestTypes: [] };
       hkRender();
+      _refreshCombatSlotKeys();   // combat key fields resolve from the same bar data
+    }
+    // Updates each combat slot's key field to the live skill-bar key for its picked
+    // skill (display only — firing resolves by name live in AHK). No-op on focused
+    // fields and on skills not on the bar (keeps any manual key).
+    function _refreshCombatSlotKeys() {
+      document.querySelectorAll('.combat-slot-row').forEach(row => {
+        const nameEl = row.querySelector('.combat-slot-name');
+        const keyEl = row.querySelector('.combat-slot-key');
+        if (!nameEl || !keyEl || keyEl === document.activeElement) return;
+        const rk = _skillKeyByName(nameEl.value);
+        if (rk) keyEl.value = rk;
+      });
     }
     // Collapse state is view-only (not persisted, no AHK round-trip): a Set of
     // keys 'g:<gi>' | 'h:<hotkeyId>' | 'a:<hotkeyId>:<ai>' that are folded.
@@ -8365,6 +8378,10 @@
         container.innerHTML = html;
         _combatSlotsBuilt = true;
         _updateSkillDropdowns();
+        _refreshCombatSlotKeys();
+        // Pull a fresh skill-bar read so the per-slot keys resolve even if no
+        // bindings push has happened yet this session (e.g. reloaded mid-zone).
+        try { ahkCall('RefreshSkillKeys'); } catch (e) {}
         // Position value labels on slot sliders after DOM is ready
         requestAnimationFrame(() => _sbInitAll());
         return;
@@ -8502,6 +8519,9 @@
       }
       saveCombatSlot(i);
       updateRangeCircleVisibility();
+      // Ask AHK to re-read the bar + re-push bindings, so the key resolves even if
+      // the cached bindings were stale; updateHotkeyBindings() then fills the field.
+      ahkCall('RefreshSkillKeys');
     }
 
     // Incrementally update a slot row + its Advanced row without destroying DOM
