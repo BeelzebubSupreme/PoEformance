@@ -3131,7 +3131,14 @@
       min-width: 260px;
       border: 1px solid var(--codex-rule);
       background: linear-gradient(180deg, var(--codex-parchment), var(--codex-vellum));
-      border-radius: 2px
+      border-radius: 2px;
+      /* Promote each box to its own compositing layer + clip its paint to its
+         own border box. WebView2 otherwise leaves a "ghost" of the collapsed
+         state (doubled help text, leftover toggle/scrollbar marks) when a
+         <details> expands and the flex row reflows — it looked like a second
+         box nested inside the Junk Filter box. */
+      transform: translateZ(0);
+      contain: paint;
     }
     .ent-junkbox.ent-box-sm { flex: 1 1 240px }
     .ent-junkbox-sum {
