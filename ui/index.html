@@ -5011,22 +5011,40 @@
               </div>
               <div class="cfg-help">Standalone debug panel docked to the right edge of the game window: AutoPilot / combat / loot / explore state, pathfinding diagnostics (hz/rg), current navigation target with distance, AutoFlask reason and the running version. Useful for debugging, distracting in normal play.</div>
 
-              <div class="cfg-row" style="margin-top:6px"><span class="cfg-label">Entity Markers</span></div>
-              <div class="cfg-help">Which monster categories the radar draws on the minimap and on-screen overlay. Off = invisible to the radar, even if the entity is in range.</div>
-              <div id="radar-filters" class="filter-row">
-                <label class="filter-pill"><input type="checkbox" id="rf-normal"
-                    onchange="setRadarFilter('normal',  this.checked)" checked> Normal</label>
-                <label class="filter-pill"><input type="checkbox" id="rf-rare"
-                    onchange="setRadarFilter('rare',    this.checked)" checked> Rare</label>
-                <label class="filter-pill"><input type="checkbox" id="rf-boss"
-                    onchange="setRadarFilter('boss',    this.checked)" checked> Boss</label>
-                <label class="filter-pill"><input type="checkbox" id="rf-minions"
-                    onchange="setRadarFilter('minions', this.checked)"> Minions</label>
-                <label class="filter-pill"><input type="checkbox" id="rf-npcs"
-                    onchange="setRadarFilter('npcs',    this.checked)"> NPCs</label>
-                <label class="filter-pill"><input type="checkbox" id="rf-chests"
-                    onchange="setRadarFilter('chests',  this.checked)"> Chests</label>
-              </div>
+              <!-- Entity Markers — collapsible nested section. Gets the themed
+                   caret for free (cube when closed, gold diamond when open) via
+                   the .cfg-section details summary::after rule. Replaces the old
+                   pill row; each monster category is now a standard toggle row.
+                   Keeps id="radar-filters" (opacity dim when radar off) and the
+                   rf-* ids / setRadarFilter handlers so header sync is unchanged. -->
+              <details style="margin-top:6px">
+                <summary style="cursor:pointer;padding:4px 0">
+                  <div class="cfg-header" style="font-size:12px">Entity Markers</div>
+                </summary>
+                <div style="margin-top:4px;padding:6px 0 4px 4px">
+                  <div class="cfg-help">Which monster categories the radar draws on the minimap and on-screen overlay. Off = invisible to the radar, even if the entity is in range.</div>
+                  <div id="radar-filters">
+                    <div class="cfg-row"><span class="cfg-label">Normal</span>
+                      <label class="toggle"><input type="checkbox" id="rf-normal" onchange="setRadarFilter('normal', this.checked)" checked><span class="toggle-slider"></span></label>
+                    </div>
+                    <div class="cfg-row"><span class="cfg-label">Rare</span>
+                      <label class="toggle"><input type="checkbox" id="rf-rare" onchange="setRadarFilter('rare', this.checked)" checked><span class="toggle-slider"></span></label>
+                    </div>
+                    <div class="cfg-row"><span class="cfg-label">Boss</span>
+                      <label class="toggle"><input type="checkbox" id="rf-boss" onchange="setRadarFilter('boss', this.checked)" checked><span class="toggle-slider"></span></label>
+                    </div>
+                    <div class="cfg-row"><span class="cfg-label">Minions</span>
+                      <label class="toggle"><input type="checkbox" id="rf-minions" onchange="setRadarFilter('minions', this.checked)"><span class="toggle-slider"></span></label>
+                    </div>
+                    <div class="cfg-row"><span class="cfg-label">NPCs</span>
+                      <label class="toggle"><input type="checkbox" id="rf-npcs" onchange="setRadarFilter('npcs', this.checked)"><span class="toggle-slider"></span></label>
+                    </div>
+                    <div class="cfg-row"><span class="cfg-label">Chests</span>
+                      <label class="toggle"><input type="checkbox" id="rf-chests" onchange="setRadarFilter('chests', this.checked)"><span class="toggle-slider"></span></label>
+                    </div>
+                  </div>
+                </div>
+              </details>
 
               <div class="cfg-row" style="margin-top:6px"><span class="cfg-label">Zone Navigation</span>
                 <label class="toggle"><input type="checkbox" id="tog-zonenav" onchange="ahkCall('ToggleZoneNav')"
