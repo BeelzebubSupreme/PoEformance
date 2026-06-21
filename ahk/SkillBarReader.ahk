@@ -1,17 +1,19 @@
 ; SkillBarReader.ahk
 ; Reads the live skill-bar key bindings straight from the HUD UI tree, using the
 ; per-element Displayed Text (UiElementBase.TextPtr @ 0x390). This is the reliable
-; source the poe2_production_Config.ini parse could not provide: each visible skill
+; source the poe2_production_Config.ini parse could not provide: each keyboard skill
 ; slot's hotkey label (e.g. "Q","R","E","T","F") is read from the rendered UI.
 ;
 ; skills_bar layout confirmed live 2026-06-21 against a subtree dump:
 ;   skills_bar (HUD > HUDRight > skills_bar)
-;     -> per-slot icon containers (direct children of skills_bar)
-;          visible container = an equipped, shown skill (its leaf label is the key)
+;     -> per-slot icon containers (direct children, ~64x64 UI units)
+;          visible container = an equipped, shown slot
 ;          hidden  container = the weapon-set-2 duplicate (label "Ctrl+<key>")
-;        each container holds, a few levels deeper, exactly ONE visible leaf whose
-;        Displayed Text is the bound key; icon-only slots (mouse binds) carry no
-;        text and yield no key.
+;        each container holds, a few levels deeper, the slot's label leaf whose
+;        Displayed Text is the bound key. There are two rows:
+;          top row    = mouse-bound slots (label-less): slot 1 = Left Mouse always,
+;                       slot 2 = Middle Mouse, slot 3 = Right Mouse (when label empty)
+;          bottom row = keyboard slots, read directly from the label text.
 ;
 ; Included by InGameStateMonitor.ahk
 
@@ -74,10 +76,10 @@ _SkillBarBfsFind(reader, rootPtr, targetId, maxDepth)
 }
 
 ; Depth-first search within a single skill-slot container for the first VISIBLE
-; leaf carrying non-empty Displayed Text — that text is the bound key. Hidden
+; leaf carrying NON-EMPTY Displayed Text — that text is the bound key. Hidden
 ; subtrees are pruned (so a hidden weapon-set-2 container never leaks its "Ctrl+…"
-; label). Params: ptr - subtree root; depth - recursion guard.
-; Returns the trimmed key string, or "" when none is found.
+; label), and empty visible leaves are skipped (so a mouse slot returns "").
+; Params: ptr - subtree root; depth - recursion guard. Returns the key, or "".
 _SkillBarFindLabel(reader, ptr, depth)
 {
     if (depth > 7 || !reader.IsProbablyValidPointer(ptr))
@@ -116,7 +118,7 @@ _SkillBarFindLabel(reader, ptr, depth)
 
 ; Normalizes a UI key label to an AHK send token. Single ASCII letters are
 ; lowercased (AHK Send expects "q", not "Q"); everything else (digits, named keys,
-; "Ctrl+Q") is passed through trimmed. Param: t - raw label text.
+; mouse buttons "LButton"/…, "Ctrl+Q") is passed through trimmed. Param: t - label.
 _SkillBarNormalizeKey(t)
 {
     t := Trim(t)
@@ -126,10 +128,10 @@ _SkillBarNormalizeKey(t)
 }
 
 ; Reads the skill-bar bindings. Param: reader - the PoE2MemoryReader.
-; Returns an array of Maps, one per VISIBLE slot that carries a hotkey label, in
-; row-major screen order (top->bottom, left->right):
-;   { key, sendKey, screenX, screenY, addr }
-; Empty when the bar isn't available / visible.
+; Returns an array of slot Maps in row-major order (top->bottom, left->right):
+;   { slot, key, sendKey, screenX, screenY, addr }
+; slot is the 1-based row-major index; the top (mouse) row gets the LMB/MMB/RMB
+; treatment. Empty when the bar isn't available / visible.
 ReadSkillBarHotkeys(reader)
 {
     out := []
@@ -149,31 +151,74 @@ ReadSkillBarHotkeys(reader)
     buf := reader.Mem.ReadBytes(cf, n * A_PtrSize)
     if !buf
         return out
+
+    ; Gather the actual skill-slot containers: VISIBLE and icon-sized (~64x64 UI
+    ; units). This INCLUDES the label-less mouse slots (top row) and excludes both
+    ; the hidden weapon-set-2 duplicates (not visible) and the wide indicator panel.
+    slots := []
     Loop n
     {
         container := NumGet(buf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
         if !reader.IsProbablyValidPointer(container)
             continue
-        ; _SkillBarFindLabel prunes hidden containers (returns "") and icon-only
-        ; slots with no text leaf, so the result already excludes the weapon-set-2
-        ; "Ctrl+…" duplicates and the label-less top-row icons.
-        key := _SkillBarFindLabel(reader, container, 0)
-        if (key = "")
+        flags := 0
+        try flags := reader.Mem.ReadUInt(container + PoE2Offsets.UiElementBase["Flags"])
+        if (((flags >> 11) & 1) = 0)
             continue
+        szBuf := reader.Mem.ReadBytes(container + PoE2Offsets.UiElementBase["UnscaledSize"], 8)
+        if !szBuf
+            continue
+        sw := NumGet(szBuf.Ptr, 0, "Float")
+        sh := NumGet(szBuf.Ptr, 4, "Float")
+        if (sw < 40 || sw > 96 || sh < 40 || sh > 96)
+            continue
+        key := _SkillBarFindLabel(reader, container, 0)
         pos := UiTree_GetScreenPos(reader, container)
+        slots.Push(Map("key", key, "sx", pos["x"], "sy", pos["y"], "addr", container))
+    }
+    if (slots.Length = 0)
+        return out
+    _SkillBarSortRowMajor(slots)
+
+    ; Top row = the mouse-bound slots. Slot 1 is ALWAYS the left mouse button;
+    ; slots 2 and 3 fall back to the middle / right mouse button when their label
+    ; is empty (a mouse bind renders no text). Only applied when a distinct lower
+    ; (keyboard) row exists, so a single-row bar isn't mistaken for mouse slots.
+    topY := slots[1]["sy"]
+    for s in slots
+        if (s["sy"] < topY)
+            topY := s["sy"]
+    hasBottom := false
+    for s in slots
+        if (s["sy"] - topY > 16)
+            hasBottom := true
+
+    for i, s in slots
+    {
+        key := s["key"]
+        isTop := (Abs(s["sy"] - topY) <= 8)
+        if (hasBottom && isTop)
+        {
+            if (i = 1)
+                key := "LButton"                 ; slot 1 is always Left Mouse
+            else if (i = 2 && key = "")
+                key := "MButton"                 ; slot 2 -> Middle Mouse when label-less
+            else if (i = 3 && key = "")
+                key := "RButton"                 ; slot 3 -> Right Mouse when label-less
+        }
         out.Push(Map(
+            "slot", i,
             "key", key,
             "sendKey", _SkillBarNormalizeKey(key),
-            "screenX", pos["x"],
-            "screenY", pos["y"],
-            "addr", container
+            "screenX", s["sx"],
+            "screenY", s["sy"],
+            "addr", s["addr"]
         ))
     }
-    _SkillBarSortRowMajor(out)
     return out
 }
 
-; In-place insertion sort of the slot array by (screenY, screenX). Small N.
+; In-place insertion sort of the gathered slot array by (sy, sx). Small N.
 _SkillBarSortRowMajor(arr)
 {
     i := 2
@@ -195,16 +240,17 @@ _SkillBarSortRowMajor(arr)
 ; visual row together (compared left->right) despite tiny vertical jitter.
 _SkillBarRowMajorGreater(a, b)
 {
-    dy := a["screenY"] - b["screenY"]
+    dy := a["sy"] - b["sy"]
     if (Abs(dy) > 8)
         return dy > 0
-    return a["screenX"] > b["screenX"]
+    return a["sx"] > b["sx"]
 }
 
-; Reads the skill bar and (re)populates g_skillKeyBySlot in row-major visual order
-; (slot 1 = first key, …). Non-destructive when the bar yields nothing (keeps the
-; existing config-parsed map), so it never wipes binds while the bar is hidden or
-; between areas. Does NOT push to the UI — callers do that. Returns the slot count.
+; Reads the skill bar and (re)populates g_skillKeyBySlot in row-major slot order.
+; Non-destructive when the bar yields nothing (keeps the existing config-parsed
+; map), so it never wipes binds while the bar is hidden or between areas. Skips
+; slots whose key is empty (unbound). Does NOT push to the UI — callers do that.
+; Returns the number of bound slots.
 RefreshSkillBarKeys()
 {
     global g_reader, g_skillKeyBySlot, g_skillKeyLoadStatus
@@ -214,11 +260,21 @@ RefreshSkillBarKeys()
     if (list.Length = 0)
         return 0
     m := Map()
-    for i, e in list
-        m[i] := e["sendKey"]
+    cnt := 0
+    for e in list
+    {
+        sk := e["sendKey"]
+        if (sk != "")
+        {
+            m[e["slot"]] := sk
+            cnt += 1
+        }
+    }
+    if (cnt = 0)
+        return 0
     g_skillKeyBySlot := m
-    g_skillKeyLoadStatus := "ui:" list.Length
-    return list.Length
+    g_skillKeyLoadStatus := "ui:" cnt
+    return cnt
 }
 
 ; Refreshes the skill-bar keys from the live UI and pushes the hotkey bindings to
@@ -244,14 +300,18 @@ DetectSkillKeysAndReport()
     list := ReadSkillBarHotkeys(g_reader)
     if (list.Length = 0)
     {
-        try MsgBox("No skill-bar keys detected.`n`nMake sure you are in a zone with the skill bar visible and skills equipped, then try again.", "Detect Skill Keys", 0x30)
+        try MsgBox("No skill slots detected.`n`nMake sure you are in a zone with the skill bar visible and skills equipped, then try again.", "Detect Skill Keys", 0x30)
         return
     }
     RefreshSkillBarKeys()
     try PushHotkeyBindingsToWebView()
-    txt := "Detected " list.Length " skill-bar key(s) — row-major (top->bottom, left->right):`n`n"
-    for i, e in list
-        txt .= "  slot " i ":  " e["key"] "   (send: " e["sendKey"] ")`n"
+    txt := "Detected " list.Length " skill slot(s) — row-major (top->bottom, left->right):`n`n"
+    for e in list
+    {
+        lbl := (e["key"] != "") ? e["key"] : "(unbound)"
+        snd := (e["sendKey"] != "") ? e["sendKey"] : "-"
+        txt .= "  slot " e["slot"] ":  " lbl "   (send: " snd ")`n"
+    }
     txt .= "`nApplied to the Hotkeys-tab skill slots."
     try MsgBox(txt, "Detect Skill Keys", 0x40)
 }
