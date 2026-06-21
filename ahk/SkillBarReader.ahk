@@ -246,33 +246,112 @@ _SkillBarRowMajorGreater(a, b)
     return a["sx"] > b["sx"]
 }
 
-; Reads the skill bar and (re)populates g_skillKeyBySlot in row-major slot order.
-; Non-destructive when the bar yields nothing (keeps the existing config-parsed
-; map), so it never wipes binds while the bar is hidden or between areas. Skips
-; slots whose key is empty (unbound). Does NOT push to the UI — callers do that.
+; Resolves the local player entity pointer from the cached radar snapshot.
+; Returns the pointer, or 0 when unavailable.
+_SkillBarLocalPlayerPtr()
+{
+    global g_radarLastSnap
+    snap := (g_radarLastSnap && g_radarLastSnap is Map) ? g_radarLastSnap : 0
+    if !snap
+        return 0
+    inGs := snap.Has("inGameState") ? snap["inGameState"] : 0
+    area := (inGs && inGs is Map && inGs.Has("areaInstance")) ? inGs["areaInstance"] : 0
+    return (area && area is Map && area.Has("localPlayerPtr")) ? area["localPlayerPtr"] : 0
+}
+
+; Reads the skill bar AND resolves each slot's assigned skill via the slot's
+; ActiveSkill pointer (slot + SkillBarSlot.ActiveSkillPtr -> detailsPtr), then
+; cross-references the player's decoded skills (keyed by detailsPtr) for the
+; name + icon. Param: reader - the PoE2MemoryReader. Returns the
+; ReadSkillBarHotkeys() array, each slot Map additionally carrying "skillName"
+; (display name), "skillInternal", and "iconPath" ("" when unresolved).
+ReadSkillBarSkills(reader)
+{
+    slots := ReadSkillBarHotkeys(reader)
+    if (slots.Length = 0)
+        return slots
+    byDetails := Map()
+    lpPtr := _SkillBarLocalPlayerPtr()
+    if lpPtr
+    {
+        skillsData := 0
+        try skillsData := reader.ReadPlayerSkills(lpPtr)
+        if (skillsData && skillsData is Map && skillsData.Has("skills"))
+        {
+            for sk in skillsData["skills"]
+            {
+                if !(sk is Map)
+                    continue
+                dp := sk.Has("detailsPtr") ? sk["detailsPtr"] : 0
+                if (dp)
+                    byDetails[dp] := sk
+            }
+        }
+    }
+    for s in slots
+    {
+        s["skillName"]     := ""
+        s["skillInternal"] := ""
+        s["iconPath"]      := ""
+        dp := 0
+        try dp := reader.Mem.ReadPtr(s["addr"] + PoE2Offsets.SkillBarSlot["ActiveSkillPtr"])
+        if (dp && byDetails.Has(dp))
+        {
+            sk := byDetails[dp]
+            s["skillInternal"] := sk.Has("name") ? sk["name"] : ""
+            s["skillName"]     := (sk.Has("displayName") && sk["displayName"] != "") ? sk["displayName"] : s["skillInternal"]
+            s["iconPath"]      := sk.Has("iconPath") ? sk["iconPath"] : ""
+        }
+    }
+    return slots
+}
+
+; Reads the skill bar and (re)populates g_skillKeyBySlot (slot -> key) plus the
+; skill-name maps g_skillKeyBySkillName (display + internal name -> key) and
+; g_skillSlotSkillName (slot -> display name). Non-destructive when the bar yields
+; nothing (keeps the existing maps), so it never wipes binds while the bar is
+; hidden / between areas. Does NOT push to the UI — callers do that.
 ; Returns the number of bound slots.
 RefreshSkillBarKeys()
 {
     global g_reader, g_skillKeyBySlot, g_skillKeyLoadStatus
+    global g_skillKeyBySkillName, g_skillSlotSkillName
     if !IsObject(g_reader)
         return 0
-    list := ReadSkillBarHotkeys(g_reader)
+    list := ReadSkillBarSkills(g_reader)
     if (list.Length = 0)
         return 0
-    m := Map()
+    bySlot   := Map()
+    byName   := Map()
+    slotName := Map()
     cnt := 0
     for e in list
     {
         sk := e["sendKey"]
-        if (sk != "")
+        if (sk = "")
+            continue
+        bySlot[e["slot"]] := sk
+        cnt += 1
+        nm    := e.Has("skillName") ? e["skillName"] : ""
+        intnm := e.Has("skillInternal") ? e["skillInternal"] : ""
+        if (nm != "")
         {
-            m[e["slot"]] := sk
-            cnt += 1
+            byName[StrLower(nm)] := sk
+            slotName[e["slot"]]  := nm
         }
+        if (intnm != "")
+            byName[StrLower(intnm)] := sk
     }
     if (cnt = 0)
         return 0
-    g_skillKeyBySlot := m
+    g_skillKeyBySlot := bySlot
+    ; Only overwrite the name maps when skills actually resolved, so a transient
+    ; unreadable-skills tick doesn't drop a previously good name->key mapping.
+    if (byName.Count > 0)
+    {
+        g_skillKeyBySkillName := byName
+        g_skillSlotSkillName  := slotName
+    }
     g_skillKeyLoadStatus := "ui:" cnt
     return cnt
 }
@@ -297,7 +376,7 @@ DetectSkillKeysAndReport()
         try MsgBox("Game not connected.", "Detect Skill Keys", 0x10)
         return
     }
-    list := ReadSkillBarHotkeys(g_reader)
+    list := ReadSkillBarSkills(g_reader)
     if (list.Length = 0)
     {
         try MsgBox("No skill slots detected.`n`nMake sure you are in a zone with the skill bar visible and skills equipped, then try again.", "Detect Skill Keys", 0x30)
@@ -310,9 +389,10 @@ DetectSkillKeysAndReport()
     {
         lbl := (e["key"] != "") ? e["key"] : "(unbound)"
         snd := (e["sendKey"] != "") ? e["sendKey"] : "-"
-        txt .= "  slot " e["slot"] ":  " lbl "   (send: " snd ")`n"
+        skn := (e.Has("skillName") && e["skillName"] != "") ? e["skillName"] : "?"
+        txt .= "  slot " e["slot"] ":  " lbl "  ->  " skn "   (send: " snd ")`n"
     }
-    txt .= "`nApplied to the Hotkeys-tab skill slots."
+    txt .= "`nApplied to the Hotkeys-tab skill slots (key + skill name)."
     try MsgBox(txt, "Detect Skill Keys", 0x40)
 }
 

@@ -19,6 +19,8 @@ SkillHotkeysInit()
 {
     global g_skillKeyBySlot := Map()
     global g_skillKeyLoadStatus := "default"
+    global g_skillKeyBySkillName := Map()   ; lowercased skill name (display + internal) -> send key
+    global g_skillSlotSkillName := Map()    ; slot -> skill display name (from the live bar)
 }
 
 ; Best-effort parse of skill-slot key bindings from the PoE2 config INI.
@@ -110,7 +112,7 @@ LoadSkillHotkeysFromConfig(configPath)
 ; readiness) and pushes it to updateHotkeyBindings() in the WebView as JSON.
 PushHotkeyBindingsToWebView()
 {
-    global g_webViewReady, g_flaskKeyBySlot, g_skillKeyBySlot, g_reader
+    global g_webViewReady, g_flaskKeyBySlot, g_skillKeyBySlot, g_reader, g_skillSlotSkillName
     if !g_webViewReady
         return
 
@@ -130,7 +132,8 @@ PushHotkeyBindingsToWebView()
     {
         s := A_Index
         if g_skillKeyBySlot.Has(s)
-            skillSlotArr.Push(Map("slot", s, "key", g_skillKeyBySlot[s]))
+            skillSlotArr.Push(Map("slot", s, "key", g_skillKeyBySlot[s]
+                , "skill", (IsSet(g_skillSlotSkillName) && g_skillSlotSkillName.Has(s)) ? g_skillSlotSkillName[s] : ""))
     }
 
     ; Active skill names for the readiness dropdown (on-demand read).

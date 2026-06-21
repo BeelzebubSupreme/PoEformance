@@ -441,7 +441,7 @@ TryCombatAutomation(radarSnap, gameHwnd)
         if (selectedSlot)
         {
             slotCfg := g_combatSkillSlots[selectedSlot]
-            sendKey := slotCfg["key"]
+            sendKey := _CombatResolveSlotKey(slotCfg)
 
             if _SendSkillKey(sendKey, gameHwnd)
             {
@@ -697,6 +697,20 @@ _DetectCombat(radarSnap)
 }
 
 ; ── Skill Selection ───────────────────────────────────────────────────────
+; Resolves the actual send key for a combat slot. Prefers the LIVE skill-bar key
+; for the slot's configured skill name (so the in-game keybind is always honored,
+; even after a rebind), falling back to the manually-entered key. Param: slotCfg -
+; the slot config Map. Returns the send-key string.
+_CombatResolveSlotKey(slotCfg)
+{
+    global g_skillKeyBySkillName
+    nm := slotCfg.Has("skillName") ? slotCfg["skillName"] : ""
+    if (nm != "" && IsSet(g_skillKeyBySkillName) && g_skillKeyBySkillName is Map
+        && g_skillKeyBySkillName.Has(StrLower(nm)))
+        return g_skillKeyBySkillName[StrLower(nm)]
+    return slotCfg.Has("key") ? slotCfg["key"] : ""
+}
+
 ; Picks the highest-priority skill that is off cooldown and ready to use.
 ; Returns: Map("slot", N, "outOfRange", bool) — slot=0 if nothing ready
 _SelectNextSkill(skills, combatInfo)

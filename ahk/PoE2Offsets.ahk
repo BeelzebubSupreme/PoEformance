@@ -496,6 +496,15 @@ class PoE2Offsets
         "UnscaledSize", 0x288   ; StdTuple2D<float> — element size in UI coords
     )
 
+    ; Skill-bar slot element. The per-slot icon container under skills_bar holds a
+    ; direct pointer to its ActiveSkill struct — the SAME detailsPtr the Actor
+    ; component exposes — so slot -> skill name (and key) needs no icon matching.
+    ; Confirmed live 2026-06-21 via the Skill<->Slot probe: every visible slot
+    ; matched its skill's detailsPtr at exactly +0x2F0.
+    static SkillBarSlot := Map(
+        "ActiveSkillPtr", 0x2F0
+    )
+
     ; Panels we want to detect for overlay visibility gating.
     ; Each name corresponds to a UiElement StringId discoverable under GameUiPtr.
     ; The offset is discovered at runtime by DiscoverPanelOffsets() and cached per patch.
