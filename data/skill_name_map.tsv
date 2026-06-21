@@ -147,6 +147,7 @@ ChargedStaffPlayer	Charged Staff	Art/2DArt/SkillIcons/MonkChargedStaff.dds
 ChargedStaffShockwavePlayer	Charged Shockwave	Art/2DArt/SkillIcons/MonkChargedStaff.dds
 ChilledGroundBurstWaterDjinn	Navira's Fracturing	Art/2DArt/SkillIcons/SorceressWaterDjinnChiilldedGroundBurst.dds
 ChilledGroundOasisConvertWaterDjinn	Navira's Oasis	Art/2DArt/SkillIcons/SorceressWaterDjinnCommandOasis.dds
+CircleOfPower	Sigil of Power	Art/2DArt/SkillIcons/SigilofPowerWeaponSkill.dds
 ClawRakePlayer	[DNT-UNUSED] Claw Rake	Art/2DArt/SkillIcons/icondualswing.dds
 ClusterGrenadePlayer	Cluster Grenade	Art/2DArt/SkillIcons/MercClusterGrenade.dds
 CoilingBoltsPlayer	Coiling Bolts	Art/2DArt/SkillIcons/CoilOfUndoingSkill.dds
@@ -373,6 +374,7 @@ FireboltPlayer	Firebolt	Art/2DArt/SkillIcons/FireballSkillStaff.dds
 FireboltRogueExileSorceress2	Firebolt	Art/2DArt/SkillIcons/FireballSkillStaff.dds
 FirestormPlayer	Firestorm	Art/2DArt/SkillIcons/WitchFirestorm.dds
 FirestormRogueExileSorceress1	Firestorm	Art/2DArt/SkillIcons/WitchFirestorm.dds
+Firewall	Flame Wall	Art/2DArt/SkillIcons/SorceressFlameWall.dds
 FlameLinkPlayer	Flame Link	Art/2DArt/SkillIcons/FlameLink.dds
 FlameSliceFireDjinn	Ruzhan's Zealotry	Art/2DArt/SkillIcons/SorceressSummonFireDjinn.dds
 FlameSlicePlayer	[DNT-UNUSED] Flame Slice	Art/2DArt/SkillIcons/passives/TwoHandedMeleeDamage.dds
@@ -1158,6 +1160,7 @@ StarbornOnslaughtPlayer	Starborn Onslaught	Art/2DArt/SkillIcons/HimindrygrSkillI
 StompingGroundShockwavePlayer	Stomping Ground Shockwave	Art/2DArt/SkillIcons/iconbasicattack.dds
 StonebackRhoaTableCharge	Table Charge	Art/2DArt/SkillIcons/iconshieldcharge.dds
 StormBladePlayer	[DNT-UNUSED] Storm Blade	Art/2DArt/SkillIcons/Upheaval.dds
+StormCloud	Orb of Storms	Art/2DArt/SkillIcons/SorceressOrbOfStorms.dds
 StormLancePlayer	Storm Lance	Art/2DArt/SkillIcons/HuntressOverchargedSpear.dds
 StormLanceRogueExileHuntress2	Storm Lance	Art/2DArt/SkillIcons/HuntressOverchargedSpear.dds
 StormWavePlayer	Storm Wave	Art/2DArt/SkillIcons/MonkStormWave.dds
