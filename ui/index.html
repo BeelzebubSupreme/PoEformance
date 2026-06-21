@@ -9243,6 +9243,7 @@
     <div class="uib-prop-row"><span class="uib-prop-key">Background Color</span>${colorVal(p.bgColor)}</div>
 
     <div class="uib-prop-section" style="color:#7be07b">--- Extra ---</div>
+    <div class="uib-prop-row"><span class="uib-prop-key">Displayed Text</span><span class="uib-prop-val" style="color:#7be07b">${p.text ? '"' + escHtml(p.text) + '"' : '<span style="color:#666">(none)</span>'}</span></div>
     <div class="uib-prop-row"><span class="uib-prop-key">Font Name</span><span class="uib-prop-val" style="color:#7be07b">${p.fontName ? '"' + escHtml(p.fontName) + '"' : '<span style="color:#666">(none)</span>'}</span></div>
     <div class="uib-prop-row"><span class="uib-prop-key">Text Style</span><span class="uib-prop-val" style="color:#7be07b">${p.textStyle ? '"' + escHtml(p.textStyle) + '"' : '<span style="color:#666">(none)</span>'}</span></div>
     <div class="uib-prop-row"><span class="uib-prop-key">Vtable</span>${hv(p.vtable || '')}</div>`;
@@ -9273,6 +9274,7 @@
         ``,
         `Flags:         ${p.flags || ''}`,
         `Background:    ${p.bgColor || ''}`,
+        `Displayed Text: "${p.text || ''}"`,
         `Font Name:     "${p.fontName || ''}"`,
         `Text Style:    "${p.textStyle || ''}"`,
         `Vtable:        ${p.vtable || ''}`,

@@ -15,7 +15,7 @@ UiTree_Dump(reader, gameUiPtr, maxDepth := 12, outPath := "")
         stamp := FormatTime(, "yyyyMMdd_HHmmss")
         outPath := debugDir "\ui_tree_" stamp ".tsv"
     }
-    header := "Depth`tPath`tStringId`tAddress`tVisible`tChildCount`tScreenX`tScreenY`tSizeW`tSizeH`tFlags`n"
+    header := "Depth`tPath`tStringId`tAddress`tVisible`tChildCount`tScreenX`tScreenY`tSizeW`tSizeH`tFlags`tText`n"
     queue   := [{ptr: gameUiPtr, depth: 0, parentPath: ""}]
     rows    := []
     visited := Map()
@@ -51,7 +51,9 @@ UiTree_Dump(reader, gameUiPtr, maxDepth := 12, outPath := "")
             . Round(elem["screenY"], 1) . "`t"
             . Round(elem["sizeW"], 1) . "`t"
             . Round(elem["sizeH"], 1) . "`t"
-            . Format("0x{:08X}", elem["flags"])
+            . Format("0x{:08X}", elem["flags"]) . "`t"
+            ; Sanitize so embedded tabs/newlines never break the TSV layout.
+            . StrReplace(StrReplace(StrReplace(elem["text"], "`t", " "), "`r", " "), "`n", " ")
         )
         if (depth < maxDepth && childCount > 0)
         {
@@ -108,6 +110,7 @@ UiTree_ReadElement(reader, elemPtr)
     stringId   := reader.ReadStdWStringAt(elemPtr + PoE2Offsets.UiElementBase["StringIdPtr"])
     fontName   := reader.ReadStdWStringAt(elemPtr + PoE2Offsets.UiElementBase["FontNamePtr"])
     textStyle  := reader.ReadStdWStringAt(elemPtr + PoE2Offsets.UiElementBase["TextStylePtr"])
+    text       := reader.ReadStdWStringAt(elemPtr + PoE2Offsets.UiElementBase["TextPtr"], 256)
     flags      := NumGet(hdr.Ptr, 0x180, "UInt")
     isVisible  := ((flags >> 11) & 1) ? true : false
     sizeW      := NumGet(hdr.Ptr, 0x288, "Float")
@@ -127,6 +130,7 @@ UiTree_ReadElement(reader, elemPtr)
         "stringId",        stringId,
         "fontName",        fontName,
         "textStyle",       textStyle,
+        "text",            text,
         "isVisible",       isVisible,
         "shouldModifyPos", shouldModifyPos,
         "flags",           flags,

@@ -378,12 +378,20 @@ PushUiBrowserState()
         fnt := StrReplace(fnt, '"', '\"')
         tsty := StrReplace(elem.Has("textStyle") ? elem["textStyle"] : "", "\", "\\")
         tsty := StrReplace(tsty, '"', '\"')
+        ; Displayed text can contain control chars (multi-line tags) — escape them
+        ; fully so the JSON the WebView JSON.parse()s stays valid.
+        dtxt := StrReplace(elem.Has("text") ? elem["text"] : "", "\", "\\")
+        dtxt := StrReplace(dtxt, '"', '\"')
+        dtxt := StrReplace(dtxt, "`r", "\r")
+        dtxt := StrReplace(dtxt, "`n", "\n")
+        dtxt := StrReplace(dtxt, "`t", "\t")
         scLabelJ := StrReplace(scLabel, '"', '\"')
         propsJson := '{'
             . '"address":"' . Format("0x{:X}", g_uiBrowserCurrentPtr) . '"'
             . ',"stringId":"' . sid . '"'
             . ',"fontName":"' . fnt . '"'
             . ',"textStyle":"' . tsty . '"'
+            . ',"text":"' . dtxt . '"'
             . ',"isVisible":' . (elem["isVisible"] ? "true" : "false")
             . ',"effectiveVisible":' . (effVisible ? "true" : "false")
             . ',"shouldModifyPos":' . (elem["shouldModifyPos"] ? "true" : "false")

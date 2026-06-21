@@ -489,6 +489,7 @@ class PoE2Offsets
         "StringIdPtr", 0x098,  ; StdWString — UI element identifier in PoE2 0.5.x (e.g. "life_orb", "HUDLeft", "InventoryPanel"). Verified via UI-browser string scan. 0x0F8 is the text/font-style field; 0x140 is the stale 0.4.x layout.
         "FontNamePtr", 0x0C8,  ; StdWString — font family used for text rendering (e.g. "Fontin", "Fontin Smallcaps")
         "TextStylePtr", 0x0F8,  ; StdWString — text/font style descriptor (e.g. "Normal", "Large", "PathOfExile.Panel.Title")
+        "TextPtr", 0x390,  ; StdWString — the element's DISPLAYED text (loot tags, skill rows, runeforge rows). Validated live 2026-06-14; every text element holds its UTF-16 string here. FontName sits at +0xC8.
         "Flags", 0x180,  ; uint — bit 10 = SHOULD_MODIFY_POS, bit 11 = IS_VISIBLE
         "ScaleIndex", 0x18A,  ; byte — 1/2/3 for GameWindowScale lookup
         "BackgroundColor", 0x25C,  ; float4 RGBA — .W (alpha, +12) is used for chat-active check
