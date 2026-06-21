@@ -3157,10 +3157,36 @@
     .ent-junk-custom {
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 6px;
       margin-top: 10px;
-      max-width: 360px
+      max-width: 420px
     }
+    .ent-junk-addrow { display: flex; gap: 6px; align-items: center }
+    .ent-junk-addrow .cfg-input { flex: 1 1 auto; min-width: 0 }
+    .ent-junk-chips { display: flex; flex-wrap: wrap; gap: 5px }
+    .ent-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 3px 2px 8px;
+      border: 1px solid rgba(90,62,34,0.7);
+      border-radius: 2px;
+      background: linear-gradient(180deg, rgba(28,18,10,0.85), rgba(20,12,6,0.95));
+      font-family: var(--codex-mono-serif);
+      font-size: 11px;
+      color: var(--codex-text)
+    }
+    .ent-chip-x {
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: var(--codex-text-dim);
+      font-size: 11px;
+      line-height: 1;
+      padding: 0 3px
+    }
+    .ent-chip-x:hover { color: #e0533b }
+    .ent-chip-empty { font-size: 11px; color: var(--codex-text-dim); font-style: italic }
     /* Dim the body when the master switch is off (controls still usable). */
     .ent-junkbox.junk-disabled .ent-junkbox-body { opacity: 0.5 }
 
@@ -4289,6 +4315,44 @@
 
     <!-- ENTITIES TAB (now default active) -->
     <div class="tab-panel active" id="panel-entities">
+      <!-- Entity-class filter — moved here from Config. Same ids/handlers, so the
+           global type filter (radar / trees / exports / AutoPilot) is unchanged. -->
+      <details id="ent-typebox" class="ent-junkbox">
+        <summary class="ent-junkbox-sum">
+          <span class="ent-junkbox-title">Entity Classes</span>
+          <span class="ent-junkbox-meta">global type filter</span>
+        </summary>
+        <div class="ent-junkbox-body">
+          <div class="ent-junkbox-help">
+            Global entity-class filter applied <em>before</em> anything else — affects the radar,
+            the Game-tab trees, exports / dumps and the AutoPilot target picker. Unchecking a
+            class hides it everywhere; if something expected is missing from the radar, check here.
+          </div>
+          <div class="filter-row">
+            <label class="filter-pill"><input type="checkbox" id="ef-player"
+                onchange="setEntityFilter('player',    this.checked)" checked> <span
+                class="etype-badge etype-Player">Player</span></label>
+            <label class="filter-pill"><input type="checkbox" id="ef-minion"
+                onchange="setEntityFilter('minion',    this.checked)" checked> <span
+                class="etype-badge etype-Minion">Minion</span></label>
+            <label class="filter-pill"><input type="checkbox" id="ef-enemy"
+                onchange="setEntityFilter('enemy',     this.checked)" checked> <span
+                class="etype-badge etype-Enemy">Enemy</span></label>
+            <label class="filter-pill"><input type="checkbox" id="ef-npc"
+                onchange="setEntityFilter('npc',       this.checked)" checked> <span
+                class="etype-badge etype-NPC">NPC</span></label>
+            <label class="filter-pill"><input type="checkbox" id="ef-chest"
+                onchange="setEntityFilter('chest',     this.checked)" checked> <span
+                class="etype-badge etype-Chest">Chest</span></label>
+            <label class="filter-pill"><input type="checkbox" id="ef-worlditem"
+                onchange="setEntityFilter('worlditem', this.checked)" checked> <span
+                class="etype-badge etype-WorldItem">WorldItem</span></label>
+            <label class="filter-pill"><input type="checkbox" id="ef-other"
+                onchange="setEntityFilter('other',     this.checked)" checked> <span
+                class="etype-badge etype-Object">Other</span></label>
+          </div>
+        </div>
+      </details>
       <!-- Junk filter — collapsible box, sibling of the live-rebuilt content so
            updateEntities() never wipes it. Short pill labels; hover for detail. -->
       <details id="ent-junkbox" class="ent-junkbox">
@@ -4306,12 +4370,16 @@
             individual patterns. Hover any pill for what it matches. Add your own terms at the bottom.
           </div>
           <div id="junk-cats"></div>
-          <label class="ent-junk-custom">
+          <div class="ent-junk-custom">
             <span class="al-cap">Custom terms</span>
-            <input type="text" class="cfg-input" id="junk-custom" placeholder="comma-separated, e.g. /banner/, decoy"
-                   title="Extra case-insensitive substrings to treat as junk, in addition to the categories above."
-                   onchange="junkSet('custom', this.value)">
-          </label>
+            <div class="ent-junk-addrow">
+              <input type="text" class="cfg-input" id="junk-custom-input" placeholder="e.g. /banner/, decoy"
+                     title="A case-insensitive substring to treat as junk. Press Enter or click Add."
+                     onkeydown="if(event.key==='Enter'){event.preventDefault();junkAddCustom();}">
+              <button class="hk-btn" onclick="junkAddCustom()">Add</button>
+            </div>
+            <div id="junk-custom-list" class="ent-junk-chips"></div>
+          </div>
         </div>
       </details>
       <div id="tab-entities-content">
@@ -5092,46 +5160,6 @@
              trees / radar consider at all) and skill/buff blacklist.
              ════════════════════════════════════════════════════════════ -->
         <div class="cfg-subpanel" data-cfgtab="filters">
-
-        <div class="cfg-section">
-          <details id="det-entities" open ontoggle="syncCfgSections()">
-            <summary>
-              <div class="cfg-header">Entities</div>
-            </summary>
-            <div class="cfg-subsection">
-              <div class="cfg-help">
-                Global entity-class filter applied <em>before</em> anything else in the helper
-                processes the live entity list — affects the trees on the Game tab, the radar,
-                exports / dumps, and the AutoPilot's target picker. Unchecking a category hides
-                that whole class of entities everywhere; if something is missing from the radar
-                that you'd expect to see, check here first.
-              </div>
-              <div class="filter-row">
-                <label class="filter-pill"><input type="checkbox" id="ef-player"
-                    onchange="setEntityFilter('player',    this.checked)" checked> <span
-                    class="etype-badge etype-Player">Player</span></label>
-                <label class="filter-pill"><input type="checkbox" id="ef-minion"
-                    onchange="setEntityFilter('minion',    this.checked)" checked> <span
-                    class="etype-badge etype-Minion">Minion</span></label>
-                <label class="filter-pill"><input type="checkbox" id="ef-enemy"
-                    onchange="setEntityFilter('enemy',     this.checked)" checked> <span
-                    class="etype-badge etype-Enemy">Enemy</span></label>
-                <label class="filter-pill"><input type="checkbox" id="ef-npc"
-                    onchange="setEntityFilter('npc',       this.checked)" checked> <span
-                    class="etype-badge etype-NPC">NPC</span></label>
-                <label class="filter-pill"><input type="checkbox" id="ef-chest"
-                    onchange="setEntityFilter('chest',     this.checked)" checked> <span
-                    class="etype-badge etype-Chest">Chest</span></label>
-                <label class="filter-pill"><input type="checkbox" id="ef-worlditem"
-                    onchange="setEntityFilter('worlditem', this.checked)" checked> <span
-                    class="etype-badge etype-WorldItem">WorldItem</span></label>
-                <label class="filter-pill"><input type="checkbox" id="ef-other"
-                    onchange="setEntityFilter('other',     this.checked)" checked> <span
-                    class="etype-badge etype-Object">Other</span></label>
-              </div>
-            </div>
-          </details>
-        </div>
 
         <div class="cfg-section">
           <details id="det-blacklist" ontoggle="syncCfgSections()">
@@ -6239,6 +6267,47 @@
     // key forms: "enabled" | "cat:<key>" | "pat:<pattern>" | "custom".
     function junkSet(key, value) { try { ahkCall("SetJunk", key, value); } catch (e) {} }
 
+    // Custom junk terms are stored as ONE comma-separated string in AHK, but the
+    // UI presents them as an Add box + deletable chips. _junkCustomTerms mirrors
+    // the authoritative AHK string (refreshed from each header push).
+    let _junkCustomTerms = [];
+    function junkRenderCustom(customStr) {
+      _junkCustomTerms = String(customStr || "").split(",").map(t => t.trim()).filter(Boolean);
+      const host = document.getElementById("junk-custom-list");
+      if (!host) return;
+      host.innerHTML = _junkCustomTerms.length
+        ? _junkCustomTerms.map((t, i) =>
+            `<span class="ent-chip" title="${escAttr(t)}"><span class="ent-chip-txt">${escHtml(t)}</span>`
+            + `<button class="ent-chip-x" title="Remove term" onclick="junkDelCustomIdx(${i})">✕</button></span>`).join("")
+        : `<span class="ent-chip-empty">No custom terms yet.</span>`;
+    }
+    function junkCommitCustom() {
+      const s = _junkCustomTerms.join(",");
+      junkSet("custom", s);
+      junkRenderCustom(s);
+    }
+    // Adds one or more terms (the input may itself be comma-separated). Skips
+    // case-insensitive duplicates, clears the input, and pushes to AHK.
+    function junkAddCustom() {
+      const inp = document.getElementById("junk-custom-input");
+      if (!inp) return;
+      const parts = String(inp.value || "").split(",").map(t => t.trim()).filter(Boolean);
+      let changed = false;
+      for (const p of parts) {
+        if (!_junkCustomTerms.some(t => t.toLowerCase() === p.toLowerCase())) {
+          _junkCustomTerms.push(p);
+          changed = true;
+        }
+      }
+      inp.value = "";
+      if (changed) junkCommitCustom();
+    }
+    function junkDelCustomIdx(i) {
+      if (i < 0 || i >= _junkCustomTerms.length) return;
+      _junkCustomTerms.splice(i, 1);
+      junkCommitCustom();
+    }
+
     // Short display label + hover description per category key and per built-in
     // pattern (counts/rationale from the C# JunkFilter reference). The pattern
     // string itself is the canonical id sent to AHK; here it's only presentation.
@@ -6281,8 +6350,7 @@
       const on = jf.enabled === true || jf.enabled === "true";
       const m = document.getElementById("junk-enabled");
       if (m) m.checked = on;
-      const cf = document.getElementById("junk-custom");
-      if (cf && document.activeElement !== cf) cf.value = jf.custom || "";
+      junkRenderCustom(jf.custom || "");
       const cats = Array.isArray(jf.categories) ? jf.categories : [];
       junkRenderCats(cats);
       // Meta line: "<active>/<total> patterns" + a muted "(off)" when disabled.
@@ -10156,7 +10224,7 @@
     // ═══════════════════════════════════════════════════════════════════
     //  CONFIG HELPERS
     // ═══════════════════════════════════════════════════════════════════
-    const _cfgSectionIds = ['status', 'overview', 'toggles', 'integrations', 'autoflask', 'autopilot', 'rangecircles', 'radar', 'maphack', 'blacklist', 'entities', 'actions', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
+    const _cfgSectionIds = ['status', 'overview', 'toggles', 'integrations', 'autoflask', 'autopilot', 'rangecircles', 'radar', 'maphack', 'blacklist', 'actions', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
     let _cfgSectionsGuard = 0;
     let _cfgSectionsLoaded = false;
 
