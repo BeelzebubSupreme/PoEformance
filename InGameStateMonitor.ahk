@@ -46,7 +46,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.12.106"
+POEFORMANCE_VERSION := "0.45.12.107"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -944,6 +944,7 @@ OnTreeTabChanged(*)
 #Include ahk/AutoPilot.ahk
 #Include ahk/CustomHotkeys.ahk
 #Include ahk/CustomHotkeysBindings.ahk
+#Include ahk/SkillBarReader.ahk
 #Include ahk/CustomHotkeysBridge.ahk
 #Include ahk/AtlasData.ahk
 #Include ahk/PoE2AtlasReader.ahk

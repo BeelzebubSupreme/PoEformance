@@ -282,5 +282,7 @@ HotkeyBindingsOnAreaChange(snap)
     if (addr = 0 || addr = _lastAreaAddr)
         return
     _lastAreaAddr := addr
-    SetTimer(PushHotkeyBindingsToWebView, -1)
+    ; Refresh skill-slot keys from the live skill bar (reliable Displayed-Text
+    ; source), then push — so the Hotkeys tab auto-fills its skill binds per area.
+    SetTimer(_SkillKeysRefreshAndPush, -1)
 }
