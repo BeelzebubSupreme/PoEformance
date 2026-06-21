@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.12.126`.
+Reimplementation of the original C# project (see Reference). Version `0.45.12.127`.
 
 ## Language
 
@@ -123,15 +123,16 @@ Alerts → `alerts.ini [Alerts]`.
   `JunkFilter` (6 categories: cosmetic / engine / daemon / pets / markers / hideout doodads;
   "weapons/" deliberately dropped). `IsJunkEntity(path)` is hooked once at the sample chokepoint
   (`CollectEntityMapCandidates`, before `candidates.Push`) so radar / browser / trees /
-  exports / AutoPilot all skip junk. Master + per-category + per-pattern toggles + custom
-  terms; active patterns precomputed in `g_junkActive` via `RebuildJunkActive()` (cheap
+  exports / AutoPilot all skip junk. Master + per-category toggles + custom terms (the
+  engine also keeps a per-pattern `disabledPatterns` set, but the UI only exposes category
+  toggles); active patterns precomputed in `g_junkActive` via `RebuildJunkActive()` (cheap
   case-insensitive `InStr` per entity). `_ApplyJunkSetting` / `BuildJunkFilterHeaderJson` /
   `Save/LoadEntityJunkFilter` (self-persist `[JunkFilter]`). Dispatch `SetJunk`; header key
-  `junkFilter`; UI is a wrapping row (`.ent-boxes`) of collapsible boxes at the top of the
-  **Entities** tab: Entity Classes (the global type filter, moved here from Config),
-  Junk Filter (`#ent-junkbox`, the built-in categories), Hideout (`#ent-hideoutbox`, the
-  hideout-doodad category split out), and Custom Terms (`#ent-custombox`, add box + chips).
-  Short pill labels + hover tooltips. The fast radar path builds the awake
+  `junkFilter`; UI is a wrapping `.ent-boxes` flex row of **standard `cfg-section` boxes** at
+  the top of the **Entities** tab: Entity Classes (the global type filter, moved here from
+  Config, as toggle rows), Junk Filter (`#ent-junkbox`, master + one toggle row per category),
+  Hideout (`#ent-hideoutbox`, the hideout-doodad category split out), and Custom Terms
+  (`#ent-custombox`, add box + deletable chips). Category rows via `junkCatRow`. The fast radar path builds the awake
   sample from `_radarEntityCache` in `UpdateRadarFast` (not `CollectEntityMapCandidates`), so the
   junk filter is ALSO applied there at the awake-sample build. Default ON, all categories on.
 - **GdiOverlayBase.ahk** — reusable transparent, click-through, always-on-top GDI layer
