@@ -1434,6 +1434,8 @@ _BuildInventoryArrayJson(invs)
             base := d.Has("baseType") ? String(d["baseType"]) : ""
             rarId := d.Has("rarityId") ? Integer(d["rarityId"]) : -1
             stkCnt := d.Has("stackCount") ? Integer(d["stackCount"]) : 0
+            idf := d.Has("identified") ? Integer(d["identified"]) : -1
+            art := d.Has("artPath") ? String(d["artPath"]) : ""
             modsJson := _BuildItemModsJson(d.Has("modsInfo") ? d["modsInfo"] : 0)
             itemsJson .= "{"
                 . '"sx":' Integer(it["slotStartX"]) ","
@@ -1444,6 +1446,8 @@ _BuildInventoryArrayJson(invs)
                 . '"b":' _JsStr(base) ","
                 . '"r":' rarId ","
                 . '"s":' stkCnt ","
+                . '"idf":' idf ","
+                . '"a":' _JsStr(art) ","
                 . '"m":' modsJson
                 . "}"
         }

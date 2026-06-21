@@ -368,6 +368,13 @@ class PoE2Offsets
         "IdPtr", 0x00
     )
 
+    ; Item "RenderItem" component. ResourcePath (+0x28) is a std::wstring with the
+    ; item's 2D inventory-art .dds path (e.g. "Art/2DItems/.../Foo.dds"); the
+    ; basename doubles as a price-lookup key. Used to render real item icons.
+    static RenderItemComponent := Map(
+        "ResourcePath", 0x28
+    )
+
     static ChargesInternal := Map(
         "PerUseCharges", 0x18
     )
@@ -383,6 +390,7 @@ class PoE2Offsets
     )
 
     static Mods := Map(
+        "Identified", 0x90,   ; byte: 1 = item is identified, 0 = unidentified
         "Rarity", 0x94,
         "AllMods", 0xA0,
         "StatsFromMods", 0x148

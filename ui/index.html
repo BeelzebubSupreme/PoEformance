@@ -1620,6 +1620,42 @@
       letter-spacing: 0.02em
     }
 
+    /* Item 2D-art icon (RenderItem ResourcePath → poe2db CDN). Fills the cell
+       behind the name label; the label is hidden while the icon shows and the
+       img onerror handler reveals it again when the CDN has no art. */
+    .inv-item-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      padding: 1px;
+      pointer-events: none;
+      z-index: 0
+    }
+    .inv-item-label { position: relative; z-index: 1 }
+    /* Unidentified marker — small crimson glyph in the top-left corner. */
+    .inv-unid-badge {
+      position: absolute;
+      left: 2px;
+      top: 0;
+      font-family: var(--codex-mono-serif);
+      font-size: 12px;
+      font-weight: 700;
+      color: #e0533b;
+      text-shadow: 0 0 2px rgba(0,0,0,0.95), 1px 1px 0 rgba(0,0,0,0.9);
+      pointer-events: none;
+      line-height: 1;
+      z-index: 3
+    }
+    .eq-card-img {
+      width: 40px;
+      height: 40px;
+      object-fit: contain;
+      align-self: center;
+      margin-bottom: 2px
+    }
+
     /* EQUIPPED — same parchment frame, items as larger sigil-cards in a flex
        row. Each card carries a small slot-id glyph in the top-right. */
     .eq-grid {
@@ -7623,9 +7659,14 @@
         const rarity = (typeof it.r === 'number' && it.r >= 0 && it.r <= 3) ? it.r : 0;
         const name = it.n || it.b || '?';
         const tip = _buildItemTooltipPayload(it);
+        const icon = _iconUrl(it.a);
+        const imgTag = icon ? `<img class="eq-card-img" src="${escAttr(icon)}" loading="lazy" onerror="this.style.display='none'">` : '';
+        const unidBadge = (it.idf === 0) ? '<span class="inv-unid-badge" title="Unidentified">?</span>' : '';
         cards += `<div class="eq-card rarity-${rarity}" `
               + `onmouseenter="_invShowTip(event,'${tip}')" onmouseleave="_invHideTip()" onmousemove="_invMoveTip(event)">`
               + `<div class="eq-slot-id">${escHtml(slotName)}</div>`
+              + unidBadge
+              + imgTag
               + `<div class="eq-card-name">${escHtml(name)}</div>`
               + `</div>`;
       }
@@ -7674,10 +7715,19 @@
         const stack = (typeof it.s === 'number' && it.s > 1) ? it.s : 0;
         const stackBadge = stack ? `<span class="inv-stack">${stack}</span>` : '';
         const tip = _buildItemTooltipPayload(it);
+        // Real item art (RenderItem ResourcePath via poe2db). The icon fills the
+        // cell; the name label sits behind it and is revealed again if the CDN
+        // has no art for this path. idf===0 → unidentified corner glyph.
+        const icon = _iconUrl(it.a);
+        const imgLayer = icon ? `<img class="inv-item-img" src="${escAttr(icon)}" loading="lazy" onerror="this.style.display='none';var l=this.parentElement.querySelector('.inv-item-label');if(l)l.style.display=''">` : '';
+        const label = `<span class="inv-item-label"${icon ? ' style="display:none"' : ''}>${escHtml(_truncateForCell(name, w * h))}</span>`;
+        const unidBadge = (it.idf === 0) ? '<span class="inv-unid-badge" title="Unidentified">?</span>' : '';
         cells += `<div class="inv-item rarity-${rarity}" `
               + `style="grid-column:${sx + 1} / span ${w};grid-row:${sy + 1} / span ${h}" `
               + `onmouseenter="_invShowTip(event,'${tip}')" onmouseleave="_invHideTip()" onmousemove="_invMoveTip(event)">`
-              + escHtml(_truncateForCell(name, w * h))
+              + imgLayer
+              + label
+              + unidBadge
               + stackBadge
               + `</div>`;
       }
@@ -7701,6 +7751,8 @@
         b: it.b || '',
         r: it.r,
         s: (typeof it.s === 'number' && it.s > 0) ? it.s : 0,
+        a: it.a || '',
+        idf: (typeof it.idf === 'number') ? it.idf : -1,
         m: Array.isArray(it.m) ? it.m : []
       };
       try { return btoa(unescape(encodeURIComponent(JSON.stringify(payload)))); }
@@ -7718,8 +7770,10 @@
       try { p = JSON.parse(decodeURIComponent(escape(atob(b64)))); }
       catch (e) { return; }
       const rarityCls = `rarity-${(p.r >= 0 && p.r <= 3) ? p.r : 0}`;
-      let html = `<div class="inv-tt-name inv-item ${rarityCls}" style="border:none;background:none;padding:0;display:block;text-align:left">${escHtml(p.n || p.b || '?')}</div>`;
+      const ttIcon = (p.a) ? `<div style="text-align:center;margin-bottom:4px">${_iconHtml(p.a, 40)}</div>` : '';
+      let html = ttIcon + `<div class="inv-tt-name inv-item ${rarityCls}" style="border:none;background:none;padding:0;display:block;text-align:left">${escHtml(p.n || p.b || '?')}</div>`;
       if (p.b && p.b !== p.n) html += `<div class="inv-tt-base">${escHtml(p.b)}</div>`;
+      if (p.idf === 0) html += `<div class="inv-tt-base" style="color:#e0533b">Unidentified</div>`;
       if (p.s && p.s > 1) html += `<div class="inv-tt-base">Stack Size: ${p.s}</div>`;
       // Mods are objects {c: category, t: text}. Implicits + enchants render
       // first (with separators), then explicits — matches the in-game tooltip order.
