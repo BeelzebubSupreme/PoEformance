@@ -6398,17 +6398,21 @@
       junkRenderCustom(jf.custom || "");
       const cats = Array.isArray(jf.categories) ? jf.categories : [];
       junkRenderCats(cats);
-      // Junk Filter meta: "<active>/<total>" over the built-in categories shown in
-      // this box (hideout lives in its own box), or "off" when the master is off.
+      // Junk Filter meta: "<active>/<total>" over EVERY junk rule — all built-in
+      // categories (including the split-out hideout box) plus the custom terms —
+      // so the count reflects the whole filter. "off" when the master is off.
       let total = 0, active = 0;
       for (const c of cats) {
-        if (String(c.key || "") === "hideout") continue;
         const con = (c.on === true || c.on === "true");
         for (const p of (Array.isArray(c.patterns) ? c.patterns : [])) {
           total++;
           if (con && (p.on === true || p.on === "true")) active++;
         }
       }
+      // Custom terms have no per-term toggle — they're active whenever the master is.
+      const customCount = String(jf.custom || "").split(",").map(t => t.trim()).filter(Boolean).length;
+      total += customCount;
+      active += customCount;
       const meta = document.getElementById("junk-meta");
       if (meta) meta.textContent = on ? `${active}/${total}` : "off";
       // The master switch gates the whole junk filter, so dim all three junk boxes.
