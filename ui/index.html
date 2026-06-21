@@ -3126,20 +3126,44 @@
       gap: 8px;
       padding: 6px 8px 8px;
     }
-    /* The four entity-tab boxes use the standard cfg-section design; here they are
-       just sized as flex items so they sit side by side and wrap. */
-    .ent-boxes > .cfg-section {
-      flex: 1 1 300px;
-      min-width: 240px;
-      margin-bottom: 0
+    .ent-junkbox {
+      flex: 1 1 360px;
+      min-width: 260px;
+      border: 1px solid var(--codex-rule);
+      background: linear-gradient(180deg, var(--codex-parchment), var(--codex-vellum));
+      border-radius: 2px
     }
-    /* Small count badge inside a box header (e.g. "25/25" or the custom count). */
-    .ent-meta {
+    .ent-junkbox.ent-box-sm { flex: 1 1 240px }
+    .ent-junkbox-sum {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 10px;
+      cursor: pointer;
+      list-style: none;
+      user-select: none
+    }
+    .ent-junkbox-sum::-webkit-details-marker { display: none }
+    .ent-junkbox-title {
+      font-family: var(--codex-display);
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--codex-gold-hi)
+    }
+    .ent-junkbox-meta {
       font-family: var(--codex-mono-serif);
       font-size: 11px;
-      font-weight: 400;
       color: var(--codex-text-dim);
-      letter-spacing: 0
+      margin-right: auto
+    }
+    .ent-junkbox-body { padding: 2px 10px 10px }
+    .ent-junkbox-help {
+      font-family: var(--codex-serif);
+      font-size: 11px;
+      color: var(--codex-text-dim);
+      line-height: 1.4;
+      margin-bottom: 2px
     }
     .ent-junk-custom {
       display: flex;
@@ -3174,8 +3198,40 @@
     }
     .ent-chip-x:hover { color: #e0533b }
     .ent-chip-empty { font-size: 11px; color: var(--codex-text-dim); font-style: italic }
-    /* Dim a junk box's body when the master switch is off (controls still usable). */
-    .cfg-section.junk-disabled .cfg-subsection { opacity: 0.5 }
+    /* Dim the body when the master switch is off (controls still usable). */
+    .ent-junkbox.junk-disabled .ent-junkbox-body { opacity: 0.5 }
+
+    .junk-cat {
+      border-top: 1px solid var(--codex-rule);
+      padding: 7px 0 4px
+    }
+    .junk-cat-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 5px
+    }
+    .junk-cat-name {
+      font-family: var(--codex-display);
+      font-size: 11px;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: var(--codex-text);
+      cursor: help;
+      margin-right: auto
+    }
+    /* When a category is off its per-pattern pills have no effect — dim them. */
+    .junk-cat-off .junk-pat-row { opacity: 0.4 }
+    .junk-pat-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap
+    }
+    .junk-pat {
+      font-family: var(--codex-mono-serif);
+      text-transform: none;
+      letter-spacing: 0
+    }
 
     .cfg-section details {
       padding: 0
@@ -4275,72 +4331,89 @@
       <div class="ent-boxes">
         <!-- Entity-class filter — moved here from Config. Same ids/handlers, so the
              global type filter (radar / trees / exports / AutoPilot) is unchanged. -->
-        <div class="cfg-section" id="ent-typebox">
-          <details open>
-            <summary><div class="cfg-header">Entity Classes</div></summary>
-            <div class="cfg-subsection">
-              <div class="cfg-help">
-                Global entity-class filter applied <em>before</em> anything else — affects the radar,
-                the Game-tab trees, exports / dumps and the AutoPilot target picker.
-              </div>
-              <div class="cfg-row"><span class="cfg-label">Player</span>
-                <label class="toggle"><input type="checkbox" id="ef-player" onchange="setEntityFilter('player', this.checked)" checked><span class="toggle-slider"></span></label></div>
-              <div class="cfg-row"><span class="cfg-label">Minion</span>
-                <label class="toggle"><input type="checkbox" id="ef-minion" onchange="setEntityFilter('minion', this.checked)" checked><span class="toggle-slider"></span></label></div>
-              <div class="cfg-row"><span class="cfg-label">Enemy</span>
-                <label class="toggle"><input type="checkbox" id="ef-enemy" onchange="setEntityFilter('enemy', this.checked)" checked><span class="toggle-slider"></span></label></div>
-              <div class="cfg-row"><span class="cfg-label">NPC</span>
-                <label class="toggle"><input type="checkbox" id="ef-npc" onchange="setEntityFilter('npc', this.checked)" checked><span class="toggle-slider"></span></label></div>
-              <div class="cfg-row"><span class="cfg-label">Chest</span>
-                <label class="toggle"><input type="checkbox" id="ef-chest" onchange="setEntityFilter('chest', this.checked)" checked><span class="toggle-slider"></span></label></div>
-              <div class="cfg-row"><span class="cfg-label">World Item</span>
-                <label class="toggle"><input type="checkbox" id="ef-worlditem" onchange="setEntityFilter('worlditem', this.checked)" checked><span class="toggle-slider"></span></label></div>
-              <div class="cfg-row"><span class="cfg-label">Other</span>
-                <label class="toggle"><input type="checkbox" id="ef-other" onchange="setEntityFilter('other', this.checked)" checked><span class="toggle-slider"></span></label></div>
+        <details id="ent-typebox" class="ent-junkbox">
+          <summary class="ent-junkbox-sum">
+            <span class="ent-junkbox-title">Entity Classes</span>
+            <span class="ent-junkbox-meta">global type filter</span>
+          </summary>
+          <div class="ent-junkbox-body">
+            <div class="ent-junkbox-help">
+              Global entity-class filter applied <em>before</em> anything else — affects the radar,
+              the Game-tab trees, exports / dumps and the AutoPilot target picker. Unchecking a
+              class hides it everywhere; if something expected is missing from the radar, check here.
             </div>
-          </details>
-        </div>
+            <div class="filter-row">
+              <label class="filter-pill"><input type="checkbox" id="ef-player"
+                  onchange="setEntityFilter('player',    this.checked)" checked> <span
+                  class="etype-badge etype-Player">Player</span></label>
+              <label class="filter-pill"><input type="checkbox" id="ef-minion"
+                  onchange="setEntityFilter('minion',    this.checked)" checked> <span
+                  class="etype-badge etype-Minion">Minion</span></label>
+              <label class="filter-pill"><input type="checkbox" id="ef-enemy"
+                  onchange="setEntityFilter('enemy',     this.checked)" checked> <span
+                  class="etype-badge etype-Enemy">Enemy</span></label>
+              <label class="filter-pill"><input type="checkbox" id="ef-npc"
+                  onchange="setEntityFilter('npc',       this.checked)" checked> <span
+                  class="etype-badge etype-NPC">NPC</span></label>
+              <label class="filter-pill"><input type="checkbox" id="ef-chest"
+                  onchange="setEntityFilter('chest',     this.checked)" checked> <span
+                  class="etype-badge etype-Chest">Chest</span></label>
+              <label class="filter-pill"><input type="checkbox" id="ef-worlditem"
+                  onchange="setEntityFilter('worlditem', this.checked)" checked> <span
+                  class="etype-badge etype-WorldItem">WorldItem</span></label>
+              <label class="filter-pill"><input type="checkbox" id="ef-other"
+                  onchange="setEntityFilter('other',     this.checked)" checked> <span
+                  class="etype-badge etype-Object">Other</span></label>
+            </div>
+          </div>
+        </details>
 
-        <!-- Junk filter — one toggle row per category (hideout split into its own box). -->
-        <div class="cfg-section" id="ent-junkbox">
-          <details open>
-            <summary><div class="cfg-header">Junk Filter <span class="ent-meta" id="junk-meta"></span></div></summary>
-            <div class="cfg-subsection">
-              <div class="cfg-help">
-                Hides gameplay-irrelevant entities by a substring match on the metadata path. Each
-                row enables/disables a whole category everywhere (radar, browser, trees, exports,
-                AutoPilot). Hover a category name for what it covers.
-              </div>
-              <div class="cfg-row"><span class="cfg-label">Enable junk filter</span>
-                <label class="toggle"><input type="checkbox" id="junk-enabled" onchange="junkSet('enabled', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label></div>
-              <div id="junk-cats"></div>
+        <!-- Junk filter — built-in path categories (hideout split into its own box). -->
+        <details id="ent-junkbox" class="ent-junkbox">
+          <summary class="ent-junkbox-sum">
+            <span class="ent-junkbox-title">Junk Filter</span>
+            <span class="ent-junkbox-meta" id="junk-meta"></span>
+            <label class="toggle" onclick="event.stopPropagation()"
+                   title="Master switch — hide all matched junk entities everywhere (radar, Entities browser, trees, exports, AutoPilot). Also gates the Hideout and Custom Terms boxes.">
+              <input type="checkbox" id="junk-enabled" onchange="junkSet('enabled', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label>
+          </summary>
+          <div class="ent-junkbox-body">
+            <div class="ent-junkbox-help">
+              Hides gameplay-irrelevant entities by a substring match on the metadata path.
+              Each row is a category (its pill enables/disables the whole row); the small pills are
+              individual patterns. Hover any pill for what it matches.
             </div>
-          </details>
-        </div>
+            <div id="junk-cats"></div>
+          </div>
+        </details>
 
         <!-- Hideout doodads — standalone box (still a junk-filter category). -->
-        <div class="cfg-section" id="ent-hideoutbox">
-          <details open>
-            <summary><div class="cfg-header">Hideout</div></summary>
-            <div class="cfg-subsection">
-              <div class="cfg-help">
-                Suppresses hideout decoration doodads (MiscellaneousObjects/HideoutDoodad).
-                Part of the junk filter — needs the Junk Filter master switch on.
-              </div>
-              <div id="junk-hideout"></div>
+        <details id="ent-hideoutbox" class="ent-junkbox ent-box-sm">
+          <summary class="ent-junkbox-sum">
+            <span class="ent-junkbox-title">Hideout</span>
+            <span class="ent-junkbox-meta">doodads</span>
+          </summary>
+          <div class="ent-junkbox-body">
+            <div class="ent-junkbox-help">
+              Suppresses hideout decoration doodads (MiscellaneousObjects/HideoutDoodad).
+              Part of the junk filter — needs the Junk Filter master switch on.
             </div>
-          </details>
-        </div>
+            <div id="junk-hideout"></div>
+          </div>
+        </details>
 
         <!-- Custom terms — standalone box (add + deletable chips). -->
-        <div class="cfg-section" id="ent-custombox">
-          <details open>
-            <summary><div class="cfg-header">Custom Terms <span class="ent-meta" id="junk-custom-meta"></span></div></summary>
-            <div class="cfg-subsection">
-              <div class="cfg-help">
-                Extra case-insensitive path substrings to treat as junk, on top of the categories.
-                Needs the Junk Filter master switch on.
-              </div>
+        <details id="ent-custombox" class="ent-junkbox ent-box-sm">
+          <summary class="ent-junkbox-sum">
+            <span class="ent-junkbox-title">Custom Terms</span>
+            <span class="ent-junkbox-meta" id="junk-custom-meta"></span>
+          </summary>
+          <div class="ent-junkbox-body">
+            <div class="ent-junkbox-help">
+              Extra case-insensitive path substrings to treat as junk, on top of the categories.
+              Needs the Junk Filter master switch on.
+            </div>
+            <div class="ent-junk-custom">
               <div class="ent-junk-addrow">
                 <input type="text" class="cfg-input" id="junk-custom-input" placeholder="e.g. /banner/, decoy"
                        title="A case-insensitive substring to treat as junk. Press Enter or click Add."
@@ -4349,8 +4422,8 @@
               </div>
               <div id="junk-custom-list" class="ent-junk-chips"></div>
             </div>
-          </details>
-        </div>
+          </div>
+        </details>
       </div>
       <div id="tab-entities-content">
         <div class="no-data-msg">Waiting for data…</div>
@@ -6291,6 +6364,32 @@
       markers:  { short: "Markers",  desc: "Already-handled / decorator markers: boss-room minimap icons, rune markers." },
       hideout:  { short: "Hideout",  desc: "Hideout decoration doodads (MiscellaneousObjects/HideoutDoodad)." }
     };
+    const _junkPatInfo = {
+      "/attachments":      { short: "attach",   desc: "Visual attachment points on models (438 paths)." },
+      "microtransactions": { short: "mtx",      desc: "Microtransaction cosmetics (53)." },
+      "/timelines/":       { short: "timeline", desc: "Player cosmetic animation timelines (191)." },
+      "stashskins":        { short: "stash",    desc: "Stash visual variants (60)." },
+      "hairstyles":        { short: "hair",     desc: "Character cosmetic hair." },
+      "/outfits/":         { short: "outfit",   desc: "Character cosmetic outfits." },
+      "/fx/":              { short: "fx",       desc: "Particle effects." },
+      "/mat/":             { short: "mat",      desc: "Material definitions." },
+      "/ao/":              { short: "ao",       desc: "Ambient-occlusion data." },
+      "/epk/":             { short: "epk",      desc: "Effect packages." },
+      "/graph/":           { short: "graph",    desc: "Skill graph nodes." },
+      "/audio/":           { short: "audio",    desc: "Sound definitions." },
+      "/environment/":     { short: "env",      desc: "Environment settings (48)." },
+      "monstermods":       { short: "mods",     desc: "Invisible monster-modifier daemons (194)." },
+      "essencemoddaemons": { short: "essence",  desc: "Invisible essence-modifier daemons (44)." },
+      "tormentedspirits":  { short: "torment",  desc: "Tormented-spirit daemons (48)." },
+      "/daemon/":          { short: "daemon",   desc: "Generic invisible helper entities (38+)." },
+      "/pet/":             { short: "pet",      desc: "Pet cosmetics (14)." },
+      "/clone/":           { short: "clone",    desc: "Player clone effects (36)." },
+      "playersummoned":    { short: "summon",   desc: "Summoned-entity base classes (41)." },
+      "bossroomminimapicon": { short: "bossicon", desc: "Boss-room minimap-icon entities (41)." },
+      "/runemarked":       { short: "rune",     desc: "Rune-marker decorator nodes." },
+      "hideoutdoodad":     { short: "doodad",   desc: "Hideout decoration doodads (MiscellaneousObjects/HideoutDoodad)." }
+    };
+
     function applyJunkFromHeader(jf) {
       if (!jf || typeof jf !== "object") return;
       const on = jf.enabled === true || jf.enabled === "true";
@@ -6341,14 +6440,25 @@
       if (hideoutHost) hideoutHost.innerHTML = hideoutHtml;
     }
 
-    // Builds one junk category as a standard cfg-row [label | toggle] (shared by
-    // the Junk Filter and Hideout boxes). c = header category object, ck = its key.
+    // Builds the HTML for one junk category row (shared by the Junk Filter and
+    // Hideout boxes). c = header category object, ck = its key.
     function junkCatRow(c, ck) {
       const ci = _junkCatInfo[ck] || { short: ck, desc: String(c.label || ck) };
       const con = (c.on === true || c.on === "true");
-      return `<div class="cfg-row"><span class="cfg-label" title="${escAttr(ci.desc)}">${escHtml(ci.short)}</span>`
-           + `<label class="toggle" title="${escAttr(ci.desc)}"><input type="checkbox" ${con ? "checked" : ""} `
-           + `onchange="junkSet('cat:${escAttr(ck)}', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label></div>`;
+      const pills = (Array.isArray(c.patterns) ? c.patterns : []).map(p => {
+        const pp = String(p.p || "");
+        const pi = _junkPatInfo[pp] || { short: pp, desc: pp };
+        const pon = (p.on === true || p.on === "true");
+        return `<label class="filter-pill" title="${escAttr(pp + " — " + pi.desc)}"><input type="checkbox" ${pon ? "checked" : ""} `
+             + `onchange="junkSet('pat:${escAttr(pp)}', this.checked ? 1 : 0)"> `
+             + `<span class="junk-pat">${escHtml(pi.short)}</span></label>`;
+      }).join("");
+      return `<div class="junk-cat${con ? "" : " junk-cat-off"}">`
+           + `<div class="junk-cat-head">`
+           + `<span class="junk-cat-name" title="${escAttr(ci.desc)}">${escHtml(ci.short)}</span>`
+           + `<label class="toggle" title="Enable / disable this whole category at once">`
+           + `<input type="checkbox" ${con ? "checked" : ""} onchange="junkSet('cat:${escAttr(ck)}', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label></div>`
+           + `<div class="junk-pat-row">${pills}</div></div>`;
     }
 
     // ═══════════════════════════════════════════════════════════════════
