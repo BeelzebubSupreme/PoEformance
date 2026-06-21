@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.12.131`.
+Reimplementation of the original C# project (see Reference). Version `0.45.12.132`.
 
 ## Language
 
@@ -132,9 +132,12 @@ Alerts → `alerts.ini [Alerts]`.
   Junk Filter (`#ent-junkbox`, the built-in categories), Hideout (`#ent-hideoutbox`, the
   hideout-doodad category split out), and Custom Terms (`#ent-custombox`, add box + chips).
   Each junk category renders (via `junkCatRow`) as a collapsible `<details class="junk-cat">`
-  with a cube/diamond caret (closed/open) replicated from the cfg-section marker; its summary
-  is the category name + master toggle, and the body lists the individual patterns as standard
-  toggle rows (`.cfg-row`, not pills). The fast radar path builds the awake
+  with a cube/diamond caret (closed/open); the same caret is on each top box's
+  `.ent-junkbox-sum`. The category summary is the name + its master toggle; the body is a wrap
+  of per-pattern `.filter-pill` buttons (each toggles its pattern, pill colour conveys state).
+  Open categories are remembered in `_junkOpenCats` (updated from each `<details>`' `ontoggle`)
+  and `junkRenderCats` only rewrites a host's innerHTML when the markup changed — so the
+  periodic header push no longer snaps expanded categories shut. The fast radar path builds the awake
   sample from `_radarEntityCache` in `UpdateRadarFast` (not `CollectEntityMapCandidates`), so the
   junk filter is ALSO applied there at the awake-sample build. Default ON, all categories on.
 - **GdiOverlayBase.ahk** — reusable transparent, click-through, always-on-top GDI layer
