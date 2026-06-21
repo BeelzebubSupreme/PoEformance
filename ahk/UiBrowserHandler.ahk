@@ -511,3 +511,27 @@ UiBrowseScanStrings()
     FileAppend(txt, outPath, "UTF-8")
     try MsgBox("UI element string scan written to:`n" outPath, "Scan Strings", 0x40)
 }
+
+; Dumps the CURRENTLY-selected UI-browser element's whole subtree (StringId +
+; Displayed Text + screen pos/size/flags per node) to a debug TSV via
+; UiTree_Dump. Used to reverse-engineer C++-generated widget subtrees such as
+; skills_bar, where StringIds are empty and only the Displayed Text identifies a
+; node (e.g. the per-slot hotkey labels). No parameters; writes the file and
+; shows its path. No return value.
+UiBrowseDumpSubtree()
+{
+    global g_uiBrowserCurrentPtr, g_reader
+    if !(IsObject(g_reader) && g_reader.IsProbablyValidPointer(g_uiBrowserCurrentPtr))
+    {
+        try MsgBox("No element selected / game not connected.", "Dump Subtree", 0x10)
+        return
+    }
+    outPath := ""
+    try outPath := UiTree_Dump(g_reader, g_uiBrowserCurrentPtr)
+    if (outPath = "")
+    {
+        try MsgBox("Dump failed (invalid element or write error).", "Dump Subtree", 0x10)
+        return
+    }
+    try MsgBox("UI subtree dumped to:`n" outPath, "Dump Subtree", 0x40)
+}

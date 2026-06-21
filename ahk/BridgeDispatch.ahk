@@ -681,6 +681,8 @@ _DispatchBridgeCall(method, args)
             SetTimer(() => UiBrowserClearHighlight(), -1)
         case "UiBrowseScanStrings":
             SetTimer(() => UiBrowseScanStrings(), -1)
+        case "UiBrowseDumpSubtree":
+            SetTimer(() => UiBrowseDumpSubtree(), -1)
         case "RefreshItemSizes":
             ; Shell out to ggpk-tools/PoeDataExtract on a timer — runs
             ; ~200 ms..2 s end-to-end and pumps a status message back
