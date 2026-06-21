@@ -235,14 +235,19 @@ _HotkeysResolveKey(hk)
         return (g_flaskKeyBySlot.Has(slot)) ? g_flaskKeyBySlot[slot] : ""
     if (kind = "skill")
     {
-        ; Explicit literal key wins; otherwise resolve the LIVE key by the bound
-        ; skill name (auto-tracks rebinds), then fall back to the slot's key.
+        ; Explicit literal key wins. Otherwise, when a skill NAME is bound, resolve
+        ; the LIVE skill-bar key for that skill — with NO slot fallback, since a
+        ; default slot would mislead when the skill isn't on the bar (return "").
+        ; Only a name-less (legacy slot-bound) output falls back to the slot key.
         if (out.Has("key") && out["key"] != "")
             return out["key"]
         nm := out.Has("skillName") ? out["skillName"] : ""
-        if (nm != "" && IsSet(g_skillKeyBySkillName) && g_skillKeyBySkillName is Map
-            && g_skillKeyBySkillName.Has(StrLower(nm)))
-            return g_skillKeyBySkillName[StrLower(nm)]
+        if (nm != "")
+        {
+            if (IsSet(g_skillKeyBySkillName) && g_skillKeyBySkillName is Map && g_skillKeyBySkillName.Has(StrLower(nm)))
+                return g_skillKeyBySkillName[StrLower(nm)]
+            return ""
+        }
         return (g_skillKeyBySlot.Has(slot) ? g_skillKeyBySlot[slot] : "")
     }
     return out.Has("key") ? out["key"] : (hk.Has("key") ? hk["key"] : "")

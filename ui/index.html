@@ -6298,13 +6298,31 @@
     // row of raw fields. Used by the collapsed hotkey view.
     const HK_OP_TXT = { '<': '<', '<=': '≤', '>': '>', '>=': '≥', '=': '=', '!=': '≠' };
     function hkOpTxt(op) { return HK_OP_TXT[op] || op || '≥'; }
+    // Resolves the live skill-bar key for a skill by NAME (case-insensitive),
+    // using the per-slot skill name now pushed in hkBindings.skillSlots. '' if the
+    // skill isn't on the bar.
+    function _skillKeyByName(name) {
+      if (!name) return '';
+      const n = String(name).toLowerCase();
+      const s = (hkBindings.skillSlots || []).find(x => x.skill && String(x.skill).toLowerCase() === n);
+      return s ? s.key : '';
+    }
+    // Resolves the displayed/effective key for a hotkey "skill" output, mirroring
+    // the AHK logic: explicit literal key → live key by the bound skill name (no
+    // slot fallback once a name is chosen) → legacy slot key when name-less.
+    function hkResolveSkillKey(o) {
+      if (!o) return '';
+      if (o.key) return o.key;
+      if (o.skillName) return _skillKeyByName(o.skillName);
+      const bs = (hkBindings.skillSlots || []).find(s => +s.slot === +o.slot);
+      return bs ? bs.key : '';
+    }
     // "Skill 3 (RButton)" / "Flask 1 (Q)" / "key X" — the bound output in short form.
     function hkDescribeOutput(o) {
       o = o || {};
       const kind = o.kind || 'flask';
       if (kind === 'skill') {
-        const s = (hkBindings.skillSlots || []).find(x => +x.slot === +o.slot);
-        const key = o.key || (s ? s.key : '');
+        const key = hkResolveSkillKey(o);
         const nm = o.skillName || 'skill';
         return key ? `${nm} (${key})` : nm;
       }
@@ -6444,16 +6462,15 @@
           : [1,2].map(s => `<option value="${s}" ${+o.slot === s ? 'selected' : ''}>Flask ${s}</option>`).join('');
         detail = `<select onchange="hkSetOutput(${gi},${hi},'slot',this.value)">${opts}</select>`;
       } else if (kind === 'skill') {
-        // One dropdown picks the skill (the real, in-game-named list) — it both gates on
-        // that skill's cooldown AND labels the output. The key it presses is captured
-        // directly (skill->slot/key isn't readable from memory); old configs fall back to
-        // their slot's config key.
+        // One dropdown picks the skill (the real, in-game-named list) — it gates on
+        // that skill's cooldown AND resolves the LIVE skill-bar key for that skill
+        // (the slot's +0x2F0 ActiveSkill pointer maps slot -> skill). A captured
+        // literal key still overrides; name-less legacy outputs fall back to a slot.
         const names = hkBindings.skillNames || [];
         const nameOpts = `<option value="">— pick a skill —</option>`
           + names.map(n => `<option value="${hkEsc(n)}" ${o.skillName === n ? 'selected' : ''}>${hkEsc(n)}</option>`).join('')
           + (o.skillName && !names.includes(o.skillName) ? `<option value="${hkEsc(o.skillName)}" selected>${hkEsc(o.skillName)} (not active)</option>` : '');
-        const slotKey = (hkBindings.skillSlots || []).find(s => +s.slot === +o.slot);
-        const keyTxt = o.key || (slotKey ? slotKey.key : '') || 'Set key';
+        const keyTxt = hkResolveSkillKey(o) || 'Set key';
         detail = `<select title="Which skill this fires (also gates on its cooldown)" onchange="hkSetOutput(${gi},${hi},'skillName',this.value)">${nameOpts}</select> `
                + `<button class="hk-btn hk-key-btn" title="Output key this skill is bound to in-game" onclick="hkCaptureSkillKey(${gi},${hi})">${hkEsc(keyTxt)}</button>`;
       } else {
@@ -8422,7 +8439,7 @@
       const skillOpts = _skillOptionsHtml(s.skillName || '');
       return `<div class="combat-slot-row" data-slot="${i}" style="display:flex;gap:6px;align-items:center;padding:5px 0;font-size:11px;border-bottom:1px solid var(--border)">
     <span style="color:var(--accent);width:16px;font-weight:600">S${i}</span>
-    <input type="text" class="combat-slot-key" placeholder="—" value="${_esc(s.key)}" style="width:42px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:2px 4px;font-size:11px;text-align:center" onchange="saveCombatSlot(${i})">
+    <input type="text" class="combat-slot-key" placeholder="—" value="${_esc(s.key || _skillKeyByName(s.skillName))}" title="Auto-resolved from the in-game skill bar by skill name; edit to override" style="width:42px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:2px 4px;font-size:11px;text-align:center" onchange="saveCombatSlot(${i})">
     <select class="combat-slot-name" style="flex:1;min-width:80px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:2px 4px;font-size:11px" onchange="onSkillPicked(${i})">${skillOpts}</select>
     <span class="combat-slot-cd-live" style="width:54px;text-align:center;font-size:10px;color:var(--subtext);font-family:monospace" data-tip="Live cooldown from game memory">—</span>
     <button type="button" class="combat-slot-adv-toggle" onclick="toggleSlotAdvanced(${i})" style="width:18px;height:18px;background:transparent;border:none;color:var(--subtext);cursor:pointer;padding:0;font-size:12px" data-tip="Advanced (type / priority / overrides)">▾</button>
@@ -8463,6 +8480,11 @@
       const row = rows[i - 1];
       if (!row) return;
       const skillName = row.querySelector('.combat-slot-name').value;
+      // Auto-fill the key from the live skill bar for the picked skill (skill->key
+      // by name); only when resolvable, so a skill not on the bar keeps any manual key.
+      const keyEl = row.querySelector('.combat-slot-key');
+      const rk = _skillKeyByName(skillName);
+      if (keyEl && rk) keyEl.value = rk;
       // Auto-fill type if user hasn't explicitly set one (or it's still the default).
       const typeEl = document.querySelector(`.combat-slot-adv-row[data-slot="${i}"] .combat-slot-type`);
       if (typeEl) typeEl.value = _inferSlotType(skillName);
@@ -8490,7 +8512,7 @@
       const inRow = focused && (row.contains(focused) || (advRow && advRow.contains(focused)));
 
       const key = row.querySelector('.combat-slot-key');
-      if (key && key !== focused) key.value = s.key || '';
+      if (key && key !== focused) key.value = s.key || _skillKeyByName(s.skillName);
 
       // Re-render the skill <select> options when the live skill list has changed.
       // Always preserve user's current selection if not focused.
