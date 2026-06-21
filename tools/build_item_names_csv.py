@@ -341,16 +341,10 @@ def extract_unique_ivi_names(csv_dir, words):
 #     DisplayedName are internal action skills and are skipped (so the UI can
 #     filter them out).
 # ---------------------------------------------------------------------------
-# Live GrantedEffects.Id -> (DisplayedName, Icon_DDSFile) for skills the dat scan
-# misses because their base GE Id was kept after an in-game rename (the displayed
-# name lives on a differently-named "<Name>Player" row). Merged into the skill map.
-MANUAL_SKILL_ALIASES = [
-    ("CircleOfPower", "Sigil of Power", "Art/2DArt/SkillIcons/SigilofPowerWeaponSkill.dds"),
-    ("Firewall",      "Flame Wall",     "Art/2DArt/SkillIcons/SorceressFlameWall.dds"),
-    ("StormCloud",    "Orb of Storms",  "Art/2DArt/SkillIcons/SorceressOrbOfStorms.dds"),
-]
-
-
+# NOTE: renamed skills whose live GrantedEffects.Id has no dat link to the display
+# name (e.g. CircleOfPower -> "Sigil of Power") are handled by the manual,
+# generator-independent data/skill_name_overrides.tsv (loaded on top at runtime),
+# not by a hardcoded list here — so corrections survive any generator.
 def extract_skill_names(csv_dir):
     """Returns list of (granted_effect_id, displayed_name, icon)."""
     print("\n--- Skill name map (GrantedEffects + ActiveSkills) ---")
@@ -381,15 +375,6 @@ def extract_skill_names(csv_dir):
             continue
         seen.add(ge_id)
         results.append((ge_id, disp, icon))
-
-    # Manual aliases: GrantedEffect Ids the Actor reports live that the dat's
-    # GrantedEffects->ActiveSkills link does not resolve to a DisplayedName —
-    # renamed skills whose base GE Id differs from the "<Name>Player" display row.
-    # Keyed by the live GrantedEffects.Id. Verified in-game 2026-06-21.
-    for ge_id, disp, icon in MANUAL_SKILL_ALIASES:
-        if ge_id not in seen:
-            seen.add(ge_id)
-            results.append((ge_id, disp, icon))
 
     print(f"  Mapped {len(results)} granted effects to skill names")
     return sorted(results)
