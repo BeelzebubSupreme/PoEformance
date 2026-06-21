@@ -481,7 +481,9 @@ class PoE2Offsets
 
     ; Offsets shared by every UiElement (UiElementBaseOffset.cs)
     static UiElementBase := Map(
+        "Self", 0x008,  ; ptr to the element ITSELF — a real UiElement has *(this+0x08)==this; cheap validity check
         "ChildrenFirst", 0x010,  ; StdVector First ptr → pointer array of child UiElements
+        "ChildrenLast", 0x018,  ; StdVector end ptr → one past the last child; childCount = (Last-First)/A_PtrSize
         "ParentPtr", 0x0B8,  ; ptr to parent UiElement (for absolute pos traversal)
         "PositionModifier", 0x0F0,  ; StdTuple2D<float> — added to parent pos when child's ShouldModifyPos (bit10) is set
         "RelativePosition", 0x118,  ; StdTuple2D<float> — position relative to parent (UI coords, base 2560×1600)

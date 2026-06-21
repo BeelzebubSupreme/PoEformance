@@ -611,8 +611,8 @@ AtlasDumpDebug(reader, snap)
             }
         for _, p in probe
         {
-            cf := reader.Mem.ReadInt64(p + 0x10)
-            cl := reader.Mem.ReadInt64(p + 0x18)
+            cf := reader.Mem.ReadInt64(p + PoE2Offsets.UiElementBase["ChildrenFirst"])
+            cl := reader.Mem.ReadInt64(p + PoE2Offsets.UiElementBase["ChildrenLast"])
             childN := (cf > 0 && cl > cf) ? (cl - cf) // 8 : 0
             txt .= Format("`n--- vector scan @ 0x{:X} (uiChildren={}) ---`n", p, childN)
             txt .= _AtlasScanVectors(reader, p, 0x800)

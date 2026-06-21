@@ -97,8 +97,8 @@ UiTree_ReadElement(reader, elemPtr)
     hdr := reader.Mem.ReadBytes(elemPtr, headerSize)
     if !hdr
         return 0
-    childFirst := NumGet(hdr.Ptr, 0x010, "Ptr")
-    childLast  := NumGet(hdr.Ptr, 0x018, "Ptr")
+    childFirst := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+    childLast  := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
     childCount := 0
     if (reader.IsProbablyValidPointer(childFirst) && childLast > childFirst)
         childCount := Min((childLast - childFirst) // A_PtrSize, 4096)
@@ -216,8 +216,8 @@ UiTree_GetIndexPath(reader, rootPtr, elemPtr)
         phdr := reader.Mem.ReadBytes(parent, 0x20)
         if !phdr
             break
-        cFirst := NumGet(phdr.Ptr, 0x010, "Ptr")
-        cLast  := NumGet(phdr.Ptr, 0x018, "Ptr")
+        cFirst := NumGet(phdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+        cLast  := NumGet(phdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
         if (!reader.IsProbablyValidPointer(cFirst) || cLast <= cFirst)
             break
         n := Min((cLast - cFirst) // A_PtrSize, 4096)
@@ -277,8 +277,8 @@ UiTree_GetChildByStringId(reader, elemPtr, targetId)
     hdr := reader.Mem.ReadBytes(elemPtr, 0x20)
     if !hdr
         return 0
-    childFirst := NumGet(hdr.Ptr, 0x010, "Ptr")
-    childLast  := NumGet(hdr.Ptr, 0x018, "Ptr")
+    childFirst := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+    childLast  := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
     if (!reader.IsProbablyValidPointer(childFirst) || childLast <= childFirst)
         return 0
     numChildren := Min((childLast - childFirst) // A_PtrSize, 512)
@@ -305,8 +305,8 @@ UiTree_GetChildByIndex(reader, elemPtr, idx)
     hdr := reader.Mem.ReadBytes(elemPtr, 0x20)
     if !hdr
         return 0
-    childFirst := NumGet(hdr.Ptr, 0x010, "Ptr")
-    childLast  := NumGet(hdr.Ptr, 0x018, "Ptr")
+    childFirst := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+    childLast  := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
     if (!reader.IsProbablyValidPointer(childFirst) || childLast <= childFirst)
         return 0
     numChildren := (childLast - childFirst) // A_PtrSize
