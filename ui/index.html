@@ -4244,6 +4244,7 @@
           <button class="uib-btn" onclick="ahkCall('UiBrowseScanStrings')" data-tip="RE: dump all readable wide-string fields of this element (struct + 1-level deref) to debug\uielem_scan_*.txt — to locate the real StringId offset">🔍 Scan Strings</button>
           <button class="uib-btn" onclick="ahkCall('UiBrowseDumpSubtree')" data-tip="RE: dump this element's whole subtree (StringId + Displayed Text + pos/size/flags per node) to debug\ui_tree_*.tsv — e.g. to map the skills_bar hotkey labels">🌲 Dump Subtree</button>
           <button class="uib-btn" onclick="ahkCall('DetectSkillKeys')" data-tip="Read the in-game skill-bar key bindings (per-slot Displayed Text), fill the Hotkeys-tab skill slots, and show the detected slot→key mapping">⌨ Detect Skill Keys</button>
+          <button class="uib-btn" onclick="ahkCall('DiagSkillSlotLink')" data-tip="RE: probe whether each skill-bar slot references a player skill by pointer (detailsPtr/geplRow/ActiveSkillsDat) — writes debug\skill_slot_link_*.txt to enable automatic skill-name↔slot mapping">🔗 Skill↔Slot Link</button>
         </div>
         <div id="uib-search-row">
           <input id="uib-search-input" type="text" placeholder="Search StringId…"

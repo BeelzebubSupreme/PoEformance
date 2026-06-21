@@ -315,3 +315,142 @@ DetectSkillKeysAndReport()
     txt .= "`nApplied to the Hotkeys-tab skill slots."
     try MsgBox(txt, "Detect Skill Keys", 0x40)
 }
+
+; ── Skill <-> Slot link discovery (RE diagnostic) ───────────────────────────
+; Goal: map a skill NAME to its skill-bar SLOT automatically. Each player skill
+; exposes several stable pointers (the ActiveSkill struct = detailsPtr, the
+; GrantedEffectsPerLevel row = geplRow, and the ActiveSkills DAT row) plus its
+; Icon_DDSFile path. The skill-bar slot must reference its skill somehow; this
+; probe scans each slot's subtree for a pointer field whose value equals one of
+; those known skill pointers, which would give a clean, offset-based link.
+; Writes a report to debug\skill_slot_link_*.txt and shows its path.
+DiagSkillSlotLink()
+{
+    global g_reader, g_radarLastSnap
+    if !IsObject(g_reader)
+    {
+        try MsgBox("Game not connected.", "Skill<->Slot Link", 0x10)
+        return
+    }
+
+    ; Resolve the local player and read its skills (name + the linkable pointers).
+    snap := (g_radarLastSnap && g_radarLastSnap is Map) ? g_radarLastSnap : 0
+    lpPtr := 0
+    if snap
+    {
+        inGs := snap.Has("inGameState") ? snap["inGameState"] : 0
+        area := (inGs && inGs is Map && inGs.Has("areaInstance")) ? inGs["areaInstance"] : 0
+        lpPtr := (area && area is Map && area.Has("localPlayerPtr")) ? area["localPlayerPtr"] : 0
+    }
+    skillsData := 0
+    if lpPtr
+        try skillsData := g_reader.ReadPlayerSkills(lpPtr)
+    skills := (skillsData && skillsData is Map && skillsData.Has("skills")) ? skillsData["skills"] : []
+
+    ; Build pointer -> "name (which-pointer)" map and a printable skill table.
+    ptrMap := Map()
+    skillLines := []
+    for sk in skills
+    {
+        if !(sk is Map)
+            continue
+        nm := (sk.Has("displayName") && sk["displayName"] != "") ? sk["displayName"]
+            : (sk.Has("name") ? sk["name"] : "?")
+        dp := sk.Has("detailsPtr") ? sk["detailsPtr"] : 0
+        gr := sk.Has("geplRow") ? sk["geplRow"] : 0
+        dat := 0
+        if (dp && g_reader.IsProbablyValidPointer(dp))
+            try dat := g_reader.Mem.ReadPtr(dp + PoE2Offsets.ActiveSkillDetails["ActiveSkillsDatPtr"])
+        ip := sk.Has("iconPath") ? sk["iconPath"] : ""
+        if (dp)
+            ptrMap[dp] := nm " (detailsPtr)"
+        if (gr)
+            ptrMap[gr] := nm " (geplRow)"
+        if (dat)
+            ptrMap[dat] := nm " (activeSkillsDat)"
+        skillLines.Push(Format("  {} | details=0x{:X} gepl=0x{:X} dat=0x{:X}`n     icon={}", nm, dp, gr, dat, ip))
+    }
+
+    slots := ReadSkillBarHotkeys(g_reader)
+
+    rpt := "Skill <-> Slot link probe`n`n"
+    rpt .= "Skills (" skills.Length "):`n"
+    for ln in skillLines
+        rpt .= ln "`n"
+    rpt .= "`nSlots (" slots.Length "):`n"
+    for e in slots
+    {
+        rpt .= Format("`nslot {} key='{}' addr=0x{:X}`n", e["slot"], e["key"], e["addr"])
+        matches := _SkillBarScanPtrMatches(g_reader, e["addr"], ptrMap)
+        if (matches.Length = 0)
+            rpt .= "   (no skill-pointer match found in subtree)`n"
+        else
+            for mln in matches
+                rpt .= "   " mln "`n"
+    }
+
+    outDir := A_ScriptDir "\debug"
+    if !DirExist(outDir)
+        DirCreate(outDir)
+    outPath := outDir "\skill_slot_link_" FormatTime(A_Now, "yyyyMMdd_HHmmss") ".txt"
+    try FileAppend(rpt, outPath, "UTF-8")
+    try MsgBox("Skill<->Slot link probe written to:`n" outPath "`n`nSkills: " skills.Length "   Slots: " slots.Length, "Skill<->Slot Link", 0x40)
+}
+
+; Bounded subtree scan of a skill-bar slot for pointer fields whose value matches
+; a known skill pointer. Params: rootPtr - slot container; ptrMap - value->label.
+; Returns an array of human-readable match lines.
+_SkillBarScanPtrMatches(reader, rootPtr, ptrMap)
+{
+    out := []
+    if !reader.IsProbablyValidPointer(rootPtr)
+        return out
+    queue := [{ptr: rootPtr, d: 0}]
+    seen := Map()
+    nodes := 0
+    while (queue.Length > 0 && nodes < 200)
+    {
+        it := queue.RemoveAt(1)
+        p := it.ptr
+        if (seen.Has(p) || !reader.IsProbablyValidPointer(p))
+            continue
+        seen[p] := true
+        nodes += 1
+        blk := reader.Mem.ReadBytes(p, 0x600)
+        if blk
+        {
+            off := 0
+            while (off + A_PtrSize <= 0x600)
+            {
+                v := NumGet(blk.Ptr, off, "Ptr")
+                if (ptrMap.Has(v))
+                    out.Push(Format("MATCH @+0x{:03X} (node 0x{:X}): {} = 0x{:X}", off, p, ptrMap[v], v))
+                off += 8
+            }
+        }
+        if (it.d < 5)
+        {
+            chdr := reader.Mem.ReadBytes(p, 0x20)
+            if chdr
+            {
+                cf := NumGet(chdr.Ptr, 0x10, "Ptr")
+                cl := NumGet(chdr.Ptr, 0x18, "Ptr")
+                if (reader.IsProbablyValidPointer(cf) && cl > cf)
+                {
+                    cn := Min((cl - cf) // A_PtrSize, 64)
+                    cbuf := reader.Mem.ReadBytes(cf, cn * A_PtrSize)
+                    if cbuf
+                    {
+                        Loop cn
+                        {
+                            cp := NumGet(cbuf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
+                            if reader.IsProbablyValidPointer(cp)
+                                queue.Push({ptr: cp, d: it.d + 1})
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return out
+}
