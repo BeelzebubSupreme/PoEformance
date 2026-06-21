@@ -225,7 +225,7 @@ _HotkeysNormalizeCondTree(node)
 ; Returns the key string, or "" if unresolved.
 _HotkeysResolveKey(hk)
 {
-    global g_flaskKeyBySlot, g_skillKeyBySlot
+    global g_flaskKeyBySlot, g_skillKeyBySlot, g_skillKeyBySkillName
     out := (hk.Has("output") && hk["output"] is Map) ? hk["output"] : 0
     if !out
         return hk.Has("key") ? hk["key"] : ""
@@ -234,8 +234,22 @@ _HotkeysResolveKey(hk)
     if (kind = "flask")
         return (g_flaskKeyBySlot.Has(slot)) ? g_flaskKeyBySlot[slot] : ""
     if (kind = "skill")
-        return (out.Has("key") && out["key"] != "") ? out["key"]
-             : (g_skillKeyBySlot.Has(slot) ? g_skillKeyBySlot[slot] : "")
+    {
+        ; Explicit literal key wins. Otherwise, when a skill NAME is bound, resolve
+        ; the LIVE skill-bar key for that skill — with NO slot fallback, since a
+        ; default slot would mislead when the skill isn't on the bar (return "").
+        ; Only a name-less (legacy slot-bound) output falls back to the slot key.
+        if (out.Has("key") && out["key"] != "")
+            return out["key"]
+        nm := out.Has("skillName") ? out["skillName"] : ""
+        if (nm != "")
+        {
+            if (IsSet(g_skillKeyBySkillName) && g_skillKeyBySkillName is Map && g_skillKeyBySkillName.Has(StrLower(nm)))
+                return g_skillKeyBySkillName[StrLower(nm)]
+            return ""
+        }
+        return (g_skillKeyBySlot.Has(slot) ? g_skillKeyBySlot[slot] : "")
+    }
     return out.Has("key") ? out["key"] : (hk.Has("key") ? hk["key"] : "")
 }
 

@@ -20,7 +20,7 @@ namespace PoeDataExtract.Extractors;
 /// which is the stat_desc_map.tsv pipeline (still Python for now).
 ///
 /// Output TSV format (row index → stat id, matching the legacy
-/// extract_stats_dat_csv.py output the AHK side expects):
+/// poe_tools.py (extract-stats) output the AHK side expects):
 ///   0   level
 ///   1   item_drop_slots
 ///   2   main_hand_weapon_type

@@ -183,6 +183,12 @@ class PoE2GameStateReader extends PoE2InventoryReader
         this.LoadUniqueItemNameMap(A_ScriptDir "\\data\\unique_item_name_map.tsv")
         this.LoadUniqueIviNameMap(A_ScriptDir "\\data\\unique_ivi_name_map.tsv")
         this.LoadSkillNameMap(A_ScriptDir "\\data\\skill_name_map.tsv")
+        ; Manual, generator-independent overrides applied ON TOP — for renamed
+        ; skills whose live GrantedEffects.Id has no dat link to the display name
+        ; (e.g. CircleOfPower -> Sigil of Power). Same columns; loading second lets
+        ; these win, and they survive any regeneration of the generated map no
+        ; matter which tool produced it.
+        this.LoadSkillNameMap(A_ScriptDir "\\data\\skill_name_overrides.tsv")
         this.LoadInventoryTypeMap(A_ScriptDir "\\data\\inventory_type_map.tsv")
     }
 

@@ -378,12 +378,20 @@ PushUiBrowserState()
         fnt := StrReplace(fnt, '"', '\"')
         tsty := StrReplace(elem.Has("textStyle") ? elem["textStyle"] : "", "\", "\\")
         tsty := StrReplace(tsty, '"', '\"')
+        ; Displayed text can contain control chars (multi-line tags) — escape them
+        ; fully so the JSON the WebView JSON.parse()s stays valid.
+        dtxt := StrReplace(elem.Has("text") ? elem["text"] : "", "\", "\\")
+        dtxt := StrReplace(dtxt, '"', '\"')
+        dtxt := StrReplace(dtxt, "`r", "\r")
+        dtxt := StrReplace(dtxt, "`n", "\n")
+        dtxt := StrReplace(dtxt, "`t", "\t")
         scLabelJ := StrReplace(scLabel, '"', '\"')
         propsJson := '{'
             . '"address":"' . Format("0x{:X}", g_uiBrowserCurrentPtr) . '"'
             . ',"stringId":"' . sid . '"'
             . ',"fontName":"' . fnt . '"'
             . ',"textStyle":"' . tsty . '"'
+            . ',"text":"' . dtxt . '"'
             . ',"isVisible":' . (elem["isVisible"] ? "true" : "false")
             . ',"effectiveVisible":' . (effVisible ? "true" : "false")
             . ',"shouldModifyPos":' . (elem["shouldModifyPos"] ? "true" : "false")
@@ -502,4 +510,28 @@ UiBrowseScanStrings()
 
     FileAppend(txt, outPath, "UTF-8")
     try MsgBox("UI element string scan written to:`n" outPath, "Scan Strings", 0x40)
+}
+
+; Dumps the CURRENTLY-selected UI-browser element's whole subtree (StringId +
+; Displayed Text + screen pos/size/flags per node) to a debug TSV via
+; UiTree_Dump. Used to reverse-engineer C++-generated widget subtrees such as
+; skills_bar, where StringIds are empty and only the Displayed Text identifies a
+; node (e.g. the per-slot hotkey labels). No parameters; writes the file and
+; shows its path. No return value.
+UiBrowseDumpSubtree()
+{
+    global g_uiBrowserCurrentPtr, g_reader
+    if !(IsObject(g_reader) && g_reader.IsProbablyValidPointer(g_uiBrowserCurrentPtr))
+    {
+        try MsgBox("No element selected / game not connected.", "Dump Subtree", 0x10)
+        return
+    }
+    outPath := ""
+    try outPath := UiTree_Dump(g_reader, g_uiBrowserCurrentPtr)
+    if (outPath = "")
+    {
+        try MsgBox("Dump failed (invalid element or write error).", "Dump Subtree", 0x10)
+        return
+    }
+    try MsgBox("UI subtree dumped to:`n" outPath, "Dump Subtree", 0x40)
 }

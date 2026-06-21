@@ -4242,6 +4242,9 @@
           <button class="uib-btn" onclick="ahkCall('UiBrowseRoot')" data-tip="GameUI">⊞ GameUI</button>
           <button class="uib-btn" onclick="uibCopyInfo()" data-tip="Copy element info as text">📋 Copy Info</button>
           <button class="uib-btn" onclick="ahkCall('UiBrowseScanStrings')" data-tip="RE: dump all readable wide-string fields of this element (struct + 1-level deref) to debug\uielem_scan_*.txt — to locate the real StringId offset">🔍 Scan Strings</button>
+          <button class="uib-btn" onclick="ahkCall('UiBrowseDumpSubtree')" data-tip="RE: dump this element's whole subtree (StringId + Displayed Text + pos/size/flags per node) to debug\ui_tree_*.tsv — e.g. to map the skills_bar hotkey labels">🌲 Dump Subtree</button>
+          <button class="uib-btn" onclick="ahkCall('DetectSkillKeys')" data-tip="Read the in-game skill-bar key bindings (per-slot Displayed Text), fill the Hotkeys-tab skill slots, and show the detected slot→key mapping">⌨ Detect Skill Keys</button>
+          <button class="uib-btn" onclick="ahkCall('DiagSkillSlotLink')" data-tip="RE: probe whether each skill-bar slot references a player skill by pointer (detailsPtr/geplRow/ActiveSkillsDat) — writes debug\skill_slot_link_*.txt to enable automatic skill-name↔slot mapping">🔗 Skill↔Slot Link</button>
         </div>
         <div id="uib-search-row">
           <input id="uib-search-input" type="text" placeholder="Search StringId…"
@@ -6165,6 +6168,19 @@
       try { hkBindings = JSON.parse(jsonStr); } catch (e) { return; }
       if (!hkBindings || typeof hkBindings !== 'object') hkBindings = { flaskSlots: [], skillSlots: [], skillNames: [], chestTypes: [] };
       hkRender();
+      _refreshCombatSlotKeys();   // combat key fields resolve from the same bar data
+    }
+    // Updates each combat slot's key field to the live skill-bar key for its picked
+    // skill (display only — firing resolves by name live in AHK). No-op on focused
+    // fields and on skills not on the bar (keeps any manual key).
+    function _refreshCombatSlotKeys() {
+      document.querySelectorAll('.combat-slot-row').forEach(row => {
+        const nameEl = row.querySelector('.combat-slot-name');
+        const keyEl = row.querySelector('.combat-slot-key');
+        if (!nameEl || !keyEl || keyEl === document.activeElement) return;
+        const rk = _skillKeyByName(nameEl.value);
+        if (rk) keyEl.value = rk;
+      });
     }
     // Collapse state is view-only (not persisted, no AHK round-trip): a Set of
     // keys 'g:<gi>' | 'h:<hotkeyId>' | 'a:<hotkeyId>:<ai>' that are folded.
@@ -6295,13 +6311,31 @@
     // row of raw fields. Used by the collapsed hotkey view.
     const HK_OP_TXT = { '<': '<', '<=': '≤', '>': '>', '>=': '≥', '=': '=', '!=': '≠' };
     function hkOpTxt(op) { return HK_OP_TXT[op] || op || '≥'; }
+    // Resolves the live skill-bar key for a skill by NAME (case-insensitive),
+    // using the per-slot skill name now pushed in hkBindings.skillSlots. '' if the
+    // skill isn't on the bar.
+    function _skillKeyByName(name) {
+      if (!name) return '';
+      const n = String(name).toLowerCase();
+      const s = (hkBindings.skillSlots || []).find(x => x.skill && String(x.skill).toLowerCase() === n);
+      return s ? s.key : '';
+    }
+    // Resolves the displayed/effective key for a hotkey "skill" output, mirroring
+    // the AHK logic: explicit literal key → live key by the bound skill name (no
+    // slot fallback once a name is chosen) → legacy slot key when name-less.
+    function hkResolveSkillKey(o) {
+      if (!o) return '';
+      if (o.key) return o.key;
+      if (o.skillName) return _skillKeyByName(o.skillName);
+      const bs = (hkBindings.skillSlots || []).find(s => +s.slot === +o.slot);
+      return bs ? bs.key : '';
+    }
     // "Skill 3 (RButton)" / "Flask 1 (Q)" / "key X" — the bound output in short form.
     function hkDescribeOutput(o) {
       o = o || {};
       const kind = o.kind || 'flask';
       if (kind === 'skill') {
-        const s = (hkBindings.skillSlots || []).find(x => +x.slot === +o.slot);
-        const key = o.key || (s ? s.key : '');
+        const key = hkResolveSkillKey(o);
         const nm = o.skillName || 'skill';
         return key ? `${nm} (${key})` : nm;
       }
@@ -6441,16 +6475,15 @@
           : [1,2].map(s => `<option value="${s}" ${+o.slot === s ? 'selected' : ''}>Flask ${s}</option>`).join('');
         detail = `<select onchange="hkSetOutput(${gi},${hi},'slot',this.value)">${opts}</select>`;
       } else if (kind === 'skill') {
-        // One dropdown picks the skill (the real, in-game-named list) — it both gates on
-        // that skill's cooldown AND labels the output. The key it presses is captured
-        // directly (skill->slot/key isn't readable from memory); old configs fall back to
-        // their slot's config key.
+        // One dropdown picks the skill (the real, in-game-named list) — it gates on
+        // that skill's cooldown AND resolves the LIVE skill-bar key for that skill
+        // (the slot's +0x2F0 ActiveSkill pointer maps slot -> skill). A captured
+        // literal key still overrides; name-less legacy outputs fall back to a slot.
         const names = hkBindings.skillNames || [];
         const nameOpts = `<option value="">— pick a skill —</option>`
           + names.map(n => `<option value="${hkEsc(n)}" ${o.skillName === n ? 'selected' : ''}>${hkEsc(n)}</option>`).join('')
           + (o.skillName && !names.includes(o.skillName) ? `<option value="${hkEsc(o.skillName)}" selected>${hkEsc(o.skillName)} (not active)</option>` : '');
-        const slotKey = (hkBindings.skillSlots || []).find(s => +s.slot === +o.slot);
-        const keyTxt = o.key || (slotKey ? slotKey.key : '') || 'Set key';
+        const keyTxt = hkResolveSkillKey(o) || 'Set key';
         detail = `<select title="Which skill this fires (also gates on its cooldown)" onchange="hkSetOutput(${gi},${hi},'skillName',this.value)">${nameOpts}</select> `
                + `<button class="hk-btn hk-key-btn" title="Output key this skill is bound to in-game" onclick="hkCaptureSkillKey(${gi},${hi})">${hkEsc(keyTxt)}</button>`;
       } else {
@@ -8345,6 +8378,10 @@
         container.innerHTML = html;
         _combatSlotsBuilt = true;
         _updateSkillDropdowns();
+        _refreshCombatSlotKeys();
+        // Pull a fresh skill-bar read so the per-slot keys resolve even if no
+        // bindings push has happened yet this session (e.g. reloaded mid-zone).
+        try { ahkCall('RefreshSkillKeys'); } catch (e) {}
         // Position value labels on slot sliders after DOM is ready
         requestAnimationFrame(() => _sbInitAll());
         return;
@@ -8419,7 +8456,7 @@
       const skillOpts = _skillOptionsHtml(s.skillName || '');
       return `<div class="combat-slot-row" data-slot="${i}" style="display:flex;gap:6px;align-items:center;padding:5px 0;font-size:11px;border-bottom:1px solid var(--border)">
     <span style="color:var(--accent);width:16px;font-weight:600">S${i}</span>
-    <input type="text" class="combat-slot-key" placeholder="—" value="${_esc(s.key)}" style="width:42px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:2px 4px;font-size:11px;text-align:center" onchange="saveCombatSlot(${i})">
+    <input type="text" class="combat-slot-key" placeholder="—" value="${_esc(s.key || _skillKeyByName(s.skillName))}" title="Auto-resolved from the in-game skill bar by skill name; edit to override" style="width:42px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:2px 4px;font-size:11px;text-align:center" onchange="saveCombatSlot(${i})">
     <select class="combat-slot-name" style="flex:1;min-width:80px;background:var(--bg);border:1px solid var(--border);border-radius:3px;color:var(--text);padding:2px 4px;font-size:11px" onchange="onSkillPicked(${i})">${skillOpts}</select>
     <span class="combat-slot-cd-live" style="width:54px;text-align:center;font-size:10px;color:var(--subtext);font-family:monospace" data-tip="Live cooldown from game memory">—</span>
     <button type="button" class="combat-slot-adv-toggle" onclick="toggleSlotAdvanced(${i})" style="width:18px;height:18px;background:transparent;border:none;color:var(--subtext);cursor:pointer;padding:0;font-size:12px" data-tip="Advanced (type / priority / overrides)">▾</button>
@@ -8460,6 +8497,11 @@
       const row = rows[i - 1];
       if (!row) return;
       const skillName = row.querySelector('.combat-slot-name').value;
+      // Auto-fill the key from the live skill bar for the picked skill (skill->key
+      // by name); only when resolvable, so a skill not on the bar keeps any manual key.
+      const keyEl = row.querySelector('.combat-slot-key');
+      const rk = _skillKeyByName(skillName);
+      if (keyEl && rk) keyEl.value = rk;
       // Auto-fill type if user hasn't explicitly set one (or it's still the default).
       const typeEl = document.querySelector(`.combat-slot-adv-row[data-slot="${i}"] .combat-slot-type`);
       if (typeEl) typeEl.value = _inferSlotType(skillName);
@@ -8477,6 +8519,9 @@
       }
       saveCombatSlot(i);
       updateRangeCircleVisibility();
+      // Ask AHK to re-read the bar + re-push bindings, so the key resolves even if
+      // the cached bindings were stale; updateHotkeyBindings() then fills the field.
+      ahkCall('RefreshSkillKeys');
     }
 
     // Incrementally update a slot row + its Advanced row without destroying DOM
@@ -8487,7 +8532,7 @@
       const inRow = focused && (row.contains(focused) || (advRow && advRow.contains(focused)));
 
       const key = row.querySelector('.combat-slot-key');
-      if (key && key !== focused) key.value = s.key || '';
+      if (key && key !== focused) key.value = s.key || _skillKeyByName(s.skillName);
 
       // Re-render the skill <select> options when the live skill list has changed.
       // Always preserve user's current selection if not focused.
@@ -9243,6 +9288,7 @@
     <div class="uib-prop-row"><span class="uib-prop-key">Background Color</span>${colorVal(p.bgColor)}</div>
 
     <div class="uib-prop-section" style="color:#7be07b">--- Extra ---</div>
+    <div class="uib-prop-row"><span class="uib-prop-key">Displayed Text</span><span class="uib-prop-val" style="color:#7be07b">${p.text ? '"' + escHtml(p.text) + '"' : '<span style="color:#666">(none)</span>'}</span></div>
     <div class="uib-prop-row"><span class="uib-prop-key">Font Name</span><span class="uib-prop-val" style="color:#7be07b">${p.fontName ? '"' + escHtml(p.fontName) + '"' : '<span style="color:#666">(none)</span>'}</span></div>
     <div class="uib-prop-row"><span class="uib-prop-key">Text Style</span><span class="uib-prop-val" style="color:#7be07b">${p.textStyle ? '"' + escHtml(p.textStyle) + '"' : '<span style="color:#666">(none)</span>'}</span></div>
     <div class="uib-prop-row"><span class="uib-prop-key">Vtable</span>${hv(p.vtable || '')}</div>`;
@@ -9273,6 +9319,7 @@
         ``,
         `Flags:         ${p.flags || ''}`,
         `Background:    ${p.bgColor || ''}`,
+        `Displayed Text: "${p.text || ''}"`,
         `Font Name:     "${p.fontName || ''}"`,
         `Text Style:    "${p.textStyle || ''}"`,
         `Vtable:        ${p.vtable || ''}`,

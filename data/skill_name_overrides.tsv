@@ -1,0 +1,16 @@
+# skill_name_overrides.tsv - MANUAL, generator-independent skill-name overrides.
+# Loaded ON TOP of skill_name_map.tsv (these win) by PoE2MemoryReader.
+#
+# Purpose: some skills are renamed in-game while the Actor still reports the OLD
+# base GrantedEffects.Id live (e.g. "CircleOfPower"), and the dat's
+# GrantedEffects->ActiveSkills link does not carry the new DisplayedName, so the
+# generated map can't resolve them. Put those id -> display name + icon here.
+#
+# This file is NEVER regenerated, so corrections survive every rebuild of
+# skill_name_map.tsv (whatever tool produces it). Add a row per problem skill;
+# no code or generated-file edits needed.
+#
+# columns: granted_effect_id	displayed_name	icon_ddsfile
+CircleOfPower	Sigil of Power	Art/2DArt/SkillIcons/SigilofPowerWeaponSkill.dds
+Firewall	Flame Wall	Art/2DArt/SkillIcons/SorceressFlameWall.dds
+StormCloud	Orb of Storms	Art/2DArt/SkillIcons/SorceressOrbOfStorms.dds

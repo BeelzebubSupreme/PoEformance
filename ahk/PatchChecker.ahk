@@ -148,7 +148,7 @@ ShowPatchUpdateNotice(prevPatch, curPatch)
     payload := Map(
         "previous", prevPatch,
         "current", curPatch,
-        "files", ["python build_stat_desc_map.py", "python build_item_names.py"],
+        "files", ["python poe_tools.py build-all"],
         "note", "Offsets may also have changed — verify pattern scanning."
     )
     js := "showPatchUpdate(" JsonFull_Stringify(payload, false) ")"
