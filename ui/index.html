@@ -3081,6 +3081,31 @@
       height: 0
     }
 
+    /* Entity Junk Filter — per-category block with its own toggle and a wrap of
+       per-pattern pills (the pills reuse .filter-pill, so :has(:checked) styles
+       them). Pattern text stays monospace / lowercase via .junk-pat. */
+    .junk-cat {
+      border-top: 1px solid var(--codex-rule);
+      padding: 8px 0 4px
+    }
+    .junk-cat-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 5px
+    }
+    .junk-pat-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap
+    }
+    .junk-pat {
+      font-family: var(--codex-mono-serif);
+      text-transform: none;
+      letter-spacing: 0
+    }
+
     .cfg-section details {
       padding: 0
     }
@@ -4994,6 +5019,33 @@
         </div>
 
         <div class="cfg-section">
+          <details id="det-junk" ontoggle="syncCfgSections()">
+            <summary>
+              <div class="cfg-header">Entity Junk Filter</div>
+            </summary>
+            <div class="cfg-subsection">
+              <div class="cfg-help">
+                Globally suppresses &ldquo;junk&rdquo; entities &mdash; cosmetic / asset nodes,
+                engine FX &amp; material definitions, invisible modifier daemons, pets / clones
+                and decorator markers &mdash; via a case-insensitive substring match on the
+                entity metadata path. Like the class filter above it applies <em>everywhere</em>:
+                radar, trees, the Entities browser, exports and the AutoPilot target picker.
+                Toggle whole categories, individual patterns, or add your own terms below. If a
+                real entity ever vanishes, switch off the offending pattern (or the master
+                switch) here.
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Enable junk filter</span>
+                <label class="toggle"><input type="checkbox" id="junk-enabled" onchange="junkSet('enabled', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label></div>
+              <div id="junk-cats"></div>
+              <label class="al-field" style="display:flex;flex-direction:column;gap:4px;margin-top:10px">
+                <span class="al-cap">Custom junk terms (comma-separated substrings)</span>
+                <input type="text" class="cfg-input" id="junk-custom" placeholder="e.g. /banner/, decoy, props/" style="width:340px" onchange="junkSet('custom', this.value)">
+              </label>
+            </div>
+          </details>
+        </div>
+
+        <div class="cfg-section">
           <details id="det-blacklist" ontoggle="syncCfgSections()">
             <summary>
               <div class="cfg-header">Skills &amp; Buffs Blacklist</div>
@@ -6088,6 +6140,49 @@
         swatchEl: el,
         onConfirm: hex => grpSet(i, "color", "#" + hex.slice(0, 6))
       });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  ENTITY JUNK FILTER (Config → Filters, header-driven)
+    // ═══════════════════════════════════════════════════════════════════
+    // Each control sends one SetJunk(key,value); AHK persists + re-pushes the
+    // header, and applyJunkFromHeader mirrors state back. The custom-terms field
+    // is not overwritten while focused, so typing is never clobbered.
+    // key forms: "enabled" | "cat:<key>" | "pat:<pattern>" | "custom".
+    function junkSet(key, value) { try { ahkCall("SetJunk", key, value); } catch (e) {} }
+
+    function applyJunkFromHeader(jf) {
+      if (!jf || typeof jf !== "object") return;
+      const m = document.getElementById("junk-enabled");
+      if (m) m.checked = jf.enabled === true || jf.enabled === "true";
+      const cf = document.getElementById("junk-custom");
+      if (cf && document.activeElement !== cf) cf.value = jf.custom || "";
+      junkRenderCats(Array.isArray(jf.categories) ? jf.categories : []);
+    }
+
+    // Renders the category blocks into #junk-cats: each category has its own
+    // toggle plus a wrap of per-pattern pills. esc* keep injected strings safe.
+    function junkRenderCats(cats) {
+      const host = document.getElementById("junk-cats");
+      if (!host) return;
+      let html = "";
+      for (const c of cats) {
+        const ck = String(c.key || "");
+        const pills = (Array.isArray(c.patterns) ? c.patterns : []).map(p => {
+          const pp = String(p.p || "");
+          const on = (p.on === true || p.on === "true");
+          return `<label class="filter-pill"><input type="checkbox" ${on ? "checked" : ""} `
+               + `onchange="junkSet('pat:${escAttr(pp)}', this.checked ? 1 : 0)"> `
+               + `<span class="junk-pat">${escHtml(pp)}</span></label>`;
+        }).join("");
+        const con = (c.on === true || c.on === "true");
+        html += `<div class="junk-cat">`
+             + `<div class="junk-cat-head"><span class="cfg-label">${escHtml(String(c.label || ck))}</span>`
+             + `<label class="toggle"><input type="checkbox" ${con ? "checked" : ""} `
+             + `onchange="junkSet('cat:${escAttr(ck)}', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label></div>`
+             + `<div class="junk-pat-row">${pills}</div></div>`;
+      }
+      host.innerHTML = html;
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -8223,6 +8318,8 @@
         setEf('other', d.entityFilter.other);
       }
 
+      if (d.junkFilter) applyJunkFromHeader(d.junkFilter);
+
       // AutoPilot config sync (master state machine over combat + exploration)
       setChk('tog-autopilot', d.autoPilot);
       const apState = document.getElementById('cfg-autopilot-state');
@@ -9906,7 +10003,7 @@
     // ═══════════════════════════════════════════════════════════════════
     //  CONFIG HELPERS
     // ═══════════════════════════════════════════════════════════════════
-    const _cfgSectionIds = ['status', 'overview', 'toggles', 'integrations', 'autoflask', 'autopilot', 'rangecircles', 'radar', 'maphack', 'blacklist', 'entities', 'actions', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
+    const _cfgSectionIds = ['status', 'overview', 'toggles', 'integrations', 'autoflask', 'autopilot', 'rangecircles', 'radar', 'maphack', 'blacklist', 'entities', 'junk', 'actions', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
     let _cfgSectionsGuard = 0;
     let _cfgSectionsLoaded = false;
 

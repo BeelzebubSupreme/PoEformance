@@ -8,3 +8,4 @@
 #Include EntityFacts.ahk
 #Include EntityGroups.ahk
 #Include EntityAlerts.ahk
+#Include EntityJunkFilter.ahk

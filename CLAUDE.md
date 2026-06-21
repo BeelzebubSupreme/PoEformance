@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.12.120`.
+Reimplementation of the original C# project (see Reference). Version `0.45.12.121`.
 
 ## Language
 
@@ -119,6 +119,15 @@ Alerts → `alerts.ini [Alerts]`.
   `currentAreaHash`, severity ranking, zone-entry + proximity (cooldown) timing, and
   banner / sound / window-flash / radar-highlight / log outputs. WAV list from `wav/`.
   Self-persist `[Alerts]` in `alerts.ini`.
+- **EntityJunkFilter.ahk** — global path-based junk suppressor ported from the C#
+  `JunkFilter` (5 categories: cosmetic / engine / daemon / pets / markers; "weapons/"
+  deliberately dropped). `IsJunkEntity(path)` is hooked once at the sample chokepoint
+  (`CollectEntityMapCandidates`, before `candidates.Push`) so radar / browser / trees /
+  exports / AutoPilot all skip junk. Master + per-category + per-pattern toggles + custom
+  terms; active patterns precomputed in `g_junkActive` via `RebuildJunkActive()` (cheap
+  case-insensitive `InStr` per entity). `_ApplyJunkSetting` / `BuildJunkFilterHeaderJson` /
+  `Save/LoadEntityJunkFilter` (self-persist `[JunkFilter]`). Dispatch `SetJunk`; header key
+  `junkFilter`; UI in **Config → Filters → Entity Junk Filter**. Default ON, all categories on.
 - **GdiOverlayBase.ahk** — reusable transparent, click-through, always-on-top GDI layer
   (cached pens/brushes/fonts, double-buffered blit). Used only by NotificationOverlay so far;
   PlayerHUD / RadarOverlay are NOT yet migrated to it.

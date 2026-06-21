@@ -144,6 +144,7 @@ PushHeaderToWebView()
         . '"zoneScan":' _SerializeZoneScanStatus()
         . ',"groups":' BuildGroupsHeaderJson()
         . ',"alerts":' BuildAlertsHeaderJson()
+        . ',"junkFilter":' BuildJunkFilterHeaderJson()
         . ',"vitals":' BuildVitalsHeaderJson()
         . "}"
     WebViewExec("updateHeader(" json ")")
