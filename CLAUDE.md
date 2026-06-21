@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.12.124`.
+Reimplementation of the original C# project (see Reference). Version `0.45.12.125`.
 
 ## Language
 
@@ -127,8 +127,11 @@ Alerts → `alerts.ini [Alerts]`.
   terms; active patterns precomputed in `g_junkActive` via `RebuildJunkActive()` (cheap
   case-insensitive `InStr` per entity). `_ApplyJunkSetting` / `BuildJunkFilterHeaderJson` /
   `Save/LoadEntityJunkFilter` (self-persist `[JunkFilter]`). Dispatch `SetJunk`; header key
-  `junkFilter`; UI is a collapsible box pinned at the top of the **Entities** tab
-  (`#ent-junkbox`, short pill labels + hover tooltips). The fast radar path builds the awake
+  `junkFilter`; UI is a wrapping row (`.ent-boxes`) of collapsible boxes at the top of the
+  **Entities** tab: Entity Classes (the global type filter, moved here from Config),
+  Junk Filter (`#ent-junkbox`, the built-in categories), Hideout (`#ent-hideoutbox`, the
+  hideout-doodad category split out), and Custom Terms (`#ent-custombox`, add box + chips).
+  Short pill labels + hover tooltips. The fast radar path builds the awake
   sample from `_radarEntityCache` in `UpdateRadarFast` (not `CollectEntityMapCandidates`), so the
   junk filter is ALSO applied there at the awake-sample build. Default ON, all categories on.
 - **GdiOverlayBase.ahk** — reusable transparent, click-through, always-on-top GDI layer
