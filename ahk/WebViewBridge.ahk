@@ -1828,32 +1828,22 @@ _RunTsvGenerationPipeline()
     _TsvLog("[3/3] Running Python scripts…", "log-step")
     _TsvStatus("Step 3/3 — Running Python scripts…", "running")
 
-    scripts := [
-        "extract_stats_dat_csv.py",
-        "extract_mods_dat_csv.py",
-        "extract_monster_names_csv.py",
-        "build_item_names_csv.py",
-        "build_stat_desc_map_csv.py"
-    ]
-
+    script := "poe_tools.py"
     allOk := true
-    for _, script in scripts
+    _TsvLog("  Running " script " build-all…", "")
+    result := _RunCmdCapture('python "' toolsDir "\" script '" build-all', toolsDir)
+    if (result.exitCode != 0)
     {
-        _TsvLog("  Running " script "…", "")
-        result := _RunCmdCapture('python "' toolsDir "\" script '"', toolsDir)
-        if (result.exitCode != 0)
-        {
-            _TsvLog("  ERROR: " script " failed", "log-err")
-            if (result.output != "")
-                _TsvLog("  " result.output, "log-err")
-            allOk := false
-        }
-        else
-        {
-            out := Trim(result.output, " `t`n`r")
-            if (out != "")
-                _TsvLog("  " out, "log-ok")
-        }
+        _TsvLog("  ERROR: poe_tools.py build-all failed", "log-err")
+        if (result.output != "")
+            _TsvLog("  " result.output, "log-err")
+        allOk := false
+    }
+    else
+    {
+        out := Trim(result.output, " `t`n`r")
+        if (out != "")
+            _TsvLog("  " out, "log-ok")
     }
 
     if (allOk)

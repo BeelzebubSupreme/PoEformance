@@ -85,7 +85,7 @@ PatchMaint_StageData()
     else
         _PM_Step("data", "running", "GGPK refresh failed: " ((Type(res) = "Map") ? res["msg"] : "unknown"))
 
-    ; Dump the poe_data_tools CSVs (feeds build_item_names_csv.py → skill /
+    ; Dump the poe_data_tools CSVs (feeds poe_tools.py build-item-names → skill /
     ; unique-IVI name maps). Best-effort: a failure just leaves those two maps
     ; at their committed (possibly stale) values instead of breaking.
     _PM_RunDumpTables()
@@ -101,8 +101,10 @@ PatchMaint_StageData()
     SetTimer(() => PatchMaint_StageOffsets(), -1)
 }
 
-; Runs the tools/ Python regeneration scripts in order. Returns
-; Map("ran", bool, "ok", bool); skips gracefully when no Python is installed.
+; Runs the unified data-regeneration tool (poe_tools.py build-all), which rebuilds
+; every CSV->TSV map in one pass (stats, mods, monsters, item+skill names, stat
+; descriptions). Returns Map("ran", bool, "ok", bool); skips gracefully when
+; Python or the script is missing.
 _PM_RunPythonPipeline()
 {
     py := _PM_FindPython()
@@ -112,45 +114,38 @@ _PM_RunPythonPipeline()
         return Map("ran", false, "ok", false)
     }
     toolsDir := A_ScriptDir "\tools"
-    ; build_item_names_csv.py runs LAST: it supersedes build_item_names.py and
-    ; additionally emits skill_name_map.tsv + unique_ivi_name_map.tsv (skill /
-    ; unique-by-IVI names). It needs the poe_data_tools CSVs from the dump_tables
-    ; step (_PM_RunDumpTables, run just before this); if those are missing it
-    ; exits cleanly and the older scripts' output stands.
-    scripts := ["extract_stats_dat.py", "build_stat_desc_map.py", "build_item_names.py", "extract_monster_names.py", "build_item_names_csv.py"]
-    okCount := 0
-    ranCount := 0
-    for i, s in scripts
+    script := "poe_tools.py"
+    if !FileExist(toolsDir "\" script)
     {
-        if !FileExist(toolsDir "\" s)
-            continue
-        ranCount += 1
-        _PM_Step("data", "running", "Python: " s " (" i "/" scripts.Length ")…")
-        stderrF := A_Temp "\poe-pyregen.stderr.txt"
-        try FileDelete(stderrF)
-        exit := 1
-        try {
-            exit := RunWait(A_ComSpec ' /c ' py ' "' s '" 2> "' stderrF '"', toolsDir, "Hide")
-        } catch as ex {
-            exit := -1
-        }
-        if (exit = 0)
-            okCount += 1
-        else
-        {
-            tail := ""
-            try tail := Trim(FileRead(stderrF, "UTF-8"), " `r`n`t")
-            try LogError("PatchMaint python " s " exit " exit (tail = "" ? "" : ": " tail))
-        }
-        try FileDelete(stderrF)
+        _PM_Step("data", "running", "Python: " script " not found — skipping.")
+        return Map("ran", false, "ok", false)
     }
-    if (ranCount > 0)
-        _PM_Step("data", "running", "Python regeneration: " okCount "/" ranCount " script(s) ok.")
-    return Map("ran", ranCount > 0, "ok", okCount > 0)
+    ; build-all reads the poe_data_tools CSVs dumped just above (_PM_RunDumpTables);
+    ; if those are missing, individual steps skip cleanly and the committed maps
+    ; stand. emits skill_name_map.tsv + unique_ivi_name_map.tsv among others.
+    _PM_Step("data", "running", "Python: poe_tools.py build-all…")
+    stderrF := A_Temp "\poe-pyregen.stderr.txt"
+    try FileDelete(stderrF)
+    exit := 1
+    try {
+        exit := RunWait(A_ComSpec ' /c ' py ' "' script '" build-all 2> "' stderrF '"', toolsDir, "Hide")
+    } catch as ex {
+        exit := -1
+    }
+    okB := (exit = 0)
+    if (!okB)
+    {
+        tail := ""
+        try tail := Trim(FileRead(stderrF, "UTF-8"), " `r`n`t")
+        try LogError("PatchMaint poe_tools.py build-all exit " exit (tail = "" ? "" : ": " tail))
+    }
+    try FileDelete(stderrF)
+    _PM_Step("data", "running", "Python regeneration: poe_tools.py build-all " (okB ? "ok" : "failed") ".")
+    return Map("ran", true, "ok", okB)
 }
 
 ; Dumps the .datc64 tables to CSV via tools/dump_tables.bat (poe_data_tools.exe),
-; which build_item_names_csv.py then reads to build skill_name_map.tsv +
+; which poe_tools.py build-item-names then reads to build skill_name_map.tsv +
 ; unique_ivi_name_map.tsv. Best-effort: skips when the tool/bat is missing, and
 ; passes the Steam library root derived from the cached GGPK index path when it
 ; can (else lets the bat auto-detect). Returns Map("ran", bool, "ok", bool).

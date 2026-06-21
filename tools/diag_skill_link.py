@@ -17,7 +17,7 @@ This script dumps everything needed to find a deterministic join:
 
 Usage:
     python diag_skill_link.py [csv_dir]
-    (csv_dir defaults to ../data/raw_csv/data/balance, like build_item_names_csv.py)
+    (csv_dir defaults to ../data/raw_csv/data/balance, like poe_tools.py build-item-names)
 """
 
 import csv

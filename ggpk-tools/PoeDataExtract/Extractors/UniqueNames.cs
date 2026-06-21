@@ -27,7 +27,7 @@ namespace PoeDataExtract.Extractors;
 /// The fuzzy match key (token-split + sort + drop the "Four"/"Unique"
 /// distinguishers) normalises both to the same key, so we can join.
 ///
-/// Reference implementation: Tools/build_item_names_csv.py. The
+/// Reference implementation: tools/poe_tools.py (build-item-names). The
 /// non-CSV variant explore_unique_names.py was exploratory and never
 /// implemented this last step — direct FK matching on IVI keys
 /// returned 0 results.
@@ -112,7 +112,7 @@ internal sealed class UniqueNames : IExtractor
         //    Palm" could overwrite the variant-specific "Guiding Palm of
         //    the Heart" depending on traversal order.
         //
-        //    Match the build_item_names_csv.py preference exactly:
+        //    Match the poe_tools.py build-item-names preference exactly:
         //    keep the first non-alt name we see; only overwrite an
         //    existing entry if the existing one is alt-art and the new
         //    one isn't. Once a non-alt is locked in, never replace it.
@@ -180,7 +180,7 @@ internal sealed class UniqueNames : IExtractor
     /// key so a base item's IVI Id ("BodyArmourDexBase4") and the
     /// matching unique's IVI Id ("BodyArmourDexUnique4") collapse to
     /// the same key. Algorithm (port of
-    /// Tools/build_item_names_csv.py::ivi_match_key):
+    /// tools/poe_tools.py (_iname_extract_unique_ivi_names):
     ///   1) Split on CamelCase tokens OR digit-groups.
     ///   2) Pull out the first digit-group as the "num" component.
     ///   3) From the remaining tokens, drop "Four" + "Unique" — those

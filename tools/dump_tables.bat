@@ -67,8 +67,4 @@ echo CSV tables: %CSV_DIR%
 echo CSD files:  %EXTRACT_DIR%
 echo.
 echo Run the Python scripts to generate TSV lookup tables:
-echo   python extract_stats_dat_csv.py
-echo   python extract_mods_dat_csv.py
-echo   python extract_monster_names_csv.py
-echo   python build_item_names_csv.py
-echo   python build_stat_desc_map_csv.py
+echo   python poe_tools.py build-all
