@@ -3212,11 +3212,40 @@
       border-top: 1px solid var(--codex-rule);
       padding: 7px 0 4px
     }
+    /* The category header doubles as the <details> summary and carries the
+       caret: a small cube when collapsed, a gold diamond (rotated 45°) when
+       open — same vocabulary as the cfg-section sections. The Junk Filter box
+       is an .ent-junkbox (not a .cfg-section), so we replicate the marker. */
     .junk-cat-head {
       display: flex;
       align-items: center;
       gap: 10px;
-      margin-bottom: 5px
+      position: relative;
+      cursor: pointer;
+      list-style: none;
+      padding-right: 22px
+    }
+    .junk-cat-head::-webkit-details-marker { display: none }
+    .junk-cat-head::after {
+      content: "";
+      position: absolute;
+      right: 4px;
+      top: 50%;
+      width: 7px;
+      height: 7px;
+      background: var(--codex-gold);
+      box-shadow: 0 0 4px rgba(200,168,90,0.5);
+      transform: translateY(-50%) rotate(45deg);
+      transition: transform .2s ease-out, background .15s
+    }
+    .junk-cat:not([open]) .junk-cat-head::after {
+      transform: translateY(-50%) rotate(0deg);
+      background: var(--codex-text-dim);
+      box-shadow: none
+    }
+    .junk-cat-head:hover::after {
+      background: var(--codex-gold-hi);
+      box-shadow: 0 0 6px rgba(240,214,138,0.7)
     }
     .junk-cat-name {
       font-family: var(--codex-display);
@@ -3224,20 +3253,12 @@
       letter-spacing: 0.10em;
       text-transform: uppercase;
       color: var(--codex-text);
-      cursor: help;
       margin-right: auto
     }
-    /* When a category is off its per-pattern pills have no effect — dim them. */
+    /* When a category is off its per-pattern rows have no effect — dim them. */
     .junk-cat-off .junk-pat-row { opacity: 0.4 }
     .junk-pat-row {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap
-    }
-    .junk-pat {
-      font-family: var(--codex-mono-serif);
-      text-transform: none;
-      letter-spacing: 0
+      padding: 4px 0 2px 4px
     }
 
     .cfg-section details {
@@ -4387,8 +4408,8 @@
           <div class="ent-junkbox-body">
             <div class="ent-junkbox-help">
               Hides gameplay-irrelevant entities by a substring match on the metadata path.
-              Each row is a category (its pill enables/disables the whole row); the small pills are
-              individual patterns. Hover any pill for what it matches.
+              Each category's toggle enables/disables the whole category; expand a category
+              (cube → diamond) to fine-tune its individual patterns. Hover a name for what it matches.
             </div>
             <div id="junk-cats"></div>
           </div>
@@ -6465,25 +6486,28 @@
       if (hideoutHost) hideoutHost.innerHTML = hideoutHtml;
     }
 
-    // Builds the HTML for one junk category row (shared by the Junk Filter and
-    // Hideout boxes). c = header category object, ck = its key.
+    // Builds one junk category as a collapsible <details> (cube caret when
+    // closed, gold diamond when open). The summary is the category name + its
+    // master toggle; the body lists the individual patterns as toggle rows.
+    // Shared by the Junk Filter and Hideout boxes. c = header category, ck = key.
     function junkCatRow(c, ck) {
       const ci = _junkCatInfo[ck] || { short: ck, desc: String(c.label || ck) };
       const con = (c.on === true || c.on === "true");
-      const pills = (Array.isArray(c.patterns) ? c.patterns : []).map(p => {
+      const rows = (Array.isArray(c.patterns) ? c.patterns : []).map(p => {
         const pp = String(p.p || "");
         const pi = _junkPatInfo[pp] || { short: pp, desc: pp };
         const pon = (p.on === true || p.on === "true");
-        return `<label class="filter-pill" title="${escAttr(pp + " — " + pi.desc)}"><input type="checkbox" ${pon ? "checked" : ""} `
-             + `onchange="junkSet('pat:${escAttr(pp)}', this.checked ? 1 : 0)"> `
-             + `<span class="junk-pat">${escHtml(pi.short)}</span></label>`;
+        return `<div class="cfg-row"><span class="cfg-label" title="${escAttr(pp + " — " + pi.desc)}">${escHtml(pi.short)}</span>`
+             + `<label class="toggle"><input type="checkbox" ${pon ? "checked" : ""} `
+             + `onchange="junkSet('pat:${escAttr(pp)}', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label></div>`;
       }).join("");
-      return `<div class="junk-cat${con ? "" : " junk-cat-off"}">`
-           + `<div class="junk-cat-head">`
+      return `<details class="junk-cat${con ? "" : " junk-cat-off"}">`
+           + `<summary class="junk-cat-head">`
            + `<span class="junk-cat-name" title="${escAttr(ci.desc)}">${escHtml(ci.short)}</span>`
-           + `<label class="toggle" title="Enable / disable this whole category at once">`
-           + `<input type="checkbox" ${con ? "checked" : ""} onchange="junkSet('cat:${escAttr(ck)}', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label></div>`
-           + `<div class="junk-pat-row">${pills}</div></div>`;
+           + `<label class="toggle" onclick="event.stopPropagation()" title="Enable / disable this whole category at once">`
+           + `<input type="checkbox" ${con ? "checked" : ""} onchange="junkSet('cat:${escAttr(ck)}', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label>`
+           + `</summary>`
+           + `<div class="junk-pat-row">${rows}</div></details>`;
     }
 
     // ═══════════════════════════════════════════════════════════════════

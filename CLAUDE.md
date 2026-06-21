@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.12.130`.
+Reimplementation of the original C# project (see Reference). Version `0.45.12.131`.
 
 ## Language
 
@@ -131,7 +131,10 @@ Alerts → `alerts.ini [Alerts]`.
   **Entities** tab: Entity Classes (the global type filter, moved here from Config),
   Junk Filter (`#ent-junkbox`, the built-in categories), Hideout (`#ent-hideoutbox`, the
   hideout-doodad category split out), and Custom Terms (`#ent-custombox`, add box + chips).
-  Short pill labels + hover tooltips. The fast radar path builds the awake
+  Each junk category renders (via `junkCatRow`) as a collapsible `<details class="junk-cat">`
+  with a cube/diamond caret (closed/open) replicated from the cfg-section marker; its summary
+  is the category name + master toggle, and the body lists the individual patterns as standard
+  toggle rows (`.cfg-row`, not pills). The fast radar path builds the awake
   sample from `_radarEntityCache` in `UpdateRadarFast` (not `CollectEntityMapCandidates`), so the
   junk filter is ALSO applied there at the awake-sample build. Default ON, all categories on.
 - **GdiOverlayBase.ahk** — reusable transparent, click-through, always-on-top GDI layer
