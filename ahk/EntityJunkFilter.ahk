@@ -39,7 +39,9 @@ _JunkFilterCategoryDefs()
         Map("key", "pets", "label", "Pets / clones / summon base classes",
             "patterns", ["/pet/", "/clone/", "playersummoned"]),
         Map("key", "markers", "label", "Already-handled / decorator markers",
-            "patterns", ["bossroomminimapicon", "/runemarked"])
+            "patterns", ["bossroomminimapicon", "/runemarked"]),
+        Map("key", "hideout", "label", "Hideout decoration doodads",
+            "patterns", ["hideoutdoodad"])
     ]
 }
 

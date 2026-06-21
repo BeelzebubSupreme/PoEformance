@@ -194,6 +194,15 @@ _BuildEntitiesJson(snap)
         if snap.Has("sleepingEntities") && !IsObject(sleepEnt)
             sleepEnt := snap["sleepingEntities"]
 
+        ; Total entities present in the network bubble BEFORE the junk filter and
+        ; sampling — the std::map sizes. Emitted as "present" so the UI can show
+        ; "<shown> of <present>" (how many the filters/junk removed).
+        presentCount := 0
+        if (IsObject(awakeEnt) && awakeEnt.Has("size"))
+            presentCount += awakeEnt["size"]
+        if (IsObject(sleepEnt) && sleepEnt.Has("size"))
+            presentCount += sleepEnt["size"]
+
         ; Build unified candidate list: all awake + important sleeping
         allEntries := []
         awakePaths := Map()
@@ -233,7 +242,7 @@ _BuildEntitiesJson(snap)
         }
 
         if (allEntries.Length = 0)
-            return '{"total":0,"items":[]}'
+            return '{"total":0,"present":' presentCount ',"items":[]}'
 
         rarityNames := Map(0,"Normal",1,"Magic",2,"Rare",3,"Unique",4,"Unique",5,"Boss")
         rows  := "["
@@ -332,10 +341,10 @@ _BuildEntitiesJson(snap)
             first := false
             emitted++
         }
-        return '{"total":' emitted ',"items":' rows ']}'
+        return '{"total":' emitted ',"present":' presentCount ',"items":' rows ']}'
     }
     catch
-        return '{"total":0,"items":[]}'
+        return '{"total":0,"present":0,"items":[]}'
 }
 
 ; Serializes the per-entity components list as a JSON array of

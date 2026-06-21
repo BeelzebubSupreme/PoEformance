@@ -2417,10 +2417,12 @@
     .ei-card.expanded {
       border-color: var(--codex-gold);
     }
+    /* Entity rows + the column header share one grid template so cells line up. */
     .ei-head {
-      display: flex;
-      align-items: center;
+      display: grid;
+      grid-template-columns: 14px 48px minmax(110px,1.3fr) minmax(150px,2fr) 86px 46px 58px;
       gap: 6px;
+      align-items: center;
       padding: 4px 8px;
       cursor: pointer;
       user-select: none;
@@ -2433,38 +2435,68 @@
       transition: transform .15s;
     }
     .ei-card.expanded .ei-caret { transform: rotate(90deg); }
-    .ei-head-id {
+    .ei-listhead {
+      display: grid;
+      grid-template-columns: 14px 48px minmax(110px,1.3fr) minmax(150px,2fr) 86px 46px 58px;
+      gap: 6px;
+      align-items: center;
+      padding: 3px 8px;
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      background: linear-gradient(180deg, rgba(28,18,10,0.96), rgba(20,12,6,0.96));
+      border-bottom: 1px solid var(--codex-rule);
+      font-family: var(--codex-display);
+      font-size: 9px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--codex-text-dim);
+    }
+    .ei-listhead > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ei-listhead > span:nth-child(2),
+    .ei-listhead > span:nth-child(6),
+    .ei-listhead > span:nth-child(7) { text-align: right; }
+    .ei-c-id {
       font-family: 'Consolas', monospace;
       font-size: 11px;
       color: var(--codex-gold);
-      min-width: 42px;
       text-align: right;
-      flex-shrink: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
-    .ei-head-name {
-      flex: 1 1 auto;
+    .ei-c-name {
+      display: flex;
+      align-items: center;
+      gap: 5px;
       min-width: 0;
       font-size: 12px;
       color: var(--codex-text);
-      white-space: nowrap;
+    }
+    .ei-c-name-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ei-grp-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .ei-c-path {
+      font-family: 'Consolas', monospace;
+      font-size: 10px;
+      color: var(--codex-text-dim);
       overflow: hidden;
       text-overflow: ellipsis;
+      white-space: nowrap;
     }
-    .ei-head-path {
-      color: var(--codex-text-dim);
-      font-size: 10px;
-      font-family: 'Consolas', monospace;
-    }
-    .ei-head-meta {
-      display: flex;
-      gap: 6px;
-      align-items: center;
-      flex-shrink: 0;
+    .ei-c-type {
       font-size: 10px;
       color: var(--codex-text-dim);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
-    .ei-head-dist { min-width: 36px; text-align: right; }
-    .ei-card.dead .ei-head-name { color: var(--codex-text-dim); text-decoration: line-through; }
+    .ei-c-life, .ei-c-dist {
+      font-size: 10px;
+      color: var(--codex-text-dim);
+      text-align: right;
+      white-space: nowrap;
+    }
+    .ei-card.dead .ei-c-name-txt { color: var(--codex-text-dim); text-decoration: line-through; }
     .ei-card.sleep .ei-head { opacity: 0.55; font-style: italic; }
     .ei-body {
       display: none;
@@ -6215,7 +6247,8 @@
       engine:   { short: "Engine",   desc: "Engine asset / effect definitions: FX, materials, AO, EPK, skill graphs, audio, environment." },
       daemon:   { short: "Daemons",  desc: "Invisible modifier daemons: monster mods, essence mods, tormented spirits, generic helper daemons." },
       pets:     { short: "Pets",     desc: "Pets, player clones and summon base classes — clutter, not real targets." },
-      markers:  { short: "Markers",  desc: "Already-handled / decorator markers: boss-room minimap icons, rune markers." }
+      markers:  { short: "Markers",  desc: "Already-handled / decorator markers: boss-room minimap icons, rune markers." },
+      hideout:  { short: "Hideout",  desc: "Hideout decoration doodads (MiscellaneousObjects/HideoutDoodad)." }
     };
     const _junkPatInfo = {
       "/attachments":      { short: "attach",   desc: "Visual attachment points on models (438 paths)." },
@@ -6239,7 +6272,8 @@
       "/clone/":           { short: "clone",    desc: "Player clone effects (36)." },
       "playersummoned":    { short: "summon",   desc: "Summoned-entity base classes (41)." },
       "bossroomminimapicon": { short: "bossicon", desc: "Boss-room minimap-icon entities (41)." },
-      "/runemarked":       { short: "rune",     desc: "Rune-marker decorator nodes." }
+      "/runemarked":       { short: "rune",     desc: "Rune-marker decorator nodes." },
+      "hideoutdoodad":     { short: "doodad",   desc: "Hideout decoration doodads (MiscellaneousObjects/HideoutDoodad)." }
     };
 
     function applyJunkFromHeader(jf) {
@@ -9127,9 +9161,11 @@
       const el = document.getElementById('tab-entities-content');
       if (!el) return;
       let data; try { data = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr; } catch (e) { return; }
-      // Accept both new { total, items } and legacy bare-array shapes
+      // Accept both new { total, present, items } and legacy bare-array shapes
       const items = Array.isArray(data) ? data : (data && Array.isArray(data.items) ? data.items : []);
       window._eiState.items = items;
+      // Total entities present in the bubble before the junk filter + sampling.
+      window._eiState.present = (data && typeof data.present === 'number') ? data.present : items.length;
       // Prune expanded sets to entries that still exist, so an entity
       // leaving range doesn't leave a dangling expansion record.
       const liveAddrs = new Set(items.map(e => e.addr));
@@ -9189,7 +9225,7 @@
         <div class="ei-root">
           <div class="ei-toolbar">
             <div class="ei-toolbar-row">
-              <span class="ei-total">Total: <span class="ei-total-count">${st.items.length}</span>${filtered.length !== st.items.length ? ` · <span class="ei-total-count">${filtered.length}</span> shown` : ''}</span>
+              <span class="ei-total" title="Shown in list after all filters · entities in the list snapshot (after the junk filter) · total present in the area before junk filtering"><span class="ei-total-count">${filtered.length}</span> shown · <span class="ei-total-count">${st.items.length}</span> listed · <span class="ei-total-count">${st.present ?? st.items.length}</span> present</span>
               <div class="ei-filter"><label>Id</label><input id="ei-f-id" type="text" placeholder="…" value="${escAttr(fId)}" oninput="eiFilterChange('id', this.value)"></div>
               <div class="ei-filter"><label>Path</label><input id="ei-f-path" type="text" placeholder="metadata/…" value="${escAttr(fPath)}" oninput="eiFilterChange('path', this.value)"></div>
             </div>
@@ -9215,6 +9251,9 @@
               </select></div>
             </div>
           </div>
+          <div class="ei-listhead">
+            <span></span><span>ID</span><span>Name</span><span>Path</span><span>Type</span><span>Life</span><span>Dist</span>
+          </div>
           <div class="ei-list">${body}</div>
         </div>
       `;
@@ -9228,23 +9267,26 @@
       if (expanded) klass.push('expanded');
       if (e.alive === false) klass.push('dead');
       if (e.sleep === true) klass.push('sleep');
-      const shortName = escHtml(e.name || e.path || '?');
-      const pathTail = e.path ? escHtml('… ' + String(e.path).split('/').slice(-2).join('/')) : '';
-      const lifeStr = (e.life !== undefined && e.life >= 0) ? `${e.life}%` : '';
-      const distStr = (e.dist !== undefined && e.dist >= 0) ? `${e.dist}m` : '';
-      const meta = [
-        lifeStr ? `<span class="ei-head-life">${lifeStr}</span>` : '',
-        distStr ? `<span class="ei-head-dist">${distStr}</span>` : ''
-      ].filter(Boolean).join('');
-      const grpPill = e.group ? `<span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;color:var(--subtext)"><span style="width:8px;height:8px;border-radius:50%;background:${escAttr(grpColorFor(e.group) || '#3aa0ff')}"></span>${escHtml(e.group)}</span>` : '';
+      const name = escHtml(e.name || (e.path ? String(e.path).split('/').pop() : '?'));
+      const fullPath = e.path ? String(e.path) : '';
+      const pathShort = escHtml(fullPath.replace(/^Metadata\//i, '') || '—');
+      const type = escHtml(e.type || '');
+      const lifeStr = (e.life !== undefined && e.life >= 0) ? `${e.life}%` : '—';
+      const distStr = (e.dist !== undefined && e.dist >= 0) ? `${e.dist}m` : '—';
+      const grpDot = e.group
+        ? `<span class="ei-grp-dot" title="${escAttr('Group: ' + e.group)}" style="background:${escAttr(grpColorFor(e.group) || '#3aa0ff')}"></span>`
+        : '';
       const body = expanded ? eiBody(e) : '';
       return `
         <div class="${klass.join(' ')}" data-addr="${escAttr(e.addr)}">
           <div class="ei-head" onclick="eiToggle('${escAttr(e.addr)}')">
             <span class="ei-caret">▶</span>
-            <span class="ei-head-id">#${e.id ?? '?'}</span>
-            <span class="ei-head-name">${shortName} <span class="ei-head-path">${pathTail}</span></span>
-            <span class="ei-head-meta">${grpPill}${meta}</span>
+            <span class="ei-c-id">#${e.id ?? '?'}</span>
+            <span class="ei-c-name">${grpDot}<span class="ei-c-name-txt">${name}</span></span>
+            <span class="ei-c-path" title="${escAttr(fullPath)}">${pathShort}</span>
+            <span class="ei-c-type">${type}</span>
+            <span class="ei-c-life">${lifeStr}</span>
+            <span class="ei-c-dist">${distStr}</span>
           </div>
           <div class="ei-body">${body}</div>
         </div>

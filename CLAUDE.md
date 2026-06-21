@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.12.122`.
+Reimplementation of the original C# project (see Reference). Version `0.45.12.123`.
 
 ## Language
 
@@ -120,8 +120,8 @@ Alerts → `alerts.ini [Alerts]`.
   banner / sound / window-flash / radar-highlight / log outputs. WAV list from `wav/`.
   Self-persist `[Alerts]` in `alerts.ini`.
 - **EntityJunkFilter.ahk** — global path-based junk suppressor ported from the C#
-  `JunkFilter` (5 categories: cosmetic / engine / daemon / pets / markers; "weapons/"
-  deliberately dropped). `IsJunkEntity(path)` is hooked once at the sample chokepoint
+  `JunkFilter` (6 categories: cosmetic / engine / daemon / pets / markers / hideout doodads;
+  "weapons/" deliberately dropped). `IsJunkEntity(path)` is hooked once at the sample chokepoint
   (`CollectEntityMapCandidates`, before `candidates.Push`) so radar / browser / trees /
   exports / AutoPilot all skip junk. Master + per-category + per-pattern toggles + custom
   terms; active patterns precomputed in `g_junkActive` via `RebuildJunkActive()` (cheap
