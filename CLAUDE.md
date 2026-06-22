@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.3`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.4`.
 
 ## Language
 
@@ -332,6 +332,58 @@ area-state instead of re-reading memory.
   placement/auto-hide; session save/load. Prices default OFF (feature `enabled=false`).
 - The on-screen bars anchor to the game-window bottom + offset (no XP-bar fingerprint walk
   yet — a possible later refinement, like the C# original's `TryGetExperienceBarRectByFp`).
+
+## StashMover ("dump backpack to open container")
+
+Simulates Ctrl+Click on every backpack item so the game moves them into whatever
+container is currently open (stash tab, vendor sell window, trade window, gambling
+window). Triggered by a configurable hotkey AND an on-screen overlay button drawn
+next to the inventory grid. All data is already reverse-engineered: backpack items +
+grid cells from `ReadAllPlayerInventories` (id==1), and the inventory grid's screen
+rectangle from the UI tree.
+
+### New file
+- **`ahk/StashMover.ahk`** — self-contained module.
+  - Geometry: `_SmInventoryGridRect()` BFS-finds the `InventoryPanel` UiElement under
+    the GameUi root (`_UiBrowser_GetGameUiPtr`), reads `UiTree_GetScreenPos` +
+    `UnscaledSize`, and converts to ABSOLUTE screen pixels via `NavClientRect`
+    (`screenPx = clientOrigin + uiPos * clientHeight/1600`), mirroring the conversion
+    in `UiBrowserHandler`. Cell pitch = panel size / backpack `totalBoxesX/Y`; the
+    per-item click point is the geometric centre of its `slotStart..slotEnd` rect.
+    Manual `offsetX/offsetY` (px) calibration is added to the origin for fine-tuning.
+  - Click engine: NON-BLOCKING sequencer — Ctrl held down (`keybd_event` VK 0xA2,
+    UIPI-bypass), one item per `_SmStep` timer tick (`SetCursorPos` + short left
+    `mouse_event` click), re-armed after `perItemDelayMs`; aborts + releases Ctrl on
+    focus loss. Click points are precomputed up front (grid cells are stable as items
+    leave) and deduped by item pointer. Activates the PoE window first on the hotkey
+    path; the overlay button is `WS_EX_NOACTIVATE` so it never steals foreground.
+  - Overlay button: a lazily-built always-on-top, NOACTIVATE Gui (`_SmEnsureGui`);
+    `StashMoverTick(radarSnap)` (called from `UpdateRadarFast` after
+    `TryLootTrackerTick`) positions it at the grid's top-right and shows/hides it
+    based on enable + game-focus + grid-visibility.
+  - Config: self-persists `[StashMover]` (`enabled`, `hotkey`, `showButton`,
+    `perItemDelayMs`, `settleDelayMs`, `offsetX`, `offsetY`); `LoadStashMover()` seeds
+    ALL globals unconditionally (init gotcha). Default OFF, hotkey empty.
+
+### Edited files
+- **InGameStateMonitor.ahk** — `#Include ahk/StashMover.ahk`; `LoadStashMover()` at
+  startup; `RegisterStashMoverHotkey()` after `RegisterCombatHotkey()`; version bump.
+- **AutoFlask.ahk** — `StashMoverTick(radarSnap)` after `TryLootTrackerTick`.
+- **BridgeDispatch.ahk** — `SetStashMover` (apply → persist → re-bind hotkey) +
+  `StashMoveDump` (manual trigger).
+- **WebViewBridge.ahk** — `stashMover` block in the header push.
+- **ui/index.html** — "📦 Stash Mover" section in **Config → Automation**
+  (`det-stashmover`, registered in `_cfgSectionIds`) + `stashMoverSyncFromHeader`.
+
+### Pending (needs the game + Windows)
+- Verify the `InventoryPanel` StringId resolves and its rect equals the 12×N grid
+  (no header/padding) — otherwise nudge `offsetX/offsetY`. Confirm the UI→pixel scale
+  on non-16:10 windows (the conversion uses height-scale on both axes, no letterbox
+  cull, matching `UiBrowserHandler`; a horizontal-cull/per-axis-scale refinement may
+  be needed). Verify the NOACTIVATE button receives clicks without stealing focus, the
+  Ctrl-held click sequence actually moves items, and timing (`perItemDelayMs`/
+  `settleDelayMs`) is reliable. Destination detection is lenient (grid-visible + has
+  items); `id==27` is read only as a stash hint.
 
 ## Open / pending (needs the game running)
 

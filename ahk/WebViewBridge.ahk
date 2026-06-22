@@ -147,6 +147,7 @@ PushHeaderToWebView()
         . ',"junkFilter":' BuildJunkFilterHeaderJson()
         . ',"vitals":' BuildVitalsHeaderJson()
         . ',"loot":' BuildLootHeaderJson()
+        . ',"stashMover":' BuildStashMoverHeaderJson()
         . "}"
     WebViewExec("updateHeader(" json ")")
 }

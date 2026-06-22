@@ -145,6 +145,18 @@ _DispatchBridgeCall(method, args)
             SaveLootTrackerConfig()
             SetTimer(PushHeaderToWebView, -50)
             SetTimer(PushLootLiveToWebView, -50)
+        case "SetStashMover":
+            ; args[1] = setting key, args[2] = value. Apply -> persist -> (re)bind hotkey.
+            if (args.Length >= 2)
+            {
+                if _SmApplySetting(args[1], args[2])
+                    RegisterStashMoverHotkey()
+            }
+            SaveStashMover()
+            SetTimer(PushHeaderToWebView, -50)
+        case "StashMoveDump":
+            ; Manual trigger from the tool UI (test button).
+            SetTimer(() => StashMoverDump("ui"), -1)
         case "LootNewSession":
             ; Archive the current session to disk, then start a fresh one.
             _LtResetSession()
