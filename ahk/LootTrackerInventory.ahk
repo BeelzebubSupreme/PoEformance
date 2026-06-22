@@ -34,7 +34,10 @@ _LtSplitItemKey(key)
     if (sep < 1)
         return [0, key, ""]
     head := SubStr(key, 1, sep - 1)
-    r := (StrLen(head) = 1 && head >= "0" && head <= "3") ? (Ord(head) - 48) : 0
+    ; Compare by character code (Ord) — a string vs numeric-literal comparison throws
+    ; "Expected a Number but got a String" in AHK v2 when head isn't a digit.
+    hc := (StrLen(head) = 1) ? Ord(head) : -1
+    r := (hc >= 48 && hc <= 51) ? (hc - 48) : 0   ; '0'..'3'
     rest := SubStr(key, sep + 1)
     sep2 := InStr(rest, us)
     if (sep2 < 1)

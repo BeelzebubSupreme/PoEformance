@@ -288,8 +288,10 @@ _LtPriceKey(path)
     s := StrLen(seg)
     while (s > 0)
     {
-        c := SubStr(seg, s, 1)
-        if (c >= "0" && c <= "9")
+        ; Compare by character code — AHK v2 throws "Expected a Number but got a
+        ; String" if you compare a non-numeric char with a numeric-string literal.
+        code := Ord(SubStr(seg, s, 1))
+        if (code >= 48 && code <= 57)   ; '0'..'9'
             s -= 1
         else
             break
