@@ -4650,6 +4650,11 @@
         </div>
 
         <div class="cfg-section">
+          <div class="cfg-header" style="margin-bottom:4px">Valuable drops (session)</div>
+          <div id="lt-items"><div class="al-desc">No priced drops yet.</div></div>
+        </div>
+
+        <div class="cfg-section">
           <div class="cfg-row"><span class="cfg-label">Pricing</span><span id="lt-price-status" class="al-desc" style="margin:0">idle</span></div>
         </div>
 
@@ -6878,6 +6883,23 @@
             h += '<tr><td>' + _ltEsc(r.name) + '</td><td class="lt-dim">' + _ltFmtDur(r.timeMs || 0)
               + '</td><td class="' + ((r.ex || 0) >= 0 ? 'lt-green' : 'lt-red') + '">' + _ltFmtSigned(r.ex || 0, 1) + ' ex</td></tr>';
           runsEl.innerHTML = h + '</table>';
+        }
+      }
+
+      const itemsEl = document.getElementById('lt-items');
+      if (itemsEl) {
+        const items = d.items || [];
+        if (!items.length) {
+          itemsEl.innerHTML = '<div class="al-desc">No priced drops yet.</div>';
+        } else {
+          const rate = d.divRate || 0;
+          const fmtVal = (ex) => (rate > 0 && ex >= rate) ? (ex / rate).toFixed(2) + ' div' : Math.round(ex) + ' ex';
+          let h = '<table class="lt-tbl"><tr><th>Item</th><th>×</th><th>Each</th><th>Total</th></tr>';
+          for (const it of items)
+            h += '<tr><td>' + _ltEsc(it.name) + '</td><td class="lt-dim">' + (it.count || 0)
+              + '</td><td class="lt-dim">' + fmtVal(it.unit || 0)
+              + '</td><td class="lt-green">' + fmtVal(it.total || 0) + '</td></tr>';
+          itemsEl.innerHTML = h + '</table>';
         }
       }
 

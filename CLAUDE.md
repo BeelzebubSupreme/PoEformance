@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.12.156`.
+Reimplementation of the original C# project (see Reference). Version `0.45.12.157`.
 
 ## Language
 
@@ -310,9 +310,17 @@ area-state instead of re-reading memory.
 - **BridgeDispatch.ahk** — `SetLootConfig` / `LootNewSession` / `LootRefreshPrices` /
   `LootLoadSessions` / `LootSessionDetail` / `LootDeleteSession` / `LootRequestLive`.
 - **WebViewBridge.ahk** — `loot` settings block in the header push.
-- **ui/index.html** — new **Loot** tab (live readout, session table, settings, price status,
-  session history) + `lootSyncFromHeader` / `updateLootLive` / `updateLootSessions` /
-  `updateLootSessionDetail`.
+- **ui/index.html** — new **Loot** tab (live readout, session table, **valuable-drops
+  breakdown** `#lt-items`, settings, price status, session history) + `lootSyncFromHeader` /
+  `updateLootLive` / `updateLootSessions` / `updateLootSessionDetail`.
+
+### Valuable-drops breakdown (session item list)
+- `_LtAggregateSessionGained()` folds every run's banked `gained` + the current run's live
+  leg (`g_ltLiveLegDelta`) into one `Map(itemKey→count)`; `_LtBuildItemRows()` prices each
+  via `_LtTryPriceItem`, keeps the net-positive PRICED rows (`name`/`count`/`unit`/`total`),
+  sorts by total value desc, caps to 60. Pushed as `items` in `_LtLiveViewJson` and rendered
+  as a 4-col `lt-tbl` (Item · × · Each · Total) in `updateLootLive`. Unpriced items
+  (most rares/magics — poe.ninja has no price) are omitted by design.
 
 ### Shipped data / gitignore
 - `data/meta_art_map.json` (the 1446-entry metaId→art bridge) is committed source data.

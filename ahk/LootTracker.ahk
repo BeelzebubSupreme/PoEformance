@@ -376,6 +376,63 @@ _LtSessionTotals(&totalActiveMs, &totalEx)
     }
 }
 
+; Net session loot folded across every run PLUS the current run's live (unbanked) leg, as
+; one Map(itemKey -> count). Banked legs already live in each run's "gained"; the in-
+; progress leg is in g_ltLiveLegDelta, so a freshly picked-up item shows up immediately.
+_LtAggregateSessionGained()
+{
+    global g_ltCompleted, g_ltLiveLegDelta
+    agg := Map()
+    for _, r in g_ltCompleted
+    {
+        if (r && IsObject(r) && r.Has("gained") && Type(r["gained"]) = "Map")
+            _LtMergeInto(agg, r["gained"])
+    }
+    if (g_ltLiveLegDelta && Type(g_ltLiveLegDelta) = "Map")
+        _LtMergeInto(agg, g_ltLiveLegDelta)
+    return agg
+}
+
+; Turns an aggregated loot Map into the display rows of the "valuable drops" list:
+; one Map("name","count","unit","total") per PRICED net-gained item (poe.ninja name +
+; unit Exalted price), sorted by total value descending and capped to maxRows. Items
+; poe.ninja doesn't price (most rares/magics) and net losses (count <= 0) are skipped —
+; the list shows exactly what drove the session value up.
+_LtBuildItemRows(agg, maxRows := 60)
+{
+    rows := []
+    for k, cnt in agg
+    {
+        if (cnt <= 0)
+            continue
+        unit := 0.0, label := ""
+        if !_LtTryPriceItem(k, &unit, &label)
+            continue
+        if (unit <= 0)
+            continue
+        rows.Push(Map("name", label, "count", cnt, "unit", unit, "total", unit * cnt))
+    }
+
+    ; Insertion sort by total descending (rows are few — at most a few dozen item types).
+    i := 2
+    while (i <= rows.Length)
+    {
+        cur := rows[i]
+        j := i - 1
+        while (j >= 1 && rows[j]["total"] < cur["total"])
+        {
+            rows[j + 1] := rows[j]
+            j -= 1
+        }
+        rows[j + 1] := cur
+        i += 1
+    }
+
+    while (rows.Length > maxRows)
+        rows.RemoveAt(rows.Length)
+    return rows
+}
+
 ; Rebuilds the cached display model (throttled ~4 Hz). Read by the overlays + WebView.
 _LtRefreshLiveView(radarSnap)
 {
@@ -425,6 +482,9 @@ _LtRefreshLiveView(radarSnap)
     view["avgTimeMs"]     := (maps > 0) ? (totA // maps) : 0
     view["avgEx"]         := (maps > 0) ? (totEx / maps) : 0.0
     view["sessTimeMs"]    := now - g_ltSessionStartTick
+
+    ; Itemized session breakdown: the priced drops that drove the value up, by value.
+    view["items"] := _LtBuildItemRows(_LtAggregateSessionGained(), 60)
 
     runs := []
     i := g_ltCompleted.Length
@@ -528,6 +588,23 @@ _LtLiveViewJson()
     }
     runsJson .= "]"
 
+    itemsJson := "["
+    if (v.Has("items") && Type(v["items"]) = "Array")
+    {
+        first := true
+        for _, it in v["items"]
+        {
+            itemsJson .= (first ? "" : ",") "{"
+                . '"name":' _JsStr(it["name"])
+                . ',"count":' (it["count"] + 0)
+                . ',"unit":' _LtNum(it["unit"])
+                . ',"total":' _LtNum(it["total"])
+                . "}"
+            first := false
+        }
+    }
+    itemsJson .= "]"
+
     ageSec := (g_ltLastSyncEpoch > 0) ? (_LtNowEpoch() - g_ltLastSyncEpoch) : -1
 
     j := "{"
@@ -546,6 +623,7 @@ _LtLiveViewJson()
     j .= ',"sessTimeMs":'   ((v.Has("sessTimeMs") ? v["sessTimeMs"] : 0) + 0)
     j .= ',"divRate":'      _LtNum(v.Has("divRate") ? v["divRate"] : 0)
     j .= ',"runs":'         runsJson
+    j .= ',"items":'        itemsJson
     j .= ',"priceStatus":'  _JsStr(v.Has("priceStatus") ? v["priceStatus"] : "idle")
     j .= ',"priceErr":'     _JsStr(v.Has("priceErr") ? v["priceErr"] : "")
     j .= ',"itemsCached":'  ((v.Has("itemsCached") ? v["itemsCached"] : 0) + 0)
