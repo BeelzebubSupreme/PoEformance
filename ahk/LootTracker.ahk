@@ -52,6 +52,8 @@ global g_ltLastReason       := "init" ; per-tick diagnostic (why nothing is trac
 global g_ltWad     := 0
 global g_ltWadTick := 0
 global g_ltWadHash := 0
+global g_ltDiagBp  := -1  ; last inventory snapshot backpack item-key count (-1 = read failed, 0 = empty)
+global g_ltDiag2   := ""  ; loot-diff diagnostic string (bp / gained / priced / unpriced)
 
 ; ── Init ─────────────────────────────────────────────────────────────────────
 LoadLootTracker()
@@ -66,6 +68,7 @@ LoadLootTracker()
     global g_ltMonsterTallies, g_ltNextKillScanTick
     global g_ltLastReason
     global g_ltWad, g_ltWadTick, g_ltWadHash
+    global g_ltDiagBp, g_ltDiag2
 
     ; Defaults — seeded unconditionally so a fresh install never trips the
     ; "global has not been assigned a value" runtime error.
@@ -103,6 +106,8 @@ LoadLootTracker()
     g_ltWad     := 0
     g_ltWadTick := 0
     g_ltWadHash := 0
+    g_ltDiagBp  := -1
+    g_ltDiag2   := ""
 
     f := g_ltConfigFile
     if !FileExist(f)
@@ -392,6 +397,7 @@ _LtRefreshLiveView(radarSnap)
 {
     global g_ltLiveView, g_ltNextViewTick, g_ltCurrent, g_ltOnMap, g_ltCompleted, g_ltDivToEx
     global g_ltPriceStatus, g_ltPriceError, g_ltLastSyncEpoch, g_ltPricesByArt, g_ltSessionStartTick
+    global g_ltDiagBp, g_ltDiag2
 
     now := A_TickCount
     if (now < g_ltNextViewTick)
@@ -412,6 +418,7 @@ _LtRefreshLiveView(radarSnap)
         view["profitEx"] := _LtValueOf(gained, &p, &u)
         view["timeMs"]   := _LtCurrentLiveTimeMs()
         view["kills"]    := g_ltCurrent["kills"].Clone()
+        g_ltDiag2 := "bp=" g_ltDiagBp " gained=" gained.Count " priced=" p " unpriced=" u
     }
     else
     {
@@ -419,6 +426,7 @@ _LtRefreshLiveView(radarSnap)
         view["profitEx"] := 0.0
         view["timeMs"]   := 0
         view["kills"]    := [0, 0, 0, 0]
+        g_ltDiag2 := "bp=" g_ltDiagBp " (no active run)"
     }
 
     totA := 0, totEx := 0.0
@@ -510,7 +518,7 @@ PushLootLiveToWebView()
 
 _LtLiveViewJson()
 {
-    global g_ltLiveView, g_ltLastSyncEpoch, g_ltLastReason, g_ltEnabled
+    global g_ltLiveView, g_ltLastSyncEpoch, g_ltLastReason, g_ltEnabled, g_ltDiag2
     v := g_ltLiveView
     if !(v && Type(v) = "Map")
         return "{}"
@@ -558,6 +566,7 @@ _LtLiveViewJson()
     j .= ',"itemsCached":'  ((v.Has("itemsCached") ? v["itemsCached"] : 0) + 0)
     j .= ',"lastSyncAgo":'  (ageSec + 0)
     j .= ',"reason":'       _JsStr(g_ltLastReason)
+    j .= ',"diag2":'        _JsStr(g_ltDiag2)
     j .= ',"enabled":'      (g_ltEnabled ? "true" : "false")
     j .= "}"
     return j
