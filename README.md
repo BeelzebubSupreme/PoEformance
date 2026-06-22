@@ -4,7 +4,7 @@
 
 **A modern AutoHotkey v2 toolset for *Path of Exile 2* — overlays, automation, reverse-engineering workbench, and GGPK-level map reveal in one place.**
 
-![Version](https://img.shields.io/badge/version-v0.45.13.2-blue)
+![Version](https://img.shields.io/badge/version-v0.45.13.3-blue)
 ![Build](https://img.shields.io/badge/build-stable-green)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Language](https://img.shields.io/badge/language-AutoHotkey%20v2-orange)
@@ -16,7 +16,7 @@
 
 <div align="center">
   <img src="assets/inventory.png" width="900" alt="PoEformance — Arcane Codex UI">
-  <p><em>Inventory tab — the "Arcane Codex" theme: vellum pages, illuminated chapter headings, sigil-card items with rarity ink-bleed glows.</em></p>
+  <p><em>Inventory tab — the "Arcane Codex" theme: vellum pages, illuminated chapter headings, and item cards bearing each piece's real in-game artwork under rarity-tinted glows.</em></p>
 </div>
 
 ---
@@ -230,10 +230,11 @@ The radar fast-path skips heavy decoders (Stats, Buffs, Actor, Animated, StateMa
   <img src="assets/skills_buffs.png" width="800" alt="Skills & Buffs tab">
 </div>
 
-**Inventory** — backpack grid + equipped slots + flask bar + every stash tab the game has populated. Hover any item for a parchment-slip tooltip with the full mod list.
+**Inventory** — backpack grid + equipped slots + flask bar + every stash tab the game has populated, each item now drawn with its **real in-game artwork** and stack counts. Hover any item for a parchment-slip tooltip carrying its icon, base type and full mod list.
 
 <div align="center">
   <img src="assets/inventory.png" width="800" alt="Inventory tab">
+  <p><em>Inventory tab — backpack, equipped slots and flasks, every item rendered with its real in-game artwork (and stack counts); hover any piece for its icon, base type and full mod list.</em></p>
 </div>
 
 **Watchlist** — pin any memory-tree path and watch its value live.
@@ -309,7 +310,7 @@ The interface is intentionally framed as a leather-bound grimoire of relics — 
   - *Disconnected* — blood crimson at the same pulse rhythm, so the two read as one "attention required" family with the cause encoded only in colour.
   - *AutoPilot — combat* — fast crimson pulse (1.4 s), a deliberate urgency over the paused/disconnected calm.
 - **Sliding tab marker** — one gold underline per bar (categories + sub-tabs) that glides between active positions with a 280 ms cubic-bezier transition instead of jumping. The little diamond fleuron rides on top of the marker so it travels with the rule.
-- **Inventory chapter** — vellum-page background with paper-grain noise + corner vignettes; item cards as sigil-slips with rarity-tinted ink-bleed glows (Rare items carry a subtle 4.5 s brightness pulse); tooltip is a parchment slip with corner fleurons and gilded section dividers.
+- **Inventory chapter** — vellum-page background with paper-grain noise + corner vignettes; item cards as sigil-slips that frame each piece's real in-game artwork under rarity-tinted ink-bleed glows (Rare items carry a subtle 4.5 s brightness pulse); tooltip is a parchment slip with corner fleurons and gilded section dividers.
 
 <div align="center">
   <img src="assets/configuration2.png" width="800" alt="Config tab — Arcane Codex theme">
