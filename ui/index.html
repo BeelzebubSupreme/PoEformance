@@ -3263,15 +3263,22 @@
        is an .ent-junkbox (not a .cfg-section), so we replicate the marker. */
     .junk-cat-head {
       display: flex;
-      align-items: center;
-      gap: 10px;
+      flex-direction: column;
+      gap: 3px;
       position: relative;
       cursor: pointer;
-      list-style: none;
-      padding-right: 22px
+      list-style: none
     }
     .junk-cat-head::-webkit-details-marker { display: none }
-    .junk-cat-head::after {
+    /* Title row carries the name and the open/closed caret; it stays a single
+       row so the caret aligns with the name even though the desc sits below it. */
+    .junk-cat-titlerow {
+      display: flex;
+      align-items: center;
+      position: relative;
+      padding-right: 22px
+    }
+    .junk-cat-titlerow::after {
       content: "";
       position: absolute;
       right: 4px;
@@ -3283,12 +3290,12 @@
       transform: translateY(-50%) rotate(45deg);
       transition: transform .2s ease-out, background .15s
     }
-    .junk-cat:not([open]) .junk-cat-head::after {
+    .junk-cat:not([open]) .junk-cat-titlerow::after {
       transform: translateY(-50%) rotate(0deg);
       background: var(--codex-text-dim);
       box-shadow: none
     }
-    .junk-cat-head:hover::after {
+    .junk-cat-head:hover .junk-cat-titlerow::after {
       background: var(--codex-gold-hi);
       box-shadow: 0 0 6px rgba(240,214,138,0.7)
     }
@@ -3300,13 +3307,13 @@
       color: var(--codex-text);
       margin-right: auto
     }
-    /* One-line explanation of the category, shown between its name and buttons. */
+    /* One-line explanation of the category — lives in the summary so it stays
+       visible whether the category is collapsed or expanded. */
     .junk-cat-desc {
       font-family: var(--codex-serif);
       font-size: 12px;
       line-height: 1.4;
       color: var(--codex-text-dim);
-      padding: 2px 2px 5px;
       max-width: 560px
     }
     .junk-pat-row {
@@ -6544,13 +6551,14 @@
     }
 
     // Builds one junk category as a collapsible <details> (cube caret when
-    // closed, gold diamond when open). The summary is just the category name —
-    // the category has no on/off slider of its own. The body opens with a
-    // one-line explanation of the category, then a wrap of per-pattern filter-pill
-    // buttons (each toggles its pattern — the pill's own colour conveys state)
-    // followed by a trailing "enable/disable all" button that flips every pattern
-    // in the category at once. Open state is restored from _junkOpenCats so
-    // re-renders don't snap it shut. c = header category, ck = key.
+    // closed, gold diamond when open). The summary holds the category name plus a
+    // one-line explanation — both live in the summary so the description stays
+    // visible whether collapsed or expanded; the category has no on/off slider of
+    // its own. The body is a wrap of per-pattern filter-pill buttons (each toggles
+    // its pattern — the pill's own colour conveys state) followed by a trailing
+    // "enable/disable all" button that flips every pattern in the category at once.
+    // Open state is restored from _junkOpenCats so re-renders don't snap it shut.
+    // c = header category, ck = key.
     function junkCatRow(c, ck) {
       const ci = _junkCatInfo[ck] || { short: ck, desc: String(c.label || ck) };
       const allOn = (c.on === true || c.on === "true");
@@ -6569,9 +6577,9 @@
              + `<span class="junk-pat">${allOn ? "disable all" : "enable all"}</span></label>`;
       return `<details class="junk-cat"${_junkOpenCats.has(ck) ? " open" : ""} ontoggle="junkCatToggle('${ck}', this.open)">`
            + `<summary class="junk-cat-head">`
-           + `<span class="junk-cat-name" title="${escAttr(ci.desc)}">${escHtml(ci.short)}</span>`
-           + `</summary>`
+           + `<div class="junk-cat-titlerow"><span class="junk-cat-name">${escHtml(ci.short)}</span></div>`
            + `<div class="junk-cat-desc">${escHtml(ci.desc)}</div>`
+           + `</summary>`
            + `<div class="junk-pat-row">${pills}${allBtn}</div></details>`;
     }
 
