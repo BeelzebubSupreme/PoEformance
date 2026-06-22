@@ -10,15 +10,15 @@
 ; POE2Radar JunkFilter.cs + entity_database_analysis.md). The over-broad
 ; "weapons/" pattern is deliberately omitted (it would hide real weapon items).
 ;
-; Detailed management: a master switch, five category toggles, per-pattern
-; toggles inside each category, plus a free-form list of user "custom" terms.
-; The active pattern list is precomputed on every change (RebuildJunkActive) so
-; the per-entity hot path is just a short InStr loop. Self-persists to
-; poeformance_config.ini [JunkFilter] (same pattern as Groups/Alerts). Included
-; via TreeViewWatchlistPanel.ahk; LoadEntityJunkFilter() seeds all globals.
+; Detailed management: a master switch, per-pattern toggles grouped into
+; categories (categories are organizational only — no category-level on/off),
+; plus a free-form list of user "custom" terms. The active pattern list is precomputed
+; on every change (RebuildJunkActive) so the per-entity hot path is just a short
+; InStr loop. Self-persists to poeformance_config.ini [JunkFilter] (same pattern
+; as Groups/Alerts). Included via TreeViewWatchlistPanel.ahk; LoadEntityJunkFilter()
+; seeds all globals.
 
 global g_junkFilterEnabled := true     ; master switch
-global g_junkCatEnabled    := Map()    ; categoryKey -> bool
 global g_junkPatDisabled   := Map()    ; built-in pattern -> true (individually off)
 global g_junkCustom        := ""       ; raw comma-separated user terms
 global g_junkActive        := []       ; precomputed flat list of active patterns
@@ -59,21 +59,17 @@ IsJunkEntity(entityPath)
     return false
 }
 
-; Recomputes g_junkActive from the enabled categories (minus individually
-; disabled patterns) plus the parsed custom terms. Called after every config
-; change so IsJunkEntity never re-evaluates toggles per entity. Returns nothing.
+; Recomputes g_junkActive from every category's patterns (minus the individually
+; disabled ones) plus the parsed custom terms. Called after every config change
+; so IsJunkEntity never re-evaluates toggles per entity. Returns nothing.
 RebuildJunkActive()
 {
-    global g_junkCatEnabled, g_junkPatDisabled, g_junkCustom, g_junkActive
+    global g_junkPatDisabled, g_junkCustom, g_junkActive
     out := []
     for _, cat in _JunkFilterCategoryDefs()
-    {
-        if !(g_junkCatEnabled.Has(cat["key"]) && g_junkCatEnabled[cat["key"]])
-            continue
         for _, p in cat["patterns"]
             if !g_junkPatDisabled.Has(p)
                 out.Push(p)
-    }
     for _, term in StrSplit(g_junkCustom, ",")
     {
         t := Trim(term)
@@ -84,22 +80,22 @@ RebuildJunkActive()
 }
 
 ; Applies a single setting from the web UI (BridgeDispatch "SetJunk"). key forms:
-; "enabled" | "cat:<key>" | "pat:<pattern>" | "custom". value is 1/0 for the
-; toggles, or the raw string for "custom". Rebuilds the active list afterwards.
+; "enabled" | "pat:<pattern>" | "custom". Categories are organizational only —
+; there is no category-level on/off, so each pattern is toggled individually via
+; "pat:<pattern>". value is 1/0 for the toggles, or the raw string for "custom".
+; Rebuilds the active list afterwards.
 _ApplyJunkSetting(key, value)
 {
-    global g_junkFilterEnabled, g_junkCatEnabled, g_junkPatDisabled, g_junkCustom
+    global g_junkFilterEnabled, g_junkPatDisabled, g_junkCustom
     k := String(key)
     isOn := (value = 1 || value = "1" || value = true)
     if (k = "enabled")
         g_junkFilterEnabled := isOn
-    else if (SubStr(k, 1, 4) = "cat:")
-        g_junkCatEnabled[SubStr(k, 5)] := isOn
     else if (SubStr(k, 1, 4) = "pat:")
     {
         pat := SubStr(k, 5)
         if (isOn)
-            g_junkPatDisabled.Delete(pat)
+            (g_junkPatDisabled.Has(pat) && g_junkPatDisabled.Delete(pat))
         else
             g_junkPatDisabled[pat] := true
     }
@@ -109,11 +105,12 @@ _ApplyJunkSetting(key, value)
 }
 
 ; Builds the "junkFilter" JSON object for the header push so the Filters tab
-; mirrors the saved master/category/pattern/custom state. Returns a JSON object
-; string: { enabled, custom, categories:[{ key,label,on,patterns:[{p,on}] }] }.
+; mirrors the saved master/pattern/custom state. Categories carry no on/off of
+; their own (organizational groups only). Returns a JSON object string:
+; { enabled, custom, categories:[{ key,label,patterns:[{p,on}] }] }.
 BuildJunkFilterHeaderJson()
 {
-    global g_junkFilterEnabled, g_junkCatEnabled, g_junkPatDisabled, g_junkCustom
+    global g_junkFilterEnabled, g_junkPatDisabled, g_junkCustom
     json := '{"enabled":' (g_junkFilterEnabled ? "true" : "false")
         . ',"custom":' _JsStr(g_junkCustom)
         . ',"categories":['
@@ -123,10 +120,8 @@ BuildJunkFilterHeaderJson()
         if !firstCat
             json .= ","
         firstCat := false
-        catOn := (g_junkCatEnabled.Has(cat["key"]) && g_junkCatEnabled[cat["key"]])
         json .= '{"key":' _JsStr(cat["key"])
             . ',"label":' _JsStr(cat["label"])
-            . ',"on":' (catOn ? "true" : "false")
             . ',"patterns":['
         firstPat := true
         for _, p in cat["patterns"]
@@ -142,19 +137,15 @@ BuildJunkFilterHeaderJson()
     return json "]}"
 }
 
-; Persists the junk-filter state to the INI ([JunkFilter]). Category flags are
-; one key each; disabled built-in patterns join with commas (patterns contain
-; none); custom terms store verbatim. Blanks write a space so IniRead seeds back.
+; Persists the junk-filter state to the INI ([JunkFilter]). Disabled built-in
+; patterns join with commas (patterns contain none); custom terms store verbatim.
+; Blanks write a space so IniRead seeds back. Category state is fully derived
+; from the per-pattern disabled set, so there is nothing category-level to store.
 SaveEntityJunkFilter()
 {
-    global g_junkFilterEnabled, g_junkCatEnabled, g_junkPatDisabled, g_junkCustom, g_junkConfigFile
+    global g_junkFilterEnabled, g_junkPatDisabled, g_junkCustom, g_junkConfigFile
     f := (g_junkConfigFile != "") ? g_junkConfigFile : (A_ScriptDir "\poeformance_config.ini")
     IniWrite(g_junkFilterEnabled ? "1" : "0", f, "JunkFilter", "enabled")
-    for _, cat in _JunkFilterCategoryDefs()
-    {
-        on := (g_junkCatEnabled.Has(cat["key"]) && g_junkCatEnabled[cat["key"]])
-        IniWrite(on ? "1" : "0", f, "JunkFilter", "cat_" cat["key"])
-    }
     dis := ""
     for pat, _ in g_junkPatDisabled
         dis .= (dis = "" ? "" : ",") pat
@@ -167,12 +158,9 @@ SaveEntityJunkFilter()
 ; saved values. Finishes by precomputing the active pattern list.
 LoadEntityJunkFilter()
 {
-    global g_junkFilterEnabled, g_junkCatEnabled, g_junkPatDisabled, g_junkCustom, g_junkActive, g_junkConfigFile
+    global g_junkFilterEnabled, g_junkPatDisabled, g_junkCustom, g_junkActive, g_junkConfigFile
     g_junkConfigFile := A_ScriptDir "\poeformance_config.ini"
     g_junkFilterEnabled := true
-    g_junkCatEnabled := Map()
-    for _, cat in _JunkFilterCategoryDefs()
-        g_junkCatEnabled[cat["key"]] := true
     g_junkPatDisabled := Map()
     g_junkCustom := ""
     g_junkActive := []
@@ -181,12 +169,6 @@ LoadEntityJunkFilter()
     en := IniRead(f, "JunkFilter", "enabled", "")
     if (en != "")
         g_junkFilterEnabled := (en = "1")
-    for _, cat in _JunkFilterCategoryDefs()
-    {
-        v := IniRead(f, "JunkFilter", "cat_" cat["key"], "")
-        if (v != "")
-            g_junkCatEnabled[cat["key"]] := (v = "1")
-    }
     dis := IniRead(f, "JunkFilter", "disabledPatterns", "")
     if (dis != "" && dis != " ")
     {
