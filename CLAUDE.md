@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.12.157`.
+Reimplementation of the original C# project (see Reference). Version `0.45.12.158`.
 
 ## Language
 
@@ -317,8 +317,8 @@ area-state instead of re-reading memory.
 ### Valuable-drops breakdown (session item list)
 - `_LtAggregateSessionGained()` folds every run's banked `gained` + the current run's live
   leg (`g_ltLiveLegDelta`) into one `Map(itemKey→count)`; `_LtBuildItemRows()` prices each
-  via `_LtTryPriceItem`, keeps the net-positive PRICED rows (`name`/`count`/`unit`/`total`),
-  sorts by total value desc, caps to 60. Pushed as `items` in `_LtLiveViewJson` and rendered
+  via `_LtTryPriceItem`, keeps the net-positive PRICED rows worth ≥ 0.5 ex (so nothing
+  that would render as "0 ex" clutters the list), sorts by total value desc, caps to 60. Pushed as `items` in `_LtLiveViewJson` and rendered
   as a 4-col `lt-tbl` (Item · × · Each · Total) in `updateLootLive`. Unpriced items
   (most rares/magics — poe.ninja has no price) are omitted by design.
 

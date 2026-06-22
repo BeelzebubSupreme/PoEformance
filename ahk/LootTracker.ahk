@@ -408,9 +408,12 @@ _LtBuildItemRows(agg, maxRows := 60)
         unit := 0.0, label := ""
         if !_LtTryPriceItem(k, &unit, &label)
             continue
-        if (unit <= 0)
+        total := unit * cnt
+        ; Hide negligible drops that would render as "0 ex" (Math.round(total) == 0),
+        ; e.g. Scroll of Wisdom / Transmutation — they only clutter the list.
+        if (total < 0.5)
             continue
-        rows.Push(Map("name", label, "count", cnt, "unit", unit, "total", unit * cnt))
+        rows.Push(Map("name", label, "count", cnt, "unit", unit, "total", total))
     }
 
     ; Insertion sort by total descending (rows are few — at most a few dozen item types).
