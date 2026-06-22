@@ -11,8 +11,8 @@
 ; "weapons/" pattern is deliberately omitted (it would hide real weapon items).
 ;
 ; Detailed management: a master switch, per-pattern toggles grouped into
-; categories (categories are organizational only — no category-level on/off),
-; plus a free-form list of user "custom" terms. The active pattern list is precomputed
+; categories (each category has no gate of its own, just an "enable/disable all"
+; bulk button), plus a free-form list of user "custom" terms. The active pattern list is precomputed
 ; on every change (RebuildJunkActive) so the per-entity hot path is just a short
 ; InStr loop. Self-persists to poeformance_config.ini [JunkFilter] (same pattern
 ; as Groups/Alerts). Included via TreeViewWatchlistPanel.ahk; LoadEntityJunkFilter()
@@ -80,10 +80,11 @@ RebuildJunkActive()
 }
 
 ; Applies a single setting from the web UI (BridgeDispatch "SetJunk"). key forms:
-; "enabled" | "pat:<pattern>" | "custom". Categories are organizational only —
-; there is no category-level on/off, so each pattern is toggled individually via
-; "pat:<pattern>". value is 1/0 for the toggles, or the raw string for "custom".
-; Rebuilds the active list afterwards.
+; "enabled" | "cat:<key>" | "pat:<pattern>" | "custom". Categories have no gate of
+; their own — "cat:<key>" is just a bulk shortcut that enables (1) or disables (0)
+; EVERY pattern in that category at once (the per-category "enable/disable all"
+; button). value is 1/0 for the toggles, or the raw string for "custom". Rebuilds
+; the active list afterwards.
 _ApplyJunkSetting(key, value)
 {
     global g_junkFilterEnabled, g_junkPatDisabled, g_junkCustom
@@ -91,6 +92,22 @@ _ApplyJunkSetting(key, value)
     isOn := (value = 1 || value = "1" || value = true)
     if (k = "enabled")
         g_junkFilterEnabled := isOn
+    else if (SubStr(k, 1, 4) = "cat:")
+    {
+        ck := SubStr(k, 5)
+        for _, cat in _JunkFilterCategoryDefs()
+            if (cat["key"] = ck)
+            {
+                for _, p in cat["patterns"]
+                {
+                    if (isOn)
+                        (g_junkPatDisabled.Has(p) && g_junkPatDisabled.Delete(p))
+                    else
+                        g_junkPatDisabled[p] := true
+                }
+                break
+            }
+    }
     else if (SubStr(k, 1, 4) = "pat:")
     {
         pat := SubStr(k, 5)
@@ -105,9 +122,9 @@ _ApplyJunkSetting(key, value)
 }
 
 ; Builds the "junkFilter" JSON object for the header push so the Filters tab
-; mirrors the saved master/pattern/custom state. Categories carry no on/off of
-; their own (organizational groups only). Returns a JSON object string:
-; { enabled, custom, categories:[{ key,label,patterns:[{p,on}] }] }.
+; mirrors the saved master/pattern/custom state. Per category, "on" is the
+; computed "all patterns enabled" flag — it drives the "enable/disable all"
+; button. Returns: { enabled, custom, categories:[{ key,label,on,patterns:[{p,on}] }] }.
 BuildJunkFilterHeaderJson()
 {
     global g_junkFilterEnabled, g_junkPatDisabled, g_junkCustom
@@ -120,8 +137,17 @@ BuildJunkFilterHeaderJson()
         if !firstCat
             json .= ","
         firstCat := false
+        ; "on" = every pattern in the category is enabled (drives enable/disable all).
+        catOn := true
+        for _, p in cat["patterns"]
+            if g_junkPatDisabled.Has(p)
+            {
+                catOn := false
+                break
+            }
         json .= '{"key":' _JsStr(cat["key"])
             . ',"label":' _JsStr(cat["label"])
+            . ',"on":' (catOn ? "true" : "false")
             . ',"patterns":['
         firstPat := true
         for _, p in cat["patterns"]

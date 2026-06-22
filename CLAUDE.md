@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.12.133`.
+Reimplementation of the original C# project (see Reference). Version `0.45.12.134`.
 
 ## Language
 
@@ -127,7 +127,7 @@ Alerts → `alerts.ini [Alerts]`.
   terms; active patterns precomputed in `g_junkActive` via `RebuildJunkActive()` (cheap
   case-insensitive `InStr` per entity). `_ApplyJunkSetting` / `BuildJunkFilterHeaderJson` /
   `Save/LoadEntityJunkFilter` (self-persist `[JunkFilter]`). Dispatch `SetJunk` (keys
-  `enabled` | `pat:<pattern>` | `custom` — no category-level on/off); header key
+  `enabled` | `cat:<key>` bulk enable/disable-all | `pat:<pattern>` | `custom`); header key
   `junkFilter`; UI is a wrapping row (`.ent-boxes`) of collapsible boxes at the top of the
   **Entities** tab: Entity Classes (the global type filter, moved here from Config) and
   Junk Filter (`#ent-junkbox`). The Junk Filter box holds ALL of it: the built-in categories
@@ -135,10 +135,13 @@ Alerts → `alerts.ini [Alerts]`.
   deletable chips) in its body — the former standalone Hideout / Custom Terms boxes are gone.
   Each junk category renders (via `junkCatRow`) as a collapsible `<details class="junk-cat">`
   with a cube/diamond caret (closed/open); the same caret is on each top box's
-  `.ent-junkbox-sum`. Categories are organizational groups only — there is NO category-level
-  on/off (no slider, no bulk button): the summary is just the name, and the body is a wrap of
-  per-pattern `.filter-pill` buttons (each toggles its own pattern via `pat:`, pill colour
-  conveys state). Only the Junk Filter box master switch gates the whole feature.
+  `.ent-junkbox-sum`. Categories have NO on/off slider of their own: the summary is just the
+  name, and the body is a wrap of per-pattern `.filter-pill` buttons (each toggles its own
+  pattern via `pat:`, pill colour conveys state) followed by a trailing `.junk-all`
+  "enable/disable all" button that bulk-flips every pattern in the category (`cat:<key>`, a
+  shortcut over the per-pattern flags — there is no separate category gate). A `.ent-junk-sep`
+  spacer sits between the last category (Hideout) and the Custom Terms section. Only the Junk
+  Filter box master switch gates the whole feature.
   Open categories are remembered in `_junkOpenCats` (updated from each `<details>`' `ontoggle`)
   and `junkRenderCats` only rewrites a host's innerHTML when the markup changed — so the
   periodic header push no longer snaps expanded categories shut. The fast radar path builds the awake

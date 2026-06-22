@@ -3197,12 +3197,32 @@
       line-height: 1.4;
       margin-bottom: 2px
     }
+    /* Spacer between the last category (Hideout) and the Custom Terms section. */
+    .ent-junk-sep {
+      height: 1px;
+      margin: 16px 2px 6px;
+      background: var(--codex-rule)
+    }
     .ent-junk-custom {
       display: flex;
       flex-direction: column;
       gap: 6px;
-      margin-top: 10px;
       max-width: 420px
+    }
+    .ent-junk-custom-head {
+      font-family: var(--codex-display);
+      font-size: 11px;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: var(--codex-text)
+    }
+    .ent-junk-custom-meta {
+      font-family: var(--codex-mono-serif);
+      font-size: 11px;
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--codex-text-dim);
+      margin-left: 6px
     }
     .ent-junk-addrow { display: flex; gap: 6px; align-items: center }
     .ent-junk-addrow .cfg-input { flex: 1 1 auto; min-width: 0 }
@@ -3290,6 +3310,24 @@
       font-family: var(--codex-mono-serif);
       text-transform: none;
       letter-spacing: 0
+    }
+    /* The trailing "enable/disable all" pill is an action button, not a state —
+       keep it visually distinct (dashed, italic) and don't let it adopt the gold
+       "selected" look of the pattern pills. Its label states the action. */
+    .filter-pill.junk-all {
+      font-style: italic;
+      border-style: dashed;
+      margin-left: 4px
+    }
+    .filter-pill.junk-all:has(input:checked) {
+      color: var(--codex-text-dim);
+      border-color: rgba(90,62,34,0.7);
+      background: linear-gradient(180deg, rgba(28,18,10,0.85), rgba(20,12,6,0.95));
+      box-shadow: none
+    }
+    .filter-pill.junk-all:hover {
+      color: var(--codex-text);
+      border-color: var(--codex-gold)
     }
 
     .cfg-section details {
@@ -4440,9 +4478,11 @@
             <div class="ent-junkbox-help">
               Hides gameplay-irrelevant entities by a substring match on the metadata path.
               Categories are just groups — expand one (cube → diamond) to toggle its individual
-              pattern buttons. Hover a button for what it matches.
+              pattern buttons; the last button enables/disables the whole category. Hover a button for what it matches.
             </div>
             <div id="junk-cats"></div>
+            <!-- Spacer between the last category (Hideout) and Custom Terms. -->
+            <div class="ent-junk-sep"></div>
             <!-- Custom terms — extra user substrings, on top of the built-in categories. -->
             <div class="ent-junk-custom">
               <div class="ent-junk-custom-head">Custom terms<span id="junk-custom-meta" class="ent-junk-custom-meta"></span></div>
@@ -6484,7 +6524,8 @@
     let _junkLastMain = null;
 
     // Renders every junk category (incl. hideout) into #junk-cats. Each category
-    // is a collapsible row; its body is a wrap of per-pattern buttons.
+    // is a collapsible row; its body is a wrap of per-pattern buttons plus a
+    // trailing "enable/disable all" button.
     function junkRenderCats(cats) {
       const host = document.getElementById("junk-cats");
       let mainHtml = "";
@@ -6495,12 +6536,14 @@
 
     // Builds one junk category as a collapsible <details> (cube caret when
     // closed, gold diamond when open). The summary is just the category name —
-    // the category is purely an organizational group, it has no on/off of its
-    // own. The body is a wrap of per-pattern filter-pill buttons (each toggles
-    // its pattern — the pill's own colour conveys state). Open state is restored
+    // the category has no on/off slider of its own. The body is a wrap of
+    // per-pattern filter-pill buttons (each toggles its pattern — the pill's own
+    // colour conveys state) followed by a trailing "enable/disable all" button
+    // that flips every pattern in the category at once. Open state is restored
     // from _junkOpenCats so re-renders don't snap it shut. c = header category, ck = key.
     function junkCatRow(c, ck) {
       const ci = _junkCatInfo[ck] || { short: ck, desc: String(c.label || ck) };
+      const allOn = (c.on === true || c.on === "true");
       const pills = (Array.isArray(c.patterns) ? c.patterns : []).map(p => {
         const pp = String(p.p || "");
         const pi = _junkPatInfo[pp] || { short: pp, desc: pp };
@@ -6509,11 +6552,16 @@
              + `onchange="junkSet('pat:${escAttr(pp)}', this.checked ? 1 : 0)"> `
              + `<span class="junk-pat">${escHtml(pi.short)}</span></label>`;
       }).join("");
+      // Trailing bulk control — checked when all patterns are on, so a click
+      // flips the whole category. Its label states the action it performs.
+      const allBtn = `<label class="filter-pill junk-all" title="Enable or disable every pattern in this category">`
+             + `<input type="checkbox" ${allOn ? "checked" : ""} onchange="junkSet('cat:${escAttr(ck)}', this.checked ? 1 : 0)"> `
+             + `<span class="junk-pat">${allOn ? "disable all" : "enable all"}</span></label>`;
       return `<details class="junk-cat"${_junkOpenCats.has(ck) ? " open" : ""} ontoggle="junkCatToggle('${ck}', this.open)">`
            + `<summary class="junk-cat-head">`
            + `<span class="junk-cat-name" title="${escAttr(ci.desc)}">${escHtml(ci.short)}</span>`
            + `</summary>`
-           + `<div class="junk-pat-row">${pills}</div></details>`;
+           + `<div class="junk-pat-row">${pills}${allBtn}</div></details>`;
     }
 
     // ═══════════════════════════════════════════════════════════════════
