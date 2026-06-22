@@ -1,19 +1,30 @@
 ; StashMover.ahk
 ; "Dump to stash" feature: simulates Ctrl+Click on every backpack item so the
-; game moves them into the currently open container (stash tab, vendor sell
-; window, trade window, gambling window, …). Triggered by a configurable hotkey
-; AND/OR an on-screen button drawn next to the in-game inventory grid.
+; game moves them into whatever container is currently open (stash tab, vendor
+; sell window, trade window, gambling window, …). Triggered by a configurable
+; hotkey AND/OR an on-screen button drawn next to the in-game inventory grid.
 ;
 ; Data sources (all already reverse-engineered elsewhere in the project):
 ;   - Backpack items + their grid cells  -> ReadAllPlayerInventories (id == 1).
 ;   - Inventory grid screen rectangle    -> UI tree element "InventoryPanel"
 ;     (UiTree_GetScreenPos + UnscaledSize), converted to absolute screen pixels
 ;     with NavClientRect, mirroring the conversion in UiBrowserHandler
-;     (screenPx = uiPos * clientHeight / 1600).
+;     (screenPx = clientOrigin + uiPos * clientHeight/1600).
 ;
-; The actual clicking runs as a NON-BLOCKING sequencer (one item per timer tick)
-; so the radar hot path is never frozen for the ~1-3 s a full backpack takes.
-; Ctrl is held down for the whole run and released on completion / abort.
+; Safety / quality of life:
+;   - Ignore filter: a user-built set of item base-type paths that are never
+;     moved (assembled from the live inventory in the UI).
+;   - Quest items are auto-skipped (they can't be stashed).
+;   - Post-run verification: items that didn't actually leave the backpack are
+;     flagged "failed" for a short cooldown so a repeated trigger doesn't keep
+;     re-clicking an un-stashable item (e.g. stash full). If NOTHING moved, the
+;     user is warned instead of silently hammering.
+;   - Randomness: each click lands at a small random offset inside its cell and
+;     the inter-click delay is jittered, so the timing/positions aren't static.
+;
+; The clicking runs as a NON-BLOCKING sequencer (one item per timer tick) so the
+; radar hot path is never frozen for the ~1-3 s a full backpack takes. Ctrl is
+; held down for the whole run and released on completion / abort.
 ;
 ; Included by InGameStateMonitor.ahk. Initialise every global in LoadStashMover()
 ; (AHK v2 module-init gotcha: top-level initialisers in #Include'd modules don't
@@ -28,20 +39,29 @@ LoadStashMover()
     global g_smEnabled := false               ; master switch for the whole feature
     global g_smHotkey := ""                    ; AHK hotkey string, e.g. "F4" / "^d" (empty = none)
     global g_smShowButton := true              ; draw the clickable overlay button
-    global g_smPerItemDelayMs := 35            ; pause between consecutive item clicks
-    global g_smSettleDelayMs := 16             ; pause after moving the cursor, before the click
+    global g_smPerItemDelayMs := 35            ; base pause between consecutive item clicks
+    global g_smSettleDelayMs := 16             ; base pause after moving the cursor, before the click
     global g_smOffsetX := 0                    ; manual screen-px calibration (X) of the grid origin
     global g_smOffsetY := 0                    ; manual screen-px calibration (Y) of the grid origin
+    global g_smSkipQuest := true               ; never try to stash quest items (they can't be)
+    global g_smJitter := true                  ; randomise click position + inter-click delay
     global g_smConfigFile := _ConfigPath()
+
+    ; Ignore filter — path -> display name. Items whose base-type path is in here
+    ; are never moved. Built by the user from the live inventory in the UI.
+    global g_smIgnore := Map()
 
     ; Runtime state (never persisted)
     global g_smGui := 0                        ; interactive overlay Gui (lazy-built)
     global g_smBtnCtrl := 0                    ; the button control inside g_smGui
     global g_smGuiShown := false
     global g_smRunning := false                ; a dump sequence is in progress
-    global g_smQueue := []                     ; precomputed absolute click points for the run
+    global g_smQueue := []                     ; precomputed click points for the run
     global g_smQueueIdx := 0
-    global g_smMovedCount := 0
+    global g_smMovedCount := 0                 ; clicks issued this run (not verified moves)
+    global g_smQueuedPtrs := []                ; item ptrs we attempted (for post-run verify)
+    global g_smFailed := Map()                 ; itemEntityPtr -> A_TickCount when it failed to move
+    global g_smFailCooldownMs := 8000          ; how long a failed item is skipped before retry
     global g_smRegisteredHotkey := ""          ; last hotkey actually bound (for clean re-register)
 
     f := g_smConfigFile
@@ -53,6 +73,9 @@ LoadStashMover()
         g_smSettleDelayMs  := Integer(IniRead(f, "StashMover", "settleDelayMs", g_smSettleDelayMs))
         g_smOffsetX        := Integer(IniRead(f, "StashMover", "offsetX", g_smOffsetX))
         g_smOffsetY        := Integer(IniRead(f, "StashMover", "offsetY", g_smOffsetY))
+        g_smSkipQuest      := (IniRead(f, "StashMover", "skipQuest", g_smSkipQuest ? "1" : "0") = "1")
+        g_smJitter         := (IniRead(f, "StashMover", "jitter", g_smJitter ? "1" : "0") = "1")
+        g_smIgnore         := _SmIgnoreDeserialize(IniRead(f, "StashMover", "ignore", ""))
     } catch as ex {
         LogError("LoadStashMover", ex)
     }
@@ -63,7 +86,8 @@ LoadStashMover()
 SaveStashMover()
 {
     global g_smEnabled, g_smHotkey, g_smShowButton, g_smPerItemDelayMs
-    global g_smSettleDelayMs, g_smOffsetX, g_smOffsetY, g_smConfigFile
+    global g_smSettleDelayMs, g_smOffsetX, g_smOffsetY, g_smSkipQuest, g_smJitter
+    global g_smIgnore, g_smConfigFile
     f := g_smConfigFile
     try {
         IniWrite(g_smEnabled ? "1" : "0", f, "StashMover", "enabled")
@@ -73,6 +97,9 @@ SaveStashMover()
         IniWrite(g_smSettleDelayMs, f, "StashMover", "settleDelayMs")
         IniWrite(g_smOffsetX, f, "StashMover", "offsetX")
         IniWrite(g_smOffsetY, f, "StashMover", "offsetY")
+        IniWrite(g_smSkipQuest ? "1" : "0", f, "StashMover", "skipQuest")
+        IniWrite(g_smJitter ? "1" : "0", f, "StashMover", "jitter")
+        IniWrite(_SmIgnoreSerialize(g_smIgnore), f, "StashMover", "ignore")
     } catch as ex {
         LogError("SaveStashMover", ex)
     }
@@ -87,12 +114,50 @@ _SmClampConfig()
     g_smSettleDelayMs  := Max(0, Min(300, g_smSettleDelayMs + 0))
 }
 
+; Serialises the ignore Map(path->name) to a single INI-safe string. Entries are
+; joined by RS (Chr 30); path and name inside an entry by US (Chr 31). Neither
+; control char appears in metadata paths or item names.
+_SmIgnoreSerialize(ignoreMap)
+{
+    if !(IsObject(ignoreMap) && ignoreMap is Map)
+        return ""
+    us := Chr(31), rs := Chr(30)
+    parts := []
+    for path, name in ignoreMap
+        parts.Push(path us name)
+    out := ""
+    for i, p in parts
+        out .= (i > 1 ? rs : "") p
+    return out
+}
+
+; Parses the serialised ignore string back into a Map(path->name).
+_SmIgnoreDeserialize(s)
+{
+    m := Map()
+    s := s ""
+    if (s = "")
+        return m
+    us := Chr(31), rs := Chr(30)
+    for _, entry in StrSplit(s, rs)
+    {
+        if (entry = "")
+            continue
+        kv := StrSplit(entry, us)
+        path := kv.Length >= 1 ? kv[1] : ""
+        name := kv.Length >= 2 ? kv[2] : ""
+        if (path != "")
+            m[path] := (name != "" ? name : path)
+    }
+    return m
+}
+
 ; Applies a single setting from the UI/bridge. Param: key, val (string/bool).
 ; Returns true when the value changed something that needs a hotkey re-register.
 _SmApplySetting(key, val)
 {
     global g_smEnabled, g_smHotkey, g_smShowButton, g_smPerItemDelayMs
-    global g_smSettleDelayMs, g_smOffsetX, g_smOffsetY
+    global g_smSettleDelayMs, g_smOffsetX, g_smOffsetY, g_smSkipQuest, g_smJitter
     needRebind := false
     switch key
     {
@@ -104,6 +169,10 @@ _SmApplySetting(key, val)
             needRebind := true
         case "showButton":
             g_smShowButton := _SmTruthy(val)
+        case "skipQuest":
+            g_smSkipQuest := _SmTruthy(val)
+        case "jitter":
+            g_smJitter := _SmTruthy(val)
         case "perItemDelayMs":
             g_smPerItemDelayMs := Integer(val)
         case "settleDelayMs":
@@ -126,21 +195,126 @@ _SmTruthy(v)
     return (s = "1" || s = "true" || s = "yes" || s = "on")
 }
 
-; Builds the "stashMover" JSON object embedded in the WebView header push.
+; Builds the "stashMover" JSON object embedded in the WebView header push,
+; including the ignore list so the chips survive a UI refresh.
 BuildStashMoverHeaderJson()
 {
     global g_smEnabled, g_smHotkey, g_smShowButton, g_smPerItemDelayMs
-    global g_smSettleDelayMs, g_smOffsetX, g_smOffsetY
+    global g_smSettleDelayMs, g_smOffsetX, g_smOffsetY, g_smSkipQuest, g_smJitter, g_smIgnore
     j := "{"
     j .= '"enabled":'        (g_smEnabled ? "true" : "false")
     j .= ',"hotkey":'        _JsStr(g_smHotkey)
     j .= ',"showButton":'    (g_smShowButton ? "true" : "false")
+    j .= ',"skipQuest":'     (g_smSkipQuest ? "true" : "false")
+    j .= ',"jitter":'        (g_smJitter ? "true" : "false")
     j .= ',"perItemDelayMs":' (g_smPerItemDelayMs + 0)
     j .= ',"settleDelayMs":'  (g_smSettleDelayMs + 0)
     j .= ',"offsetX":'        (g_smOffsetX + 0)
     j .= ',"offsetY":'        (g_smOffsetY + 0)
+    j .= ',"ignore":' _SmIgnoreJsonArray()
     j .= "}"
     return j
+}
+
+; Builds a JSON array of the ignore entries: [{"path":..,"name":..}, …].
+_SmIgnoreJsonArray()
+{
+    global g_smIgnore
+    out := "["
+    first := true
+    for path, name in g_smIgnore
+    {
+        out .= (first ? "" : ",") '{"path":' _JsStr(path) ',"name":' _JsStr(name) "}"
+        first := false
+    }
+    return out "]"
+}
+
+; ── Ignore filter (built from the live inventory) ─────────────────────────────
+
+; Adds or removes one base-type path from the ignore set, persists, and refreshes
+; both the header (chips) and the inventory list (pill states).
+; Params: path, name (display), on (truthy = add, falsy = remove).
+SetStashIgnore(path, name := "", on := true)
+{
+    global g_smIgnore
+    path := Trim(path "")
+    if (path = "")
+        return
+    if _SmTruthy(on)
+        g_smIgnore[path] := (Trim(name "") != "" ? Trim(name "") : path)
+    else if g_smIgnore.Has(path)
+        g_smIgnore.Delete(path)
+    SaveStashMover()
+    SetTimer(PushHeaderToWebView, -50)
+    SetTimer(_SmPushInventory, -50)
+}
+
+; Clears the whole ignore set.
+ClearStashIgnore()
+{
+    global g_smIgnore
+    g_smIgnore := Map()
+    SaveStashMover()
+    SetTimer(PushHeaderToWebView, -50)
+    SetTimer(_SmPushInventory, -50)
+}
+
+; Reads the live backpack and pushes a deduped (by base-type path) item list to
+; the WebView (JS updateStashInventory) so the user can pick ignore entries.
+; Each row: {path, name, rarity, count, ignored}.
+_SmPushInventory()
+{
+    global g_smIgnore
+    sdPtr := _SmResolveServerData()
+    bp := sdPtr ? _SmReadBackpack(sdPtr) : 0
+    rows := Map()   ; path -> Map(name,rarity,count)
+    order := []
+    if IsObject(bp)
+    {
+        seenPtr := Map()
+        for _, it in bp["items"]
+        {
+            if !(it && IsObject(it) && it.Has("details"))
+                continue
+            ptr := it.Has("itemEntityPtr") ? it["itemEntityPtr"] : 0
+            if (ptr && seenPtr.Has(ptr))   ; dedupe the per-cell repeats of a multi-cell item
+                continue
+            if ptr
+                seenPtr[ptr] := true
+            d := it["details"]
+            path := d.Has("metadataPath") ? d["metadataPath"] : ""
+            if (path = "")
+                continue
+            name := (d.Has("baseType") && d["baseType"] != "") ? d["baseType"]
+                  : (d.Has("displayName") ? d["displayName"] : path)
+            rarity := d.Has("rarity") ? d["rarity"] : ""
+            if rows.Has(path)
+                rows[path]["count"] += 1
+            else
+            {
+                rows[path] := Map("name", name, "rarity", rarity, "count", 1)
+                order.Push(path)
+            }
+        }
+    }
+    arr := "["
+    first := true
+    for _, path in order
+    {
+        r := rows[path]
+        arr .= (first ? "" : ",") "{"
+            . '"path":' _JsStr(path)
+            . ',"name":' _JsStr(r["name"])
+            . ',"rarity":' _JsStr(r["rarity"])
+            . ',"count":' (r["count"] + 0)
+            . ',"ignored":' (g_smIgnore.Has(path) ? "true" : "false")
+            . "}"
+        first := false
+    }
+    arr .= "]"
+    payload := '{"items":' arr ',"connected":' (IsObject(bp) ? "true" : "false") "}"
+    try WebViewExec("updateStashInventory(" payload ")")
 }
 
 ; ── Hotkey ───────────────────────────────────────────────────────────────────
@@ -323,33 +497,41 @@ _SmReadBackpack(sdPtr)
     return 0
 }
 
-; True when the game server reports an open stash tab (inventoryId == 27). Used
-; only as an informational hint; the dump itself doesn't hard-require it, because
-; vendor / trade / gambling windows may not populate that slot.
-_SmStashOpen(sdPtr)
+; True when the metadata path looks like a quest item (these can't be stashed).
+_SmIsQuestItem(path)
 {
-    global g_reader
-    if (!IsObject(g_reader) || !sdPtr)
-        return false
-    invs := 0
-    try invs := g_reader.ReadAllPlayerInventories(sdPtr)
-    if !(invs && Type(invs) = "Array")
-        return false
-    for _, inv in invs
-        if (inv && IsObject(inv) && inv.Has("inventoryId") && inv["inventoryId"] = 27)
-            return true
-    return false
+    p := StrLower(path "")
+    return (InStr(p, "questitem") || InStr(p, "/quests/")) ? true : false
+}
+
+; Decides whether a backpack item should be skipped this run, and why.
+; Returns "" (move it) or a reason: "ignore" | "quest" | "failed".
+; Param: item - one backpack item Map; nowTick - A_TickCount for cooldown checks.
+_SmShouldSkip(item, nowTick)
+{
+    global g_smIgnore, g_smSkipQuest, g_smFailed, g_smFailCooldownMs
+    d := item.Has("details") ? item["details"] : 0
+    path := (d && IsObject(d) && d.Has("metadataPath")) ? d["metadataPath"] : ""
+    if (path != "" && g_smIgnore.Has(path))
+        return "ignore"
+    if (g_smSkipQuest && _SmIsQuestItem(path))
+        return "quest"
+    ptr := item.Has("itemEntityPtr") ? item["itemEntityPtr"] : 0
+    if (ptr && g_smFailed.Has(ptr) && (nowTick - g_smFailed[ptr]) < g_smFailCooldownMs)
+        return "failed"
+    return ""
 }
 
 ; ── Dump sequencer ───────────────────────────────────────────────────────────
 
-; Public entry point. Builds the click queue (one absolute pixel per backpack
+; Public entry point. Builds the click queue (one point per eligible backpack
 ; item, deduped by item pointer) and starts the non-blocking sequencer.
 ; Param: source - "hotkey" | "button" | "ui" (for diagnostics only).
 StashMoverDump(source := "")
 {
-    global g_reader, g_smEnabled, g_smRunning
-    global g_smQueue, g_smQueueIdx, g_smMovedCount
+    global g_reader, g_smEnabled, g_smRunning, g_smJitter
+    global g_smQueue, g_smQueueIdx, g_smMovedCount, g_smQueuedPtrs
+    global g_smFailed, g_smFailCooldownMs
     if !g_smEnabled
         return
     if g_smRunning
@@ -378,13 +560,25 @@ StashMoverDump(source := "")
     cols := bp["cols"], rows := bp["rows"]
     cellW := rect["w"] / cols
     cellH := rect["h"] / rows
+    ; Position jitter radius: keep clicks well inside the cell (~30% of the
+    ; smaller half-cell), so a stray pixel can never spill into a neighbour.
+    jr := g_smJitter ? Max(0, Round(Min(cellW, cellH) * 0.30)) : 0
+
+    ; Prune stale failed entries so items become retry-able after the cooldown.
+    now := A_TickCount
+    for ptr, t in g_smFailed.Clone()
+        if ((now - t) >= g_smFailCooldownMs)
+            g_smFailed.Delete(ptr)
 
     ; Build the click list. Each item occupies cells [slotStartX, slotEndX) ×
     ; [slotStartY, slotEndY); its geometric centre in grid units is the midpoint,
     ; converted to a pixel inside the grid rectangle. Dedupe by item pointer so a
-    ; multi-cell item (which the reader repeats per cell) is clicked only once.
+    ; multi-cell item (which the reader repeats per cell) is clicked only once;
+    ; skip ignored / quest / recently-failed items.
     points := []
+    queuedPtrs := []
     seen := Map()
+    skipped := Map("ignore", 0, "quest", 0, "failed", 0)
     for _, it in bp["items"]
     {
         if !(it && IsObject(it))
@@ -394,6 +588,13 @@ StashMoverDump(source := "")
             continue
         if ptr
             seen[ptr] := true
+        reason := _SmShouldSkip(it, now)
+        if (reason != "")
+        {
+            if skipped.Has(reason)
+                skipped[reason] += 1
+            continue
+        }
         sx := it.Has("slotStartX") ? it["slotStartX"] : 0
         sy := it.Has("slotStartY") ? it["slotStartY"] : 0
         ex := it.Has("slotEndX") ? it["slotEndX"] : (sx + 1)
@@ -402,12 +603,17 @@ StashMoverDump(source := "")
         cgy := (sy + ey) / 2.0
         px := Round(rect["x"] + cgx * cellW)
         py := Round(rect["y"] + cgy * cellH)
-        points.Push(Map("x", px, "y", py))
+        points.Push(Map("x", px, "y", py, "jr", jr))
+        if ptr
+            queuedPtrs.Push(ptr)
     }
 
     if (points.Length = 0)
     {
-        _SmTooltip("Stash Mover: backpack empty.", 1500)
+        msg := "Stash Mover: nothing to move"
+        if (skipped["ignore"] || skipped["quest"] || skipped["failed"])
+            msg .= " (" skipped["ignore"] " ignored, " skipped["quest"] " quest, " skipped["failed"] " on cooldown)"
+        _SmTooltip(msg ".", 1800)
         return
     }
 
@@ -426,6 +632,7 @@ StashMoverDump(source := "")
     }
 
     g_smQueue := points
+    g_smQueuedPtrs := queuedPtrs
     g_smQueueIdx := 0
     g_smMovedCount := 0
     g_smRunning := true
@@ -437,59 +644,134 @@ StashMoverDump(source := "")
     SetTimer(_SmStep, -1)   ; first step ASAP, then self-re-arms
 }
 
-; One sequencer step: clicks the next queued item, then re-arms after the
-; per-item delay. Aborts (releasing Ctrl) if PoE2 loses focus mid-run.
+; One sequencer step: clicks the next queued item, then re-arms after a (jittered)
+; per-item delay. When the queue is exhausted it releases Ctrl and schedules the
+; post-run verification. Aborts (releasing Ctrl) if PoE2 loses focus mid-run.
 _SmStep()
 {
     global g_smRunning, g_smQueue, g_smQueueIdx, g_smMovedCount
-    global g_smPerItemDelayMs, g_smSettleDelayMs
+    global g_smPerItemDelayMs, g_smJitter
     if !g_smRunning
         return
 
     gameHwnd := ResolvePoEWindow()
     if (!gameHwnd || !WinActive("ahk_id " gameHwnd))
     {
-        _SmFinish("Stash Mover: aborted (focus lost) — moved " g_smMovedCount ".")
+        _SmReleaseCtrl()
+        _SmFinish("Stash Mover: aborted (focus lost) — clicked " g_smMovedCount ".")
         return
     }
 
     if (g_smQueueIdx >= g_smQueue.Length)
     {
-        _SmFinish("Stash Mover: moved " g_smMovedCount " item(s).")
+        ; Done clicking — release Ctrl and verify after a short settle so the
+        ; server inventory has time to reflect the moves.
+        _SmReleaseCtrl()
+        SetTimer(_SmVerify, -Max(250, g_smPerItemDelayMs * 5))
         return
     }
 
     g_smQueueIdx += 1
     pt := g_smQueue[g_smQueueIdx]
-    _SmClickAt(pt["x"], pt["y"])
+    _SmClickAt(pt["x"], pt["y"], pt.Has("jr") ? pt["jr"] : 0)
     g_smMovedCount += 1
 
-    SetTimer(_SmStep, -Max(1, g_smPerItemDelayMs))
+    ; Jittered inter-click delay so the cadence isn't perfectly static.
+    delay := g_smPerItemDelayMs
+    if g_smJitter
+        delay := Round(g_smPerItemDelayMs * _SmRandF(0.75, 1.45))
+    SetTimer(_SmStep, -Max(1, delay))
 }
 
-; Releases Ctrl, clears run state, restores the button and shows a short status
-; tooltip. Param: msg - the status text (empty = silent).
+; Post-run verification: re-reads the backpack and flags every item we attempted
+; that's still present as "failed" (cooldown skip on the next run). Warns when
+; nothing moved at all (stash full / no valid destination). Clears run state.
+_SmVerify()
+{
+    global g_smRunning, g_smQueuedPtrs, g_smFailed, g_smMovedCount
+    attempted := g_smQueuedPtrs.Length
+    stillThere := Map()
+    sdPtr := _SmResolveServerData()
+    bp := sdPtr ? _SmReadBackpack(sdPtr) : 0
+    if IsObject(bp)
+    {
+        for _, it in bp["items"]
+        {
+            ptr := (it && IsObject(it) && it.Has("itemEntityPtr")) ? it["itemEntityPtr"] : 0
+            if ptr
+                stillThere[ptr] := true
+        }
+        now := A_TickCount
+        failed := 0
+        for _, ptr in g_smQueuedPtrs
+        {
+            if stillThere.Has(ptr)
+            {
+                g_smFailed[ptr] := now    ; couldn't move — skip for the cooldown
+                failed += 1
+            }
+        }
+        moved := attempted - failed
+        if (attempted > 0 && moved = 0)
+            _SmTooltip("Stash Mover: nothing moved — stash full or item not stashable?", 2200)
+        else if (failed > 0)
+            _SmTooltip("Stash Mover: moved " moved ", " failed " couldn't be stashed.", 2000)
+        else
+            _SmTooltip("Stash Mover: moved " moved " item(s).", 1600)
+    }
+    else
+    {
+        ; Couldn't verify — just report the click count.
+        _SmTooltip("Stash Mover: clicked " g_smMovedCount " item(s).", 1500)
+    }
+    _SmFinish("")
+}
+
+; Releases the held Ctrl key (idempotent enough to call on any exit path).
+_SmReleaseCtrl()
+{
+    DllCall("keybd_event", "uchar", 0xA2, "uchar", 0, "uint", 0x0002, "uptr", 0)   ; LCONTROL up
+}
+
+; Clears run state and shows an optional status tooltip. Does NOT touch Ctrl —
+; callers release it explicitly so the key state is correct on every path.
 _SmFinish(msg := "")
 {
-    global g_smRunning, g_smQueue, g_smQueueIdx
-    DllCall("keybd_event", "uchar", 0xA2, "uchar", 0, "uint", 0x0002, "uptr", 0)   ; LCONTROL up
+    global g_smRunning, g_smQueue, g_smQueueIdx, g_smQueuedPtrs
     g_smRunning := false
     g_smQueue := []
+    g_smQueuedPtrs := []
     g_smQueueIdx := 0
     if (msg != "")
         _SmTooltip(msg, 1600)
 }
 
-; Moves the cursor to (x,y) and issues a single short left click. Ctrl is already
-; held by the caller, so in an open container the game treats it as a move.
-_SmClickAt(x, y)
+; Moves the cursor to (x,y) plus a small random offset (±jr px) and issues a
+; single short left click. Ctrl is already held, so in an open container the game
+; treats it as a move. Param: jr - max jitter radius in px (0 = none).
+_SmClickAt(x, y, jr := 0)
 {
-    global g_smSettleDelayMs
-    DllCall("SetCursorPos", "int", x, "int", y)
-    Sleep(Max(1, g_smSettleDelayMs))
+    global g_smSettleDelayMs, g_smJitter
+    cx := x, cy := y
+    if (jr > 0)
+    {
+        cx += Random(-jr, jr)
+        cy += Random(-jr, jr)
+    }
+    DllCall("SetCursorPos", "int", cx, "int", cy)
+    settle := g_smSettleDelayMs
+    if g_smJitter
+        settle := Round(g_smSettleDelayMs * _SmRandF(0.6, 1.4))
+    Sleep(Max(1, settle))
     DllCall("mouse_event", "uint", 0x0002, "int", 0, "int", 0, "uint", 0, "uptr", 0)   ; LEFTDOWN
-    Sleep(8)
+    Sleep(g_smJitter ? Random(6, 14) : 8)
     DllCall("mouse_event", "uint", 0x0004, "int", 0, "int", 0, "uint", 0, "uptr", 0)   ; LEFTUP
+}
+
+; Returns a random float in [lo, hi] (AHK v2 Random with float args).
+_SmRandF(lo, hi)
+{
+    return Random(lo, hi)
 }
 
 ; Shows a transient tooltip near the cursor that auto-clears after ms.
