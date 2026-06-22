@@ -954,9 +954,13 @@ StashMoverDiagnose()
     kindNow := ""
     try kindNow := _SmDetectContext()["kind"]
     if wrote
+    {
         try MsgBox("Diagnostic written to:`n" outPath "`n`nDetected kind: " kindNow, "Stash Mover Diagnostic", 0x40)
+    }
     else
+    {
         try MsgBox(out, "Stash Mover Diagnostic", 0x40)   ; fallback if the file write failed
+    }
 }
 
 ; True when the metadata path looks like a quest item (these can't be stashed).
