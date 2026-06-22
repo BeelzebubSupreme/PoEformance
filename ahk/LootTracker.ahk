@@ -65,6 +65,7 @@ LoadLootTracker()
     global g_ltNextPriceCheckTick, g_ltLiveView
     global g_ltMonsterTallies, g_ltNextKillScanTick
     global g_ltLastReason
+    global g_ltWad, g_ltWadTick, g_ltWadHash
 
     ; Defaults — seeded unconditionally so a fresh install never trips the
     ; "global has not been assigned a value" runtime error.
