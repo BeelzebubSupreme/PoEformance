@@ -4,7 +4,7 @@
 
 **A modern AutoHotkey v2 toolset for *Path of Exile 2* — overlays, automation, reverse-engineering workbench, and GGPK-level map reveal in one place.**
 
-![Version](https://img.shields.io/badge/version-v0.45.13.0-blue)
+![Version](https://img.shields.io/badge/version-v0.45.13.1-blue)
 ![Build](https://img.shields.io/badge/build-stable-green)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Language](https://img.shields.io/badge/language-AutoHotkey%20v2-orange)
@@ -28,10 +28,13 @@
   - [Automation](#-automation)
   - [Custom Hotkeys](#️-custom-hotkeys))
   - [Loot Pickup](#-loot-pickup)
+  - [Loot Tracker](#-loot-tracker)
   - [Overlays](#-overlays)
+  - [Entity Alerts, Groups & Junk Filter](#-entity-alerts-groups--junk-filter)
   - [GGPK Maphack](#-ggpk-maphack)
   - [Live Inspection](#-live-inspection)
   - [Reverse-Engineering Tools](#-reverse-engineering-tools)
+  - [AI Integration](#-ai-integration)
 - [UI Theme — Arcane Codex](#ui-theme--arcane-codex)
 - [Header Anatomy](#header-anatomy)
 - [Requirements](#requirements)
@@ -49,11 +52,15 @@
 
 💎 **Loot Pickup** — rarity-filtered ground-item collection with a persistent cache (drops noticed during combat aren't forgotten) and an actual **per-item-size fit check** against the live backpack grid — fed by a 4 040-entry registry of every PoE2 base item.
 
+📊 **Loot Tracker** — times every map run (auto-paused in town / hideout, resumed by instance hash), diffs your backpack for net loot, prices it live via **poe.ninja** (Exalted / Divine), tallies kills per rarity, and keeps a browsable session history — surfaced as two on-screen bars *and* a full WebView tab with a per-item breakdown of the priced drops that drove your div/h.
+
 🗺 **GGPK Maphack** — patches PoE2's minimap shaders directly in the bundle, with configurable outline + background colors and one-click apply/revert. Reveals the full zone in-game without the radar overlay running.
 
 🔬 **Reverse-Engineering Workbench** — Memory Diff (snapshot · do something in-game · snapshot · diff with multi-format decode), Cheat-Engine-style Dissector for navigating pointer chains, struct-diff Panel Detection, live UI tree browser.
 
 🧪 **Entity Inspector** — every entity in range surfaced with its address, full property block, and a per-component tree. Filter by Id / Path / Type / State, expand any component for inline decoded fields, lazy-fetch on demand for the heavy ones the radar pass skips.
+
+🔌 **AI Integration** — an opt-in local HTTP API plus a bundled **MCP server** let an AI assistant read the live game state and change settings (groups, alerts, watchlist, config) through the very same bridge the UI uses.
 
 📜 **Arcane Codex UI** — leather-bound grimoire aesthetic, with a full-height logo rail anchoring three stacked navigation rows, a sliding gold underline that glides between active tabs, and a header pill vocabulary that pulses green when connected, copper when paused and crimson when disconnected.
 
@@ -124,6 +131,17 @@ Filter ground drops by rarity (Normal · Magic · Rare · Unique · Currency) an
   <p><em>Loot Pickup — five rarity filter pills, live cache count, last-action status.</em></p>
 </div>
 
+### 📊 Loot Tracker
+
+A full **map-run / session loot accountant** — a port of the GameHelper2 `LootTracker` plugin. It times every map, works out what you actually gained, prices it, and keeps the books across a whole session.
+
+- **Per-run timer** — each map instance is timed and **auto-paused** the moment you step into town or your hideout, then resumed (matched by instance hash) when you return, so the clock only counts time actually spent mapping.
+- **Net-loot diff** — your backpack is snapshotted against a per-map baseline, so only *new* drops count — what was already in your bags or stash never does, and consumed currency nets back out.
+- **Live poe.ninja pricing** — drops are valued in **Exalted** with a live **Divine** conversion. The multi-MB poe.ninja fetch + reduction runs in a separate PowerShell child process, so the radar hot path never stalls on a network call. Pricing is **off by default** — flip it on and pick your league in the Loot tab.
+- **Kills by rarity** — Normal · Magic · Rare · Unique tallied per run, read straight from the radar reader's own proven dead-entity detection (the live sample never carries corpses), with your own minions / spectres / totems / allies excluded — matching the C# reference's friendly-monster skip.
+- **Valuable-drops breakdown** — a session-wide table of the recognised (priced) drops sorted by value, each with its count, unit price and total — exactly what drove your div/h. Sub-0.5-ex clutter (Wisdom scrolls, Transmutes) is hidden by design.
+- **On-screen bars + history** — a slim strip while mapping and a compact session bar in the hideout (both GDI, auto-hiding), plus an on-disk session history you can browse, re-open and delete from the Loot tab.
+
 ### 🗺 Overlays
 
 **Radar** — high-performance GDI overlay with minimap + large-map modes, full-zone reveal, entity icons (NPCs, Bosses, Waypoints, Chests), distance indicators, and isometric projection. The large-map maphack is **source-clipped** to the on-screen viewport (it transforms only the visible slice of the terrain bitmap, not the whole ~1 MPixel image) and **HUD-masked** so its outline never paints over the game's orbs, skill / flask / XP bars or the area / quest panel — tunable clip rectangles, with a debug toggle to outline them.
@@ -146,6 +164,14 @@ Filter ground drops by rarity (Normal · Magic · Rare · Unique · Currency) an
   <img src="assets/vitals.png" width="800" alt="Vitals overlay configuration — per-bar size, position, colours, opacity and visibility rules">
   <p><em>Config → Vitals — each bar has its own size/position/colours/opacity and a prioritised visibility rule list (In Combat · On Low Vital · In Town · While Map open).</em></p>
 </div>
+
+### 🚨 Entity Alerts, Groups & Junk Filter
+
+Three path-driven layers decide what the radar shows — and what it shouts about — all configured from the **Entities** tab plus dedicated **Groups** and **Alerts** tabs.
+
+- **Groups** — give any metadata-path family its own colour; a matching path group overrides the default type colour on the radar dots, so specific monsters / chests / strongboxes get painted exactly how you want them. Edit, filter and colour-pick groups in-app (shared GGPK colour picker).
+- **Alerts** — a per-tick alert engine off the radar snapshot: match entities by path or group, rank by severity, and fire **banner + sound (any `wav/` file) + window-flash + radar-highlight + log** outputs. Town/hideout-suppressed and per-area reset, with zone-entry and cooldown-gated proximity timing so you're warned once, not spammed.
+- **Junk Filter** — a global path-based suppressor (cosmetic / engine / daemon / pets / markers / hideout doodads) hooked at the single sample chokepoint, so radar, entity browser, trees, exports *and* the bot all skip the noise at once. Master + per-category + per-pattern toggles, plus your own custom terms.
 
 ### 🗺 GGPK Maphack
 
@@ -242,6 +268,13 @@ Generated TSV exports (stat templates, base-item registry, mods, monster names, 
   <img src="assets/data.png" width="800" alt="Data exports">
 </div>
 
+### 🔌 AI Integration
+
+An opt-in local HTTP API turns the helper into something an AI assistant can read and drive.
+
+- **Local API** — a tiny `127.0.0.1` server (default port 7777, **off by default**) exposes the live game state and every settings surface: `GET /state` · `/entities` · `GET|POST /api/groups` · `/api/alerts` · `/api/config` · `/api/watchlist` · `/api/names`. Reads come straight off the radar snapshot; writes route through the same bridge commands the UI uses, so side-effects and persistence match exactly. Toggle it under **Config → General → Integrations**.
+- **MCP server** — a bundled Node [Model-Context-Protocol](https://modelcontextprotocol.io/) server (`mcp-server/`) proxies that API, handing an assistant typed tools: `game_state`, `get_entities`, group / alert / config / watchlist management, and `search_names`.
+
 ---
 
 ## UI Theme — Arcane Codex
@@ -290,6 +323,8 @@ Two compact-mode tiers kick in as the window narrows: pills shrink at ≤ 1300 p
 - **Administrator privileges** — required for `ReadProcessMemory` against an elevated game process
 - **WebView2 Runtime** — pre-installed on Windows 11; Windows 10 may need the [Evergreen runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
 - **.NET 8 SDK** *(only if you want to use the GGPK Maphack or rebuild the data extractor)* — [download](https://dotnet.microsoft.com/download/dotnet/8.0)
+- **Node.js** *(only for the optional MCP server that exposes the local API to an AI assistant)* — [download](https://nodejs.org/)
+- **PowerShell** *(ships with Windows 10/11; used by the Loot Tracker's off-thread poe.ninja price fetch)*
 
 ---
 
@@ -361,6 +396,24 @@ InGameStateMonitor.ahk          ─ main entry / WebView host (the only .ahk in 
 │   ├── CustomHotkeysBindings.ahk  ─ resolves in-game flask/skill binds + chest types for the UI
 │   └── CustomHotkeysBridge.ahk    ─ config persistence + import/export bridge
 │
+├── Loot Tracker  (ahk/)
+│   ├── LootTracker.ahk            ─ run state machine, session totals, live view model
+│   ├── LootTrackerInventory.ahk   ─ backpack snapshot + net-loot diff
+│   ├── LootTrackerKills.ahk       ─ per-run kill tally (mirrors the radar's death detection)
+│   ├── LootTrackerSessions.ahk    ─ on-disk session history (sessions/)
+│   ├── LootPricing.ahk            ─ poe.ninja price layer (+ tools/poe_ninja_prices.ps1)
+│   └── LootTrackerOverlay.ahk     ─ map-strip + hideout compact GDI bars
+│
+├── Entity intelligence  (ahk/)
+│   ├── EntityFacts.ahk            ─ rarity / meta-group / category extraction
+│   ├── EntityGroups.ahk           ─ path-based colour groups (radar override)
+│   ├── EntityAlerts.ahk           ─ per-tick alert engine (banner/sound/flash/log)
+│   └── EntityJunkFilter.ahk       ─ global path-based junk suppressor
+│
+├── Integrations
+│   ├── LocalApiServer.ahk         ─ 127.0.0.1 HTTP API (live state + settings)
+│   └── mcp-server/                ─ Node MCP server proxying the local API
+│
 ├── Memory reading
 │   ├── PoE2MemoryReader.ahk         ─ core: pattern-scan, RIP-relative, panel diff
 │   ├── PoE2EntityReader.ahk         ─ entity decoding + radar tile reads
@@ -413,6 +466,7 @@ InGameStateMonitor.ahk          ─ main entry / WebView host (the only .ahk in 
 │   ├── base_item_sizes.tsv     ─ 4040-entry path → (w, h) (for loot fit-check)
 │   ├── stat_desc_map.tsv       ─ mod template descriptions
 │   ├── unique_item_name_map.tsv ─ unique-item name resolver
+│   ├── meta_art_map.json       ─ metaId → art-id bridge (poe.ninja loot pricing)
 │   └── *.tsv                   ─ name maps, monster data, item base names
 │
 ├── .github/                    ─ community + automation files
