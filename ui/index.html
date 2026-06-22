@@ -5172,6 +5172,21 @@
                 <label class="toggle"><input type="checkbox" id="sm-showButton"
                     onchange="ahkCall('SetStashMover','showButton', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
               </div>
+              <div class="cfg-row"><span class="cfg-label">Skip quest items (can't be stashed)</span>
+                <label class="toggle"><input type="checkbox" id="sm-skipQuest"
+                    onchange="ahkCall('SetStashMover','skipQuest', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Randomise click position &amp; timing</span>
+                <label class="toggle"><input type="checkbox" id="sm-jitter"
+                    onchange="ahkCall('SetStashMover','jitter', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Allow selling to a vendor (else stash only)</span>
+                <label class="toggle"><input type="checkbox" id="sm-allowSell"
+                    onchange="ahkCall('SetStashMover','allowSell', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Detected destination</span>
+                <span id="sm-context" class="cfg-status" style="color:#7ec8e3;font-weight:600">—</span>
+              </div>
               <div class="cfg-row">
                 <span class="cfg-label">Hotkey (AHK syntax, e.g. <code>F4</code> or <code>^d</code>)</span>
                 <input type="text" class="cfg-input" id="sm-hotkey" placeholder="none" style="width:120px"
@@ -5189,6 +5204,29 @@
                 Grid offset only matters if the auto-detected inventory rectangle is
                 slightly off — nudge until the simulated clicks land on the cells.
               </div>
+
+              <details class="cfg-subsection" style="margin-top:8px"
+                       ontoggle="if(this.open) ahkCall('StashRequestInventory')">
+                <summary style="cursor:pointer;padding:4px 0">
+                  <div class="cfg-header" style="font-size:12px">🚫 Ignore filter
+                    <span id="sm-ignore-meta" class="ent-junk-custom-meta"></span></div>
+                </summary>
+                <div style="margin-top:4px;padding:4px 0 4px 2px">
+                  <div class="cfg-help">
+                    Base types you never want stashed. Open your inventory in-game, hit
+                    refresh to list what you currently carry, then click an item to toggle it.
+                  </div>
+                  <div class="cfg-row" style="gap:8px;flex-wrap:wrap">
+                    <button class="hk-btn" onclick="ahkCall('StashRequestInventory')">⟳ Refresh from inventory</button>
+                    <button class="hk-btn" onclick="if(confirm('Clear the whole ignore list?'))ahkCall('ClearStashIgnore')">Clear list</button>
+                  </div>
+                  <div class="cfg-label" style="margin-top:6px">Current inventory (click to ignore):</div>
+                  <div id="sm-inv-list" class="ent-junk-chips" style="margin-top:4px"><span class="ent-chip-empty">Refresh to load…</span></div>
+                  <div class="cfg-label" style="margin-top:8px">Ignored base types:</div>
+                  <div id="sm-ignore-list" class="ent-junk-chips" style="margin-top:4px"></div>
+                </div>
+              </details>
+
               <div class="cfg-row">
                 <button class="hk-btn" onclick="ahkCall('StashMoveDump')">▼ Dump now (test)</button>
               </div>
@@ -6880,17 +6918,72 @@
     }
 
     // Stash Mover header settings -> form widgets (skips a field being edited).
+    let _smIgnore = [];   // mirrors the AHK ignore set (array of {path,name})
     function stashMoverSyncFromHeader(s) {
       if (!s) return;
       const chk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = v === true || v === 1 || v === '1' || v === 'true'; };
       const val = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
       chk('sm-enabled', s.enabled);
       chk('sm-showButton', s.showButton);
+      chk('sm-skipQuest', s.skipQuest);
+      chk('sm-jitter', s.jitter);
+      chk('sm-allowSell', s.allowSell);
       val('sm-hotkey', s.hotkey);
       val('sm-perItemDelayMs', s.perItemDelayMs);
       val('sm-settleDelayMs', s.settleDelayMs);
       val('sm-offsetX', s.offsetX);
       val('sm-offsetY', s.offsetY);
+      const ctxEl = document.getElementById('sm-context');
+      if (ctxEl) {
+        const m = { stash: 'Stash', vendor: 'Vendor (will SELL)', trade: 'Trade', unknown: '— (open a stash/vendor)' };
+        ctxEl.textContent = m[s.context] || '—';
+        ctxEl.style.color = (s.context === 'vendor') ? '#e3a07e' : '#7ec8e3';
+      }
+      _smIgnore = Array.isArray(s.ignore) ? s.ignore : [];
+      stashRenderIgnore();
+    }
+
+    // Renders the "Ignored base types" chips from _smIgnore. Handlers reference the
+    // entry by index (smIgnoreRemove) so item paths/names never have to be inlined
+    // into an HTML attribute (avoids quoting bugs with apostrophes etc.).
+    function stashRenderIgnore() {
+      const meta = document.getElementById('sm-ignore-meta');
+      if (meta) meta.textContent = _smIgnore.length ? String(_smIgnore.length) : '';
+      const host = document.getElementById('sm-ignore-list');
+      if (!host) return;
+      host.innerHTML = _smIgnore.length
+        ? _smIgnore.map((e, i) =>
+            `<span class="ent-chip" title="${escAttr(e.path)}"><span class="ent-chip-txt">${escHtml(e.name || e.path)}</span>`
+            + `<button class="ent-chip-x" title="Remove" onclick="smIgnoreRemove(${i})">✕</button></span>`).join('')
+        : `<span class="ent-chip-empty">Nothing ignored yet.</span>`;
+    }
+    function smIgnoreRemove(i) {
+      const e = _smIgnore[i];
+      if (e) ahkCall('SetStashIgnore', e.path, '', '0');
+    }
+
+    // Live backpack list (pushed by AHK after StashRequestInventory). Each row is a
+    // clickable chip (by index); ignored ones are dimmed/struck so the state is clear.
+    let _smInvItems = [];
+    function updateStashInventory(json) {
+      let d; try { d = typeof json === 'string' ? JSON.parse(json) : json; } catch (e) { return; }
+      const host = document.getElementById('sm-inv-list');
+      if (!host) return;
+      _smInvItems = (d && Array.isArray(d.items)) ? d.items : [];
+      if (d && d.connected === false) { host.innerHTML = `<span class="ent-chip-empty">Game not connected.</span>`; return; }
+      if (!_smInvItems.length) { host.innerHTML = `<span class="ent-chip-empty">Backpack empty / not readable.</span>`; return; }
+      host.innerHTML = _smInvItems.map((it, i) => {
+        const cnt = it.count > 1 ? ` ×${it.count}` : '';
+        const lbl = (it.name || it.path) + cnt;
+        const sty = it.ignored ? 'opacity:.5;text-decoration:line-through' : '';
+        const tip = it.ignored ? 'Click to stop ignoring' : 'Click to ignore';
+        return `<span class="ent-chip" style="cursor:pointer;${sty}" title="${escAttr(tip + ' — ' + it.path)}" onclick="smInvToggle(${i})">`
+          + `${it.ignored ? '🚫 ' : ''}<span class="ent-chip-txt">${escHtml(lbl)}</span></span>`;
+      }).join('');
+    }
+    function smInvToggle(i) {
+      const it = _smInvItems[i];
+      if (it) ahkCall('SetStashIgnore', it.path, it.name || '', it.ignored ? '0' : '1');
     }
 
     // Live run + session aggregates + price status (pushed ~1 Hz from AHK).

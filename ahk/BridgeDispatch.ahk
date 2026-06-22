@@ -157,6 +157,16 @@ _DispatchBridgeCall(method, args)
         case "StashMoveDump":
             ; Manual trigger from the tool UI (test button).
             SetTimer(() => StashMoverDump("ui"), -1)
+        case "StashRequestInventory":
+            ; Push the live backpack (deduped by base type) so the user can build
+            ; the ignore filter from what they currently carry.
+            SetTimer(_SmPushInventory, -1)
+        case "SetStashIgnore":
+            ; args[1] = base-type path, args[2] = display name, args[3] = on/off.
+            if (args.Length >= 1)
+                SetStashIgnore(args[1], (args.Length >= 2) ? args[2] : "", (args.Length >= 3) ? args[3] : true)
+        case "ClearStashIgnore":
+            ClearStashIgnore()
         case "LootNewSession":
             ; Archive the current session to disk, then start a fresh one.
             _LtResetSession()
