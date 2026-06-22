@@ -85,33 +85,39 @@ _LtSnapshotInventory(radarSnap, &snap)
         if !sdPtr
             return false
 
-        invs := g_reader.ReadAllPlayerInventories(sdPtr)
-        if !(invs && Type(invs) = "Array")
+        ; Read ONLY MainInventory1 (id 1): walk the PlayerInventories vector to its
+        ; pointer and decode just that one inventory — NOT ReadAllPlayerInventories,
+        ; which also reads every stash tab and resolves their names (far too heavy for a
+        ; per-500 ms hot-path diff). Mirrors the C# original's direct backpack read.
+        pdVecFirst := g_reader.Mem.ReadInt64(sdPtr + PoE2Offsets.ServerData["PlayerServerData"])
+        if (pdVecFirst <= 0)
             return false
-
-        ; Diagnostic: summarize every inventory (id(gridXxY)=rawItemCount) so we can see
-        ; which id is the live backpack and whether the read reflects changes.
-        dbg := ""
-        for _, iv in invs
+        playerDataPtr := g_reader.Mem.ReadPtr(pdVecFirst)
+        if !g_reader.IsProbablyValidPointer(playerDataPtr)
+            return false
+        invFirst := g_reader.Mem.ReadInt64(playerDataPtr + PoE2Offsets.ServerDataStructure["PlayerInventories"])
+        invLast  := g_reader.Mem.ReadInt64(playerDataPtr + PoE2Offsets.ServerDataStructure["PlayerInventoriesLast"])
+        if (invFirst <= 0 || invLast < invFirst)
+            return false
+        entrySize := PoE2Offsets.InventoryArray["EntrySize"]
+        invCount := Min(Floor((invLast - invFirst) / entrySize), 128)
+        backpackPtr := 0
+        idx := 0
+        while (idx < invCount)
         {
-            if !(iv && IsObject(iv) && iv.Has("inventoryId"))
-                continue
-            ic := (iv.Has("items") && Type(iv["items"]) = "Array") ? iv["items"].Length : 0
-            gx := iv.Has("totalBoxesX") ? iv["totalBoxesX"] : 0
-            gy := iv.Has("totalBoxesY") ? iv["totalBoxesY"] : 0
-            dbg .= (dbg = "" ? "" : " ") "id" iv["inventoryId"] "(" gx "x" gy ")=" ic
-        }
-        g_ltDiagInv := dbg
-
-        backpack := 0
-        for _, inv in invs
-        {
-            if (inv && IsObject(inv) && inv.Has("inventoryId") && inv["inventoryId"] = 1)
+            entryAddr := invFirst + (idx * entrySize)
+            if (g_reader.Mem.ReadInt(entryAddr + PoE2Offsets.InventoryArray["InventoryId"]) = 1)
             {
-                backpack := inv
+                backpackPtr := g_reader.Mem.ReadPtr(entryAddr + PoE2Offsets.InventoryArray["InventoryPtr0"])
                 break
             }
+            idx += 1
         }
+        if !g_reader.IsProbablyValidPointer(backpackPtr)
+            return false   ; backpack not resolvable this frame — leave bp = -1
+
+        backpack := g_reader._ReadInventoryWithItems(backpackPtr)
+        g_ltDiagInv := "id1 items=" ((backpack && IsObject(backpack) && backpack.Has("items")) ? backpack["items"].Length : 0)
         if !(backpack && IsObject(backpack) && backpack.Has("items"))
         {
             g_ltDiagBp := 0

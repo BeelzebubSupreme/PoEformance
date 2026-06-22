@@ -401,7 +401,7 @@ _LtRefreshLiveView(radarSnap)
 {
     global g_ltLiveView, g_ltNextViewTick, g_ltCurrent, g_ltOnMap, g_ltCompleted, g_ltDivToEx
     global g_ltPriceStatus, g_ltPriceError, g_ltLastSyncEpoch, g_ltPricesByArt, g_ltSessionStartTick
-    global g_ltDiagBp, g_ltDiag2, g_ltDiagCalls
+    global g_ltDiagBp, g_ltDiag2, g_ltDiagCalls, g_ltRunStartTick, g_ltBaseline
 
     now := A_TickCount
     if (now < g_ltNextViewTick)
@@ -422,7 +422,10 @@ _LtRefreshLiveView(radarSnap)
         view["profitEx"] := _LtValueOf(gained, &p, &u)
         view["timeMs"]   := _LtCurrentLiveTimeMs()
         view["kills"]    := g_ltCurrent["kills"].Clone()
-        g_ltDiag2 := "calls=" g_ltDiagCalls " bp=" g_ltDiagBp " gained=" gained.Count " priced=" p " unpriced=" u
+        g_ltDiag2 := "calls=" g_ltDiagCalls " bp=" g_ltDiagBp " gained=" gained.Count
+            . " rs=" (g_ltRunStartTick > 0 ? 1 : 0)
+            . " bl=" ((g_ltBaseline && Type(g_ltBaseline) = "Map") ? g_ltBaseline.Count : -1)
+            . " p=" p " u=" u
     }
     else
     {
