@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.12.139`.
+Reimplementation of the original C# project (see Reference). Version `0.45.12.140`.
 
 ## Language
 
@@ -252,6 +252,65 @@ Modeled on `myrahz/Radar` (`PathFinder.cs`): never follow a stored path.
   gate, direct-click fallback) is gone. New reasons: `routing(…)` while the
   field floods (stuck detection paused then), `cam-bad(…)`,
   `ui-blocked(… d=N prj/hud/map/ent/near)`, `click(… d=N ahead=M)`.
+
+## LootTracker (map-run / session loot tracker) — port of GameHelper2 `yokkenUA/LootTracker`
+
+Reimplements the C# plugin in AHK v2 + WebView. Times each map run (paused in
+town/hideout, resumed by instance hash), diffs the backpack against a per-run baseline
+for net loot, prices it via poe.ninja (Exalted/Divine), tallies kills per rarity, and
+keeps an on-disk session history. Reuses the existing inventory reader / radar snapshot /
+area-state instead of re-reading memory.
+
+### New files (`ahk/`)
+- **LootTracker.ahk** — run state machine + per-tick entry `TryLootTrackerTick(radarSnap)`
+  (runs in `UpdateRadarFast` right after `TryEntityAlerts`, self-throttled), session
+  totals, valuation, the cached display model `g_ltLiveView` (rebuilt ~4 Hz, read by the
+  overlays + WebView), `BuildLootHeaderJson` (settings), `PushLootLiveToWebView` (1 Hz live
+  push → JS `updateLootLive`), `_LtApplySetting`, self-persist `[LootTracker]` in
+  `poeformance_config.ini`. Seeds ALL run + kill globals in `LoadLootTracker()`.
+- **LootTrackerInventory.ahk** — backpack (inventoryId==1) snapshot → `Map(itemKey→count)`
+  via `ReadAllPlayerInventories` (deduped by item entity ptr — the reader returns one entry
+  per occupied slot). Composite key `<rarityDigit><US><path>[<US><renderArt>]` (US=`Chr(31)`,
+  a **function-local**, never a module global — init gotcha). `_LtDiff`/`_LtMergeInto`/`_LtValueOf`.
+- **LootTrackerKills.ahk** — per-tick kill tally off the radar `awakeEntities` sample
+  (category=="Monsters", `ReadEntityRarityId`, alive→dead via `life.isAlive`), throttled
+  ~200 ms, reset per area.
+- **LootTrackerSessions.ahk** — JSON session history in `sessions/` (`session_<A_Now>.json`,
+  JsonFull), trim to `maxSessions`, summary/detail/delete + WebView pushes.
+- **LootPricing.ahk** — poe.ninja price layer. The HTTP fetch + multi-MB JSON reduction runs
+  in a **PowerShell child process** (`tools/poe_ninja_prices.ps1`) so the radar hot path is
+  never blocked; the child writes a small TSV (`data/loot_prices.tsv`) loaded cheaply.
+  Spawn → poll `ProcessExist` → load TSV. `metaId→art` bridge `data/meta_art_map.json`,
+  `_LtPriceKey`/`_LtTryPriceItem`/`_LtRarityVariant` (per-rarity tablet + unique render-art
+  keys). Seeds globals in `LoadLootPricing()` (gates the startup refresh on `g_ltEnabled`).
+- **LootTrackerOverlay.ahk** — two `GdiOverlayBase` subclasses registered with the
+  `OverlayManager`: `LootMapStripOverlay` (slim strip on maps) + `LootCompactBarOverlay`
+  (hideout session bar, hidden while a large panel is open via `panelVisibility.anyPanelOpen`).
+  Bypass the play gate like NotificationOverlay; render from `g_ltLiveView` (live timer fresh
+  each frame). Text/glyph only — no PNG icons (GdiOverlayBase has no image blit).
+
+### Edited files
+- **InGameStateMonitor.ahk** — `#Include` the modules (overlay before `OverlayManager`);
+  `LoadLootTracker()` + `LoadLootPricing()` before `LoadOverlaySystem()`; version bump.
+- **OverlayManager.ahk** — register the two loot bars.
+- **AutoFlask.ahk** — `TryLootTrackerTick(radarSnap)` after `TryEntityAlerts`.
+- **BridgeDispatch.ahk** — `SetLootConfig` / `LootNewSession` / `LootRefreshPrices` /
+  `LootLoadSessions` / `LootSessionDetail` / `LootDeleteSession` / `LootRequestLive`.
+- **WebViewBridge.ahk** — `loot` settings block in the header push.
+- **ui/index.html** — new **Loot** tab (live readout, session table, settings, price status,
+  session history) + `lootSyncFromHeader` / `updateLootLive` / `updateLootSessions` /
+  `updateLootSessionDetail`.
+
+### Shipped data / gitignore
+- `data/meta_art_map.json` (the 1446-entry metaId→art bridge) is committed source data.
+- `sessions/` and `data/loot_prices.tsv*` are user-specific/generated → gitignored.
+
+### Pending (needs the game + Windows)
+- Verify the PowerShell fetch (league slug valid, network reachable, PS present), TSV parse,
+  Divine→Exalted rate; the inventory diff / kill counts; run resume-by-hash; the two bars'
+  placement/auto-hide; session save/load. Prices default OFF (feature `enabled=false`).
+- The on-screen bars anchor to the game-window bottom + offset (no XP-bar fingerprint walk
+  yet — a possible later refinement, like the C# original's `TryGetExperienceBarRectByFp`).
 
 ## Open / pending (needs the game running)
 

@@ -92,6 +92,11 @@ UpdateRadarFast()
         TryEntityAlerts(radarSnap)
         Profiler.End("tick.alerts")
 
+        ; ── Loot tracker — map-run timing + inventory diff + kill tally (self-throttled) ──
+        Profiler.Begin("tick.loot")
+        TryLootTrackerTick(radarSnap)
+        Profiler.End("tick.loot")
+
         ; ── Atlas overlay snapshot (self-gated on g_atlasOverlayEnabled, throttled) ──
         TryBuildAtlasRender(radarSnap)
         if !IsObject(g_overlayManager)

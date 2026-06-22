@@ -4349,6 +4349,10 @@
           <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9" />
           <path d="M13.7 21a2 2 0 0 1-3.4 0" />
         </svg><span class="nav-label">Alerts</span></div>
+      <div class="tab" data-tab="loot" onclick="switchTab('loot')"><svg viewBox="0 0 24 24">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+          <polyline points="3.3 7 12 12 20.7 7" /><line x1="12" y1="12" x2="12" y2="22" />
+        </svg><span class="nav-label">Loot</span></div>
       <div class="bar-marker tab-marker"></div>
     </div>
 
@@ -4605,6 +4609,81 @@
               <span class="al-item"><span class="al-cap">Log to file</span><label class="toggle"><input type="checkbox" id="al-log" onchange="alertChk('log',this)"><span class="toggle-slider"></span></label></span>
             </div>
           </div></details>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOOT TAB — map-run / session loot tracker (ported from GameHelper2 LootTracker) -->
+    <div class="tab-panel" id="panel-loot">
+      <style>
+        #panel-loot .lt-tbl{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
+        #panel-loot .lt-tbl th,#panel-loot .lt-tbl td{text-align:left;padding:3px 8px;border-bottom:1px solid rgba(255,255,255,.07)}
+        #panel-loot .lt-tbl th{color:#888;font-weight:600}
+        #panel-loot .lt-green{color:#7fd97f}
+        #panel-loot .lt-red{color:#e58a8a}
+        #panel-loot .lt-dim{color:#9a9a9a}
+        #panel-loot .lt-row{font-size:14px}
+        #panel-loot .lt-loot td{color:#bdbdbd;font-size:11px;border-bottom:1px dashed rgba(255,255,255,.05)}
+        #panel-loot .lt-live{font-size:13px}
+      </style>
+      <div style="padding:10px">
+        <div class="cfg-section">
+          <div class="cfg-row"><span class="cfg-label">Enable loot tracker</span>
+            <label class="toggle"><input type="checkbox" id="lt-enabled" onchange="lootChk('enabled',this)"><span class="toggle-slider"></span></label></div>
+          <div class="al-desc" style="padding:0 2px">Times each map run, diffs your backpack for net loot, prices it via poe.ninja (Exalted / Divine) and tallies kills. Paused in town / hideout. Two on-screen bars show the run while playing and the session in hideout.</div>
+          <div class="al-line" style="margin-top:6px">
+            <button class="hk-btn" onclick="if(confirm('Archive the current session and start a fresh one?'))ahkCall('LootNewSession')">⟳ New session</button>
+            <button class="hk-btn" onclick="ahkCall('LootRefreshPrices')">↻ Refresh prices</button>
+            <button class="hk-btn" onclick="ahkCall('LootLoadSessions')">View session history</button>
+          </div>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-header" style="margin-bottom:4px">Current run</div>
+          <div id="lt-live" class="lt-live"><div class="al-desc">Waiting for data…</div></div>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-header" style="margin-bottom:4px">This session</div>
+          <div id="lt-session-summary" class="al-desc" style="margin:0">—</div>
+          <div id="lt-runs"></div>
+        </div>
+
+        <div class="cfg-section">
+          <div class="cfg-row"><span class="cfg-label">Pricing</span><span id="lt-price-status" class="al-desc" style="margin:0">idle</span></div>
+        </div>
+
+        <div class="cfg-section" id="lt-sec-settings">
+          <details id="det-lt-settings" ontoggle="syncCfgSections()"><summary><div class="cfg-header">Settings</div></summary>
+          <div class="cfg-subsection">
+            <div class="al-line">
+              <span class="al-item"><span class="al-cap">Show kill counts</span><label class="toggle"><input type="checkbox" id="lt-showKills" onchange="lootChk('showKills',this)"><span class="toggle-slider"></span></label></span>
+              <span class="al-item"><span class="al-cap">Anchor bars to right</span><label class="toggle"><input type="checkbox" id="lt-barOnRight" onchange="lootChk('barOnRight',this)"><span class="toggle-slider"></span></label></span>
+            </div>
+            <div class="al-line">
+              <label class="al-field"><span class="al-cap">poe.ninja league</span><input type="text" class="cfg-input" id="lt-league" placeholder="e.g. Standard" style="width:200px" onchange="lootStr('league',this)"></label>
+              <label class="al-field"><span class="al-cap">Price refresh (min)</span><span class="hk-num"><input type="number" id="lt-cacheTtlMin" min="5" max="1440" onchange="lootNum('cacheTtlMin',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
+            </div>
+            <div class="al-line">
+              <label class="al-field"><span class="al-cap">History size (rows)</span><span class="hk-num"><input type="number" id="lt-historySize" min="5" max="500" onchange="lootNum('historySize',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
+              <label class="al-field"><span class="al-cap">Sessions to keep</span><span class="hk-num"><input type="number" id="lt-maxSessions" min="1" max="500" onchange="lootNum('maxSessions',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
+            </div>
+            <div class="cfg-header" style="margin:8px 0 2px">On-screen bars</div>
+            <div class="al-line">
+              <label class="al-field"><span class="al-cap">Compact bar height (px)</span><span class="hk-num"><input type="number" id="lt-compactHeight" min="60" max="400" step="5" onchange="lootNum('compactHeight',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
+              <label class="al-field"><span class="al-cap">Bottom offset (px)</span><span class="hk-num"><input type="number" id="lt-barBottomOffset" min="0" max="600" step="5" onchange="lootNum('barBottomOffset',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
+            </div>
+            <div class="al-line">
+              <label class="al-field"><span class="al-cap">Bar opacity</span><span class="slider-wrap"><span class="slider-val" id="lt-barOpacity-bub">0.55</span><input type="range" id="lt-barOpacity" min="0.05" max="1" step="0.05" value="0.55" oninput="_sb(this,'lt-barOpacity-bub',this.value)" onchange="ahkCall('SetLootConfig','barOpacity',parseFloat(this.value))"></span></label>
+              <label class="al-field"><span class="al-cap">Bar UI scale</span><span class="slider-wrap"><span class="slider-val" id="lt-uiScale-bub">1.0</span><input type="range" id="lt-uiScale" min="0.5" max="3" step="0.05" value="1" oninput="_sb(this,'lt-uiScale-bub',this.value)" onchange="ahkCall('SetLootConfig','uiScale',parseFloat(this.value))"></span></label>
+            </div>
+          </div></details>
+        </div>
+
+        <div class="cfg-section" id="lt-sec-history" style="display:none">
+          <div class="cfg-header" style="margin-bottom:4px">Session history</div>
+          <div id="lt-sessions"><div class="al-desc">Loading…</div></div>
+          <div id="lt-detail"></div>
         </div>
       </div>
     </div>
@@ -6301,6 +6380,7 @@
       watchlist: 'game',
       groups:    'game',
       alerts:    'game',
+      loot:      'game',
       ui:        're',
       gamestate: 're',
       memdiff:   're',
@@ -6691,6 +6771,172 @@
         ahkCall('MemDiffRequestState');
       if (key === 'hotkeys')
         ahkCall('RequestHotkeys');
+      if (key === 'loot') {
+        ahkCall('LootRequestLive');
+        ahkCall('LootLoadSessions');
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  LOOT TAB — map-run / session loot tracker
+    // ═══════════════════════════════════════════════════════════════════
+    // Settings arrive in the header (loot block); live run/session/price data
+    // arrives ~1 Hz via updateLootLive; session history via updateLootSessions
+    // / updateLootSessionDetail. All writes route through SetLootConfig.
+    function lootChk(key, el) { ahkCall('SetLootConfig', key, el.checked ? 1 : 0); }
+    function lootStr(key, el) { ahkCall('SetLootConfig', key, el.value); }
+    function lootNum(key, val) { ahkCall('SetLootConfig', key, val); }
+
+    function _ltEsc(s) {
+      return ('' + (s == null ? '' : s)).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    }
+    function _ltFmtDur(ms) {
+      let s = Math.floor((ms || 0) / 1000);
+      const h = Math.floor(s / 3600); s -= h * 3600;
+      const m = Math.floor(s / 60); const sec = s - m * 60;
+      const p2 = n => (n < 10 ? '0' + n : '' + n);
+      return h >= 1 ? (h + ':' + p2(m) + ':' + p2(sec)) : (p2(m) + ':' + p2(sec));
+    }
+    function _ltFmtDurSec(sec) { return _ltFmtDur((sec || 0) * 1000); }
+    function _ltFmtSigned(x, dec) {
+      const n = +(x || 0);
+      const body = dec > 0 ? n.toFixed(dec) : ('' + Math.round(n));
+      return n > 0 ? '+' + body : body;
+    }
+    function _ltFmtAgo(sec) {
+      if (sec < 0) return '—';
+      if (sec < 60) return Math.round(sec) + 's';
+      if (sec < 3600) return Math.floor(sec / 60) + 'm';
+      if (sec < 86400) return Math.floor(sec / 3600) + 'h';
+      return Math.floor(sec / 86400) + 'd';
+    }
+
+    // Header settings -> form widgets (skips a field the user is editing).
+    function lootSyncFromHeader(s) {
+      if (!s) return;
+      const chk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = v === true || v === 1 || v === '1' || v === 'true'; };
+      const val = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
+      chk('lt-enabled', s.enabled);
+      chk('lt-showKills', s.showKills);
+      chk('lt-barOnRight', s.barOnRight);
+      val('lt-league', s.league);
+      val('lt-cacheTtlMin', s.cacheTtlMin);
+      val('lt-historySize', s.historySize);
+      val('lt-maxSessions', s.maxSessions);
+      val('lt-compactHeight', s.compactHeight);
+      val('lt-barBottomOffset', s.barBottomOffset);
+      const opa = document.getElementById('lt-barOpacity');
+      if (opa && document.activeElement !== opa) { opa.value = s.barOpacity; _sb(opa, 'lt-barOpacity-bub', s.barOpacity); }
+      const sc = document.getElementById('lt-uiScale');
+      if (sc && document.activeElement !== sc) { sc.value = s.uiScale; _sb(sc, 'lt-uiScale-bub', s.uiScale); }
+    }
+
+    // Live run + session aggregates + price status (pushed ~1 Hz from AHK).
+    function updateLootLive(json) {
+      let d; try { d = typeof json === 'string' ? JSON.parse(json) : json; } catch (e) { return; }
+      if (!d) return;
+
+      const live = document.getElementById('lt-live');
+      if (live) {
+        if (d.hasRun) {
+          const ex = d.profitEx || 0, rate = d.divRate || 0;
+          const div = rate > 0 ? (ex / rate) : null;
+          const k = d.kills || [0, 0, 0, 0];
+          live.innerHTML =
+            '<div class="lt-row"><b>' + _ltEsc(d.name || '—') + '</b> '
+            + '<span class="lt-dim">' + _ltFmtDur(d.timeMs || 0) + '</span> '
+            + '<span class="' + (ex >= 0 ? 'lt-green' : 'lt-red') + '">' + _ltFmtSigned(ex, 0) + ' ex</span>'
+            + (div !== null ? ' <span class="' + (ex >= 0 ? 'lt-green' : 'lt-red') + '">(' + _ltFmtSigned(div, 1) + ' div)</span>' : '')
+            + '</div>'
+            + '<div class="lt-dim" style="margin-top:4px">Kills — N ' + k[0] + ' · M ' + k[1] + ' · R ' + k[2] + ' · U ' + k[3] + '</div>'
+            + '<div class="lt-dim">' + (d.onMap ? 'on map' : 'in town / hideout (paused)') + '</div>';
+        } else {
+          live.innerHTML = '<div class="al-desc">No active run. Enter a map to start tracking.</div>';
+        }
+      }
+
+      const sum = document.getElementById('lt-session-summary');
+      if (sum) {
+        const rate = d.divRate || 0;
+        const totDiv = rate > 0 ? (d.sessEx / rate).toFixed(1) + ' div' : Math.round(d.sessEx || 0) + ' ex';
+        const perHDiv = rate > 0 ? (d.sessPerHourEx / rate).toFixed(1) + ' div/h' : Math.round(d.sessPerHourEx || 0) + ' ex/h';
+        sum.innerHTML = 'Maps: ' + (d.maps || 0) + ' · AVG ' + _ltFmtDur(d.avgTimeMs || 0)
+          + ' · ' + Math.round(d.avgEx || 0) + ' ex/map · Total ' + totDiv + ' · ' + perHDiv
+          + ' · Session ' + _ltFmtDur(d.sessTimeMs || 0);
+      }
+
+      const runsEl = document.getElementById('lt-runs');
+      if (runsEl) {
+        const runs = d.runs || [];
+        if (!runs.length) { runsEl.innerHTML = ''; }
+        else {
+          let h = '<table class="lt-tbl"><tr><th>Map</th><th>Time</th><th>Profit</th></tr>';
+          for (const r of runs)
+            h += '<tr><td>' + _ltEsc(r.name) + '</td><td class="lt-dim">' + _ltFmtDur(r.timeMs || 0)
+              + '</td><td class="' + ((r.ex || 0) >= 0 ? 'lt-green' : 'lt-red') + '">' + _ltFmtSigned(r.ex || 0, 1) + ' ex</td></tr>';
+          runsEl.innerHTML = h + '</table>';
+        }
+      }
+
+      const ps = document.getElementById('lt-price-status');
+      if (ps) {
+        let t;
+        if (d.priceStatus === 'syncing') t = 'syncing…';
+        else if (d.priceStatus === 'error') t = 'error: ' + (d.priceErr || 'unknown');
+        else {
+          t = (d.lastSyncAgo >= 0 ? 'updated ' + _ltFmtAgo(d.lastSyncAgo) + ' ago' : 'no data yet')
+            + ' · ' + (d.itemsCached || 0) + ' items';
+          if (d.divRate > 0) t += ' · 1 div = ' + d.divRate.toFixed(1) + ' ex';
+        }
+        ps.textContent = t;
+      }
+    }
+
+    // Session history list (newest first).
+    function updateLootSessions(json) {
+      let arr; try { arr = typeof json === 'string' ? JSON.parse(json) : json; } catch (e) { return; }
+      const sec = document.getElementById('lt-sec-history');
+      if (sec) sec.style.display = '';
+      const host = document.getElementById('lt-sessions');
+      if (!host) return;
+      if (!arr || !arr.length) { host.innerHTML = '<div class="al-desc">No saved sessions.</div>'; return; }
+      let h = '<table class="lt-tbl"><tr><th>Date</th><th>Length</th><th>Maps</th><th>Total</th><th>Div/h</th><th></th></tr>';
+      for (const s of arr) {
+        const totDiv = s.divRate > 0 ? (s.totalEx / s.divRate).toFixed(1) + ' div' : Math.round(s.totalEx) + ' ex';
+        const perH = s.totalSec > 0 ? (s.totalEx / (s.totalSec / 3600)) : 0;
+        const perHDiv = s.divRate > 0 ? (perH / s.divRate).toFixed(1) : '—';
+        h += '<tr><td>' + _ltEsc(s.start) + '</td><td>' + _ltFmtDurSec(s.durationSec) + '</td><td>' + (s.maps || 0)
+          + '</td><td>' + totDiv + '</td><td>' + perHDiv + '</td><td>'
+          + '<button class="hk-btn" onclick="ahkCall(\'LootSessionDetail\',\'' + s.file + '\')">Details</button> '
+          + '<button class="hk-btn" onclick="if(confirm(\'Delete this session?\'))ahkCall(\'LootDeleteSession\',\'' + s.file + '\')">Delete</button>'
+          + '</td></tr>';
+      }
+      host.innerHTML = h + '</table>';
+    }
+
+    // One session in full: aggregates + per-map table with its per-item loot.
+    function updateLootSessionDetail(json) {
+      let d; try { d = typeof json === 'string' ? JSON.parse(json) : json; } catch (e) { return; }
+      const host = document.getElementById('lt-detail');
+      if (!host) return;
+      if (!d) { host.innerHTML = '<div class="al-desc">Session not found.</div>'; return; }
+      const maps = d.maps || [];
+      let totalEx = 0, totalSec = 0;
+      maps.forEach(m => { totalEx += m.profitEx || 0; totalSec += m.activeSeconds || 0; });
+      const rate = d.divRate || 0;
+      let h = '<div class="cfg-header" style="margin:10px 0 4px">Session ' + _ltEsc(d.start) + '</div>';
+      h += '<div class="al-desc">Length ' + _ltFmtDurSec(d.durationSec) + ' · Maps ' + maps.length
+        + ' · Total ' + (rate > 0 ? (totalEx / rate).toFixed(1) + ' div' : Math.round(totalEx) + ' ex') + '</div>';
+      h += '<table class="lt-tbl"><tr><th>Map</th><th>Time</th><th>Profit</th></tr>';
+      maps.forEach(m => {
+        h += '<tr><td>' + _ltEsc(m.name) + '</td><td class="lt-dim">' + _ltFmtDurSec(m.activeSeconds)
+          + '</td><td class="' + ((m.profitEx || 0) >= 0 ? 'lt-green' : 'lt-red') + '">' + _ltFmtSigned(m.profitEx || 0, 1) + ' ex</td></tr>';
+        (m.loot || []).forEach(l => {
+          h += '<tr class="lt-loot"><td style="padding-left:18px">' + _ltEsc(l.label) + ' ×' + l.count
+            + '</td><td></td><td class="lt-dim">' + (l.priced ? _ltFmtSigned(l.ex || 0, 1) + ' ex' : '—') + '</td></tr>';
+        });
+      });
+      host.innerHTML = h + '</table>';
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -8417,6 +8663,7 @@
       let d; try { d = typeof json === 'string' ? JSON.parse(json) : json; } catch (e) { return; }
       if (d.groups !== undefined) applyGroupsFromHeader(d.groups);
       if (d.alerts !== undefined) applyAlertsFromHeader(d.alerts);
+      if (d.loot !== undefined) lootSyncFromHeader(d.loot);
 
       // Version tags
       const verApp = document.getElementById('ver-app');

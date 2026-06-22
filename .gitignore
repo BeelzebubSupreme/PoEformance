@@ -35,6 +35,11 @@ hotkeys.json
 hotkeys_export/
 desktop.ini
 
+# LootTracker self-persist (user-specific) + generated price cache
+sessions/
+data/loot_prices.tsv
+data/loot_prices.tsv.tmp
+
 # Dev notes (not for repo)
 NEXT_STEPS.md
 QUICKSTART.md
