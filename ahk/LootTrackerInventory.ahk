@@ -58,9 +58,10 @@ _LtArtIdFromDds(ddsPath)
 ; (loading screen / no server data), in which case snap is left empty.
 _LtSnapshotInventory(radarSnap, &snap)
 {
-    global g_reader, g_ltDiagBp
+    global g_reader, g_ltDiagBp, g_ltDiagInv, g_ltDiagCalls
     snap := Map()
     g_ltDiagBp := -1   ; assume read failed until proven otherwise (diagnostic)
+    g_ltDiagCalls += 1
 
     if !(IsObject(g_reader) && IsObject(g_reader.Mem) && g_reader.Mem.Handle)
         return false
@@ -87,6 +88,20 @@ _LtSnapshotInventory(radarSnap, &snap)
         invs := g_reader.ReadAllPlayerInventories(sdPtr)
         if !(invs && Type(invs) = "Array")
             return false
+
+        ; Diagnostic: summarize every inventory (id(gridXxY)=rawItemCount) so we can see
+        ; which id is the live backpack and whether the read reflects changes.
+        dbg := ""
+        for _, iv in invs
+        {
+            if !(iv && IsObject(iv) && iv.Has("inventoryId"))
+                continue
+            ic := (iv.Has("items") && Type(iv["items"]) = "Array") ? iv["items"].Length : 0
+            gx := iv.Has("totalBoxesX") ? iv["totalBoxesX"] : 0
+            gy := iv.Has("totalBoxesY") ? iv["totalBoxesY"] : 0
+            dbg .= (dbg = "" ? "" : " ") "id" iv["inventoryId"] "(" gx "x" gy ")=" ic
+        }
+        g_ltDiagInv := dbg
 
         backpack := 0
         for _, inv in invs

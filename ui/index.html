@@ -6850,13 +6850,15 @@
             + '</div>'
             + '<div class="lt-dim" style="margin-top:4px">Kills — N ' + k[0] + ' · M ' + k[1] + ' · R ' + k[2] + ' · U ' + k[3] + '</div>'
             + '<div class="lt-dim">' + (d.onMap ? 'on map' : 'in town / hideout (paused)') + '</div>'
-            + '<div class="lt-dim" style="font-size:11px">' + _ltEsc(d.reason || '') + (d.diag2 ? ' · ' + _ltEsc(d.diag2) : '') + '</div>';
+            + '<div class="lt-dim" style="font-size:11px">' + _ltEsc(d.reason || '') + (d.diag2 ? ' · ' + _ltEsc(d.diag2) : '') + '</div>'
+            + (d.diagInv ? '<div class="lt-dim" style="font-size:11px">inv: ' + _ltEsc(d.diagInv) + '</div>' : '');
         } else {
           const msg = d.enabled === false
             ? 'Loot tracker is disabled — toggle it on above.'
             : 'No active run. Enter a map to start tracking.';
           live.innerHTML = '<div class="al-desc">' + msg + '</div>'
-            + (d.reason ? '<div class="lt-dim" style="margin-top:2px;font-size:11px">state: ' + _ltEsc(d.reason) + (d.diag2 ? ' · ' + _ltEsc(d.diag2) : '') + '</div>' : '');
+            + (d.reason ? '<div class="lt-dim" style="margin-top:2px;font-size:11px">state: ' + _ltEsc(d.reason) + (d.diag2 ? ' · ' + _ltEsc(d.diag2) : '') + '</div>' : '')
+            + (d.diagInv ? '<div class="lt-dim" style="font-size:11px">inv: ' + _ltEsc(d.diagInv) + '</div>' : '');
         }
       }
 
