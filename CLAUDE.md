@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.7`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.8`.
 
 ## Language
 
@@ -403,6 +403,13 @@ rectangle from the UI tree.
     uniques, currency and maps are kept. The filter is NOT applied to stash / trade
     (those dump everything, minus ignore/quest/failed). `_SmSellCategoryEnabled` /
     `_SmIsSellingKind` gate it; UI = 4 `.filter-pill`s in the Stash Mover section.
+  - The "Detected destination" readout refreshes via `_SmRefreshContext(radarSnap)`
+    in `StashMoverTick` BEFORE the focus gate (so it updates while the user is in the
+    tool), cheap-gated on `panelVisibility.anyPanelOpen`, throttled ~700 ms, pushing
+    the header on a kind change. `StashMoverDiagnose()` (bridge `StashMoverDiag`, UI
+    "🔍 Diagnose destination") MsgBoxes the live signals — open inventory ids (+grid),
+    top-level panel StringIds (visible/hidden), keyword-matched visible StringIds, and
+    the detected kind — the RE aid for pinning the real stash/vendor signals in-game.
 
 ### Edited files
 - **InGameStateMonitor.ahk** — `#Include ahk/StashMover.ahk`; `LoadStashMover()` at

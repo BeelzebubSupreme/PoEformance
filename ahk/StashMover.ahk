@@ -671,17 +671,210 @@ _SmDetectContext()
     return _SmCtxFor(uiKind != "" ? uiKind : "unknown")
 }
 
-; Cached wrapper for the per-tick button label (recomputes at most ~1.4 Hz so the
-; inventory read + UI scan don't run on every overlay tick). Returns a context Map.
-_SmContextCached()
+; Refreshes the detected-destination context for the live "Detected destination"
+; readout — runs regardless of game focus (so the readout updates while the user is
+; in the tool window). Gated on a panel being open (cheap snapshot field) so the
+; inventory read + UI scan don't run during normal mapping; throttled ~1.4 Hz.
+; Pushes the header when the kind changes. Param: radarSnap - the current snapshot.
+_SmRefreshContext(radarSnap)
 {
     global g_smCtx, g_smCtxKind, g_smCtxTick
-    if (IsObject(g_smCtx) && (A_TickCount - g_smCtxTick) < 700)
-        return g_smCtx
+    pv := (IsObject(radarSnap) && radarSnap.Has("panelVisibility")) ? radarSnap["panelVisibility"] : 0
+    open := (IsObject(pv) && pv.Has("anyPanelOpen")) ? pv["anyPanelOpen"] : false
+    if !open
+    {
+        ; Nothing open — clear the stale readout once.
+        if (g_smCtxKind != "")
+        {
+            g_smCtx := 0, g_smCtxKind := ""
+            SetTimer(PushHeaderToWebView, -50)
+        }
+        return
+    }
+    if ((A_TickCount - g_smCtxTick) < 700)
+        return
+    g_smCtxTick := A_TickCount
+    prev := g_smCtxKind
     g_smCtx := _SmDetectContext()
     g_smCtxKind := g_smCtx["kind"]
-    g_smCtxTick := A_TickCount
-    return g_smCtx
+    if (g_smCtxKind != prev)
+        SetTimer(PushHeaderToWebView, -50)
+}
+
+; Returns the current cached context Map (for the button label), or the "unknown"
+; descriptor when nothing has been detected yet.
+_SmCurrentCtx()
+{
+    global g_smCtx
+    return IsObject(g_smCtx) ? g_smCtx : _SmCtxFor("unknown")
+}
+
+; ── Destination diagnostic (RE aid — find the real stash/vendor signals) ─────
+
+; Lists the StringId + visibility of the direct children of the GameUi root (the
+; top-level panels). This is the cleanest discriminator for which window is open.
+; Returns a newline string like "  PurchasePanel  [visible]".
+_SmDiagTopPanels(reader, gameUi)
+{
+    out := ""
+    if !reader.IsProbablyValidPointer(gameUi)
+        return "  (gameUi invalid)`n"
+    hdr := reader.Mem.ReadBytes(gameUi, 0x20)
+    if !hdr
+        return "  (root unreadable)`n"
+    cf := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+    cl := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
+    if (!reader.IsProbablyValidPointer(cf) || cl <= cf)
+        return "  (no children)`n"
+    n := Min((cl - cf) // A_PtrSize, 256)
+    buf := reader.Mem.ReadBytes(cf, n * A_PtrSize)
+    if !buf
+        return "  (children unreadable)`n"
+    idOff := PoE2Offsets.UiElementBase["StringIdPtr"]
+    flagsOff := PoE2Offsets.UiElementBase["Flags"]
+    Loop n
+    {
+        cp := NumGet(buf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
+        if !reader.IsProbablyValidPointer(cp)
+            continue
+        sid := ""
+        try sid := reader.ReadStdWStringAt(cp + idOff, 64)
+        if (sid = "")
+            continue
+        vis := false
+        try vis := ((reader.Mem.ReadUInt(cp + flagsOff) >> 11) & 1) ? true : false
+        out .= "  " sid (vis ? "  [visible]" : "  [hidden]") "`n"
+    }
+    return (out != "" ? out : "  (no named children)`n")
+}
+
+; Collects VISIBLE element StringIds containing any destination-ish keyword, deep
+; in the tree (pruning hidden subtrees). Deduped + capped. Returns a newline string.
+_SmDiagVisibleMatches(reader, gameUi)
+{
+    if !reader.IsProbablyValidPointer(gameUi)
+        return "  (gameUi invalid)`n"
+    kws := ["buy", "sell", "vendor", "purchase", "merchant", "shop", "store", "wares"
+          , "trade", "stash", "gamble", "haggle", "wager", "npc", "barter", "sale"]
+    idOff := PoE2Offsets.UiElementBase["StringIdPtr"]
+    flagsOff := PoE2Offsets.UiElementBase["Flags"]
+    queue := [{ptr: gameUi, d: 0}]
+    seen := Map()
+    found := Map()
+    nodes := 0
+    while (queue.Length > 0 && nodes < 6000)
+    {
+        it := queue.RemoveAt(1)
+        p := it.ptr
+        if (seen.Has(p) || !reader.IsProbablyValidPointer(p))
+            continue
+        seen[p] := true
+        nodes += 1
+        if (p != gameUi)
+        {
+            fl := 0
+            try fl := reader.Mem.ReadUInt(p + flagsOff)
+            if (((fl >> 11) & 1) = 0)
+                continue
+        }
+        sid := ""
+        try sid := reader.ReadStdWStringAt(p + idOff, 64)
+        if (sid != "")
+        {
+            low := StrLower(sid)
+            for _, kw in kws
+            {
+                if InStr(low, kw)
+                {
+                    found[sid] := true
+                    break
+                }
+            }
+        }
+        if (it.d >= 18)
+            continue
+        hdr := reader.Mem.ReadBytes(p, 0x20)
+        if !hdr
+            continue
+        cf := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+        cl := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
+        if (!reader.IsProbablyValidPointer(cf) || cl <= cf)
+            continue
+        cn := Min((cl - cf) // A_PtrSize, 256)
+        cbuf := reader.Mem.ReadBytes(cf, cn * A_PtrSize)
+        if !cbuf
+            continue
+        Loop cn
+        {
+            cpp := NumGet(cbuf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
+            if reader.IsProbablyValidPointer(cpp)
+                queue.Push({ptr: cpp, d: it.d + 1})
+        }
+    }
+    out := ""
+    cnt := 0
+    for sid in found
+    {
+        out .= "  " sid "`n"
+        if (++cnt >= 40)
+            break
+    }
+    return (out != "" ? out : "  (none matched)`n")
+}
+
+; Shows a MsgBox report of the live destination signals: ServerData / GameUi
+; resolution, every open inventory id (+ grid + item count), the top-level panel
+; StringIds (visible/hidden), the keyword-matched visible StringIds, and the
+; current detected kind. Run this at a stash AND at a vendor to pin the signals.
+StashMoverDiagnose()
+{
+    global g_reader
+    if !IsObject(g_reader)
+    {
+        try MsgBox("Game not connected.", "Stash Mover Diagnostic", 0x10)
+        return
+    }
+    out := "Stash Mover — destination diagnostic`n`n"
+    try
+    {
+        sdPtr := _SmResolveServerData()
+        out .= "ServerData: " (sdPtr ? Format("0x{:X}", sdPtr) : "0  (FAILED to resolve)") "`n`n"
+
+        out .= "Open inventory IDs:`n"
+        invLines := ""
+        if sdPtr
+        {
+            invs := 0
+            try invs := g_reader.ReadAllPlayerInventories(sdPtr)
+            if (invs && Type(invs) = "Array")
+            {
+                for _, inv in invs
+                {
+                    if !(inv && IsObject(inv))
+                        continue
+                    id := inv.Has("inventoryId") ? inv["inventoryId"] : -1
+                    x := inv.Has("totalBoxesX") ? inv["totalBoxesX"] : 0
+                    y := inv.Has("totalBoxesY") ? inv["totalBoxesY"] : 0
+                    cnt := (inv.Has("items") && inv["items"] is Array) ? inv["items"].Length : 0
+                    invLines .= "  id=" id "   " x "x" y "   items=" cnt "`n"
+                }
+            }
+        }
+        out .= (invLines != "" ? invLines : "  (none)`n") "`n"
+
+        gameUi := _UiBrowser_GetGameUiPtr()
+        out .= "GameUi: " (g_reader.IsProbablyValidPointer(gameUi) ? Format("0x{:X}", gameUi) : "0  (FAILED)") "`n`n"
+        out .= "Top-level panels (direct children of GameUi):`n" _SmDiagTopPanels(g_reader, gameUi) "`n"
+        out .= "Visible keyword-matched StringIds:`n" _SmDiagVisibleMatches(g_reader, gameUi) "`n"
+
+        ctx := _SmDetectContext()
+        out .= "Currently detected kind:  " ctx["kind"]
+    }
+    catch as ex
+    {
+        out .= "`n`nEXCEPTION: " (ex.HasOwnProp("Message") ? ex.Message : "?")
+    }
+    try MsgBox(out, "Stash Mover Diagnostic", 0x40)
 }
 
 ; True when the metadata path looks like a quest item (these can't be stashed).
@@ -1072,8 +1265,17 @@ StashMoverTick(radarSnap := 0)
 {
     global g_smEnabled, g_smShowButton, g_smRunning, g_smGui, g_smGuiShown
     static _lastBfsTick := 0
-    ; Cheap gates every tick so the button hides promptly.
-    if (!g_smEnabled || !g_smShowButton || g_smRunning)
+    if !g_smEnabled
+    {
+        _SmHideGui()
+        return
+    }
+    ; Keep the "Detected destination" readout live even when the game isn't focused
+    ; (the user is usually in the tool window while configuring). Cheap-gated inside.
+    _SmRefreshContext(radarSnap)
+
+    ; The overlay button needs the button enabled, no active run, and game focus.
+    if (!g_smShowButton || g_smRunning)
     {
         _SmHideGui()
         return
@@ -1118,7 +1320,7 @@ _SmUpdateButtonText()
     global g_smBtnCtrl, g_smLastBtnText
     if !IsObject(g_smBtnCtrl)
         return
-    ctx := _SmContextCached()
+    ctx := _SmCurrentCtx()
     txt := ctx["button"]
     if (txt != g_smLastBtnText)
     {

@@ -157,6 +157,9 @@ _DispatchBridgeCall(method, args)
         case "StashMoveDump":
             ; Manual trigger from the tool UI (test button).
             SetTimer(() => StashMoverDump("ui"), -1)
+        case "StashMoverDiag":
+            ; RE aid: show the live stash/vendor detection signals in a MsgBox.
+            SetTimer(StashMoverDiagnose, -1)
         case "StashRequestInventory":
             ; Push the live backpack (deduped by base type) so the user can build
             ; the ignore filter from what they currently carry.

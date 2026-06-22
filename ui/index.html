@@ -5242,8 +5242,14 @@
                 </div>
               </details>
 
-              <div class="cfg-row">
+              <div class="cfg-row" style="gap:8px;flex-wrap:wrap">
                 <button class="hk-btn" onclick="ahkCall('StashMoveDump')">▼ Dump now (test)</button>
+                <button class="hk-btn" onclick="ahkCall('StashMoverDiag')">🔍 Diagnose destination</button>
+              </div>
+              <div class="cfg-help">
+                "Diagnose destination" pops up the live signals (open inventory IDs,
+                top-level panel StringIds, detected kind). Run it once at a stash and
+                once at a vendor — the report identifies how each is recognised.
               </div>
             </div>
           </details>
