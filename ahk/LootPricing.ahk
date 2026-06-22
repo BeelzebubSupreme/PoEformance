@@ -101,7 +101,7 @@ _LtLoadMetaArtMap()
 ; Returns true if the file existed and parsed into a populated table.
 _LtLoadPriceTsv(path)
 {
-    global g_ltPricesByArt, g_ltNamesByArt, g_ltPricesByName, g_ltDivToEx, g_ltLastSyncEpoch
+    global g_ltPricesByArt, g_ltNamesByArt, g_ltPricesByName, g_ltDivToEx, g_ltLastSyncEpoch, g_ltPriceError
     if !FileExist(path)
         return false
     try
@@ -116,6 +116,7 @@ _LtLoadPriceTsv(path)
     byName := Map()
     div := 0.0
     epoch := 0
+    metaErr := ""
 
     Loop Parse, raw, "`n", "`r"
     {
@@ -128,6 +129,7 @@ _LtLoadPriceTsv(path)
         {
             div   := (cols.Has(2) && cols[2] != "") ? cols[2] + 0 : 0.0
             epoch := (cols.Has(3) && cols[3] != "") ? Integer(cols[3]) : 0
+            metaErr := cols.Has(4) ? cols[4] : ""
         }
         else if (kind = "A")
         {
@@ -158,6 +160,10 @@ _LtLoadPriceTsv(path)
     g_ltPricesByName  := byName
     g_ltDivToEx       := div
     g_ltLastSyncEpoch := epoch
+    ; Surface any poe.ninja partial-failure note the helper recorded (e.g. a renamed
+    ; league slug or unreachable overview type) so the UI can hint at why prices are thin.
+    if (metaErr != "")
+        g_ltPriceError := metaErr
     return true
 }
 

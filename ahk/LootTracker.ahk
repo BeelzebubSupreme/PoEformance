@@ -45,6 +45,7 @@ global g_ltNextViewTick     := 0
 global g_ltLastLivePushTick := 0
 global g_ltNextPriceCheckTick := 0
 global g_ltLiveView         := Map()  ; cached display model for overlays + WebView
+global g_ltLastReason       := "init" ; per-tick diagnostic (why nothing is tracked)
 
 ; ── Init ─────────────────────────────────────────────────────────────────────
 LoadLootTracker()
@@ -57,6 +58,7 @@ LoadLootTracker()
     global g_ltLiveLegDelta, g_ltNextLiveSnapTick, g_ltNextViewTick, g_ltLastLivePushTick
     global g_ltNextPriceCheckTick, g_ltLiveView
     global g_ltMonsterTallies, g_ltNextKillScanTick
+    global g_ltLastReason
 
     ; Defaults — seeded unconditionally so a fresh install never trips the
     ; "global has not been assigned a value" runtime error.
@@ -90,6 +92,7 @@ LoadLootTracker()
     g_ltLiveView         := Map()
     g_ltMonsterTallies   := Map()
     g_ltNextKillScanTick := 0
+    g_ltLastReason       := "init"
 
     f := g_ltConfigFile
     if !FileExist(f)
@@ -153,48 +156,63 @@ TryLootTrackerTick(radarSnap)
 
 _LtRunTick(radarSnap)
 {
-    global g_ltEnabled, g_ltLastZoneHash, g_ltBaseline, g_ltBaselinePending
+    global g_ltEnabled, g_ltLastZoneHash, g_ltBaseline, g_ltBaselinePending, g_ltLastReason
 
     if !g_ltEnabled
+    {
+        g_ltLastReason := "disabled"
         return
+    }
     if !(radarSnap && Type(radarSnap) = "Map")
+    {
+        g_ltLastReason := "no-snapshot"
         return
+    }
 
     inGs := radarSnap.Has("inGameState") ? radarSnap["inGameState"] : 0
     area := (inGs && IsObject(inGs) && inGs.Has("areaInstance")) ? inGs["areaInstance"] : 0
-    if !(area && IsObject(area))
-        return
+    areaHash := (area && IsObject(area) && area.Has("currentAreaHash")) ? area["currentAreaHash"] : 0
 
-    areaHash := area.Has("currentAreaHash") ? area["currentAreaHash"] : 0
     wad := radarSnap.Has("worldAreaDat") ? radarSnap["worldAreaDat"] : 0
-    name := (wad && IsObject(wad) && wad.Has("name")) ? wad["name"] : ""
-
-    ; Skip transient loading frames (no hash / no area name yet).
-    if (areaHash = 0 || name = "")
-        return
-
-    isTown    := (wad && IsObject(wad) && wad.Has("isTown") && wad["isTown"]) ? true : false
-    isHideout := (wad && IsObject(wad) && wad.Has("isHideout") && wad["isHideout"]) ? true : false
+    hasWad := (wad && IsObject(wad)) ? true : false
+    name := (hasWad && wad.Has("name")) ? wad["name"] : ""
+    isTown    := (hasWad && wad.Has("isTown") && wad["isTown"]) ? true : false
+    isHideout := (hasWad && wad.Has("isHideout") && wad["isHideout"]) ? true : false
     areaLevel := radarSnap.Has("areaLevel") ? radarSnap["areaLevel"] : 0
 
-    if (areaHash != g_ltLastZoneHash)
+    ; The run state machine needs a real area (nonzero instance hash) AND the world-area
+    ; flags (to tell a map from town/hideout). The map NAME is best-effort — worldAreaDat
+    ; may briefly be unread on a freshly-loaded zone, so we no longer gate on it (that
+    ; silently disabled all tracking when the name came back empty).
+    if (areaHash != 0 && hasWad)
     {
-        g_ltLastZoneHash := areaHash
-        _LtHandleZoneTransition(radarSnap, areaHash, name, isTown, isHideout, areaLevel)
-    }
-
-    ; Capture the map-entry baseline on the first frame the inventory reads cleanly.
-    if (g_ltBaselinePending)
-    {
-        snap := 0
-        if _LtSnapshotInventory(radarSnap, &snap)
+        if (areaHash != g_ltLastZoneHash)
         {
-            g_ltBaseline := snap
-            g_ltBaselinePending := false
+            g_ltLastZoneHash := areaHash
+            _LtHandleZoneTransition(radarSnap, areaHash, name, isTown, isHideout, areaLevel)
         }
-    }
 
-    _LtScanKills(radarSnap)
+        ; Capture the map-entry baseline on the first frame the inventory reads cleanly.
+        if (g_ltBaselinePending)
+        {
+            snap := 0
+            if _LtSnapshotInventory(radarSnap, &snap)
+            {
+                g_ltBaseline := snap
+                g_ltBaselinePending := false
+            }
+        }
+
+        _LtScanKills(radarSnap)
+        g_ltLastReason := (isTown || isHideout) ? "town/hideout (paused)" : "on-map"
+    }
+    else if (areaHash != 0)
+        g_ltLastReason := "waiting for world-area data"
+    else
+        g_ltLastReason := "loading (hash=0)"
+
+    ; Always refresh + push while enabled, so the session clock advances and the
+    ; diagnostics flow even between maps / when no run is active.
     _LtRefreshLiveView(radarSnap)
     _LtMaybePushLive()
     _LtMaybeAutoRefreshPrices()
@@ -227,8 +245,10 @@ _LtHandleZoneTransition(radarSnap, areaHash, name, isTown, isHideout, areaLevel)
         else
         {
             ; A genuinely new map instance — open a run and show it in the table at once.
+            ; Fall back to a synthetic name if worldAreaDat hasn't been read yet.
+            nm := (name != "") ? name : ("Area " areaLevel)
             g_ltCurrent := Map(
-                "name", name,
+                "name", nm,
                 "hash", areaHash,
                 "areaLevel", areaLevel,
                 "activeMs", 0,
@@ -472,7 +492,7 @@ PushLootLiveToWebView()
 
 _LtLiveViewJson()
 {
-    global g_ltLiveView, g_ltLastSyncEpoch
+    global g_ltLiveView, g_ltLastSyncEpoch, g_ltLastReason, g_ltEnabled
     v := g_ltLiveView
     if !(v && Type(v) = "Map")
         return "{}"
@@ -519,6 +539,8 @@ _LtLiveViewJson()
     j .= ',"priceErr":'     _JsStr(v.Has("priceErr") ? v["priceErr"] : "")
     j .= ',"itemsCached":'  ((v.Has("itemsCached") ? v["itemsCached"] : 0) + 0)
     j .= ',"lastSyncAgo":'  (ageSec + 0)
+    j .= ',"reason":'       _JsStr(g_ltLastReason)
+    j .= ',"enabled":'      (g_ltEnabled ? "true" : "false")
     j .= "}"
     return j
 }
