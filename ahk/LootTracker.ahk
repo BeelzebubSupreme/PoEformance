@@ -176,9 +176,11 @@ _LtRunTick(radarSnap)
     wad := radarSnap.Has("worldAreaDat") ? radarSnap["worldAreaDat"] : 0
     hasWad := (wad && IsObject(wad)) ? true : false
     name := (hasWad && wad.Has("name")) ? wad["name"] : ""
+    areaId := (hasWad && wad.Has("id")) ? wad["id"] : ""
     isTown    := (hasWad && wad.Has("isTown") && wad["isTown"]) ? true : false
     isHideout := (hasWad && wad.Has("isHideout") && wad["isHideout"]) ? true : false
     areaLevel := radarSnap.Has("areaLevel") ? radarSnap["areaLevel"] : 0
+    diag := "name='" name "' id='" areaId "' T=" (isTown ? 1 : 0) " H=" (isHideout ? 1 : 0)
 
     ; The run state machine needs a real area (nonzero instance hash) AND the world-area
     ; flags (to tell a map from town/hideout). The map NAME is best-effort — worldAreaDat
@@ -204,10 +206,10 @@ _LtRunTick(radarSnap)
         }
 
         _LtScanKills(radarSnap)
-        g_ltLastReason := (isTown || isHideout) ? "town/hideout (paused)" : "on-map"
+        g_ltLastReason := ((isTown || isHideout) ? "town/hideout (paused)" : "on-map") " · " diag
     }
     else if (areaHash != 0)
-        g_ltLastReason := "waiting for world-area data"
+        g_ltLastReason := "waiting for world-area data · " diag
     else
         g_ltLastReason := "loading (hash=0)"
 
