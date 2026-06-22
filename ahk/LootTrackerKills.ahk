@@ -1,33 +1,39 @@
 ; LootTrackerKills.ahk
 ; Per-run monster kill tally for the LootTracker feature (ported from
-; LootTrackerCore.Kills.cs). Counts monster alive->dead transitions off the radar
-; snapshot, classified by rarity (0 Normal · 1 Magic · 2 Rare · 3 Unique). Polled on a
-; throttle (a kill is a rare event and the awake-entity walk isn't free) and read once
-; per monster: an entry already counted is skipped with a bare Map lookup.
+; LootTrackerCore.Kills.cs). Kills are NOT derived from the live radar sample: the radar
+; reader filters dead entities OUT of the sample before LootTracker ever sees it (corpses
+; must not show on the radar), so a monster's death is never observable there. Instead we
+; mirror the reader's own per-area death tally (g_reader._radarKillsByRarity), populated
+; by its proven multi-signal dead-entity detection in _FilterStaleRadarEntities. That
+; counter resets on every area change, so we accumulate per-area DELTAS into the run total.
 ;
-; Globals (g_ltMonsterTallies / g_ltNextKillScanTick) are seeded in LoadLootTracker().
+; Globals (g_ltKillLastR / g_ltNextKillScanTick) are seeded in LoadLootTracker().
 ; Included by InGameStateMonitor.ahk.
 
-; entity id -> Map("rarity", 0..3, "seenAlive", bool, "tallied", bool). Lives only for
-; the active map instance (cleared on every (re)entry via _LtResetKillTally).
-global g_ltMonsterTallies   := Map()
+; Last per-rarity reading of the reader's tally, used to turn its area-resetting
+; cumulative counter into per-run deltas. Reset to zero on every zone transition (matching
+; the reader's own reset) so each new area's kills are counted from scratch.
+global g_ltKillLastR        := [0, 0, 0, 0]
 global g_ltNextKillScanTick := 0
 
+; Resets the kill-delta baseline. Called on every zone transition and on session reset.
 _LtResetKillTally()
 {
-    global g_ltMonsterTallies
-    g_ltMonsterTallies := Map()
+    global g_ltKillLastR
+    g_ltKillLastR := [0, 0, 0, 0]
 }
 
-; Tally monster deaths for the active run. Only runs while actively inside a map (timer
-; running). Rarity is pinned the first time an entity is seen; death is taken from the
-; decoded life component (isAlive). A monster must be seen alive at least once before a
-; dead reading counts, so corpses present on (re)entry aren't mistaken for fresh kills.
+; Accumulate monster kills for the active run from the radar reader's per-area tally.
+; Only runs while actively inside a map (timer running). Each scan adds the change in
+; g_reader._radarKillsByRarity since the last reading; if any slot dropped below the last
+; reading the reader reset on an area change, so the whole current reading is taken as new.
 _LtScanKills(radarSnap)
 {
-    global g_ltCurrent, g_ltRunStartTick, g_ltMonsterTallies, g_ltNextKillScanTick, g_ltDiagKills
+    global g_reader, g_ltCurrent, g_ltRunStartTick, g_ltKillLastR, g_ltNextKillScanTick, g_ltDiagKills
 
     if !(g_ltCurrent && IsObject(g_ltCurrent) && g_ltRunStartTick > 0)
+        return
+    if !(IsObject(g_reader) && g_reader.HasProp("_radarKillsByRarity"))
         return
 
     now := A_TickCount
@@ -35,76 +41,38 @@ _LtScanKills(radarSnap)
         return
     g_ltNextKillScanTick := now + 150
 
-    inGs := radarSnap.Has("inGameState") ? radarSnap["inGameState"] : 0
-    area := (inGs && IsObject(inGs) && inGs.Has("areaInstance")) ? inGs["areaInstance"] : 0
-    if !(area && IsObject(area))
+    cur := g_reader._radarKillsByRarity
+    if !(cur && Type(cur) = "Array" && cur.Length >= 4)
         return
-    awake := area.Has("awakeEntities") ? area["awakeEntities"] : 0
-    sample := (awake && IsObject(awake) && awake.Has("sample")) ? awake["sample"] : 0
-    if !(sample && Type(sample) = "Array")
-        return
+    if !(g_ltKillLastR && Type(g_ltKillLastR) = "Array" && g_ltKillLastR.Length >= 4)
+        g_ltKillLastR := [0, 0, 0, 0]
 
-    kills := g_ltCurrent["kills"]
-    mons := 0, deadCnt := 0
-    for _, entry in sample
+    ; Detect a reader reset between scans (area changed): any slot below the last reading
+    ; means the cumulative counter restarted, so the whole current reading is new kills.
+    reset := false
+    i := 1
+    while (i <= 4)
     {
-        if !(entry && Type(entry) = "Map" && entry.Has("entity"))
-            continue
-        entity := entry["entity"]
-        if !(entity && Type(entity) = "Map")
-            continue
-        path := entity.Has("path") ? entity["path"] : ""
-        if (path = "")
-            continue
-        ; Only real monsters (category "Monsters"); skips NPCs / chests / effects.
-        if (ExtractMetaCategory(path) != "Monsters")
-            continue
-        id := entry.Has("id") ? entry["id"] : 0
-        if (id = 0)
-            continue
-        mons += 1
-
-        decoded := (entity.Has("decodedComponents") && entity["decodedComponents"]
-            && Type(entity["decodedComponents"]) = "Map") ? entity["decodedComponents"] : Map()
-        ; Death signal: a monster's HP can read stale > 0 for a moment after death, so the
-        ; reliable flag is IsTargetable going to 0 — exactly what SnapshotSerializers uses
-        ; for Enemy/Boss. Fall back to life.isAlive when targetable isn't decoded.
-        life := decoded.Has("life") ? decoded["life"] : 0
-        alive := (life && IsObject(life) && life.Has("isAlive")) ? life["isAlive"] : true
-        if (decoded.Has("targetable"))
-            alive := decoded["targetable"] ? true : false
-        dead := !alive
-        if dead
-            deadCnt += 1
-
-        if g_ltMonsterTallies.Has(id)
+        if (cur[i] < g_ltKillLastR[i])
         {
-            t := g_ltMonsterTallies[id]
-            ; Upgrade the pinned rarity if the monster was first seen before its rarity
-            ; component finished decoding (otherwise every kill counts as Normal).
-            if (t["rarity"] = 0)
-            {
-                r2 := ReadEntityRarityId(decoded)
-                if (r2 > 0)
-                    t["rarity"] := (r2 > 3) ? 3 : r2
-            }
-            if t["tallied"]
-                continue
-            if !dead
-                t["seenAlive"] := true
-            else if t["seenAlive"]
-            {
-                kills[t["rarity"] + 1] := kills[t["rarity"] + 1] + 1
-                t["tallied"] := true
-            }
-            continue
+            reset := true
+            break
         }
-
-        ; First sighting: pin the rarity (4 Unique / 5 Boss fold into the Unique slot).
-        rar := ReadEntityRarityId(decoded)
-        idx := (rar > 3) ? 3 : (rar < 0 ? 0 : rar)
-        g_ltMonsterTallies[id] := Map("rarity", idx, "seenAlive", !dead, "tallied", false)
+        i += 1
     }
 
-    g_ltDiagKills := "mons=" mons " tal=" g_ltMonsterTallies.Count " dead=" deadCnt
+    if !(g_ltCurrent.Has("kills") && Type(g_ltCurrent["kills"]) = "Array" && g_ltCurrent["kills"].Length >= 4)
+        g_ltCurrent["kills"] := [0, 0, 0, 0]
+    kills := g_ltCurrent["kills"]
+    i := 1
+    while (i <= 4)
+    {
+        delta := reset ? cur[i] : (cur[i] - g_ltKillLastR[i])
+        if (delta > 0)
+            kills[i] += delta
+        g_ltKillLastR[i] := cur[i]
+        i += 1
+    }
+
+    g_ltDiagKills := "N" kills[1] " M" kills[2] " R" kills[3] " U" kills[4] " r=" cur[1] "/" cur[2] "/" cur[3] "/" cur[4]
 }

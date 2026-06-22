@@ -69,7 +69,7 @@ LoadLootTracker()
     global g_ltLastZoneHash, g_ltSessionStartTick, g_ltSessionStartStamp, g_ltOnMap
     global g_ltLiveLegDelta, g_ltNextLiveSnapTick, g_ltNextViewTick, g_ltLastLivePushTick
     global g_ltNextPriceCheckTick, g_ltLiveView
-    global g_ltMonsterTallies, g_ltNextKillScanTick
+    global g_ltKillLastR, g_ltNextKillScanTick
     global g_ltLastReason
     global g_ltWad, g_ltWadTick, g_ltWadHash
     global g_ltDiagBp, g_ltDiag2, g_ltDiagInv, g_ltDiagCalls
@@ -105,7 +105,7 @@ LoadLootTracker()
     g_ltLastLivePushTick := 0
     g_ltNextPriceCheckTick := 0
     g_ltLiveView         := Map()
-    g_ltMonsterTallies   := Map()
+    g_ltKillLastR        := [0, 0, 0, 0]
     g_ltNextKillScanTick := 0
     g_ltLastReason       := "init"
     g_ltWad     := 0
@@ -265,6 +265,10 @@ _LtHandleZoneTransition(radarSnap, areaHash, name, isTown, isHideout, areaLevel)
     g_ltOnMap := isMap
     now := A_TickCount
 
+    ; The reader's kill counter resets on every area change, so re-baseline our delta
+    ; tracker here too (covers maps, town and hideout) to keep run totals exact.
+    _LtResetKillTally()
+
     if isMap
     {
         _LtBankActiveTime(now)
@@ -300,7 +304,6 @@ _LtHandleZoneTransition(radarSnap, areaHash, name, isTown, isHideout, areaLevel)
         g_ltBaselinePending := true
         g_ltLiveLegDelta := Map()       ; drop the previous leg's live delta
         g_ltNextLiveSnapTick := 0       ; recompute the live leg promptly
-        _LtResetKillTally()
     }
     else if (g_ltCurrent && IsObject(g_ltCurrent))
     {

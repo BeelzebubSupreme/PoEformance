@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.12.154`.
+Reimplementation of the original C# project (see Reference). Version `0.45.12.155`.
 
 ## Language
 
@@ -272,9 +272,17 @@ area-state instead of re-reading memory.
   via `ReadAllPlayerInventories` (deduped by item entity ptr — the reader returns one entry
   per occupied slot). Composite key `<rarityDigit><US><path>[<US><renderArt>]` (US=`Chr(31)`,
   a **function-local**, never a module global — init gotcha). `_LtDiff`/`_LtMergeInto`/`_LtValueOf`.
-- **LootTrackerKills.ahk** — per-tick kill tally off the radar `awakeEntities` sample
-  (category=="Monsters", `ReadEntityRarityId`, alive→dead via `life.isAlive`), throttled
-  ~200 ms, reset per area.
+- **LootTrackerKills.ahk** — per-run kill tally that **mirrors the radar reader's own
+  death detection** instead of re-scanning the sample. The reader filters dead entities
+  OUT of `awakeEntities.sample` before LootTracker sees it (corpses must not show on the
+  radar), so deaths are never observable there — every sample-based heuristic
+  (`life.isAlive`, IsTargetable, despawn) read `dead=0`. Fix: `PoE2MemoryReader` keeps a
+  per-area `_radarKillsByRarity` `[N,M,R,U]` tally, incremented by `_RecordRadarKill` at
+  the two blacklist sites in `_FilterStaleRadarEntities` (signal-5 targetable-dead timer +
+  the hard-dead signals 1/2/3, monster-gated to entities we saw alive). The counter resets
+  on area change; `_LtScanKills` accumulates per-area DELTAS into `g_ltCurrent["kills"]`
+  (`g_ltKillLastR` baseline, re-zeroed on every zone transition via `_LtResetKillTally`),
+  throttled ~150 ms.
 - **LootTrackerSessions.ahk** — JSON session history in `sessions/` (`session_<A_Now>.json`,
   JsonFull), trim to `maxSessions`, summary/detail/delete + WebView pushes.
 - **LootPricing.ahk** — poe.ninja price layer. The HTTP fetch + multi-MB JSON reduction runs
@@ -293,6 +301,9 @@ area-state instead of re-reading memory.
 - **InGameStateMonitor.ahk** — `#Include` the modules (overlay before `OverlayManager`);
   `LoadLootTracker()` + `LoadLootPricing()` before `LoadOverlaySystem()`; version bump.
 - **OverlayManager.ahk** — register the two loot bars.
+- **PoE2MemoryReader.ahk** — per-area `_radarKillsByRarity` tally + `_RecordRadarKill`,
+  populated from `_FilterStaleRadarEntities` (exposes the radar's own kill detection so
+  LootTracker can count kills the sample can't reveal).
 - **AutoFlask.ahk** — `TryLootTrackerTick(radarSnap)` after `TryEntityAlerts`.
 - **BridgeDispatch.ahk** — `SetLootConfig` / `LootNewSession` / `LootRefreshPrices` /
   `LootLoadSessions` / `LootSessionDetail` / `LootDeleteSession` / `LootRequestLive`.

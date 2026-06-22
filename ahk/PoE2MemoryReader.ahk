@@ -91,6 +91,14 @@ class PoE2GameStateReader extends PoE2InventoryReader
         ; for idle/ranged monsters that stand still in combat.
         this.PosDeadThresholdMs := 15000
 
+        ; Per-area cumulative monster kill tally by rarity index
+        ; (0 Normal · 1 Magic · 2 Rare · 3 Unique/Boss). Incremented by
+        ; _FilterStaleRadarEntities the instant an entity is confirmed dead and
+        ; blacklisted, so consumers (LootTracker) can reuse the radar's proven death
+        ; detection instead of re-deriving kills from the live sample — which never
+        ; contains corpses, because they are filtered out here. Reset on area change.
+        this._radarKillsByRarity := [0, 0, 0, 0]
+
         ; Cached UI element data for radar (re-read every 400ms instead of every 100ms).
         this._radarUiCache := 0
         this._radarUiCacheTick := 0
@@ -2454,6 +2462,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
             this._firstSeenTick := Map()
             this._posLastXY := Map()
             this._posFrozenSinceTick := Map()
+            this._radarKillsByRarity := [0, 0, 0, 0]
             this._lastAreaInstanceAddr := areaHashKey
         }
 
@@ -2591,6 +2600,9 @@ class PoE2GameStateReader extends PoE2InventoryReader
                         this._targetableDeadMap[addr] := tCount
                         if (tCount >= this.TargetableDeadThreshold)
                         {
+                            ; Confirmed kill (monster, seen targetable then dead) — tally it
+                            ; before the tracking state is cleared.
+                            this._RecordRadarKill(dc, rarityId)
                             blacklist[addr] := sampleEntry.Has("id") ? sampleEntry["id"] : -1
                             if this._everAliveAddrs.Has(addr)
                                 this._everAliveAddrs.Delete(addr)
@@ -2646,6 +2658,12 @@ class PoE2GameStateReader extends PoE2InventoryReader
                 else if (dbgSig = 3)
                     dbgS3 += 1
 
+                ; Count it as a kill only for monsters we actually saw alive (so corpses
+                ; that were already dead when we entered render range aren't tallied). Done
+                ; before the cleanup below clears the ever-alive / targetable guard maps.
+                if (isMonster && (this._everAliveAddrs.Has(addr) || this._targetableEverOn.Has(addr)))
+                    this._RecordRadarKill(dc, rarityId)
+
                 if (addr > 0)
                 {
                     blacklist[addr] := sampleEntry.Has("id") ? sampleEntry["id"] : -1
@@ -2676,6 +2694,24 @@ class PoE2GameStateReader extends PoE2InventoryReader
             "preFilter", sample.Length, "postFilter", newSample.Length
         )
         return entitySummary
+    }
+
+    ; Records one confirmed monster kill into the per-area rarity tally
+    ; (this._radarKillsByRarity). Prefers the rich ReadEntityRarityId (flat + nested
+    ; mods) and falls back to the flat rarityId the filter already read; folds
+    ; Unique/Boss (>=3) into slot index 3. Called only from _FilterStaleRadarEntities.
+    _RecordRadarKill(dc, flatRarity)
+    {
+        rar := flatRarity
+        try {
+            if (dc && Type(dc) = "Map") {
+                rr := ReadEntityRarityId(dc)
+                if (rr > rar)
+                    rar := rr
+            }
+        }
+        idx := (rar >= 3) ? 3 : (rar < 0 ? 0 : rar)
+        this._radarKillsByRarity[idx + 1] += 1
     }
 
     ; Reads walkable terrain data from memory for the given AreaInstance address.
