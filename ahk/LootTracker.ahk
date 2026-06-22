@@ -56,6 +56,7 @@ global g_ltDiagBp  := -1  ; last inventory snapshot backpack item-key count (-1 
 global g_ltDiag2   := ""  ; loot-diff diagnostic string (bp / gained / priced / unpriced)
 global g_ltDiagInv := ""  ; per-inventory summary (id(grid)=itemCount …) from the last read
 global g_ltDiagCalls := 0 ; how many times _LtSnapshotInventory ran (must climb if the live read is alive)
+global g_ltLastErr := ""  ; last swallowed per-tick exception (Type: message [Lnn]) for the UI
 
 ; ── Init ─────────────────────────────────────────────────────────────────────
 LoadLootTracker()
@@ -71,6 +72,7 @@ LoadLootTracker()
     global g_ltLastReason
     global g_ltWad, g_ltWadTick, g_ltWadHash
     global g_ltDiagBp, g_ltDiag2, g_ltDiagInv, g_ltDiagCalls
+    global g_ltLastErr
 
     ; Defaults — seeded unconditionally so a fresh install never trips the
     ; "global has not been assigned a value" runtime error.
@@ -112,6 +114,7 @@ LoadLootTracker()
     g_ltDiag2   := ""
     g_ltDiagInv := ""
     g_ltDiagCalls := 0
+    g_ltLastErr := ""
 
     f := g_ltConfigFile
     if !FileExist(f)
@@ -168,7 +171,11 @@ TryLootTrackerTick(radarSnap)
     try
         _LtRunTick(radarSnap)
     catch as ex
+    {
+        global g_ltLastErr
+        g_ltLastErr := Type(ex) ": " ex.Message " [L" (ex.HasProp("Line") ? ex.Line : "?") "]"
         try LogError("TryLootTrackerTick", ex)
+    }
     finally
         _running := false
 }
@@ -525,7 +532,7 @@ PushLootLiveToWebView()
 
 _LtLiveViewJson()
 {
-    global g_ltLiveView, g_ltLastSyncEpoch, g_ltLastReason, g_ltEnabled, g_ltDiag2, g_ltDiagInv
+    global g_ltLiveView, g_ltLastSyncEpoch, g_ltLastReason, g_ltEnabled, g_ltDiag2, g_ltDiagInv, g_ltLastErr
     v := g_ltLiveView
     if !(v && Type(v) = "Map")
         return "{}"
@@ -575,6 +582,7 @@ _LtLiveViewJson()
     j .= ',"reason":'       _JsStr(g_ltLastReason)
     j .= ',"diag2":'        _JsStr(g_ltDiag2)
     j .= ',"diagInv":'      _JsStr(g_ltDiagInv)
+    j .= ',"lastErr":'      _JsStr(g_ltLastErr)
     j .= ',"enabled":'      (g_ltEnabled ? "true" : "false")
     j .= "}"
     return j
