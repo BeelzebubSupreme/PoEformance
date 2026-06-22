@@ -45,11 +45,20 @@ LoadStashMover()
     global g_smOffsetY := 0                    ; manual screen-px calibration (Y) of the grid origin
     global g_smSkipQuest := true               ; never try to stash quest items (they can't be)
     global g_smJitter := true                  ; randomise click position + inter-click delay
+    global g_smAllowSell := true               ; allow acting when the open container is a vendor (sells!)
     global g_smConfigFile := _ConfigPath()
 
     ; Ignore filter — path -> display name. Items whose base-type path is in here
     ; are never moved. Built by the user from the live inventory in the UI.
     global g_smIgnore := Map()
+
+    ; Detected destination context: "stash" | "vendor" | "trade" | "unknown".
+    ; Drives the overlay button label, the result tooltip verb and the sell guard.
+    global g_smCtx := 0                         ; cached context Map (kind/verb/button)
+    global g_smCtxKind := ""                    ; cached kind string (for the header)
+    global g_smCtxTick := 0                     ; A_TickCount of the last context detect
+    global g_smRunVerb := "Moved"              ; verb for the current run's result tooltip
+    global g_smLastBtnText := ""               ; last text written to the overlay button
 
     ; Runtime state (never persisted)
     global g_smGui := 0                        ; interactive overlay Gui (lazy-built)
@@ -75,6 +84,7 @@ LoadStashMover()
         g_smOffsetY        := Integer(IniRead(f, "StashMover", "offsetY", g_smOffsetY))
         g_smSkipQuest      := (IniRead(f, "StashMover", "skipQuest", g_smSkipQuest ? "1" : "0") = "1")
         g_smJitter         := (IniRead(f, "StashMover", "jitter", g_smJitter ? "1" : "0") = "1")
+        g_smAllowSell      := (IniRead(f, "StashMover", "allowSell", g_smAllowSell ? "1" : "0") = "1")
         g_smIgnore         := _SmIgnoreDeserialize(IniRead(f, "StashMover", "ignore", ""))
     } catch as ex {
         LogError("LoadStashMover", ex)
@@ -86,7 +96,7 @@ LoadStashMover()
 SaveStashMover()
 {
     global g_smEnabled, g_smHotkey, g_smShowButton, g_smPerItemDelayMs
-    global g_smSettleDelayMs, g_smOffsetX, g_smOffsetY, g_smSkipQuest, g_smJitter
+    global g_smSettleDelayMs, g_smOffsetX, g_smOffsetY, g_smSkipQuest, g_smJitter, g_smAllowSell
     global g_smIgnore, g_smConfigFile
     f := g_smConfigFile
     try {
@@ -99,6 +109,7 @@ SaveStashMover()
         IniWrite(g_smOffsetY, f, "StashMover", "offsetY")
         IniWrite(g_smSkipQuest ? "1" : "0", f, "StashMover", "skipQuest")
         IniWrite(g_smJitter ? "1" : "0", f, "StashMover", "jitter")
+        IniWrite(g_smAllowSell ? "1" : "0", f, "StashMover", "allowSell")
         IniWrite(_SmIgnoreSerialize(g_smIgnore), f, "StashMover", "ignore")
     } catch as ex {
         LogError("SaveStashMover", ex)
@@ -157,7 +168,7 @@ _SmIgnoreDeserialize(s)
 _SmApplySetting(key, val)
 {
     global g_smEnabled, g_smHotkey, g_smShowButton, g_smPerItemDelayMs
-    global g_smSettleDelayMs, g_smOffsetX, g_smOffsetY, g_smSkipQuest, g_smJitter
+    global g_smSettleDelayMs, g_smOffsetX, g_smOffsetY, g_smSkipQuest, g_smJitter, g_smAllowSell
     needRebind := false
     switch key
     {
@@ -173,6 +184,8 @@ _SmApplySetting(key, val)
             g_smSkipQuest := _SmTruthy(val)
         case "jitter":
             g_smJitter := _SmTruthy(val)
+        case "allowSell":
+            g_smAllowSell := _SmTruthy(val)
         case "perItemDelayMs":
             g_smPerItemDelayMs := Integer(val)
         case "settleDelayMs":
@@ -200,17 +213,20 @@ _SmTruthy(v)
 BuildStashMoverHeaderJson()
 {
     global g_smEnabled, g_smHotkey, g_smShowButton, g_smPerItemDelayMs
-    global g_smSettleDelayMs, g_smOffsetX, g_smOffsetY, g_smSkipQuest, g_smJitter, g_smIgnore
+    global g_smSettleDelayMs, g_smOffsetX, g_smOffsetY, g_smSkipQuest, g_smJitter
+    global g_smAllowSell, g_smIgnore, g_smCtxKind
     j := "{"
     j .= '"enabled":'        (g_smEnabled ? "true" : "false")
     j .= ',"hotkey":'        _JsStr(g_smHotkey)
     j .= ',"showButton":'    (g_smShowButton ? "true" : "false")
     j .= ',"skipQuest":'     (g_smSkipQuest ? "true" : "false")
     j .= ',"jitter":'        (g_smJitter ? "true" : "false")
+    j .= ',"allowSell":'     (g_smAllowSell ? "true" : "false")
     j .= ',"perItemDelayMs":' (g_smPerItemDelayMs + 0)
     j .= ',"settleDelayMs":'  (g_smSettleDelayMs + 0)
     j .= ',"offsetX":'        (g_smOffsetX + 0)
     j .= ',"offsetY":'        (g_smOffsetY + 0)
+    j .= ',"context":'        _JsStr(g_smCtxKind)
     j .= ',"ignore":' _SmIgnoreJsonArray()
     j .= "}"
     return j
@@ -497,6 +513,148 @@ _SmReadBackpack(sdPtr)
     return 0
 }
 
+; True when the game server reports an open stash tab (inventoryId == 27). This is
+; the authoritative stash signal — the server populates id 27 with whichever stash
+; tab is visible, and it's never present at a vendor / trade window.
+_SmStashOpen(sdPtr)
+{
+    global g_reader
+    if (!IsObject(g_reader) || !sdPtr)
+        return false
+    invs := 0
+    try invs := g_reader.ReadAllPlayerInventories(sdPtr)
+    if !(invs && Type(invs) = "Array")
+        return false
+    for _, inv in invs
+        if (inv && IsObject(inv) && inv.Has("inventoryId") && inv["inventoryId"] = 27)
+            return true
+    return false
+}
+
+; ── Destination context (stash vs vendor vs trade) ───────────────────────────
+
+; Returns the context descriptor for a kind: Map(kind, verb, button). The verb is
+; used in the result tooltip; button is the overlay-button label.
+_SmCtxFor(kind)
+{
+    switch kind
+    {
+        case "stash":  return Map("kind", "stash",  "verb", "Stashed", "button", "Dump → Stash")
+        case "vendor": return Map("kind", "vendor", "verb", "Sold",    "button", "Sell → Vendor")
+        case "trade":  return Map("kind", "trade",  "verb", "Moved",   "button", "Move → Trade")
+        default:       return Map("kind", "unknown","verb", "Moved",   "button", "Dump items")
+    }
+}
+
+; Classifies a UI element StringId into a destination kind by keyword (substring,
+; case-insensitive — robust against unknown exact StringIds). Stash is detected
+; separately via inventory id 27, so it's deliberately NOT matched here (an open
+; stash never carries id 27 at a vendor, so this can't mislabel a sale as a stash).
+_SmClassifyStringId(sid)
+{
+    s := StrLower(sid "")
+    if (InStr(s, "sell") || InStr(s, "vendor") || InStr(s, "purchase") || InStr(s, "haggle") || InStr(s, "gamble"))
+        return "vendor"
+    if (InStr(s, "trade"))
+        return "trade"
+    return ""
+}
+
+; Scans the VISIBLE UI subtree for a vendor / trade window. Prunes hidden subtrees
+; (so only on-screen windows count) and returns "vendor" (preferred) or "trade",
+; else "". Bounded by node count + depth so it stays cheap.
+_SmScanContextUi(reader, gameUi)
+{
+    if !reader.IsProbablyValidPointer(gameUi)
+        return ""
+    idOff    := PoE2Offsets.UiElementBase["StringIdPtr"]
+    flagsOff := PoE2Offsets.UiElementBase["Flags"]
+    queue := [{ptr: gameUi, d: 0}]
+    seen := Map()
+    nodes := 0
+    tradeHit := false
+    while (queue.Length > 0 && nodes < 2500)
+    {
+        it := queue.RemoveAt(1)
+        p := it.ptr
+        if (seen.Has(p) || !reader.IsProbablyValidPointer(p))
+            continue
+        seen[p] := true
+        nodes += 1
+        ; Prune hidden subtrees (bit 11). The root is always treated as visible.
+        if (p != gameUi)
+        {
+            fl := 0
+            try fl := reader.Mem.ReadUInt(p + flagsOff)
+            if (((fl >> 11) & 1) = 0)
+                continue
+        }
+        sid := ""
+        try sid := reader.ReadStdWStringAt(p + idOff, 48)
+        if (sid != "")
+        {
+            k := _SmClassifyStringId(sid)
+            if (k = "vendor")
+                return "vendor"
+            if (k = "trade")
+                tradeHit := true
+        }
+        if (it.d >= 12)
+            continue
+        hdr := reader.Mem.ReadBytes(p, 0x20)
+        if !hdr
+            continue
+        cf := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+        cl := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
+        if (!reader.IsProbablyValidPointer(cf) || cl <= cf)
+            continue
+        n := Min((cl - cf) // A_PtrSize, 256)
+        buf := reader.Mem.ReadBytes(cf, n * A_PtrSize)
+        if !buf
+            continue
+        Loop n
+        {
+            cp := NumGet(buf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
+            if reader.IsProbablyValidPointer(cp)
+                queue.Push({ptr: cp, d: it.d + 1})
+        }
+    }
+    return tradeHit ? "trade" : ""
+}
+
+; Detects the current destination context. Stash is authoritative via inventory
+; id 27 (reliable, never present at a vendor); vendor / trade come from the UI
+; scan; otherwise "unknown" (the action still works — Ctrl+Click moves to whatever
+; container is open — only the label is generic). Returns a Map(kind,verb,button).
+_SmDetectContext()
+{
+    global g_reader
+    sdPtr := _SmResolveServerData()
+    if (sdPtr && _SmStashOpen(sdPtr))
+        return _SmCtxFor("stash")
+    uiKind := ""
+    if IsObject(g_reader)
+    {
+        gameUi := _UiBrowser_GetGameUiPtr()
+        if g_reader.IsProbablyValidPointer(gameUi)
+            uiKind := _SmScanContextUi(g_reader, gameUi)
+    }
+    return _SmCtxFor(uiKind != "" ? uiKind : "unknown")
+}
+
+; Cached wrapper for the per-tick button label (recomputes at most ~1.4 Hz so the
+; inventory read + UI scan don't run on every overlay tick). Returns a context Map.
+_SmContextCached()
+{
+    global g_smCtx, g_smCtxKind, g_smCtxTick
+    if (IsObject(g_smCtx) && (A_TickCount - g_smCtxTick) < 700)
+        return g_smCtx
+    g_smCtx := _SmDetectContext()
+    g_smCtxKind := g_smCtx["kind"]
+    g_smCtxTick := A_TickCount
+    return g_smCtx
+}
+
 ; True when the metadata path looks like a quest item (these can't be stashed).
 _SmIsQuestItem(path)
 {
@@ -529,9 +687,10 @@ _SmShouldSkip(item, nowTick)
 ; Param: source - "hotkey" | "button" | "ui" (for diagnostics only).
 StashMoverDump(source := "")
 {
-    global g_reader, g_smEnabled, g_smRunning, g_smJitter
+    global g_reader, g_smEnabled, g_smRunning, g_smJitter, g_smAllowSell
     global g_smQueue, g_smQueueIdx, g_smMovedCount, g_smQueuedPtrs
     global g_smFailed, g_smFailCooldownMs
+    global g_smCtx, g_smCtxKind, g_smCtxTick, g_smRunVerb
     if !g_smEnabled
         return
     if g_smRunning
@@ -556,6 +715,17 @@ StashMoverDump(source := "")
         _SmTooltip("Stash Mover: can't read backpack.", 1500)
         return
     }
+
+    ; Detect what's open (stash vs vendor vs trade) — drives the result verb and
+    ; the optional sell guard. The Ctrl+Click action itself is identical.
+    ctx := _SmDetectContext()
+    g_smCtx := ctx, g_smCtxKind := ctx["kind"], g_smCtxTick := A_TickCount
+    if (ctx["kind"] = "vendor" && !g_smAllowSell)
+    {
+        _SmTooltip("Stash Mover: a vendor is open and selling is disabled.", 2000)
+        return
+    }
+    g_smRunVerb := ctx["verb"]
 
     cols := bp["cols"], rows := bp["rows"]
     cellW := rect["w"] / cols
@@ -688,7 +858,9 @@ _SmStep()
 ; nothing moved at all (stash full / no valid destination). Clears run state.
 _SmVerify()
 {
-    global g_smRunning, g_smQueuedPtrs, g_smFailed, g_smMovedCount
+    global g_smRunning, g_smQueuedPtrs, g_smFailed, g_smMovedCount, g_smRunVerb
+    verb := g_smRunVerb                  ; "Stashed" | "Sold" | "Moved"
+    verbLow := StrLower(verb)
     attempted := g_smQueuedPtrs.Length
     stillThere := Map()
     sdPtr := _SmResolveServerData()
@@ -713,11 +885,11 @@ _SmVerify()
         }
         moved := attempted - failed
         if (attempted > 0 && moved = 0)
-            _SmTooltip("Stash Mover: nothing moved — stash full or item not stashable?", 2200)
+            _SmTooltip("Stash Mover: nothing " verbLow " — destination full or item not movable?", 2200)
         else if (failed > 0)
-            _SmTooltip("Stash Mover: moved " moved ", " failed " couldn't be stashed.", 2000)
+            _SmTooltip("Stash Mover: " verbLow " " moved ", " failed " couldn't be moved.", 2000)
         else
-            _SmTooltip("Stash Mover: moved " moved " item(s).", 1600)
+            _SmTooltip("Stash Mover: " verbLow " " moved " item(s).", 1600)
     }
     else
     {
@@ -851,7 +1023,8 @@ StashMoverTick(radarSnap := 0)
     }
 
     _SmEnsureGui()
-    btnW := 120, btnH := 24
+    _SmUpdateButtonText()
+    btnW := 130, btnH := 24
     ; Anchor at the grid's top-right, just above the first row.
     bx := Round(rect["x"] + rect["w"] - btnW)
     by := Round(rect["y"] - btnH - 4)
@@ -860,5 +1033,22 @@ StashMoverTick(radarSnap := 0)
     try {
         g_smGui.Show("x" bx " y" by " w" btnW " h" btnH " NoActivate")
         g_smGuiShown := true
+    }
+}
+
+; Updates the overlay button's caption from the (cached) detected context, so it
+; reads "Sell → Vendor" at a vendor and "Dump → Stash" at the stash. Only writes
+; when the text actually changed to avoid needless redraws.
+_SmUpdateButtonText()
+{
+    global g_smBtnCtrl, g_smLastBtnText
+    if !IsObject(g_smBtnCtrl)
+        return
+    ctx := _SmContextCached()
+    txt := ctx["button"]
+    if (txt != g_smLastBtnText)
+    {
+        try g_smBtnCtrl.Text := txt
+        g_smLastBtnText := txt
     }
 }

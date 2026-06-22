@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.5`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.6`.
 
 ## Language
 
@@ -381,6 +381,19 @@ rectangle from the UI tree.
   - Randomness (`jitter`, default ON): each click lands at a random offset inside its
     cell (±~30% of the half-cell), the inter-click delay is `perItemDelay × rand(0.75..1.45)`,
     the settle is `× rand(0.6..1.4)`, and the mouse-down hold is `rand(6..14) ms`.
+  - Destination context (stash vs vendor vs trade): same Ctrl+Click action works for
+    all of them; `_SmDetectContext()` only refines the label/verb + the sell guard.
+    **Stash** = inventory id 27 (authoritative; never present at a vendor, so a sale
+    can't be mislabeled "stash"). **Vendor/Trade** = `_SmScanContextUi()` BFS over the
+    VISIBLE UI subtree, classifying StringIds by case-insensitive substring
+    (`sell`/`vendor`/`purchase`/`gamble` → vendor, `trade` → trade) so it's robust to
+    unknown exact StringIds; else "unknown" (still acts, generic label). Context is
+    cached ~700 ms (`_SmContextCached`) for the per-tick button caption, detected fresh
+    once per dump. The overlay button reads "Dump → Stash" / "Sell → Vendor" /
+    "Move → Trade" / "Dump items"; the result tooltip verb is Stashed/Sold/Moved.
+    `allowSell` (default ON) gates the vendor path — off = refuse to act when a vendor
+    is open (stash-only safety). Header exposes `allowSell` + `context`; the UI shows a
+    "Detected destination" readout (vendor shown in amber as it SELLS).
 
 ### Edited files
 - **InGameStateMonitor.ahk** — `#Include ahk/StashMover.ahk`; `LoadStashMover()` at
@@ -392,8 +405,9 @@ rectangle from the UI tree.
 - **WebViewBridge.ahk** — `stashMover` block (incl. the `ignore` array) in the header push.
 - **ui/index.html** — "📦 Stash Mover" section in **Config → Automation**
   (`det-stashmover`, registered in `_cfgSectionIds`) + `stashMoverSyncFromHeader` +
-  the Ignore-filter sub-panel (`updateStashInventory`, `smToggleIgnore`,
-  `stashRenderIgnore`) + the Skip-quest / Randomise toggles.
+  the Ignore-filter sub-panel (`updateStashInventory`, `smInvToggle`,
+  `smIgnoreRemove`, `stashRenderIgnore`) + the Skip-quest / Randomise / Allow-sell
+  toggles + the "Detected destination" readout (from header `context`).
 
 ### Pending (needs the game + Windows)
 - Verify the `InventoryPanel` StringId resolves and its rect equals the 12×N grid

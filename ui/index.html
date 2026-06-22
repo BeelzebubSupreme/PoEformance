@@ -5180,6 +5180,13 @@
                 <label class="toggle"><input type="checkbox" id="sm-jitter"
                     onchange="ahkCall('SetStashMover','jitter', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
               </div>
+              <div class="cfg-row"><span class="cfg-label">Allow selling to a vendor (else stash only)</span>
+                <label class="toggle"><input type="checkbox" id="sm-allowSell"
+                    onchange="ahkCall('SetStashMover','allowSell', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Detected destination</span>
+                <span id="sm-context" class="cfg-status" style="color:#7ec8e3;font-weight:600">—</span>
+              </div>
               <div class="cfg-row">
                 <span class="cfg-label">Hotkey (AHK syntax, e.g. <code>F4</code> or <code>^d</code>)</span>
                 <input type="text" class="cfg-input" id="sm-hotkey" placeholder="none" style="width:120px"
@@ -6920,11 +6927,18 @@
       chk('sm-showButton', s.showButton);
       chk('sm-skipQuest', s.skipQuest);
       chk('sm-jitter', s.jitter);
+      chk('sm-allowSell', s.allowSell);
       val('sm-hotkey', s.hotkey);
       val('sm-perItemDelayMs', s.perItemDelayMs);
       val('sm-settleDelayMs', s.settleDelayMs);
       val('sm-offsetX', s.offsetX);
       val('sm-offsetY', s.offsetY);
+      const ctxEl = document.getElementById('sm-context');
+      if (ctxEl) {
+        const m = { stash: 'Stash', vendor: 'Vendor (will SELL)', trade: 'Trade', unknown: '— (open a stash/vendor)' };
+        ctxEl.textContent = m[s.context] || '—';
+        ctxEl.style.color = (s.context === 'vendor') ? '#e3a07e' : '#7ec8e3';
+      }
       _smIgnore = Array.isArray(s.ignore) ? s.ignore : [];
       stashRenderIgnore();
     }
