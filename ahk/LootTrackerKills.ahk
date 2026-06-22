@@ -45,6 +45,7 @@ _LtScanKills(radarSnap)
         return
 
     kills := g_ltCurrent["kills"]
+    seenNow := Map()
     mons := 0, monAny := 0, aliveCnt := 0, deadCnt := 0
     for _, entry in sample
     {
@@ -65,6 +66,8 @@ _LtScanKills(radarSnap)
         if (id = 0)
             continue
         mons += 1
+        seenNow[id] := true
+        dist := entry.Has("distance") ? entry["distance"] : 99999
 
         decoded := (entity.Has("decodedComponents") && entity["decodedComponents"]
             && Type(entity["decodedComponents"]) = "Map") ? entity["decodedComponents"] : Map()
@@ -79,14 +82,14 @@ _LtScanKills(radarSnap)
         if g_ltMonsterTallies.Has(id)
         {
             t := g_ltMonsterTallies[id]
+            t["lastDist"] := dist
             if t["tallied"]
                 continue
             if !dead
                 t["seenAlive"] := true
             else if t["seenAlive"]
             {
-                slot := t["rarity"] + 1                 ; 1..4 (AHK arrays are 1-indexed)
-                kills[slot] := kills[slot] + 1
+                kills[t["rarity"] + 1] := kills[t["rarity"] + 1] + 1   ; rare: caught the dead state
                 t["tallied"] := true
             }
             continue
@@ -95,7 +98,25 @@ _LtScanKills(radarSnap)
         ; First sighting: pin the rarity once (4 Unique / 5 Boss fold into the Unique slot).
         rar := ReadEntityRarityId(decoded)
         idx := (rar > 3) ? 3 : (rar < 0 ? 0 : rar)
-        g_ltMonsterTallies[id] := Map("rarity", idx, "seenAlive", !dead, "tallied", false)
+        g_ltMonsterTallies[id] := Map("rarity", idx, "seenAlive", !dead, "tallied", false, "lastDist", dist)
     }
-    g_ltDiagKills := "mons=" mons " any=" monAny " tal=" g_ltMonsterTallies.Count " alive=" aliveCnt " dead=" deadCnt
+
+    ; Despawn-based kills: the radar sample almost never surfaces the brief dead state, so
+    ; a monster that was seen alive and then vanished from the awake sample while close to
+    ; the player was almost certainly killed. The distance gate keeps monsters that merely
+    ; fell out of the awake range (as the player moved on) from being miscounted.
+    despawnKills := 0
+    for mid, mt in g_ltMonsterTallies
+    {
+        if (mt["tallied"] || !mt["seenAlive"])
+            continue
+        if (!seenNow.Has(mid) && mt["lastDist"] <= 100)
+        {
+            kills[mt["rarity"] + 1] := kills[mt["rarity"] + 1] + 1
+            mt["tallied"] := true
+            despawnKills += 1
+        }
+    }
+
+    g_ltDiagKills := "mons=" mons " tal=" g_ltMonsterTallies.Count " alive=" aliveCnt " dead=" deadCnt " desp=" despawnKills
 }
