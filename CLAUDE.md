@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.12.134`.
+Reimplementation of the original C# project (see Reference). Version `0.45.12.135`.
 
 ## Language
 
@@ -136,7 +136,8 @@ Alerts → `alerts.ini [Alerts]`.
   Each junk category renders (via `junkCatRow`) as a collapsible `<details class="junk-cat">`
   with a cube/diamond caret (closed/open); the same caret is on each top box's
   `.ent-junkbox-sum`. Categories have NO on/off slider of their own: the summary is just the
-  name, and the body is a wrap of per-pattern `.filter-pill` buttons (each toggles its own
+  name, and the body opens with a one-line `.junk-cat-desc` explanation (from `_junkCatInfo`)
+  then a wrap of per-pattern `.filter-pill` buttons (each toggles its own
   pattern via `pat:`, pill colour conveys state) followed by a trailing `.junk-all`
   "enable/disable all" button that bulk-flips every pattern in the category (`cat:<key>`, a
   shortcut over the per-pattern flags — there is no separate category gate). A `.ent-junk-sep`

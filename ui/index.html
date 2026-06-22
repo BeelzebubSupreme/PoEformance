@@ -3300,6 +3300,15 @@
       color: var(--codex-text);
       margin-right: auto
     }
+    /* One-line explanation of the category, shown between its name and buttons. */
+    .junk-cat-desc {
+      font-family: var(--codex-serif);
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--codex-text-dim);
+      padding: 2px 2px 5px;
+      max-width: 560px
+    }
     .junk-pat-row {
       display: flex;
       gap: 6px;
@@ -6536,11 +6545,12 @@
 
     // Builds one junk category as a collapsible <details> (cube caret when
     // closed, gold diamond when open). The summary is just the category name —
-    // the category has no on/off slider of its own. The body is a wrap of
-    // per-pattern filter-pill buttons (each toggles its pattern — the pill's own
-    // colour conveys state) followed by a trailing "enable/disable all" button
-    // that flips every pattern in the category at once. Open state is restored
-    // from _junkOpenCats so re-renders don't snap it shut. c = header category, ck = key.
+    // the category has no on/off slider of its own. The body opens with a
+    // one-line explanation of the category, then a wrap of per-pattern filter-pill
+    // buttons (each toggles its pattern — the pill's own colour conveys state)
+    // followed by a trailing "enable/disable all" button that flips every pattern
+    // in the category at once. Open state is restored from _junkOpenCats so
+    // re-renders don't snap it shut. c = header category, ck = key.
     function junkCatRow(c, ck) {
       const ci = _junkCatInfo[ck] || { short: ck, desc: String(c.label || ck) };
       const allOn = (c.on === true || c.on === "true");
@@ -6561,6 +6571,7 @@
            + `<summary class="junk-cat-head">`
            + `<span class="junk-cat-name" title="${escAttr(ci.desc)}">${escHtml(ci.short)}</span>`
            + `</summary>`
+           + `<div class="junk-cat-desc">${escHtml(ci.desc)}</div>`
            + `<div class="junk-pat-row">${pills}${allBtn}</div></details>`;
     }
 
