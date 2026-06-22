@@ -3041,6 +3041,13 @@
       background: radial-gradient(circle at 35% 30%, #ffe4a8, #c8a85a);
       border-color: rgba(0,0,0,0.5)
     }
+    /* Compact master toggle for the Junk Filter box header — small enough that it
+       no longer makes the collapsed box taller than its sibling boxes (which have
+       no toggle). Scoped to the box summary; the global toggle stays 38×20. */
+    .ent-junkbox-sum .toggle { width: 28px; height: 14px }
+    .ent-junkbox-sum .toggle-slider { border-radius: 8px }
+    .ent-junkbox-sum .toggle-slider::before { width: 10px; height: 10px; left: 2px; bottom: 2px }
+    .ent-junkbox-sum .toggle input:checked~.toggle-slider::before { transform: translateX(14px) }
 
     /* .cfg-input dimensions — sizing only; codex colours come from the
        shared input rule above. */
@@ -3267,18 +3274,18 @@
       gap: 3px;
       position: relative;
       cursor: pointer;
-      list-style: none
-    }
-    .junk-cat-head::-webkit-details-marker { display: none }
-    /* Title row carries the name and the open/closed caret; it stays a single
-       row so the caret aligns with the name even though the desc sits below it. */
-    .junk-cat-titlerow {
-      display: flex;
-      align-items: center;
-      position: relative;
+      list-style: none;
       padding-right: 22px
     }
-    .junk-cat-titlerow::after {
+    .junk-cat-head::-webkit-details-marker { display: none }
+    /* Title row holds the name; the caret is centred over the whole header
+       (name + desc) so it stays vertically centred now that the summary is
+       two lines tall. */
+    .junk-cat-titlerow {
+      display: flex;
+      align-items: center
+    }
+    .junk-cat-head::after {
       content: "";
       position: absolute;
       right: 4px;
@@ -3290,12 +3297,12 @@
       transform: translateY(-50%) rotate(45deg);
       transition: transform .2s ease-out, background .15s
     }
-    .junk-cat:not([open]) .junk-cat-titlerow::after {
+    .junk-cat:not([open]) .junk-cat-head::after {
       transform: translateY(-50%) rotate(0deg);
       background: var(--codex-text-dim);
       box-shadow: none
     }
-    .junk-cat-head:hover .junk-cat-titlerow::after {
+    .junk-cat-head:hover::after {
       background: var(--codex-gold-hi);
       box-shadow: 0 0 6px rgba(240,214,138,0.7)
     }

@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.12.136`.
+Reimplementation of the original C# project (see Reference). Version `0.45.12.137`.
 
 ## Language
 
@@ -135,10 +135,11 @@ Alerts → `alerts.ini [Alerts]`.
   deletable chips) in its body — the former standalone Hideout / Custom Terms boxes are gone.
   Each junk category renders (via `junkCatRow`) as a collapsible `<details class="junk-cat">`
   with a cube/diamond caret (closed/open); the same caret is on each top box's
-  `.ent-junkbox-sum`. Categories have NO on/off slider of their own: the summary holds the
-  name (in a `.junk-cat-titlerow` with the caret) plus a one-line `.junk-cat-desc` explanation
-  (from `_junkCatInfo`) — both in the summary so the description stays visible whether the
-  category is collapsed or expanded. The body is a wrap of per-pattern `.filter-pill` buttons
+  `.ent-junkbox-sum` (its master toggle is a compact variant so the collapsed box matches its
+  siblings). Categories have NO on/off slider of their own: the summary holds the name (in a
+  `.junk-cat-titlerow`) plus a one-line `.junk-cat-desc` explanation (from `_junkCatInfo`) —
+  both in the summary so the description stays visible whether the category is collapsed or
+  expanded; the cube/diamond caret is centred over the whole summary. The body is a wrap of per-pattern `.filter-pill` buttons
   (each toggles its own pattern via `pat:`, pill colour conveys state) followed by a trailing `.junk-all`
   "enable/disable all" button that bulk-flips every pattern in the category (`cat:<key>`, a
   shortcut over the per-pattern flags — there is no separate category gate). A `.ent-junk-sep`
