@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.6`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.7`.
 
 ## Language
 
@@ -394,6 +394,15 @@ rectangle from the UI tree.
     `allowSell` (default ON) gates the vendor path — off = refuse to act when a vendor
     is open (stash-only safety). Header exposes `allowSell` + `context`; the UI shows a
     "Detected destination" readout (vendor shown in amber as it SELLS).
+  - Vendor sell filter: when the destination is a vendor (or "unknown" — a possibly-
+    missed vendor, kept safe), each item is classified by `_SmItemCategory` into
+    `map` (path `/maps/` waystones) > `currency` (rarityId 5) > `unique` (rarityId 3/4)
+    > `gear` (everything else), and skipped (reason "filter") unless its category's
+    sell toggle is on. Toggles `sellGear` (default ON), `sellUniques` / `sellCurrency`
+    / `sellMaps` (default OFF) — so by default only normal/magic/rare gear is sold and
+    uniques, currency and maps are kept. The filter is NOT applied to stash / trade
+    (those dump everything, minus ignore/quest/failed). `_SmSellCategoryEnabled` /
+    `_SmIsSellingKind` gate it; UI = 4 `.filter-pill`s in the Stash Mover section.
 
 ### Edited files
 - **InGameStateMonitor.ahk** — `#Include ahk/StashMover.ahk`; `LoadStashMover()` at

@@ -5187,6 +5187,21 @@
               <div class="cfg-row"><span class="cfg-label">Detected destination</span>
                 <span id="sm-context" class="cfg-status" style="color:#7ec8e3;font-weight:600">—</span>
               </div>
+              <div class="cfg-label" style="margin-top:6px">Vendor sell filter (what to sell — stashing always dumps everything):</div>
+              <div class="ent-boxes" style="margin-top:4px;gap:6px;display:flex;flex-wrap:wrap">
+                <label class="filter-pill"><input type="checkbox" id="sm-sellGear"
+                    onchange="ahkCall('SetStashMover','sellGear',this.checked?'1':'0')"> Gear (normal/magic/rare)</label>
+                <label class="filter-pill"><input type="checkbox" id="sm-sellUniques"
+                    onchange="ahkCall('SetStashMover','sellUniques',this.checked?'1':'0')"> Uniques</label>
+                <label class="filter-pill"><input type="checkbox" id="sm-sellCurrency"
+                    onchange="ahkCall('SetStashMover','sellCurrency',this.checked?'1':'0')"> Currency</label>
+                <label class="filter-pill"><input type="checkbox" id="sm-sellMaps"
+                    onchange="ahkCall('SetStashMover','sellMaps',this.checked?'1':'0')"> Maps / Waystones</label>
+              </div>
+              <div class="cfg-help">
+                Applies only when selling at a vendor (or an unrecognised container).
+                By default only gear is sold; Uniques, Currency and Maps are kept.
+              </div>
               <div class="cfg-row">
                 <span class="cfg-label">Hotkey (AHK syntax, e.g. <code>F4</code> or <code>^d</code>)</span>
                 <input type="text" class="cfg-input" id="sm-hotkey" placeholder="none" style="width:120px"
@@ -6928,6 +6943,10 @@
       chk('sm-skipQuest', s.skipQuest);
       chk('sm-jitter', s.jitter);
       chk('sm-allowSell', s.allowSell);
+      chk('sm-sellGear', s.sellGear);
+      chk('sm-sellUniques', s.sellUniques);
+      chk('sm-sellCurrency', s.sellCurrency);
+      chk('sm-sellMaps', s.sellMaps);
       val('sm-hotkey', s.hotkey);
       val('sm-perItemDelayMs', s.perItemDelayMs);
       val('sm-settleDelayMs', s.settleDelayMs);

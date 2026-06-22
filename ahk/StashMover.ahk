@@ -46,6 +46,12 @@ LoadStashMover()
     global g_smSkipQuest := true               ; never try to stash quest items (they can't be)
     global g_smJitter := true                  ; randomise click position + inter-click delay
     global g_smAllowSell := true               ; allow acting when the open container is a vendor (sells!)
+    ; Vendor sell filter — which item categories to actually sell. Only applied
+    ; when the destination is a vendor (or unrecognised); stashing dumps everything.
+    global g_smSellGear := true                 ; normal/magic/rare gear (armour, weapons, jewellery …)
+    global g_smSellUniques := false            ; unique / relic items
+    global g_smSellCurrency := false           ; currency (rarityId 5)
+    global g_smSellMaps := false               ; maps / waystones (Metadata/Items/Maps/)
     global g_smConfigFile := _ConfigPath()
 
     ; Ignore filter — path -> display name. Items whose base-type path is in here
@@ -85,6 +91,10 @@ LoadStashMover()
         g_smSkipQuest      := (IniRead(f, "StashMover", "skipQuest", g_smSkipQuest ? "1" : "0") = "1")
         g_smJitter         := (IniRead(f, "StashMover", "jitter", g_smJitter ? "1" : "0") = "1")
         g_smAllowSell      := (IniRead(f, "StashMover", "allowSell", g_smAllowSell ? "1" : "0") = "1")
+        g_smSellGear       := (IniRead(f, "StashMover", "sellGear", g_smSellGear ? "1" : "0") = "1")
+        g_smSellUniques    := (IniRead(f, "StashMover", "sellUniques", g_smSellUniques ? "1" : "0") = "1")
+        g_smSellCurrency   := (IniRead(f, "StashMover", "sellCurrency", g_smSellCurrency ? "1" : "0") = "1")
+        g_smSellMaps       := (IniRead(f, "StashMover", "sellMaps", g_smSellMaps ? "1" : "0") = "1")
         g_smIgnore         := _SmIgnoreDeserialize(IniRead(f, "StashMover", "ignore", ""))
     } catch as ex {
         LogError("LoadStashMover", ex)
@@ -97,6 +107,7 @@ SaveStashMover()
 {
     global g_smEnabled, g_smHotkey, g_smShowButton, g_smPerItemDelayMs
     global g_smSettleDelayMs, g_smOffsetX, g_smOffsetY, g_smSkipQuest, g_smJitter, g_smAllowSell
+    global g_smSellGear, g_smSellUniques, g_smSellCurrency, g_smSellMaps
     global g_smIgnore, g_smConfigFile
     f := g_smConfigFile
     try {
@@ -110,6 +121,10 @@ SaveStashMover()
         IniWrite(g_smSkipQuest ? "1" : "0", f, "StashMover", "skipQuest")
         IniWrite(g_smJitter ? "1" : "0", f, "StashMover", "jitter")
         IniWrite(g_smAllowSell ? "1" : "0", f, "StashMover", "allowSell")
+        IniWrite(g_smSellGear ? "1" : "0", f, "StashMover", "sellGear")
+        IniWrite(g_smSellUniques ? "1" : "0", f, "StashMover", "sellUniques")
+        IniWrite(g_smSellCurrency ? "1" : "0", f, "StashMover", "sellCurrency")
+        IniWrite(g_smSellMaps ? "1" : "0", f, "StashMover", "sellMaps")
         IniWrite(_SmIgnoreSerialize(g_smIgnore), f, "StashMover", "ignore")
     } catch as ex {
         LogError("SaveStashMover", ex)
@@ -169,9 +184,18 @@ _SmApplySetting(key, val)
 {
     global g_smEnabled, g_smHotkey, g_smShowButton, g_smPerItemDelayMs
     global g_smSettleDelayMs, g_smOffsetX, g_smOffsetY, g_smSkipQuest, g_smJitter, g_smAllowSell
+    global g_smSellGear, g_smSellUniques, g_smSellCurrency, g_smSellMaps
     needRebind := false
     switch key
     {
+        case "sellGear":
+            g_smSellGear := _SmTruthy(val)
+        case "sellUniques":
+            g_smSellUniques := _SmTruthy(val)
+        case "sellCurrency":
+            g_smSellCurrency := _SmTruthy(val)
+        case "sellMaps":
+            g_smSellMaps := _SmTruthy(val)
         case "enabled":
             g_smEnabled := _SmTruthy(val)
             needRebind := true
@@ -215,6 +239,7 @@ BuildStashMoverHeaderJson()
     global g_smEnabled, g_smHotkey, g_smShowButton, g_smPerItemDelayMs
     global g_smSettleDelayMs, g_smOffsetX, g_smOffsetY, g_smSkipQuest, g_smJitter
     global g_smAllowSell, g_smIgnore, g_smCtxKind
+    global g_smSellGear, g_smSellUniques, g_smSellCurrency, g_smSellMaps
     j := "{"
     j .= '"enabled":'        (g_smEnabled ? "true" : "false")
     j .= ',"hotkey":'        _JsStr(g_smHotkey)
@@ -222,6 +247,10 @@ BuildStashMoverHeaderJson()
     j .= ',"skipQuest":'     (g_smSkipQuest ? "true" : "false")
     j .= ',"jitter":'        (g_smJitter ? "true" : "false")
     j .= ',"allowSell":'     (g_smAllowSell ? "true" : "false")
+    j .= ',"sellGear":'      (g_smSellGear ? "true" : "false")
+    j .= ',"sellUniques":'   (g_smSellUniques ? "true" : "false")
+    j .= ',"sellCurrency":'  (g_smSellCurrency ? "true" : "false")
+    j .= ',"sellMaps":'      (g_smSellMaps ? "true" : "false")
     j .= ',"perItemDelayMs":' (g_smPerItemDelayMs + 0)
     j .= ',"settleDelayMs":'  (g_smSettleDelayMs + 0)
     j .= ',"offsetX":'        (g_smOffsetX + 0)
@@ -662,10 +691,52 @@ _SmIsQuestItem(path)
     return (InStr(p, "questitem") || InStr(p, "/quests/")) ? true : false
 }
 
+; Classifies an item into one category for the vendor sell filter:
+; "map" (Metadata/Items/Maps/ waystones) > "currency" (rarityId 5) >
+; "unique" (rarityId 3/4) > "gear" (everything else: normal/magic/rare equipment).
+; Maps win over rarity so a unique/rare waystone is still treated as a map.
+_SmItemCategory(details)
+{
+    if !(details && IsObject(details))
+        return "gear"
+    path := details.Has("metadataPath") ? details["metadataPath"] : ""
+    if (InStr(StrLower(path), "/maps/"))
+        return "map"
+    rid := details.Has("rarityId") ? details["rarityId"] : -1
+    if (rid = 5)
+        return "currency"
+    if (rid = 3 || rid = 4)
+        return "unique"
+    return "gear"
+}
+
+; True when the given sell category is enabled for selling.
+_SmSellCategoryEnabled(cat)
+{
+    global g_smSellGear, g_smSellUniques, g_smSellCurrency, g_smSellMaps
+    switch cat
+    {
+        case "map":      return g_smSellMaps
+        case "currency": return g_smSellCurrency
+        case "unique":   return g_smSellUniques
+        default:         return g_smSellGear   ; "gear"
+    }
+}
+
+; True when the destination is a selling context the sell filter must apply to.
+; Vendor is the obvious one; "unknown" is treated as possibly-a-vendor so a
+; missed detection can't accidentally sell uniques / currency / maps. Stash and
+; trade dump everything (minus ignore / quest / failed).
+_SmIsSellingKind(kind)
+{
+    return (kind = "vendor" || kind = "unknown")
+}
+
 ; Decides whether a backpack item should be skipped this run, and why.
-; Returns "" (move it) or a reason: "ignore" | "quest" | "failed".
-; Param: item - one backpack item Map; nowTick - A_TickCount for cooldown checks.
-_SmShouldSkip(item, nowTick)
+; Returns "" (move it) or a reason: "ignore" | "quest" | "failed" | "filter".
+; Params: item - one backpack item Map; nowTick - A_TickCount for cooldown checks;
+; kind - the detected destination kind (drives the vendor sell filter).
+_SmShouldSkip(item, nowTick, kind := "")
 {
     global g_smIgnore, g_smSkipQuest, g_smFailed, g_smFailCooldownMs
     d := item.Has("details") ? item["details"] : 0
@@ -677,6 +748,9 @@ _SmShouldSkip(item, nowTick)
     ptr := item.Has("itemEntityPtr") ? item["itemEntityPtr"] : 0
     if (ptr && g_smFailed.Has(ptr) && (nowTick - g_smFailed[ptr]) < g_smFailCooldownMs)
         return "failed"
+    ; Vendor sell filter — only when selling. Keep the categories the user opted out of.
+    if (_SmIsSellingKind(kind) && !_SmSellCategoryEnabled(_SmItemCategory(d)))
+        return "filter"
     return ""
 }
 
@@ -748,7 +822,7 @@ StashMoverDump(source := "")
     points := []
     queuedPtrs := []
     seen := Map()
-    skipped := Map("ignore", 0, "quest", 0, "failed", 0)
+    skipped := Map("ignore", 0, "quest", 0, "failed", 0, "filter", 0)
     for _, it in bp["items"]
     {
         if !(it && IsObject(it))
@@ -758,7 +832,7 @@ StashMoverDump(source := "")
             continue
         if ptr
             seen[ptr] := true
-        reason := _SmShouldSkip(it, now)
+        reason := _SmShouldSkip(it, now, ctx["kind"])
         if (reason != "")
         {
             if skipped.Has(reason)
@@ -781,8 +855,8 @@ StashMoverDump(source := "")
     if (points.Length = 0)
     {
         msg := "Stash Mover: nothing to move"
-        if (skipped["ignore"] || skipped["quest"] || skipped["failed"])
-            msg .= " (" skipped["ignore"] " ignored, " skipped["quest"] " quest, " skipped["failed"] " on cooldown)"
+        if (skipped["ignore"] || skipped["quest"] || skipped["failed"] || skipped["filter"])
+            msg .= " (" skipped["ignore"] " ignored, " skipped["filter"] " filtered, " skipped["quest"] " quest, " skipped["failed"] " on cooldown)"
         _SmTooltip(msg ".", 1800)
         return
     }
