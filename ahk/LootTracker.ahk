@@ -46,6 +46,12 @@ global g_ltLastLivePushTick := 0
 global g_ltNextPriceCheckTick := 0
 global g_ltLiveView         := Map()  ; cached display model for overlays + WebView
 global g_ltLastReason       := "init" ; per-tick diagnostic (why nothing is tracked)
+; Freshly-read world-area (town/hideout/name) — read directly here rather than trusting
+; the radar snapshot's once-per-zone cache, which can latch the PREVIOUS area's flags if
+; its single read lands before the game's area pointer settles (mirrors AutoFlask).
+global g_ltWad     := 0
+global g_ltWadTick := 0
+global g_ltWadHash := 0
 
 ; ── Init ─────────────────────────────────────────────────────────────────────
 LoadLootTracker()
@@ -93,6 +99,9 @@ LoadLootTracker()
     g_ltMonsterTallies   := Map()
     g_ltNextKillScanTick := 0
     g_ltLastReason       := "init"
+    g_ltWad     := 0
+    g_ltWadTick := 0
+    g_ltWadHash := 0
 
     f := g_ltConfigFile
     if !FileExist(f)
@@ -172,8 +181,14 @@ _LtRunTick(radarSnap)
     inGs := radarSnap.Has("inGameState") ? radarSnap["inGameState"] : 0
     area := (inGs && IsObject(inGs) && inGs.Has("areaInstance")) ? inGs["areaInstance"] : 0
     areaHash := (area && IsObject(area) && area.Has("currentAreaHash")) ? area["currentAreaHash"] : 0
+    inGsAddr := (inGs && IsObject(inGs) && inGs.Has("address")) ? inGs["address"] : 0
 
-    wad := radarSnap.Has("worldAreaDat") ? radarSnap["worldAreaDat"] : 0
+    ; Prefer a FRESH world-area read (self-correcting each tick) over the radar
+    ; snapshot's once-per-zone cache, which can latch the previous area's flags; fall
+    ; back to the snapshot cache only if the fresh read isn't available.
+    wad := _LtResolveWorldArea(areaHash, inGsAddr)
+    if !(wad && IsObject(wad))
+        wad := radarSnap.Has("worldAreaDat") ? radarSnap["worldAreaDat"] : 0
     hasWad := (wad && IsObject(wad)) ? true : false
     name := (hasWad && wad.Has("name")) ? wad["name"] : ""
     areaId := (hasWad && wad.Has("id")) ? wad["id"] : ""
@@ -597,6 +612,52 @@ _LtApplySetting(key, value)
             return true
     }
     return false
+}
+
+; ── World-area (town/hideout/name) fresh read ─────────────────────────────────
+; Reads the world-area row directly (the same chain the radar cache uses) but on a
+; ~250 ms throttle each tick, so a too-early first read right after a zone change
+; self-corrects instead of latching the previous area's flags for the whole zone.
+; Keeps the last good value if a read momentarily fails. Returns the worldAreaDat Map, or 0.
+_LtResolveWorldArea(areaHash, inGsAddr)
+{
+    global g_ltWad, g_ltWadTick, g_ltWadHash
+    now := A_TickCount
+    if (areaHash != g_ltWadHash || !(g_ltWad && IsObject(g_ltWad)) || (now - g_ltWadTick) >= 250)
+    {
+        g_ltWadTick := now
+        fresh := _LtReadWorldAreaRaw(inGsAddr)
+        if (fresh && IsObject(fresh))
+        {
+            g_ltWad := fresh
+            g_ltWadHash := areaHash
+        }
+    }
+    return g_ltWad
+}
+
+; Pointer chain inGameState -> WorldData -> WorldAreaDetails -> row, decoded via the
+; reader's ReadWorldAreaDat (id / name / isTown / isHideout). 0 on any bad read.
+_LtReadWorldAreaRaw(inGsAddr)
+{
+    global g_reader
+    if !(IsObject(g_reader) && IsObject(g_reader.Mem) && g_reader.Mem.Handle)
+        return 0
+    if !inGsAddr
+        return 0
+    try
+    {
+        worldData := g_reader.Mem.ReadPtr(inGsAddr + PoE2Offsets.InGameState["WorldData"])
+        if !g_reader.IsProbablyValidPointer(worldData)
+            return 0
+        wdp := g_reader.Mem.ReadPtr(worldData + PoE2Offsets.WorldData["WorldAreaDetailsPtr"])
+        if !g_reader.IsProbablyValidPointer(wdp)
+            return 0
+        rowPtr := g_reader.Mem.ReadPtr(wdp + PoE2Offsets.WorldData["WorldAreaDetailsRowPtr"])
+        return g_reader.ReadWorldAreaDat(rowPtr)
+    }
+    catch
+        return 0
 }
 
 ; ── Small numeric helpers ─────────────────────────────────────────────────────
