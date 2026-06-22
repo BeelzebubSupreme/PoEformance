@@ -25,7 +25,7 @@ _LtResetKillTally()
 ; dead reading counts, so corpses present on (re)entry aren't mistaken for fresh kills.
 _LtScanKills(radarSnap)
 {
-    global g_ltCurrent, g_ltRunStartTick, g_ltMonsterTallies, g_ltNextKillScanTick
+    global g_ltCurrent, g_ltRunStartTick, g_ltMonsterTallies, g_ltNextKillScanTick, g_ltDiagKills
 
     if !(g_ltCurrent && IsObject(g_ltCurrent) && g_ltRunStartTick > 0)
         return
@@ -45,6 +45,7 @@ _LtScanKills(radarSnap)
         return
 
     kills := g_ltCurrent["kills"]
+    mons := 0, monAny := 0, aliveCnt := 0, deadCnt := 0
     for _, entry in sample
     {
         if !(entry && Type(entry) = "Map" && entry.Has("entity"))
@@ -55,18 +56,25 @@ _LtScanKills(radarSnap)
         path := entity.Has("path") ? entity["path"] : ""
         if (path = "")
             continue
+        if InStr(path, "Monster")
+            monAny += 1
         ; Only real monsters (category "Monsters"); skips NPCs / chests / effects.
         if (ExtractMetaCategory(path) != "Monsters")
             continue
         id := entry.Has("id") ? entry["id"] : 0
         if (id = 0)
             continue
+        mons += 1
 
         decoded := (entity.Has("decodedComponents") && entity["decodedComponents"]
             && Type(entity["decodedComponents"]) = "Map") ? entity["decodedComponents"] : Map()
         life := decoded.Has("life") ? decoded["life"] : 0
         alive := (life && IsObject(life) && life.Has("isAlive")) ? life["isAlive"] : true
         dead := !alive
+        if dead
+            deadCnt += 1
+        else
+            aliveCnt += 1
 
         if g_ltMonsterTallies.Has(id)
         {
@@ -89,4 +97,5 @@ _LtScanKills(radarSnap)
         idx := (rar > 3) ? 3 : (rar < 0 ? 0 : rar)
         g_ltMonsterTallies[id] := Map("rarity", idx, "seenAlive", !dead, "tallied", false)
     }
+    g_ltDiagKills := "mons=" mons " any=" monAny " tal=" g_ltMonsterTallies.Count " alive=" aliveCnt " dead=" deadCnt
 }

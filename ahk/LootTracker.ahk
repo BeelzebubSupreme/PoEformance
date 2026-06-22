@@ -57,6 +57,7 @@ global g_ltDiag2   := ""  ; loot-diff diagnostic string (bp / gained / priced / 
 global g_ltDiagInv := ""  ; per-inventory summary (id(grid)=itemCount …) from the last read
 global g_ltDiagCalls := 0 ; how many times _LtSnapshotInventory ran (must climb if the live read is alive)
 global g_ltLastErr := ""  ; last swallowed per-tick exception (Type: message [Lnn]) for the UI
+global g_ltDiagKills := "" ; kill-scan diagnostic (mons / any / tal / alive / dead)
 
 ; ── Init ─────────────────────────────────────────────────────────────────────
 LoadLootTracker()
@@ -115,6 +116,7 @@ LoadLootTracker()
     g_ltDiagInv := ""
     g_ltDiagCalls := 0
     g_ltLastErr := ""
+    g_ltDiagKills := ""
 
     f := g_ltConfigFile
     if !FileExist(f)
@@ -408,7 +410,7 @@ _LtRefreshLiveView(radarSnap)
 {
     global g_ltLiveView, g_ltNextViewTick, g_ltCurrent, g_ltOnMap, g_ltCompleted, g_ltDivToEx
     global g_ltPriceStatus, g_ltPriceError, g_ltLastSyncEpoch, g_ltPricesByArt, g_ltSessionStartTick
-    global g_ltDiagBp, g_ltDiag2, g_ltDiagCalls, g_ltRunStartTick, g_ltBaseline, g_ltLastErr
+    global g_ltDiagBp, g_ltDiag2, g_ltDiagCalls, g_ltRunStartTick, g_ltBaseline, g_ltLastErr, g_ltDiagKills
 
     now := A_TickCount
     if (now < g_ltNextViewTick)
@@ -443,7 +445,7 @@ _LtRefreshLiveView(radarSnap)
         g_ltDiag2 := "calls=" g_ltDiagCalls " bp=" g_ltDiagBp " gained=" gained.Count
             . " rs=" (g_ltRunStartTick > 0 ? 1 : 0)
             . " bl=" ((g_ltBaseline && Type(g_ltBaseline) = "Map") ? g_ltBaseline.Count : -1)
-            . " p=" p " u=" u
+            . " p=" p " u=" u " | " g_ltDiagKills
     }
     else
     {
