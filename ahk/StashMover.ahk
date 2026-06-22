@@ -822,6 +822,71 @@ _SmDiagVisibleMatches(reader, gameUi)
     return (out != "" ? out : "  (none matched)`n")
 }
 
+; Lists ALL visible, named StringIds down to maxDepth (regardless of keywords), so
+; the open window's real StringId is captured even if it matches no keyword. Prunes
+; hidden subtrees; deduped + capped. Returns a newline string.
+_SmDiagShallowVisible(reader, gameUi, maxDepth := 3)
+{
+    if !reader.IsProbablyValidPointer(gameUi)
+        return "  (gameUi invalid)`n"
+    idOff := PoE2Offsets.UiElementBase["StringIdPtr"]
+    flagsOff := PoE2Offsets.UiElementBase["Flags"]
+    queue := [{ptr: gameUi, d: 0}]
+    seen := Map()
+    found := Map()
+    order := []
+    while (queue.Length > 0)
+    {
+        it := queue.RemoveAt(1)
+        p := it.ptr
+        if (seen.Has(p) || !reader.IsProbablyValidPointer(p))
+            continue
+        seen[p] := true
+        if (p != gameUi)
+        {
+            fl := 0
+            try fl := reader.Mem.ReadUInt(p + flagsOff)
+            if (((fl >> 11) & 1) = 0)
+                continue
+            sid := ""
+            try sid := reader.ReadStdWStringAt(p + idOff, 64)
+            if (sid != "" && !found.Has(sid))
+            {
+                found[sid] := true
+                order.Push("  d" it.d "  " sid)
+            }
+        }
+        if (it.d >= maxDepth)
+            continue
+        hdr := reader.Mem.ReadBytes(p, 0x20)
+        if !hdr
+            continue
+        cf := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+        cl := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
+        if (!reader.IsProbablyValidPointer(cf) || cl <= cf)
+            continue
+        cn := Min((cl - cf) // A_PtrSize, 256)
+        cbuf := reader.Mem.ReadBytes(cf, cn * A_PtrSize)
+        if !cbuf
+            continue
+        Loop cn
+        {
+            cpp := NumGet(cbuf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
+            if reader.IsProbablyValidPointer(cpp)
+                queue.Push({ptr: cpp, d: it.d + 1})
+        }
+    }
+    out := ""
+    cnt := 0
+    for _, line in order
+    {
+        out .= line "`n"
+        if (++cnt >= 120)
+            break
+    }
+    return (out != "" ? out : "  (none)`n")
+}
+
 ; Shows a MsgBox report of the live destination signals: ServerData / GameUi
 ; resolution, every open inventory id (+ grid + item count), the top-level panel
 ; StringIds (visible/hidden), the keyword-matched visible StringIds, and the
@@ -865,7 +930,8 @@ StashMoverDiagnose()
         gameUi := _UiBrowser_GetGameUiPtr()
         out .= "GameUi: " (g_reader.IsProbablyValidPointer(gameUi) ? Format("0x{:X}", gameUi) : "0  (FAILED)") "`n`n"
         out .= "Top-level panels (direct children of GameUi):`n" _SmDiagTopPanels(g_reader, gameUi) "`n"
-        out .= "Visible keyword-matched StringIds:`n" _SmDiagVisibleMatches(g_reader, gameUi) "`n"
+        out .= "Visible keyword-matched StringIds (deep):`n" _SmDiagVisibleMatches(g_reader, gameUi) "`n"
+        out .= "All visible named StringIds (depth <= 3):`n" _SmDiagShallowVisible(g_reader, gameUi, 3) "`n"
 
         ctx := _SmDetectContext()
         out .= "Currently detected kind:  " ctx["kind"]
@@ -874,7 +940,23 @@ StashMoverDiagnose()
     {
         out .= "`n`nEXCEPTION: " (ex.HasOwnProp("Message") ? ex.Message : "?")
     }
-    try MsgBox(out, "Stash Mover Diagnostic", 0x40)
+    ; Write the full report to debug\ (the MsgBox truncates long lists) and show
+    ; only the path + the detected kind.
+    outDir := A_ScriptDir "\debug"
+    if !DirExist(outDir)
+        try DirCreate(outDir)
+    outPath := outDir "\stashmover_diag_" FormatTime(A_Now, "yyyyMMdd_HHmmss") ".txt"
+    wrote := false
+    try {
+        FileAppend(out, outPath, "UTF-8")
+        wrote := true
+    }
+    kindNow := ""
+    try kindNow := _SmDetectContext()["kind"]
+    if wrote
+        try MsgBox("Diagnostic written to:`n" outPath "`n`nDetected kind: " kindNow, "Stash Mover Diagnostic", 0x40)
+    else
+        try MsgBox(out, "Stash Mover Diagnostic", 0x40)   ; fallback if the file write failed
 }
 
 ; True when the metadata path looks like a quest item (these can't be stashed).
