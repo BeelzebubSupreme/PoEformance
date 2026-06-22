@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.12.155`.
+Reimplementation of the original C# project (see Reference). Version `0.45.12.156`.
 
 ## Language
 
@@ -279,7 +279,9 @@ area-state instead of re-reading memory.
   (`life.isAlive`, IsTargetable, despawn) read `dead=0`. Fix: `PoE2MemoryReader` keeps a
   per-area `_radarKillsByRarity` `[N,M,R,U]` tally, incremented by `_RecordRadarKill` at
   the two blacklist sites in `_FilterStaleRadarEntities` (signal-5 targetable-dead timer +
-  the hard-dead signals 1/2/3, monster-gated to entities we saw alive). The counter resets
+  the hard-dead signals 1/2/3, monster-gated to entities we saw alive). Friendly monsters
+  (own minions / spectres / totems / allies) are tracked in `_friendlyAddrs` and skipped,
+  matching the C# reference's `MonsterFriendly` exclusion. The counter resets
   on area change; `_LtScanKills` accumulates per-area DELTAS into `g_ltCurrent["kills"]`
   (`g_ltKillLastR` baseline, re-zeroed on every zone transition via `_LtResetKillTally`),
   throttled ~150 ms.

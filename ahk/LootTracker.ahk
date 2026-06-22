@@ -45,19 +45,12 @@ global g_ltNextViewTick     := 0
 global g_ltLastLivePushTick := 0
 global g_ltNextPriceCheckTick := 0
 global g_ltLiveView         := Map()  ; cached display model for overlays + WebView
-global g_ltLastReason       := "init" ; per-tick diagnostic (why nothing is tracked)
 ; Freshly-read world-area (town/hideout/name) — read directly here rather than trusting
 ; the radar snapshot's once-per-zone cache, which can latch the PREVIOUS area's flags if
 ; its single read lands before the game's area pointer settles (mirrors AutoFlask).
 global g_ltWad     := 0
 global g_ltWadTick := 0
 global g_ltWadHash := 0
-global g_ltDiagBp  := -1  ; last inventory snapshot backpack item-key count (-1 = read failed, 0 = empty)
-global g_ltDiag2   := ""  ; loot-diff diagnostic string (bp / gained / priced / unpriced)
-global g_ltDiagInv := ""  ; per-inventory summary (id(grid)=itemCount …) from the last read
-global g_ltDiagCalls := 0 ; how many times _LtSnapshotInventory ran (must climb if the live read is alive)
-global g_ltLastErr := ""  ; last swallowed per-tick exception (Type: message [Lnn]) for the UI
-global g_ltDiagKills := "" ; kill-scan diagnostic (mons / any / tal / alive / dead)
 
 ; ── Init ─────────────────────────────────────────────────────────────────────
 LoadLootTracker()
@@ -70,10 +63,7 @@ LoadLootTracker()
     global g_ltLiveLegDelta, g_ltNextLiveSnapTick, g_ltNextViewTick, g_ltLastLivePushTick
     global g_ltNextPriceCheckTick, g_ltLiveView
     global g_ltKillLastR, g_ltNextKillScanTick
-    global g_ltLastReason
     global g_ltWad, g_ltWadTick, g_ltWadHash
-    global g_ltDiagBp, g_ltDiag2, g_ltDiagInv, g_ltDiagCalls
-    global g_ltLastErr, g_ltDiagKills
 
     ; Defaults — seeded unconditionally so a fresh install never trips the
     ; "global has not been assigned a value" runtime error.
@@ -107,16 +97,9 @@ LoadLootTracker()
     g_ltLiveView         := Map()
     g_ltKillLastR        := [0, 0, 0, 0]
     g_ltNextKillScanTick := 0
-    g_ltLastReason       := "init"
     g_ltWad     := 0
     g_ltWadTick := 0
     g_ltWadHash := 0
-    g_ltDiagBp  := -1
-    g_ltDiag2   := ""
-    g_ltDiagInv := ""
-    g_ltDiagCalls := 0
-    g_ltLastErr := ""
-    g_ltDiagKills := ""
 
     f := g_ltConfigFile
     if !FileExist(f)
@@ -174,8 +157,6 @@ TryLootTrackerTick(radarSnap)
         _LtRunTick(radarSnap)
     catch as ex
     {
-        global g_ltLastErr
-        g_ltLastErr := Type(ex) ": " ex.Message " [L" (ex.HasProp("Line") ? ex.Line : "?") "]"
         try LogError("TryLootTrackerTick", ex)
     }
     finally
@@ -184,18 +165,12 @@ TryLootTrackerTick(radarSnap)
 
 _LtRunTick(radarSnap)
 {
-    global g_ltEnabled, g_ltLastZoneHash, g_ltBaseline, g_ltBaselinePending, g_ltLastReason
+    global g_ltEnabled, g_ltLastZoneHash, g_ltBaseline, g_ltBaselinePending
 
     if !g_ltEnabled
-    {
-        g_ltLastReason := "disabled"
         return
-    }
     if !(radarSnap && Type(radarSnap) = "Map")
-    {
-        g_ltLastReason := "no-snapshot"
         return
-    }
 
     inGs := radarSnap.Has("inGameState") ? radarSnap["inGameState"] : 0
     area := (inGs && IsObject(inGs) && inGs.Has("areaInstance")) ? inGs["areaInstance"] : 0
@@ -210,11 +185,9 @@ _LtRunTick(radarSnap)
         wad := radarSnap.Has("worldAreaDat") ? radarSnap["worldAreaDat"] : 0
     hasWad := (wad && IsObject(wad)) ? true : false
     name := (hasWad && wad.Has("name")) ? wad["name"] : ""
-    areaId := (hasWad && wad.Has("id")) ? wad["id"] : ""
     isTown    := (hasWad && wad.Has("isTown") && wad["isTown"]) ? true : false
     isHideout := (hasWad && wad.Has("isHideout") && wad["isHideout"]) ? true : false
     areaLevel := radarSnap.Has("areaLevel") ? radarSnap["areaLevel"] : 0
-    diag := "name='" name "' id='" areaId "' T=" (isTown ? 1 : 0) " H=" (isHideout ? 1 : 0)
 
     ; The run state machine needs a real area (nonzero instance hash) AND the world-area
     ; flags (to tell a map from town/hideout). The map NAME is best-effort — worldAreaDat
@@ -240,15 +213,10 @@ _LtRunTick(radarSnap)
         }
 
         _LtScanKills(radarSnap)
-        g_ltLastReason := ((isTown || isHideout) ? "town/hideout (paused)" : "on-map") " · " diag
     }
-    else if (areaHash != 0)
-        g_ltLastReason := "waiting for world-area data · " diag
-    else
-        g_ltLastReason := "loading (hash=0)"
 
-    ; Always refresh + push while enabled, so the session clock advances and the
-    ; diagnostics flow even between maps / when no run is active.
+    ; Always refresh + push while enabled, so the session clock advances even
+    ; between maps / when no run is active.
     _LtRefreshLiveView(radarSnap)
     _LtMaybePushLive()
     _LtMaybeAutoRefreshPrices()
@@ -413,7 +381,6 @@ _LtRefreshLiveView(radarSnap)
 {
     global g_ltLiveView, g_ltNextViewTick, g_ltCurrent, g_ltOnMap, g_ltCompleted, g_ltDivToEx
     global g_ltPriceStatus, g_ltPriceError, g_ltLastSyncEpoch, g_ltPricesByArt, g_ltSessionStartTick
-    global g_ltDiagBp, g_ltDiag2, g_ltDiagCalls, g_ltRunStartTick, g_ltBaseline, g_ltLastErr, g_ltDiagKills
 
     now := A_TickCount
     if (now < g_ltNextViewTick)
@@ -431,24 +398,13 @@ _LtRefreshLiveView(radarSnap)
         view["name"]   := g_ltCurrent["name"]
         view["timeMs"] := _LtCurrentLiveTimeMs()
         view["kills"]  := g_ltCurrent["kills"].Clone()
-        ; Isolate the inventory diff + valuation: a throw here (which was silently
-        ; killing the whole tick) now leaves the timer / session / kills working and
-        ; records the exact failure instead of freezing everything.
-        gained := Map(), p := 0, u := 0
+        ; Isolate the inventory diff + valuation: a throw here must not kill the whole
+        ; tick (it would freeze the timer / session / kills), so swallow it and show 0.
+        p := 0, u := 0
         try
-        {
-            gained := _LtCurrentGainedLive(radarSnap)
-            view["profitEx"] := _LtValueOf(gained, &p, &u)
-        }
-        catch as gex
-        {
+            view["profitEx"] := _LtValueOf(_LtCurrentGainedLive(radarSnap), &p, &u)
+        catch
             view["profitEx"] := 0.0
-            g_ltLastErr := "loot: " Type(gex) ": " gex.Message " [L" (gex.HasProp("Line") ? gex.Line : "?") "]"
-        }
-        g_ltDiag2 := "calls=" g_ltDiagCalls " bp=" g_ltDiagBp " gained=" gained.Count
-            . " rs=" (g_ltRunStartTick > 0 ? 1 : 0)
-            . " bl=" ((g_ltBaseline && Type(g_ltBaseline) = "Map") ? g_ltBaseline.Count : -1)
-            . " p=" p " u=" u " | " g_ltDiagKills
     }
     else
     {
@@ -456,7 +412,6 @@ _LtRefreshLiveView(radarSnap)
         view["profitEx"] := 0.0
         view["timeMs"]   := 0
         view["kills"]    := [0, 0, 0, 0]
-        g_ltDiag2 := "calls=" g_ltDiagCalls " bp=" g_ltDiagBp " (no active run)"
     }
 
     totA := 0, totEx := 0.0
@@ -548,7 +503,7 @@ PushLootLiveToWebView()
 
 _LtLiveViewJson()
 {
-    global g_ltLiveView, g_ltLastSyncEpoch, g_ltLastReason, g_ltEnabled, g_ltDiag2, g_ltDiagInv, g_ltLastErr
+    global g_ltLiveView, g_ltLastSyncEpoch, g_ltEnabled
     v := g_ltLiveView
     if !(v && Type(v) = "Map")
         return "{}"
@@ -595,10 +550,6 @@ _LtLiveViewJson()
     j .= ',"priceErr":'     _JsStr(v.Has("priceErr") ? v["priceErr"] : "")
     j .= ',"itemsCached":'  ((v.Has("itemsCached") ? v["itemsCached"] : 0) + 0)
     j .= ',"lastSyncAgo":'  (ageSec + 0)
-    j .= ',"reason":'       _JsStr(g_ltLastReason)
-    j .= ',"diag2":'        _JsStr(g_ltDiag2)
-    j .= ',"diagInv":'      _JsStr(g_ltDiagInv)
-    j .= ',"lastErr":'      _JsStr(g_ltLastErr)
     j .= ',"enabled":'      (g_ltEnabled ? "true" : "false")
     j .= "}"
     return j

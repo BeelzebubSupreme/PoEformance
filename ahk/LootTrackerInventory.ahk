@@ -61,10 +61,8 @@ _LtArtIdFromDds(ddsPath)
 ; (loading screen / no server data), in which case snap is left empty.
 _LtSnapshotInventory(radarSnap, &snap)
 {
-    global g_reader, g_ltDiagBp, g_ltDiagInv, g_ltDiagCalls
+    global g_reader
     snap := Map()
-    g_ltDiagBp := -1   ; assume read failed until proven otherwise (diagnostic)
-    g_ltDiagCalls += 1
 
     if !(IsObject(g_reader) && IsObject(g_reader.Mem) && g_reader.Mem.Handle)
         return false
@@ -117,15 +115,11 @@ _LtSnapshotInventory(radarSnap, &snap)
             idx += 1
         }
         if !g_reader.IsProbablyValidPointer(backpackPtr)
-            return false   ; backpack not resolvable this frame — leave bp = -1
+            return false   ; backpack not resolvable this frame
 
         backpack := g_reader._ReadInventoryWithItems(backpackPtr)
-        g_ltDiagInv := "id1 items=" ((backpack && IsObject(backpack) && backpack.Has("items")) ? backpack["items"].Length : 0)
         if !(backpack && IsObject(backpack) && backpack.Has("items"))
-        {
-            g_ltDiagBp := 0
             return true   ; backpack present but empty is still a valid (empty) read
-        }
 
         ; The reader returns one entry PER occupied slot, so a multi-cell item appears
         ; multiple times — dedupe by item entity pointer before counting.
@@ -156,7 +150,6 @@ _LtSnapshotInventory(radarSnap, &snap)
             key := _LtBuildItemKey(rarity, path, renderArt)
             snap[key] := (snap.Has(key) ? snap[key] : 0) + stack
         }
-        g_ltDiagBp := snap.Count
         return true
     }
     catch

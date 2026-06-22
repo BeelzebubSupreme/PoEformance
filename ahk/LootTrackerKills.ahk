@@ -29,7 +29,7 @@ _LtResetKillTally()
 ; reading the reader reset on an area change, so the whole current reading is taken as new.
 _LtScanKills(radarSnap)
 {
-    global g_reader, g_ltCurrent, g_ltRunStartTick, g_ltKillLastR, g_ltNextKillScanTick, g_ltDiagKills
+    global g_reader, g_ltCurrent, g_ltRunStartTick, g_ltKillLastR, g_ltNextKillScanTick
 
     if !(g_ltCurrent && IsObject(g_ltCurrent) && g_ltRunStartTick > 0)
         return
@@ -73,6 +73,4 @@ _LtScanKills(radarSnap)
         g_ltKillLastR[i] := cur[i]
         i += 1
     }
-
-    g_ltDiagKills := "N" kills[1] " M" kills[2] " R" kills[3] " U" kills[4] " r=" cur[1] "/" cur[2] "/" cur[3] "/" cur[4]
 }
