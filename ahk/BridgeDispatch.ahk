@@ -135,6 +135,34 @@ _DispatchBridgeCall(method, args)
                 _ApplyAlertSetting(args[1], args[2])
             SaveEntityAlertsConfig()
             SetTimer(PushHeaderToWebView, -50)
+        case "SetLootConfig":
+            ; args[1] = setting key, args[2] = value. Apply -> persist -> refresh header + live.
+            if (args.Length >= 2)
+            {
+                if _LtApplySetting(args[1], args[2])
+                    StartLootPriceRefresh()      ; league changed -> re-fetch prices
+            }
+            SaveLootTrackerConfig()
+            SetTimer(PushHeaderToWebView, -50)
+            SetTimer(PushLootLiveToWebView, -50)
+        case "LootNewSession":
+            ; Archive the current session to disk, then start a fresh one.
+            _LtResetSession()
+            SetTimer(PushLootLiveToWebView, -50)
+            SetTimer(PushLootSessionsToWebView, -50)
+        case "LootRefreshPrices":
+            StartLootPriceRefresh()
+            SetTimer(PushHeaderToWebView, -50)
+        case "LootLoadSessions":
+            PushLootSessionsToWebView()
+        case "LootSessionDetail":
+            if (args.Length >= 1)
+                PushLootSessionDetailToWebView(args[1])
+        case "LootDeleteSession":
+            if (args.Length >= 1)
+                _LtDeleteSession(args[1])
+        case "LootRequestLive":
+            PushLootLiveToWebView()
         case "SetJunk":
             if (args.Length >= 2)
                 _ApplyJunkSetting(args[1], args[2])

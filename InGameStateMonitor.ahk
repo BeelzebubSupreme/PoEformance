@@ -28,6 +28,7 @@ SetWorkingDir(A_ScriptDir)
 #Include ahk/NotificationOverlay.ahk
 #Include ahk/DebugOverlay.ahk
 #Include ahk/FocusOverlay.ahk
+#Include ahk/LootTrackerOverlay.ahk
 #Include ahk/OverlayContext.ahk
 #Include ahk/PlayOverlayPolicy.ahk
 #Include ahk/OverlayManager.ahk
@@ -46,7 +47,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.12.139"
+POEFORMANCE_VERSION := "0.45.13.0"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -323,6 +324,8 @@ LoadEntityGroups()
 LoadEntityAlertsConfig()
 LoadEntityJunkFilter()    ; global path-based junk entity suppressor + [JunkFilter] state
 LoadLocalApiConfig()      ; local HTTP API (MCP backend) settings + Winsock constants
+LoadLootTracker()         ; map-run / session loot tracker state + [LootTracker] config
+LoadLootPricing()         ; poe.ninja price layer (loads cache, kicks refresh if stale)
 LoadOverlaySystem()       ; build the OverlayManager + all overlays; wire legacy globals
 InitProfiler()            ; QPC profiler singleton (disabled until Shift+F3 enables it)
 ItemSizeRegistry.Load()   ; ~4000-entry path→(w,h) map used by loot fit-check
@@ -941,6 +944,11 @@ OnTreeTabChanged(*)
 #Include ahk/CombatAutomation.ahk
 #Include ahk/ItemSizeRegistry.ahk
 #Include ahk/LootPickup.ahk
+#Include ahk/LootPricing.ahk
+#Include ahk/LootTrackerInventory.ahk
+#Include ahk/LootTracker.ahk
+#Include ahk/LootTrackerKills.ahk
+#Include ahk/LootTrackerSessions.ahk
 #Include ahk/ExplorationModule.ahk
 #Include ahk/AutoPilot.ahk
 #Include ahk/CustomHotkeys.ahk
