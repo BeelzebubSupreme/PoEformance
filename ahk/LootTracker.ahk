@@ -408,7 +408,7 @@ _LtRefreshLiveView(radarSnap)
 {
     global g_ltLiveView, g_ltNextViewTick, g_ltCurrent, g_ltOnMap, g_ltCompleted, g_ltDivToEx
     global g_ltPriceStatus, g_ltPriceError, g_ltLastSyncEpoch, g_ltPricesByArt, g_ltSessionStartTick
-    global g_ltDiagBp, g_ltDiag2, g_ltDiagCalls, g_ltRunStartTick, g_ltBaseline
+    global g_ltDiagBp, g_ltDiag2, g_ltDiagCalls, g_ltRunStartTick, g_ltBaseline, g_ltLastErr
 
     now := A_TickCount
     if (now < g_ltNextViewTick)
@@ -423,12 +423,23 @@ _LtRefreshLiveView(radarSnap)
 
     if hasRun
     {
-        gained := _LtCurrentGainedLive(radarSnap)
-        p := 0, u := 0
-        view["name"]     := g_ltCurrent["name"]
-        view["profitEx"] := _LtValueOf(gained, &p, &u)
-        view["timeMs"]   := _LtCurrentLiveTimeMs()
-        view["kills"]    := g_ltCurrent["kills"].Clone()
+        view["name"]   := g_ltCurrent["name"]
+        view["timeMs"] := _LtCurrentLiveTimeMs()
+        view["kills"]  := g_ltCurrent["kills"].Clone()
+        ; Isolate the inventory diff + valuation: a throw here (which was silently
+        ; killing the whole tick) now leaves the timer / session / kills working and
+        ; records the exact failure instead of freezing everything.
+        gained := Map(), p := 0, u := 0
+        try
+        {
+            gained := _LtCurrentGainedLive(radarSnap)
+            view["profitEx"] := _LtValueOf(gained, &p, &u)
+        }
+        catch as gex
+        {
+            view["profitEx"] := 0.0
+            g_ltLastErr := "loot: " Type(gex) ": " gex.Message " [L" (gex.HasProp("Line") ? gex.Line : "?") "]"
+        }
         g_ltDiag2 := "calls=" g_ltDiagCalls " bp=" g_ltDiagBp " gained=" gained.Count
             . " rs=" (g_ltRunStartTick > 0 ? 1 : 0)
             . " bl=" ((g_ltBaseline && Type(g_ltBaseline) = "Map") ? g_ltBaseline.Count : -1)
