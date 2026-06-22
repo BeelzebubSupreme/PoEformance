@@ -33,7 +33,7 @@ _LtScanKills(radarSnap)
     now := A_TickCount
     if (now < g_ltNextKillScanTick)
         return
-    g_ltNextKillScanTick := now + 200
+    g_ltNextKillScanTick := now + 150
 
     inGs := radarSnap.Has("inGameState") ? radarSnap["inGameState"] : 0
     area := (inGs && IsObject(inGs) && inGs.Has("areaInstance")) ? inGs["areaInstance"] : 0
@@ -45,8 +45,7 @@ _LtScanKills(radarSnap)
         return
 
     kills := g_ltCurrent["kills"]
-    seenNow := Map()
-    mons := 0, monAny := 0, aliveCnt := 0, deadCnt := 0
+    mons := 0, deadCnt := 0
     for _, entry in sample
     {
         if !(entry && Type(entry) = "Map" && entry.Has("entity"))
@@ -57,8 +56,6 @@ _LtScanKills(radarSnap)
         path := entity.Has("path") ? entity["path"] : ""
         if (path = "")
             continue
-        if InStr(path, "Monster")
-            monAny += 1
         ; Only real monsters (category "Monsters"); skips NPCs / chests / effects.
         if (ExtractMetaCategory(path) != "Monsters")
             continue
@@ -66,57 +63,48 @@ _LtScanKills(radarSnap)
         if (id = 0)
             continue
         mons += 1
-        seenNow[id] := true
-        dist := entry.Has("distance") ? entry["distance"] : 99999
 
         decoded := (entity.Has("decodedComponents") && entity["decodedComponents"]
             && Type(entity["decodedComponents"]) = "Map") ? entity["decodedComponents"] : Map()
+        ; Death signal: a monster's HP can read stale > 0 for a moment after death, so the
+        ; reliable flag is IsTargetable going to 0 — exactly what SnapshotSerializers uses
+        ; for Enemy/Boss. Fall back to life.isAlive when targetable isn't decoded.
         life := decoded.Has("life") ? decoded["life"] : 0
         alive := (life && IsObject(life) && life.Has("isAlive")) ? life["isAlive"] : true
+        if (decoded.Has("targetable"))
+            alive := decoded["targetable"] ? true : false
         dead := !alive
         if dead
             deadCnt += 1
-        else
-            aliveCnt += 1
 
         if g_ltMonsterTallies.Has(id)
         {
             t := g_ltMonsterTallies[id]
-            t["lastDist"] := dist
+            ; Upgrade the pinned rarity if the monster was first seen before its rarity
+            ; component finished decoding (otherwise every kill counts as Normal).
+            if (t["rarity"] = 0)
+            {
+                r2 := ReadEntityRarityId(decoded)
+                if (r2 > 0)
+                    t["rarity"] := (r2 > 3) ? 3 : r2
+            }
             if t["tallied"]
                 continue
             if !dead
                 t["seenAlive"] := true
             else if t["seenAlive"]
             {
-                kills[t["rarity"] + 1] := kills[t["rarity"] + 1] + 1   ; rare: caught the dead state
+                kills[t["rarity"] + 1] := kills[t["rarity"] + 1] + 1
                 t["tallied"] := true
             }
             continue
         }
 
-        ; First sighting: pin the rarity once (4 Unique / 5 Boss fold into the Unique slot).
+        ; First sighting: pin the rarity (4 Unique / 5 Boss fold into the Unique slot).
         rar := ReadEntityRarityId(decoded)
         idx := (rar > 3) ? 3 : (rar < 0 ? 0 : rar)
-        g_ltMonsterTallies[id] := Map("rarity", idx, "seenAlive", !dead, "tallied", false, "lastDist", dist)
+        g_ltMonsterTallies[id] := Map("rarity", idx, "seenAlive", !dead, "tallied", false)
     }
 
-    ; Despawn-based kills: the radar sample almost never surfaces the brief dead state, so
-    ; a monster that was seen alive and then vanished from the awake sample while close to
-    ; the player was almost certainly killed. The distance gate keeps monsters that merely
-    ; fell out of the awake range (as the player moved on) from being miscounted.
-    despawnKills := 0
-    for mid, mt in g_ltMonsterTallies
-    {
-        if (mt["tallied"] || !mt["seenAlive"])
-            continue
-        if (!seenNow.Has(mid) && mt["lastDist"] <= 100)
-        {
-            kills[mt["rarity"] + 1] := kills[mt["rarity"] + 1] + 1
-            mt["tallied"] := true
-            despawnKills += 1
-        }
-    }
-
-    g_ltDiagKills := "mons=" mons " tal=" g_ltMonsterTallies.Count " alive=" aliveCnt " dead=" deadCnt " desp=" despawnKills
+    g_ltDiagKills := "mons=" mons " tal=" g_ltMonsterTallies.Count " dead=" deadCnt
 }
