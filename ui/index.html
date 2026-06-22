@@ -2038,8 +2038,12 @@
       background: var(--bg);
       font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: .04em
+      letter-spacing: .04em;
+      cursor: pointer;
+      user-select: none
     }
+    .skill-table th:hover { background: var(--surface) }
+    .skill-table th .sort-ind { margin-left: 3px; font-size: 9px; opacity: .7 }
 
     .skill-table td {
       padding: 4px 10px;
@@ -2456,6 +2460,9 @@
     .ei-listhead > span:nth-child(2),
     .ei-listhead > span:nth-child(6),
     .ei-listhead > span:nth-child(7) { text-align: right; }
+    .ei-listhead > span.ei-sortable { cursor: pointer; }
+    .ei-listhead > span.ei-sortable:hover { color: var(--codex-text); }
+    .ei-listhead .sort-ind { margin-left: 3px; font-size: 8px; color: var(--codex-gold); }
     .ei-c-id {
       font-family: 'Consolas', monospace;
       font-size: 11px;
@@ -8900,6 +8907,10 @@
     let _availableSkills = [];       // populated from updateSkills()
     let _showInternalSkills = false; // Skills tab: also show internal (non-player) skills
     let _lastSkillsRaw = null;       // last skills payload, for re-render on pill toggle
+    // Skills-table column sort. null = natural order. _skillSortAsc=false means the
+    // first click on a column sorts descending, a second click flips to ascending.
+    let _skillSortCol = null;
+    let _skillSortAsc = false;
 
     // Toggle the "internal skills" pill in the Skills & Buffs tab and re-render.
     function _toggleInternalSkills() {
@@ -9409,6 +9420,11 @@
     window._eiState = window._eiState || {
       items: [],
       filters: { id: '', path: '', type: 'all', state: 'all', group: 'all', category: 'all' },
+      // User column sort (click a list-head column). null = default order
+      // (bosses/transitions first, then nearest distance). sortAsc=false means
+      // the first click on a column sorts descending, the second ascending.
+      sortCol: null,
+      sortAsc: false,
       expanded: new Set(),
       compExpanded: new Set(),  // keys are `<entityAddr>::<componentName>`
       // Lazy-decode cache. Keys are `<entityAddr>::<componentName>`,
@@ -9451,8 +9467,17 @@
       const lowId = fId.toLowerCase().trim();
       const lowPath = fPath.toLowerCase().trim();
 
-      // Sort: bosses + transitions + named landmarks first, then nearest distance
+      // Sort. When the user clicked a column header (st.sortCol) sort purely by
+      // that column; otherwise the default order: bosses + transitions + named
+      // landmarks first, then nearest distance.
+      const sortCol = st.sortCol, sortAsc = !!st.sortAsc;
       const sorted = [...st.items].sort((a, b) => {
+        if (sortCol) {
+          let va = _eiSortVal(a, sortCol), vb = _eiSortVal(b, sortCol);
+          if (typeof va === 'number' && typeof vb === 'number') return sortAsc ? va - vb : vb - va;
+          va = String(va); vb = String(vb);
+          return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+        }
         const typeOrder = { Boss: 0, AreaTransition: 1, Waypoint: 2, Checkpoint: 3, NPC: 4 };
         const ta = typeOrder[a.type] ?? 99, tb = typeOrder[b.type] ?? 99;
         if (ta !== tb) return ta - tb;
@@ -9512,11 +9537,38 @@
             </div>
           </div>
           <div class="ei-listhead">
-            <span></span><span>ID</span><span>Name</span><span>Path</span><span>Type</span><span>Life</span><span>Dist</span>
+            <span></span>${[['id','ID'],['name','Name'],['path','Path'],['type','Type'],['life','Life'],['dist','Dist']].map(([k, label]) => {
+              const ind = sortCol === k ? (sortAsc ? '▲' : '▼') : '';
+              return `<span class="ei-sortable" onclick="eiSortBy('${k}')" title="Sort by ${label}">${label}<span class="sort-ind">${ind}</span></span>`;
+            }).join('')}
           </div>
           <div class="ei-list">${body}</div>
         </div>
       `;
+    }
+
+    // Click handler for an entity list-head column. First click on a column
+    // sorts descending, a second click on the same column flips to ascending.
+    function eiSortBy(col) {
+      const st = window._eiState;
+      if (st.sortCol === col) st.sortAsc = !st.sortAsc;
+      else { st.sortCol = col; st.sortAsc = false; }
+      eiRender();
+    }
+
+    // Comparable value for an entity in a given sort column. Numeric columns
+    // return numbers (compared numerically); the rest return lower-cased strings.
+    // Missing distance/life sort as the largest/smallest so they sit at one end.
+    function _eiSortVal(e, col) {
+      switch (col) {
+        case 'id':   return (typeof e.id === 'number') ? e.id : (Number(e.id) || 0);
+        case 'name': return String(e.name || (e.path ? String(e.path).split('/').pop() : '')).toLowerCase();
+        case 'path': return String(e.path || '').toLowerCase();
+        case 'type': return String(e.type || '').toLowerCase();
+        case 'life': return (e.life !== undefined && e.life >= 0) ? e.life : -1;
+        case 'dist': return (e.dist !== undefined && e.dist >= 0) ? e.dist : 1e9;
+        default:     return 0;
+      }
     }
 
     // One entity card. Expanded vs collapsed is driven by the global Set
@@ -10346,6 +10398,17 @@
         if (!ex || score > ex.score) _byDn.set(key, { s, score });
       }
       const visible = [..._byDn.values()].map(v => v.s);
+      // Optional user column sort (click a header). Default order is preserved
+      // (most-active first) until a column is chosen.
+      if (_skillSortCol) {
+        const asc = _skillSortAsc;
+        visible.sort((a, b) => {
+          let va = _skillSortVal(a, _skillSortCol), vb = _skillSortVal(b, _skillSortCol);
+          if (typeof va === 'number' && typeof vb === 'number') return asc ? va - vb : vb - va;
+          va = String(va); vb = String(vb);
+          return asc ? va.localeCompare(vb) : vb.localeCompare(va);
+        });
+      }
       const usable = visible.filter(s => s.ok);
       const blocked = visible.filter(s => !s.ok);
       const rows = visible.map(s => {
@@ -10376,7 +10439,34 @@
         return `<tr style="cursor:pointer" onclick="blacklistAdd('${escAttr(rawName)}')" data-tip="Click to hide"><td data-tip="${nm}">${icImg}${dn}</td><td class="${statusCls}">${statusTxt}</td><td>${cdText}${cdProgBar}</td><td>${usesText} ${cdBar}</td><td>${s.tu}</td><td data-tip="ID: ${s.ct} / EquipID: ${escHtml(s.eq)}">${escHtml(ctName)}</td></tr>`;
       }).join('');
       const internalPill = `<button class="inv-tog-pill${_showInternalSkills ? ' active' : ''}" type="button" style="margin-left:1em;vertical-align:middle" onclick="_toggleInternalSkills()" title="Also show internal/non-player skills (Move, Ascend, …)">Internal skills${internalCount ? ` (${internalCount})` : ''}</button>`;
-      el.innerHTML = `<div class="skill-header"><span class="skill-count">${usable.length} usable · ${blocked.length} on cooldown · ${visible.length} total</span>${internalPill}<span class="skill-debug" style="opacity:0.5;font-size:0.85em;margin-left:1em">ActiveSkill offset: ${asOff}</span></div><table class="skill-table"><thead><tr><th>Skill</th><th>Status</th><th>Cooldown</th><th>Uses</th><th>Total Uses</th><th>Cast Type</th></tr></thead><tbody>${rows}</tbody></table>`;
+      const skillHead = [['skill','Skill'],['status','Status'],['cooldown','Cooldown'],['uses','Uses'],['total','Total Uses'],['casttype','Cast Type']].map(([k, label]) => {
+        const ind = _skillSortCol === k ? (_skillSortAsc ? '▲' : '▼') : '';
+        return `<th onclick="sortSkillsBy('${k}')">${label}<span class="sort-ind">${ind}</span></th>`;
+      }).join('');
+      el.innerHTML = `<div class="skill-header"><span class="skill-count">${usable.length} usable · ${blocked.length} on cooldown · ${visible.length} total</span>${internalPill}<span class="skill-debug" style="opacity:0.5;font-size:0.85em;margin-left:1em">ActiveSkill offset: ${asOff}</span></div><table class="skill-table"><thead><tr>${skillHead}</tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    // Comparable value for a skill row in a given sort column. Numeric columns
+    // return numbers; the rest return lower-cased strings. Status ranks
+    // ready(2) > inactive(1) > blocked(0) so a first (descending) click puts the
+    // ready skills on top.
+    function _skillSortVal(s, col) {
+      switch (col) {
+        case 'skill':    return String(s.dn || s.n || '').toLowerCase();
+        case 'status':   return (!s.ok) ? 0 : ((s.tu === 0 && s.cd === 0 && s.mu === 0) ? 1 : 2);
+        case 'cooldown': return s.rem > 0 ? s.rem : (s.cd || 0);
+        case 'uses':     return (s.mu || 0) - (s.ac || 0);
+        case 'total':    return s.tu || 0;
+        case 'casttype': return String(typeof animName === 'function' ? animName(s.ct) : (s.ct ?? '')).toLowerCase();
+        default:         return 0;
+      }
+    }
+    // Click handler for a skills-table column header. First click sorts the
+    // column descending, a second click on the same column flips to ascending.
+    function sortSkillsBy(col) {
+      if (_skillSortCol === col) _skillSortAsc = !_skillSortAsc;
+      else { _skillSortCol = col; _skillSortAsc = false; }
+      if (_lastSkillsRaw != null) updateSkills(_lastSkillsRaw);
     }
 
     // ═══════════════════════════════════════════════════════════════════
