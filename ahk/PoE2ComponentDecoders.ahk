@@ -1248,6 +1248,24 @@ class PoE2ComponentDecoders
         namePtr := this.Mem.ReadPtr(buffDefPtr + PoE2Offsets.BuffDefinition["Name"])
         name := this.IsProbablyValidPointer(namePtr) ? this.Mem.ReadUnicodeString(namePtr) : ""
         buffType := this.Mem.ReadUChar(buffDefPtr + PoE2Offsets.BuffDefinition["BuffType"])
+
+        ; Buff's OWN icon: BuffDefinition.BuffVisualsKey -> BuffVisuals row ->
+        ; BuffDDSFile. This is the in-game buff art and covers buffs with no matching
+        ; active skill (Arcane Surge, Lightning Infusion, …) that the serializer's
+        ; name->skill-icon fallback can't reach. Empty on any read failure, so the
+        ; old fallback still applies. (Offsets defined in PoE2Offsets but previously
+        ; unused — verify in-game.)
+        iconPath := ""
+        try
+        {
+            buffVisualsPtr := this.Mem.ReadPtr(buffDefPtr + PoE2Offsets.BuffDefinition["BuffVisualsKey"])
+            if this.IsProbablyValidPointer(buffVisualsPtr)
+            {
+                ddsPtr := this.Mem.ReadPtr(buffVisualsPtr + PoE2Offsets.BuffVisuals["BuffDDSFile"])
+                if this.IsProbablyValidPointer(ddsPtr)
+                    iconPath := this.Mem.ReadUnicodeString(ddsPtr)
+            }
+        }
         totalTime := this.Mem.ReadFloat(statusEntryAddress + PoE2Offsets.StatusEffect["TotalTime"])
         timeLeft := this.Mem.ReadFloat(statusEntryAddress + PoE2Offsets.StatusEffect["TimeLeft"])
         sourceEntityId := this.Mem.ReadUInt(statusEntryAddress + PoE2Offsets.StatusEffect["SourceEntityId"])
@@ -1261,6 +1279,7 @@ class PoE2ComponentDecoders
         return Map(
             "buffDefPtr", buffDefPtr,
             "name", name,
+            "iconPath", iconPath,
             "buffType", buffType,
             "totalTime", totalTime,
             "timeLeft", timeLeft,

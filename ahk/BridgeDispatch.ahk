@@ -135,6 +135,11 @@ _DispatchBridgeCall(method, args)
                 _ApplyAlertSetting(args[1], args[2])
             SaveEntityAlertsConfig()
             SetTimer(PushHeaderToWebView, -50)
+        case "SetJunk":
+            if (args.Length >= 2)
+                _ApplyJunkSetting(args[1], args[2])
+            SaveEntityJunkFilter()
+            SetTimer(PushHeaderToWebView, -50)
         case "SetVitals":
             _ApplyVitals((args.Length >= 1) ? args[1] : 0)
             SaveVitalsConfig()

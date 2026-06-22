@@ -707,6 +707,12 @@ class PoE2InventoryReader extends PoE2PlayerReader
         catch
             stackCount := 0
 
+        ; Identified flag (from the Mods component) and the 2D inventory-art path
+        ; (from the RenderItem component) — both for the inventory UI. identified
+        ; is -1 when unknown/N/A (e.g. flasks routed through ObjectMagicProperties).
+        identified := (modsInfo && Type(modsInfo) = "Map" && modsInfo.Has("identified")) ? modsInfo["identified"] : -1
+        artPath := this.ReadItemArtPath(itemEntityPtr)
+
         return Map(
             "metadataPath", metadataPath,
             "baseType", baseType,
@@ -714,8 +720,26 @@ class PoE2InventoryReader extends PoE2PlayerReader
             "rarityId", rarityId,
             "rarity", this.RarityNameFromId(rarityId),
             "stackCount", stackCount,
+            "identified", identified,
+            "artPath", artPath,
             "modsInfo", modsInfo
         )
+    }
+
+    ; Reads the item's 2D inventory-art resource path via the RenderItem component
+    ; (RenderItem+0x28 → std::wstring, e.g. "Art/2DItems/.../Foo.dds"). The basename
+    ; doubles as a price-lookup key. Returns "" on any invalid pointer / read failure.
+    ReadItemArtPath(itemEntityPtr)
+    {
+        if !this.IsProbablyValidPointer(itemEntityPtr)
+            return ""
+        renderComp := this.FindEntityComponentAddress(itemEntityPtr, "RenderItem")
+        if !this.IsProbablyValidPointer(renderComp)
+            return ""
+        path := this.ReadStdWStringAt(renderComp + PoE2Offsets.RenderItemComponent["ResourcePath"], 260)
+        if (StrLen(path) <= 0 || StrLen(path) > 260)
+            return ""
+        return path
     }
 
     ; Compose the full display name like "Potent Transcendent Life Flask of the Abundant"
@@ -963,10 +987,18 @@ class PoE2InventoryReader extends PoE2PlayerReader
         if (statsFromModsOffset > 0)
             statsFromMods := this.ReadItemStatsFromMods(componentPtr + statsFromModsOffset)
 
+        ; Identified flag lives at Mods+0x90 (byte). It is a Mods-component-specific
+        ; offset; ObjectMagicProperties has a different layout, so -1 = unknown/N/A
+        ; (flasks/gems have no unidentified state and route through OMP).
+        identified := -1
+        if (sourceType = "Mods")
+            identified := (this.Mem.ReadUChar(componentPtr + PoE2Offsets.Mods["Identified"]) != 0) ? 1 : 0
+
         return Map(
             "sourceType", sourceType,
             "rarityId", rarityId,
             "rarity", this.RarityNameFromId(rarityId),
+            "identified", identified,
             "implicitMods", implicitMods,
             "explicitMods", explicitMods,
             "enchantMods", enchantMods,

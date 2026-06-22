@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.12.117`.
+Reimplementation of the original C# project (see Reference). Version `0.45.12.139`.
 
 ## Language
 
@@ -119,6 +119,37 @@ Alerts → `alerts.ini [Alerts]`.
   `currentAreaHash`, severity ranking, zone-entry + proximity (cooldown) timing, and
   banner / sound / window-flash / radar-highlight / log outputs. WAV list from `wav/`.
   Self-persist `[Alerts]` in `alerts.ini`.
+- **EntityJunkFilter.ahk** — global path-based junk suppressor ported from the C#
+  `JunkFilter` (6 categories: cosmetic / engine / daemon / pets / markers / hideout doodads;
+  "weapons/" deliberately dropped). `IsJunkEntity(path)` is hooked once at the sample chokepoint
+  (`CollectEntityMapCandidates`, before `candidates.Push`) so radar / browser / trees /
+  exports / AutoPilot all skip junk. Master + per-category + per-pattern toggles + custom
+  terms; active patterns precomputed in `g_junkActive` via `RebuildJunkActive()` (cheap
+  case-insensitive `InStr` per entity). `_ApplyJunkSetting` / `BuildJunkFilterHeaderJson` /
+  `Save/LoadEntityJunkFilter` (self-persist `[JunkFilter]`). Dispatch `SetJunk` (keys
+  `enabled` | `cat:<key>` bulk enable/disable-all | `pat:<pattern>` | `custom`); header key
+  `junkFilter`; UI is a wrapping row (`.ent-boxes`) of collapsible boxes at the top of the
+  **Entities** tab: Entity Classes (the global type filter, moved here from Config) and
+  Junk Filter (`#ent-junkbox`). The Junk Filter box holds ALL of it: the built-in categories
+  (`#junk-cats`, incl. the hideout-doodad category) **and** the Custom Terms section (add box +
+  deletable chips) in its body — the former standalone Hideout / Custom Terms boxes are gone.
+  Each junk category renders (via `junkCatRow`) as a collapsible `<details class="junk-cat">`
+  with a cube/diamond caret (closed/open); the same caret is on each top box's
+  `.ent-junkbox-sum` (its master toggle is a compact variant so the collapsed box matches its
+  siblings). Categories have NO on/off slider of their own: the summary holds the name (in a
+  `.junk-cat-titlerow`) plus a one-line `.junk-cat-desc` explanation (from `_junkCatInfo`) —
+  both in the summary so the description stays visible whether the category is collapsed or
+  expanded; the cube/diamond caret is centred over the whole summary. The body is a wrap of per-pattern `.filter-pill` buttons
+  (each toggles its own pattern via `pat:`, pill colour conveys state) followed by a trailing `.junk-all`
+  "enable/disable all" button that bulk-flips every pattern in the category (`cat:<key>`, a
+  shortcut over the per-pattern flags — there is no separate category gate). A `.ent-junk-sep`
+  spacer sits between the last category (Hideout) and the Custom Terms section. Only the Junk
+  Filter box master switch gates the whole feature.
+  Open categories are remembered in `_junkOpenCats` (updated from each `<details>`' `ontoggle`)
+  and `junkRenderCats` only rewrites a host's innerHTML when the markup changed — so the
+  periodic header push no longer snaps expanded categories shut. The fast radar path builds the awake
+  sample from `_radarEntityCache` in `UpdateRadarFast` (not `CollectEntityMapCandidates`), so the
+  junk filter is ALSO applied there at the awake-sample build. Default ON, all categories on.
 - **GdiOverlayBase.ahk** — reusable transparent, click-through, always-on-top GDI layer
   (cached pens/brushes/fonts, double-buffered blit). Used only by NotificationOverlay so far;
   PlayerHUD / RadarOverlay are NOT yet migrated to it.

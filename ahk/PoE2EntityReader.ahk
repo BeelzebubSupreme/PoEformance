@@ -169,14 +169,22 @@ class PoE2EntityReader extends PoE2ComponentDecoders
                 "nodeLayout",   "direct"
             )
 
-            entityPos               := this.ExtractEntityWorldPositionFromEntityBasic(entityBasic, playerOrigin)
-            sampleEntry["entity"]   := entityBasic
-            sampleEntry["distance"] := this.ComputeDistance3DFromMaps(playerOrigin, entityPos)
-            sampleEntry["priority"] := this.ComputeSampleEntryPriority(entityBasic, sampleEntry["distance"])
-            if (sampleEntry["priority"] >= 30)
-                npcCandidateCount += 1
+            sampleEntry["entity"] := entityBasic
 
-            candidates.Push(sampleEntry)
+            ; Global junk path-filter: suppressed entities never enter the candidate
+            ; sample, so the radar / browser / trees / exports / AutoPilot all skip
+            ; them. The left/right children are still enqueued below, so non-junk
+            ; descendants of a junk node are never lost.
+            if !IsJunkEntity(entityBasic.Has("path") ? entityBasic["path"] : "")
+            {
+                entityPos               := this.ExtractEntityWorldPositionFromEntityBasic(entityBasic, playerOrigin)
+                sampleEntry["distance"] := this.ComputeDistance3DFromMaps(playerOrigin, entityPos)
+                sampleEntry["priority"] := this.ComputeSampleEntryPriority(entityBasic, sampleEntry["distance"])
+                if (sampleEntry["priority"] >= 30)
+                    npcCandidateCount += 1
+
+                candidates.Push(sampleEntry)
+            }
 
             if (this.IsProbablyValidPointer(left) && left != head)
                 queue.Push(left)

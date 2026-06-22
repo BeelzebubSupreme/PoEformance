@@ -17,6 +17,19 @@
 ;
 ; Included by InGameStateMonitor.ahk
 
+; Cheap UiElement validity check: a real UiElement stores a pointer to ITSELF at
+; +0x08 (UiElementBase.Self), so *(ptr+Self) == ptr. Filters out false-positive
+; pointers when scanning for slot containers / in the Skill<->Slot probe.
+; Param: reader, ptr - candidate address. Returns true iff ptr is a UiElement.
+_IsUiElement(reader, ptr)
+{
+    if !reader.IsProbablyValidPointer(ptr)
+        return false
+    selfPtr := 0
+    try selfPtr := reader.Mem.ReadPtr(ptr + PoE2Offsets.UiElementBase["Self"])
+    return (selfPtr = ptr)
+}
+
 ; Resolves the skills_bar UiElement under the active GameUi root.
 ; Param: reader - the PoE2MemoryReader. Returns the element address, or 0.
 _SkillBarResolve(reader)
@@ -57,8 +70,8 @@ _SkillBarBfsFind(reader, rootPtr, targetId, maxDepth)
         hdr := reader.Mem.ReadBytes(p, 0x20)
         if !hdr
             continue
-        cf := NumGet(hdr.Ptr, 0x10, "Ptr")
-        cl := NumGet(hdr.Ptr, 0x18, "Ptr")
+        cf := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+        cl := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
         if (!reader.IsProbablyValidPointer(cf) || cl <= cf)
             continue
         n := Min((cl - cf) // A_PtrSize, 256)
@@ -91,8 +104,8 @@ _SkillBarFindLabel(reader, ptr, depth)
     hdr := reader.Mem.ReadBytes(ptr, 0x20)
     if !hdr
         return ""
-    cf := NumGet(hdr.Ptr, 0x10, "Ptr")
-    cl := NumGet(hdr.Ptr, 0x18, "Ptr")
+    cf := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+    cl := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
     isLeaf := !(reader.IsProbablyValidPointer(cf) && cl > cf)
     if (isLeaf)
     {
@@ -143,8 +156,8 @@ ReadSkillBarHotkeys(reader)
     hdr := reader.Mem.ReadBytes(bar, 0x20)
     if !hdr
         return out
-    cf := NumGet(hdr.Ptr, 0x10, "Ptr")
-    cl := NumGet(hdr.Ptr, 0x18, "Ptr")
+    cf := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+    cl := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
     if (!reader.IsProbablyValidPointer(cf) || cl <= cf)
         return out
     n := Min((cl - cf) // A_PtrSize, 64)
@@ -159,7 +172,7 @@ ReadSkillBarHotkeys(reader)
     Loop n
     {
         container := NumGet(buf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
-        if !reader.IsProbablyValidPointer(container)
+        if !_IsUiElement(reader, container)   ; self-ptr guard — only real UiElements
             continue
         flags := 0
         try flags := reader.Mem.ReadUInt(container + PoE2Offsets.UiElementBase["Flags"])
@@ -512,8 +525,8 @@ _SkillBarScanPtrMatches(reader, rootPtr, ptrMap)
             chdr := reader.Mem.ReadBytes(p, 0x20)
             if chdr
             {
-                cf := NumGet(chdr.Ptr, 0x10, "Ptr")
-                cl := NumGet(chdr.Ptr, 0x18, "Ptr")
+                cf := NumGet(chdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+                cl := NumGet(chdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
                 if (reader.IsProbablyValidPointer(cf) && cl > cf)
                 {
                     cn := Min((cl - cf) // A_PtrSize, 64)
@@ -523,7 +536,7 @@ _SkillBarScanPtrMatches(reader, rootPtr, ptrMap)
                         Loop cn
                         {
                             cp := NumGet(cbuf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
-                            if reader.IsProbablyValidPointer(cp)
+                            if _IsUiElement(reader, cp)   ; self-ptr guard — prune non-UiElement pointers
                                 queue.Push({ptr: cp, d: it.d + 1})
                         }
                     }

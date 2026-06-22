@@ -1620,6 +1620,42 @@
       letter-spacing: 0.02em
     }
 
+    /* Item 2D-art icon (RenderItem ResourcePath → poe2db CDN). Fills the cell
+       behind the name label; the label is hidden while the icon shows and the
+       img onerror handler reveals it again when the CDN has no art. */
+    .inv-item-img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      padding: 1px;
+      pointer-events: none;
+      z-index: 0
+    }
+    .inv-item-label { position: relative; z-index: 1 }
+    /* Unidentified marker — small crimson glyph in the top-left corner. */
+    .inv-unid-badge {
+      position: absolute;
+      left: 2px;
+      top: 0;
+      font-family: var(--codex-mono-serif);
+      font-size: 12px;
+      font-weight: 700;
+      color: #e0533b;
+      text-shadow: 0 0 2px rgba(0,0,0,0.95), 1px 1px 0 rgba(0,0,0,0.9);
+      pointer-events: none;
+      line-height: 1;
+      z-index: 3
+    }
+    .eq-card-img {
+      width: 40px;
+      height: 40px;
+      object-fit: contain;
+      align-self: center;
+      margin-bottom: 2px
+    }
+
     /* EQUIPPED — same parchment frame, items as larger sigil-cards in a flex
        row. Each card carries a small slot-id glyph in the top-right. */
     .eq-grid {
@@ -2002,8 +2038,12 @@
       background: var(--bg);
       font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: .04em
+      letter-spacing: .04em;
+      cursor: pointer;
+      user-select: none
     }
+    .skill-table th:hover { background: var(--surface) }
+    .skill-table th .sort-ind { margin-left: 3px; font-size: 9px; opacity: .7 }
 
     .skill-table td {
       padding: 4px 10px;
@@ -2381,10 +2421,12 @@
     .ei-card.expanded {
       border-color: var(--codex-gold);
     }
+    /* Entity rows + the column header share one grid template so cells line up. */
     .ei-head {
-      display: flex;
-      align-items: center;
+      display: grid;
+      grid-template-columns: 14px 48px minmax(110px,1.3fr) minmax(150px,2fr) 86px 46px 58px;
       gap: 6px;
+      align-items: center;
       padding: 4px 8px;
       cursor: pointer;
       user-select: none;
@@ -2397,38 +2439,71 @@
       transition: transform .15s;
     }
     .ei-card.expanded .ei-caret { transform: rotate(90deg); }
-    .ei-head-id {
+    .ei-listhead {
+      display: grid;
+      grid-template-columns: 14px 48px minmax(110px,1.3fr) minmax(150px,2fr) 86px 46px 58px;
+      gap: 6px;
+      align-items: center;
+      padding: 3px 8px;
+      position: sticky;
+      top: 0;
+      z-index: 3;
+      background: linear-gradient(180deg, rgba(28,18,10,0.96), rgba(20,12,6,0.96));
+      border-bottom: 1px solid var(--codex-rule);
+      font-family: var(--codex-display);
+      font-size: 9px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--codex-text-dim);
+    }
+    .ei-listhead > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ei-listhead > span:nth-child(2),
+    .ei-listhead > span:nth-child(6),
+    .ei-listhead > span:nth-child(7) { text-align: right; }
+    .ei-listhead > span.ei-sortable { cursor: pointer; }
+    .ei-listhead > span.ei-sortable:hover { color: var(--codex-text); }
+    .ei-listhead .sort-ind { margin-left: 3px; font-size: 8px; color: var(--codex-gold); }
+    .ei-c-id {
       font-family: 'Consolas', monospace;
       font-size: 11px;
       color: var(--codex-gold);
-      min-width: 42px;
       text-align: right;
-      flex-shrink: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
-    .ei-head-name {
-      flex: 1 1 auto;
+    .ei-c-name {
+      display: flex;
+      align-items: center;
+      gap: 5px;
       min-width: 0;
       font-size: 12px;
       color: var(--codex-text);
-      white-space: nowrap;
+    }
+    .ei-c-name-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ei-grp-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .ei-c-path {
+      font-family: 'Consolas', monospace;
+      font-size: 10px;
+      color: var(--codex-text-dim);
       overflow: hidden;
       text-overflow: ellipsis;
+      white-space: nowrap;
     }
-    .ei-head-path {
-      color: var(--codex-text-dim);
-      font-size: 10px;
-      font-family: 'Consolas', monospace;
-    }
-    .ei-head-meta {
-      display: flex;
-      gap: 6px;
-      align-items: center;
-      flex-shrink: 0;
+    .ei-c-type {
       font-size: 10px;
       color: var(--codex-text-dim);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
-    .ei-head-dist { min-width: 36px; text-align: right; }
-    .ei-card.dead .ei-head-name { color: var(--codex-text-dim); text-decoration: line-through; }
+    .ei-c-life, .ei-c-dist {
+      font-size: 10px;
+      color: var(--codex-text-dim);
+      text-align: right;
+      white-space: nowrap;
+    }
+    .ei-card.dead .ei-c-name-txt { color: var(--codex-text-dim); text-decoration: line-through; }
     .ei-card.sleep .ei-head { opacity: 0.55; font-style: italic; }
     .ei-body {
       display: none;
@@ -2973,6 +3048,13 @@
       background: radial-gradient(circle at 35% 30%, #ffe4a8, #c8a85a);
       border-color: rgba(0,0,0,0.5)
     }
+    /* Compact master toggle for the Junk Filter box header — small enough that it
+       no longer makes the collapsed box taller than its sibling boxes (which have
+       no toggle). Scoped to the box summary; the global toggle stays 38×20. */
+    .ent-junkbox-sum .toggle { width: 28px; height: 14px }
+    .ent-junkbox-sum .toggle-slider { border-radius: 8px }
+    .ent-junkbox-sum .toggle-slider::before { width: 10px; height: 10px; left: 2px; bottom: 2px }
+    .ent-junkbox-sum .toggle input:checked~.toggle-slider::before { transform: translateX(14px) }
 
     /* .cfg-input dimensions — sizing only; codex colours come from the
        shared input rule above. */
@@ -3043,6 +3125,239 @@
       pointer-events: none;
       width: 0;
       height: 0
+    }
+
+    /* Entity Junk Filter — collapsible box pinned at the top of the Entities tab.
+       Per-category rows carry a category enable pill and a wrap of per-pattern
+       pills (the pills reuse .filter-pill, so :has(:checked) styles them). Pattern
+       labels are short; the full pattern + meaning is in each pill's title. */
+    /* Top boxes sit in a wrapping flex row so Entity Classes + Junk Filter (and
+       the standalone Hideout / Custom Terms boxes) line up side by side. */
+    .ent-boxes {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 6px 8px 8px;
+    }
+    .ent-junkbox {
+      flex: 1 1 360px;
+      min-width: 260px;
+      border: 1px solid var(--codex-rule);
+      background: linear-gradient(180deg, var(--codex-parchment), var(--codex-vellum));
+      border-radius: 2px;
+      /* Promote each box to its own compositing layer + clip its paint to its
+         own border box. WebView2 otherwise leaves a "ghost" of the collapsed
+         state (doubled help text, leftover toggle/scrollbar marks) when a
+         <details> expands and the flex row reflows — it looked like a second
+         box nested inside the Junk Filter box. */
+      transform: translateZ(0);
+      contain: paint;
+    }
+    .ent-junkbox.ent-box-sm { flex: 1 1 240px }
+    .ent-junkbox-sum {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 28px 7px 10px;
+      position: relative;
+      cursor: pointer;
+      list-style: none;
+      user-select: none
+    }
+    .ent-junkbox-sum::-webkit-details-marker { display: none }
+    /* Cube caret when collapsed, gold diamond when open — same vocabulary as
+       the junk sub-categories and the cfg-section sections. Applies to all four
+       top boxes (Entity Classes, Junk Filter, Hideout, Custom Terms). */
+    .ent-junkbox-sum::after {
+      content: "";
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      width: 7px;
+      height: 7px;
+      background: var(--codex-gold);
+      box-shadow: 0 0 4px rgba(200,168,90,0.5);
+      transform: translateY(-50%) rotate(45deg);
+      transition: transform .2s ease-out, background .15s
+    }
+    .ent-junkbox:not([open]) .ent-junkbox-sum::after {
+      transform: translateY(-50%) rotate(0deg);
+      background: var(--codex-text-dim);
+      box-shadow: none
+    }
+    .ent-junkbox-sum:hover::after {
+      background: var(--codex-gold-hi);
+      box-shadow: 0 0 6px rgba(240,214,138,0.7)
+    }
+    .ent-junkbox-title {
+      font-family: var(--codex-display);
+      font-size: 12px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--codex-gold-hi)
+    }
+    .ent-junkbox-meta {
+      font-family: var(--codex-mono-serif);
+      font-size: 11px;
+      color: var(--codex-text-dim);
+      margin-right: auto
+    }
+    .ent-junkbox-body { padding: 2px 10px 10px }
+    .ent-junkbox-help {
+      font-family: var(--codex-serif);
+      font-size: 11px;
+      color: var(--codex-text-dim);
+      line-height: 1.4;
+      margin-bottom: 2px
+    }
+    /* Spacer between the last category (Hideout) and the Custom Terms section. */
+    .ent-junk-sep {
+      height: 1px;
+      margin: 16px 2px 6px;
+      background: var(--codex-rule)
+    }
+    .ent-junk-custom {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-width: 420px
+    }
+    .ent-junk-custom-head {
+      font-family: var(--codex-display);
+      font-size: 11px;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: var(--codex-text)
+    }
+    .ent-junk-custom-meta {
+      font-family: var(--codex-mono-serif);
+      font-size: 11px;
+      letter-spacing: 0;
+      text-transform: none;
+      color: var(--codex-text-dim);
+      margin-left: 6px
+    }
+    .ent-junk-addrow { display: flex; gap: 6px; align-items: center }
+    .ent-junk-addrow .cfg-input { flex: 1 1 auto; min-width: 0 }
+    .ent-junk-chips { display: flex; flex-wrap: wrap; gap: 5px }
+    .ent-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 3px 2px 8px;
+      border: 1px solid rgba(90,62,34,0.7);
+      border-radius: 2px;
+      background: linear-gradient(180deg, rgba(28,18,10,0.85), rgba(20,12,6,0.95));
+      font-family: var(--codex-mono-serif);
+      font-size: 11px;
+      color: var(--codex-text)
+    }
+    .ent-chip-x {
+      border: none;
+      background: none;
+      cursor: pointer;
+      color: var(--codex-text-dim);
+      font-size: 11px;
+      line-height: 1;
+      padding: 0 3px
+    }
+    .ent-chip-x:hover { color: #e0533b }
+    .ent-chip-empty { font-size: 11px; color: var(--codex-text-dim); font-style: italic }
+    /* Dim the body when the master switch is off (controls still usable). */
+    .ent-junkbox.junk-disabled .ent-junkbox-body { opacity: 0.5 }
+
+    .junk-cat {
+      border-top: 1px solid var(--codex-rule);
+      padding: 7px 0 4px
+    }
+    /* The category header doubles as the <details> summary and carries the
+       caret: a small cube when collapsed, a gold diamond (rotated 45°) when
+       open — same vocabulary as the cfg-section sections. The Junk Filter box
+       is an .ent-junkbox (not a .cfg-section), so we replicate the marker. */
+    .junk-cat-head {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      position: relative;
+      cursor: pointer;
+      list-style: none;
+      padding-right: 22px
+    }
+    .junk-cat-head::-webkit-details-marker { display: none }
+    /* Title row holds the name; the caret is centred over the whole header
+       (name + desc) so it stays vertically centred now that the summary is
+       two lines tall. */
+    .junk-cat-titlerow {
+      display: flex;
+      align-items: center
+    }
+    .junk-cat-head::after {
+      content: "";
+      position: absolute;
+      right: 4px;
+      top: 50%;
+      width: 7px;
+      height: 7px;
+      background: var(--codex-gold);
+      box-shadow: 0 0 4px rgba(200,168,90,0.5);
+      transform: translateY(-50%) rotate(45deg);
+      transition: transform .2s ease-out, background .15s
+    }
+    .junk-cat:not([open]) .junk-cat-head::after {
+      transform: translateY(-50%) rotate(0deg);
+      background: var(--codex-text-dim);
+      box-shadow: none
+    }
+    .junk-cat-head:hover::after {
+      background: var(--codex-gold-hi);
+      box-shadow: 0 0 6px rgba(240,214,138,0.7)
+    }
+    .junk-cat-name {
+      font-family: var(--codex-display);
+      font-size: 11px;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      color: var(--codex-text);
+      margin-right: auto
+    }
+    /* One-line explanation of the category — lives in the summary so it stays
+       visible whether the category is collapsed or expanded. */
+    .junk-cat-desc {
+      font-family: var(--codex-serif);
+      font-size: 12px;
+      line-height: 1.4;
+      color: var(--codex-text-dim);
+      max-width: 560px
+    }
+    .junk-pat-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      padding: 2px 0 4px 2px
+    }
+    .junk-pat {
+      font-family: var(--codex-mono-serif);
+      text-transform: none;
+      letter-spacing: 0
+    }
+    /* The trailing "enable/disable all" pill is an action button, not a state —
+       keep it visually distinct (dashed, italic) and don't let it adopt the gold
+       "selected" look of the pattern pills. Its label states the action. */
+    .filter-pill.junk-all {
+      font-style: italic;
+      border-style: dashed;
+      margin-left: 4px
+    }
+    .filter-pill.junk-all:has(input:checked) {
+      color: var(--codex-text-dim);
+      border-color: rgba(90,62,34,0.7);
+      background: linear-gradient(180deg, rgba(28,18,10,0.85), rgba(20,12,6,0.95));
+      box-shadow: none
+    }
+    .filter-pill.junk-all:hover {
+      color: var(--codex-text);
+      border-color: var(--codex-gold)
     }
 
     .cfg-section details {
@@ -4138,6 +4453,80 @@
 
     <!-- ENTITIES TAB (now default active) -->
     <div class="tab-panel active" id="panel-entities">
+      <!-- Filter boxes — a wrapping flex row (siblings of the live-rebuilt list
+           content so updateEntities() never wipes them). -->
+      <div class="ent-boxes">
+        <!-- Entity-class filter — moved here from Config. Same ids/handlers, so the
+             global type filter (radar / trees / exports / AutoPilot) is unchanged. -->
+        <details id="ent-typebox" class="ent-junkbox">
+          <summary class="ent-junkbox-sum">
+            <span class="ent-junkbox-title">Entity Classes</span>
+            <span class="ent-junkbox-meta">global type filter</span>
+          </summary>
+          <div class="ent-junkbox-body">
+            <div class="ent-junkbox-help">
+              Global entity-class filter applied <em>before</em> anything else — affects the radar,
+              the Game-tab trees, exports / dumps and the AutoPilot target picker. Unchecking a
+              class hides it everywhere; if something expected is missing from the radar, check here.
+            </div>
+            <div class="filter-row">
+              <label class="filter-pill"><input type="checkbox" id="ef-player"
+                  onchange="setEntityFilter('player',    this.checked)" checked> <span
+                  class="etype-badge etype-Player">Player</span></label>
+              <label class="filter-pill"><input type="checkbox" id="ef-minion"
+                  onchange="setEntityFilter('minion',    this.checked)" checked> <span
+                  class="etype-badge etype-Minion">Minion</span></label>
+              <label class="filter-pill"><input type="checkbox" id="ef-enemy"
+                  onchange="setEntityFilter('enemy',     this.checked)" checked> <span
+                  class="etype-badge etype-Enemy">Enemy</span></label>
+              <label class="filter-pill"><input type="checkbox" id="ef-npc"
+                  onchange="setEntityFilter('npc',       this.checked)" checked> <span
+                  class="etype-badge etype-NPC">NPC</span></label>
+              <label class="filter-pill"><input type="checkbox" id="ef-chest"
+                  onchange="setEntityFilter('chest',     this.checked)" checked> <span
+                  class="etype-badge etype-Chest">Chest</span></label>
+              <label class="filter-pill"><input type="checkbox" id="ef-worlditem"
+                  onchange="setEntityFilter('worlditem', this.checked)" checked> <span
+                  class="etype-badge etype-WorldItem">WorldItem</span></label>
+              <label class="filter-pill"><input type="checkbox" id="ef-other"
+                  onchange="setEntityFilter('other',     this.checked)" checked> <span
+                  class="etype-badge etype-Object">Other</span></label>
+            </div>
+          </div>
+        </details>
+
+        <!-- Junk filter — built-in path categories (incl. hideout) + custom terms, all in one box. -->
+        <details id="ent-junkbox" class="ent-junkbox">
+          <summary class="ent-junkbox-sum">
+            <span class="ent-junkbox-title">Junk Filter</span>
+            <span class="ent-junkbox-meta" id="junk-meta"></span>
+            <label class="toggle" onclick="event.stopPropagation()"
+                   title="Master switch — hide all matched junk entities everywhere (radar, Entities browser, trees, exports, AutoPilot).">
+              <input type="checkbox" id="junk-enabled" onchange="junkSet('enabled', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label>
+          </summary>
+          <div class="ent-junkbox-body">
+            <div class="ent-junkbox-help">
+              Hides gameplay-irrelevant entities by a substring match on the metadata path.
+              Categories are just groups — expand one (cube → diamond) to toggle its individual
+              pattern buttons; the last button enables/disables the whole category. Hover a button for what it matches.
+            </div>
+            <div id="junk-cats"></div>
+            <!-- Spacer between the last category (Hideout) and Custom Terms. -->
+            <div class="ent-junk-sep"></div>
+            <!-- Custom terms — extra user substrings, on top of the built-in categories. -->
+            <div class="ent-junk-custom">
+              <div class="ent-junk-custom-head">Custom terms<span id="junk-custom-meta" class="ent-junk-custom-meta"></span></div>
+              <div class="ent-junk-addrow">
+                <input type="text" class="cfg-input" id="junk-custom-input" placeholder="e.g. /banner/, decoy"
+                       title="A case-insensitive substring to treat as junk. Press Enter or click Add."
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();junkAddCustom();}">
+                <button class="hk-btn" onclick="junkAddCustom()">Add</button>
+              </div>
+              <div id="junk-custom-list" class="ent-junk-chips"></div>
+            </div>
+          </div>
+        </details>
+      </div>
       <div id="tab-entities-content">
         <div class="no-data-msg">Waiting for data…</div>
       </div>
@@ -4717,22 +5106,40 @@
               </div>
               <div class="cfg-help">Standalone debug panel docked to the right edge of the game window: AutoPilot / combat / loot / explore state, pathfinding diagnostics (hz/rg), current navigation target with distance, AutoFlask reason and the running version. Useful for debugging, distracting in normal play.</div>
 
-              <div class="cfg-row" style="margin-top:6px"><span class="cfg-label">Entity Markers</span></div>
-              <div class="cfg-help">Which monster categories the radar draws on the minimap and on-screen overlay. Off = invisible to the radar, even if the entity is in range.</div>
-              <div id="radar-filters" class="filter-row">
-                <label class="filter-pill"><input type="checkbox" id="rf-normal"
-                    onchange="setRadarFilter('normal',  this.checked)" checked> Normal</label>
-                <label class="filter-pill"><input type="checkbox" id="rf-rare"
-                    onchange="setRadarFilter('rare',    this.checked)" checked> Rare</label>
-                <label class="filter-pill"><input type="checkbox" id="rf-boss"
-                    onchange="setRadarFilter('boss',    this.checked)" checked> Boss</label>
-                <label class="filter-pill"><input type="checkbox" id="rf-minions"
-                    onchange="setRadarFilter('minions', this.checked)"> Minions</label>
-                <label class="filter-pill"><input type="checkbox" id="rf-npcs"
-                    onchange="setRadarFilter('npcs',    this.checked)"> NPCs</label>
-                <label class="filter-pill"><input type="checkbox" id="rf-chests"
-                    onchange="setRadarFilter('chests',  this.checked)"> Chests</label>
-              </div>
+              <!-- Entity Markers — collapsible nested section. Gets the themed
+                   caret for free (cube when closed, gold diamond when open) via
+                   the .cfg-section details summary::after rule. Replaces the old
+                   pill row; each monster category is now a standard toggle row.
+                   Keeps id="radar-filters" (opacity dim when radar off) and the
+                   rf-* ids / setRadarFilter handlers so header sync is unchanged. -->
+              <details style="margin-top:6px">
+                <summary style="cursor:pointer;padding:4px 0">
+                  <div class="cfg-header" style="font-size:12px">Entity Markers</div>
+                </summary>
+                <div style="margin-top:4px;padding:6px 0 4px 4px">
+                  <div class="cfg-help">Which monster categories the radar draws on the minimap and on-screen overlay. Off = invisible to the radar, even if the entity is in range.</div>
+                  <div id="radar-filters">
+                    <div class="cfg-row"><span class="cfg-label">Normal</span>
+                      <label class="toggle"><input type="checkbox" id="rf-normal" onchange="setRadarFilter('normal', this.checked)" checked><span class="toggle-slider"></span></label>
+                    </div>
+                    <div class="cfg-row"><span class="cfg-label">Rare</span>
+                      <label class="toggle"><input type="checkbox" id="rf-rare" onchange="setRadarFilter('rare', this.checked)" checked><span class="toggle-slider"></span></label>
+                    </div>
+                    <div class="cfg-row"><span class="cfg-label">Boss</span>
+                      <label class="toggle"><input type="checkbox" id="rf-boss" onchange="setRadarFilter('boss', this.checked)" checked><span class="toggle-slider"></span></label>
+                    </div>
+                    <div class="cfg-row"><span class="cfg-label">Minions</span>
+                      <label class="toggle"><input type="checkbox" id="rf-minions" onchange="setRadarFilter('minions', this.checked)"><span class="toggle-slider"></span></label>
+                    </div>
+                    <div class="cfg-row"><span class="cfg-label">NPCs</span>
+                      <label class="toggle"><input type="checkbox" id="rf-npcs" onchange="setRadarFilter('npcs', this.checked)"><span class="toggle-slider"></span></label>
+                    </div>
+                    <div class="cfg-row"><span class="cfg-label">Chests</span>
+                      <label class="toggle"><input type="checkbox" id="rf-chests" onchange="setRadarFilter('chests', this.checked)"><span class="toggle-slider"></span></label>
+                    </div>
+                  </div>
+                </div>
+              </details>
 
               <div class="cfg-row" style="margin-top:6px"><span class="cfg-label">Zone Navigation</span>
                 <label class="toggle"><input type="checkbox" id="tog-zonenav" onchange="ahkCall('ToggleZoneNav')"
@@ -4916,46 +5323,6 @@
              trees / radar consider at all) and skill/buff blacklist.
              ════════════════════════════════════════════════════════════ -->
         <div class="cfg-subpanel" data-cfgtab="filters">
-
-        <div class="cfg-section">
-          <details id="det-entities" open ontoggle="syncCfgSections()">
-            <summary>
-              <div class="cfg-header">Entities</div>
-            </summary>
-            <div class="cfg-subsection">
-              <div class="cfg-help">
-                Global entity-class filter applied <em>before</em> anything else in the helper
-                processes the live entity list — affects the trees on the Game tab, the radar,
-                exports / dumps, and the AutoPilot's target picker. Unchecking a category hides
-                that whole class of entities everywhere; if something is missing from the radar
-                that you'd expect to see, check here first.
-              </div>
-              <div class="filter-row">
-                <label class="filter-pill"><input type="checkbox" id="ef-player"
-                    onchange="setEntityFilter('player',    this.checked)" checked> <span
-                    class="etype-badge etype-Player">Player</span></label>
-                <label class="filter-pill"><input type="checkbox" id="ef-minion"
-                    onchange="setEntityFilter('minion',    this.checked)" checked> <span
-                    class="etype-badge etype-Minion">Minion</span></label>
-                <label class="filter-pill"><input type="checkbox" id="ef-enemy"
-                    onchange="setEntityFilter('enemy',     this.checked)" checked> <span
-                    class="etype-badge etype-Enemy">Enemy</span></label>
-                <label class="filter-pill"><input type="checkbox" id="ef-npc"
-                    onchange="setEntityFilter('npc',       this.checked)" checked> <span
-                    class="etype-badge etype-NPC">NPC</span></label>
-                <label class="filter-pill"><input type="checkbox" id="ef-chest"
-                    onchange="setEntityFilter('chest',     this.checked)" checked> <span
-                    class="etype-badge etype-Chest">Chest</span></label>
-                <label class="filter-pill"><input type="checkbox" id="ef-worlditem"
-                    onchange="setEntityFilter('worlditem', this.checked)" checked> <span
-                    class="etype-badge etype-WorldItem">WorldItem</span></label>
-                <label class="filter-pill"><input type="checkbox" id="ef-other"
-                    onchange="setEntityFilter('other',     this.checked)" checked> <span
-                    class="etype-badge etype-Object">Other</span></label>
-              </div>
-            </div>
-          </details>
-        </div>
 
         <div class="cfg-section">
           <details id="det-blacklist" ontoggle="syncCfgSections()">
@@ -6052,6 +6419,182 @@
         swatchEl: el,
         onConfirm: hex => grpSet(i, "color", "#" + hex.slice(0, 6))
       });
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  ENTITY JUNK FILTER (Entities tab box, header-driven)
+    // ═══════════════════════════════════════════════════════════════════
+    // Each control sends one SetJunk(key,value); AHK persists + re-pushes the
+    // header, and applyJunkFromHeader mirrors state back. The custom-terms field
+    // is not overwritten while focused, so typing is never clobbered.
+    // key forms: "enabled" | "cat:<key>" | "pat:<pattern>" | "custom".
+    function junkSet(key, value) { try { ahkCall("SetJunk", key, value); } catch (e) {} }
+
+    // Custom junk terms are stored as ONE comma-separated string in AHK, but the
+    // UI presents them as an Add box + deletable chips. _junkCustomTerms mirrors
+    // the authoritative AHK string (refreshed from each header push).
+    let _junkCustomTerms = [];
+    function junkRenderCustom(customStr) {
+      _junkCustomTerms = String(customStr || "").split(",").map(t => t.trim()).filter(Boolean);
+      const cmeta = document.getElementById("junk-custom-meta");
+      if (cmeta) cmeta.textContent = _junkCustomTerms.length ? String(_junkCustomTerms.length) : "";
+      const host = document.getElementById("junk-custom-list");
+      if (!host) return;
+      host.innerHTML = _junkCustomTerms.length
+        ? _junkCustomTerms.map((t, i) =>
+            `<span class="ent-chip" title="${escAttr(t)}"><span class="ent-chip-txt">${escHtml(t)}</span>`
+            + `<button class="ent-chip-x" title="Remove term" onclick="junkDelCustomIdx(${i})">✕</button></span>`).join("")
+        : `<span class="ent-chip-empty">No custom terms yet.</span>`;
+    }
+    function junkCommitCustom() {
+      const s = _junkCustomTerms.join(",");
+      junkSet("custom", s);
+      junkRenderCustom(s);
+    }
+    // Adds one or more terms (the input may itself be comma-separated). Skips
+    // case-insensitive duplicates, clears the input, and pushes to AHK.
+    function junkAddCustom() {
+      const inp = document.getElementById("junk-custom-input");
+      if (!inp) return;
+      const parts = String(inp.value || "").split(",").map(t => t.trim()).filter(Boolean);
+      let changed = false;
+      for (const p of parts) {
+        if (!_junkCustomTerms.some(t => t.toLowerCase() === p.toLowerCase())) {
+          _junkCustomTerms.push(p);
+          changed = true;
+        }
+      }
+      inp.value = "";
+      if (changed) junkCommitCustom();
+    }
+    function junkDelCustomIdx(i) {
+      if (i < 0 || i >= _junkCustomTerms.length) return;
+      _junkCustomTerms.splice(i, 1);
+      junkCommitCustom();
+    }
+
+    // Short display label + hover description per category key and per built-in
+    // pattern (counts/rationale from the C# JunkFilter reference). The pattern
+    // string itself is the canonical id sent to AHK; here it's only presentation.
+    const _junkCatInfo = {
+      cosmetic: { short: "Cosmetic", desc: "Visual / cosmetic asset nodes: attachment points, MTX, animation timelines, stash skins, hair, outfits." },
+      engine:   { short: "Engine",   desc: "Engine asset / effect definitions: FX, materials, AO, EPK, skill graphs, audio, environment." },
+      daemon:   { short: "Daemons",  desc: "Invisible modifier daemons: monster mods, essence mods, tormented spirits, generic helper daemons." },
+      pets:     { short: "Pets",     desc: "Pets, player clones and summon base classes — clutter, not real targets." },
+      markers:  { short: "Markers",  desc: "Already-handled / decorator markers: boss-room minimap icons, rune markers." },
+      hideout:  { short: "Hideout",  desc: "Hideout decoration doodads (MiscellaneousObjects/HideoutDoodad)." }
+    };
+    const _junkPatInfo = {
+      "/attachments":      { short: "attach",   desc: "Visual attachment points on models (438 paths)." },
+      "microtransactions": { short: "mtx",      desc: "Microtransaction cosmetics (53)." },
+      "/timelines/":       { short: "timeline", desc: "Player cosmetic animation timelines (191)." },
+      "stashskins":        { short: "stash",    desc: "Stash visual variants (60)." },
+      "hairstyles":        { short: "hair",     desc: "Character cosmetic hair." },
+      "/outfits/":         { short: "outfit",   desc: "Character cosmetic outfits." },
+      "/fx/":              { short: "fx",       desc: "Particle effects." },
+      "/mat/":             { short: "mat",      desc: "Material definitions." },
+      "/ao/":              { short: "ao",       desc: "Ambient-occlusion data." },
+      "/epk/":             { short: "epk",      desc: "Effect packages." },
+      "/graph/":           { short: "graph",    desc: "Skill graph nodes." },
+      "/audio/":           { short: "audio",    desc: "Sound definitions." },
+      "/environment/":     { short: "env",      desc: "Environment settings (48)." },
+      "monstermods":       { short: "mods",     desc: "Invisible monster-modifier daemons (194)." },
+      "essencemoddaemons": { short: "essence",  desc: "Invisible essence-modifier daemons (44)." },
+      "tormentedspirits":  { short: "torment",  desc: "Tormented-spirit daemons (48)." },
+      "/daemon/":          { short: "daemon",   desc: "Generic invisible helper entities (38+)." },
+      "/pet/":             { short: "pet",      desc: "Pet cosmetics (14)." },
+      "/clone/":           { short: "clone",    desc: "Player clone effects (36)." },
+      "playersummoned":    { short: "summon",   desc: "Summoned-entity base classes (41)." },
+      "bossroomminimapicon": { short: "bossicon", desc: "Boss-room minimap-icon entities (41)." },
+      "/runemarked":       { short: "rune",     desc: "Rune-marker decorator nodes." },
+      "hideoutdoodad":     { short: "doodad",   desc: "Hideout decoration doodads (MiscellaneousObjects/HideoutDoodad)." }
+    };
+
+    function applyJunkFromHeader(jf) {
+      if (!jf || typeof jf !== "object") return;
+      const on = jf.enabled === true || jf.enabled === "true";
+      const m = document.getElementById("junk-enabled");
+      if (m) m.checked = on;
+      junkRenderCustom(jf.custom || "");
+      const cats = Array.isArray(jf.categories) ? jf.categories : [];
+      junkRenderCats(cats);
+      // Junk Filter meta: "<active>/<total>" over EVERY junk rule — all built-in
+      // categories (including the split-out hideout box) plus the custom terms —
+      // so the count reflects the whole filter. "off" when the master is off.
+      let total = 0, active = 0;
+      for (const c of cats) {
+        for (const p of (Array.isArray(c.patterns) ? c.patterns : [])) {
+          total++;
+          if (p.on === true || p.on === "true") active++;
+        }
+      }
+      // Custom terms have no per-term toggle — they're active whenever the master is.
+      const customCount = String(jf.custom || "").split(",").map(t => t.trim()).filter(Boolean).length;
+      total += customCount;
+      active += customCount;
+      const meta = document.getElementById("junk-meta");
+      if (meta) meta.textContent = on ? `${active}/${total}` : "off";
+      // The master switch gates the whole junk filter, so dim the box when off.
+      const box = document.getElementById("ent-junkbox");
+      if (box) box.classList.toggle("junk-disabled", !on);
+    }
+
+    // Remembers which junk categories the user has expanded. The header push
+    // re-renders the junk boxes periodically (~1-2 s); without this the live
+    // <details> open state would be lost and an expanded category would snap
+    // shut. Updated from each category's ontoggle.
+    const _junkOpenCats = new Set();
+    function junkCatToggle(ck, isOpen) {
+      if (isOpen) _junkOpenCats.add(ck); else _junkOpenCats.delete(ck);
+    }
+
+    // Last markup rendered into #junk-cats — re-rendering only when the markup
+    // actually changed avoids both the per-push flicker and the open <details>
+    // being reset on every header update.
+    let _junkLastMain = null;
+
+    // Renders every junk category (incl. hideout) into #junk-cats. Each category
+    // is a collapsible row; its body is a wrap of per-pattern buttons plus a
+    // trailing "enable/disable all" button.
+    function junkRenderCats(cats) {
+      const host = document.getElementById("junk-cats");
+      let mainHtml = "";
+      for (const c of cats)
+        mainHtml += junkCatRow(c, String(c.key || ""));
+      if (host && mainHtml !== _junkLastMain) { host.innerHTML = mainHtml; _junkLastMain = mainHtml; }
+    }
+
+    // Builds one junk category as a collapsible <details> (cube caret when
+    // closed, gold diamond when open). The summary holds the category name plus a
+    // one-line explanation — both live in the summary so the description stays
+    // visible whether collapsed or expanded; the category has no on/off slider of
+    // its own. The body is a wrap of per-pattern filter-pill buttons (each toggles
+    // its pattern — the pill's own colour conveys state) followed by a trailing
+    // "enable/disable all" button that flips every pattern in the category at once.
+    // Open state is restored from _junkOpenCats so re-renders don't snap it shut.
+    // c = header category, ck = key.
+    function junkCatRow(c, ck) {
+      const ci = _junkCatInfo[ck] || { short: ck, desc: String(c.label || ck) };
+      const allOn = (c.on === true || c.on === "true");
+      const pills = (Array.isArray(c.patterns) ? c.patterns : []).map(p => {
+        const pp = String(p.p || "");
+        const pi = _junkPatInfo[pp] || { short: pp, desc: pp };
+        const pon = (p.on === true || p.on === "true");
+        return `<label class="filter-pill" title="${escAttr(pp + " — " + pi.desc)}"><input type="checkbox" ${pon ? "checked" : ""} `
+             + `onchange="junkSet('pat:${escAttr(pp)}', this.checked ? 1 : 0)"> `
+             + `<span class="junk-pat">${escHtml(pi.short)}</span></label>`;
+      }).join("");
+      // Trailing bulk control — checked when all patterns are on, so a click
+      // flips the whole category. Its label states the action it performs.
+      const allBtn = `<label class="filter-pill junk-all" title="Enable or disable every pattern in this category">`
+             + `<input type="checkbox" ${allOn ? "checked" : ""} onchange="junkSet('cat:${escAttr(ck)}', this.checked ? 1 : 0)"> `
+             + `<span class="junk-pat">${allOn ? "disable all" : "enable all"}</span></label>`;
+      return `<details class="junk-cat"${_junkOpenCats.has(ck) ? " open" : ""} ontoggle="junkCatToggle('${ck}', this.open)">`
+           + `<summary class="junk-cat-head">`
+           + `<div class="junk-cat-titlerow"><span class="junk-cat-name">${escHtml(ci.short)}</span></div>`
+           + `<div class="junk-cat-desc">${escHtml(ci.desc)}</div>`
+           + `</summary>`
+           + `<div class="junk-pat-row">${pills}${allBtn}</div></details>`;
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -7623,9 +8166,14 @@
         const rarity = (typeof it.r === 'number' && it.r >= 0 && it.r <= 3) ? it.r : 0;
         const name = it.n || it.b || '?';
         const tip = _buildItemTooltipPayload(it);
+        const icon = _iconUrl(it.a);
+        const imgTag = icon ? `<img class="eq-card-img" src="${escAttr(icon)}" loading="lazy" onerror="this.style.display='none'">` : '';
+        const unidBadge = (it.idf === 0) ? '<span class="inv-unid-badge" title="Unidentified">?</span>' : '';
         cards += `<div class="eq-card rarity-${rarity}" `
               + `onmouseenter="_invShowTip(event,'${tip}')" onmouseleave="_invHideTip()" onmousemove="_invMoveTip(event)">`
               + `<div class="eq-slot-id">${escHtml(slotName)}</div>`
+              + unidBadge
+              + imgTag
               + `<div class="eq-card-name">${escHtml(name)}</div>`
               + `</div>`;
       }
@@ -7674,10 +8222,19 @@
         const stack = (typeof it.s === 'number' && it.s > 1) ? it.s : 0;
         const stackBadge = stack ? `<span class="inv-stack">${stack}</span>` : '';
         const tip = _buildItemTooltipPayload(it);
+        // Real item art (RenderItem ResourcePath via poe2db). The icon fills the
+        // cell; the name label sits behind it and is revealed again if the CDN
+        // has no art for this path. idf===0 → unidentified corner glyph.
+        const icon = _iconUrl(it.a);
+        const imgLayer = icon ? `<img class="inv-item-img" src="${escAttr(icon)}" loading="lazy" onerror="this.style.display='none';var l=this.parentElement.querySelector('.inv-item-label');if(l)l.style.display=''">` : '';
+        const label = `<span class="inv-item-label"${icon ? ' style="display:none"' : ''}>${escHtml(_truncateForCell(name, w * h))}</span>`;
+        const unidBadge = (it.idf === 0) ? '<span class="inv-unid-badge" title="Unidentified">?</span>' : '';
         cells += `<div class="inv-item rarity-${rarity}" `
               + `style="grid-column:${sx + 1} / span ${w};grid-row:${sy + 1} / span ${h}" `
               + `onmouseenter="_invShowTip(event,'${tip}')" onmouseleave="_invHideTip()" onmousemove="_invMoveTip(event)">`
-              + escHtml(_truncateForCell(name, w * h))
+              + imgLayer
+              + label
+              + unidBadge
               + stackBadge
               + `</div>`;
       }
@@ -7701,6 +8258,8 @@
         b: it.b || '',
         r: it.r,
         s: (typeof it.s === 'number' && it.s > 0) ? it.s : 0,
+        a: it.a || '',
+        idf: (typeof it.idf === 'number') ? it.idf : -1,
         m: Array.isArray(it.m) ? it.m : []
       };
       try { return btoa(unescape(encodeURIComponent(JSON.stringify(payload)))); }
@@ -7718,8 +8277,10 @@
       try { p = JSON.parse(decodeURIComponent(escape(atob(b64)))); }
       catch (e) { return; }
       const rarityCls = `rarity-${(p.r >= 0 && p.r <= 3) ? p.r : 0}`;
-      let html = `<div class="inv-tt-name inv-item ${rarityCls}" style="border:none;background:none;padding:0;display:block;text-align:left">${escHtml(p.n || p.b || '?')}</div>`;
+      const ttIcon = (p.a) ? `<div style="text-align:center;margin-bottom:4px">${_iconHtml(p.a, 40)}</div>` : '';
+      let html = ttIcon + `<div class="inv-tt-name inv-item ${rarityCls}" style="border:none;background:none;padding:0;display:block;text-align:left">${escHtml(p.n || p.b || '?')}</div>`;
       if (p.b && p.b !== p.n) html += `<div class="inv-tt-base">${escHtml(p.b)}</div>`;
+      if (p.idf === 0) html += `<div class="inv-tt-base" style="color:#e0533b">Unidentified</div>`;
       if (p.s && p.s > 1) html += `<div class="inv-tt-base">Stack Size: ${p.s}</div>`;
       // Mods are objects {c: category, t: text}. Implicits + enchants render
       // first (with separators), then explicits — matches the in-game tooltip order.
@@ -8169,6 +8730,8 @@
         setEf('other', d.entityFilter.other);
       }
 
+      if (d.junkFilter) applyJunkFromHeader(d.junkFilter);
+
       // AutoPilot config sync (master state machine over combat + exploration)
       setChk('tog-autopilot', d.autoPilot);
       const apState = document.getElementById('cfg-autopilot-state');
@@ -8344,6 +8907,10 @@
     let _availableSkills = [];       // populated from updateSkills()
     let _showInternalSkills = false; // Skills tab: also show internal (non-player) skills
     let _lastSkillsRaw = null;       // last skills payload, for re-render on pill toggle
+    // Skills-table column sort. null = natural order. _skillSortAsc=false means the
+    // first click on a column sorts descending, a second click flips to ascending.
+    let _skillSortCol = null;
+    let _skillSortAsc = false;
 
     // Toggle the "internal skills" pill in the Skills & Buffs tab and re-render.
     function _toggleInternalSkills() {
@@ -8853,6 +9420,11 @@
     window._eiState = window._eiState || {
       items: [],
       filters: { id: '', path: '', type: 'all', state: 'all', group: 'all', category: 'all' },
+      // User column sort (click a list-head column). null = default order
+      // (bosses/transitions first, then nearest distance). sortAsc=false means
+      // the first click on a column sorts descending, the second ascending.
+      sortCol: null,
+      sortAsc: false,
       expanded: new Set(),
       compExpanded: new Set(),  // keys are `<entityAddr>::<componentName>`
       // Lazy-decode cache. Keys are `<entityAddr>::<componentName>`,
@@ -8865,9 +9437,11 @@
       const el = document.getElementById('tab-entities-content');
       if (!el) return;
       let data; try { data = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr; } catch (e) { return; }
-      // Accept both new { total, items } and legacy bare-array shapes
+      // Accept both new { total, present, items } and legacy bare-array shapes
       const items = Array.isArray(data) ? data : (data && Array.isArray(data.items) ? data.items : []);
       window._eiState.items = items;
+      // Total entities present in the bubble before the junk filter + sampling.
+      window._eiState.present = (data && typeof data.present === 'number') ? data.present : items.length;
       // Prune expanded sets to entries that still exist, so an entity
       // leaving range doesn't leave a dangling expansion record.
       const liveAddrs = new Set(items.map(e => e.addr));
@@ -8893,8 +9467,17 @@
       const lowId = fId.toLowerCase().trim();
       const lowPath = fPath.toLowerCase().trim();
 
-      // Sort: bosses + transitions + named landmarks first, then nearest distance
+      // Sort. When the user clicked a column header (st.sortCol) sort purely by
+      // that column; otherwise the default order: bosses + transitions + named
+      // landmarks first, then nearest distance.
+      const sortCol = st.sortCol, sortAsc = !!st.sortAsc;
       const sorted = [...st.items].sort((a, b) => {
+        if (sortCol) {
+          let va = _eiSortVal(a, sortCol), vb = _eiSortVal(b, sortCol);
+          if (typeof va === 'number' && typeof vb === 'number') return sortAsc ? va - vb : vb - va;
+          va = String(va); vb = String(vb);
+          return sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+        }
         const typeOrder = { Boss: 0, AreaTransition: 1, Waypoint: 2, Checkpoint: 3, NPC: 4 };
         const ta = typeOrder[a.type] ?? 99, tb = typeOrder[b.type] ?? 99;
         if (ta !== tb) return ta - tb;
@@ -8927,7 +9510,7 @@
         <div class="ei-root">
           <div class="ei-toolbar">
             <div class="ei-toolbar-row">
-              <span class="ei-total">Total: <span class="ei-total-count">${st.items.length}</span>${filtered.length !== st.items.length ? ` · <span class="ei-total-count">${filtered.length}</span> shown` : ''}</span>
+              <span class="ei-total" title="Shown in list after all filters · entities in the list snapshot (after the junk filter) · total present in the area before junk filtering"><span class="ei-total-count">${filtered.length}</span> shown · <span class="ei-total-count">${st.items.length}</span> listed · <span class="ei-total-count">${st.present ?? st.items.length}</span> present</span>
               <div class="ei-filter"><label>Id</label><input id="ei-f-id" type="text" placeholder="…" value="${escAttr(fId)}" oninput="eiFilterChange('id', this.value)"></div>
               <div class="ei-filter"><label>Path</label><input id="ei-f-path" type="text" placeholder="metadata/…" value="${escAttr(fPath)}" oninput="eiFilterChange('path', this.value)"></div>
             </div>
@@ -8953,9 +9536,39 @@
               </select></div>
             </div>
           </div>
+          <div class="ei-listhead">
+            <span></span>${[['id','ID'],['name','Name'],['path','Path'],['type','Type'],['life','Life'],['dist','Dist']].map(([k, label]) => {
+              const ind = sortCol === k ? (sortAsc ? '▲' : '▼') : '';
+              return `<span class="ei-sortable" onclick="eiSortBy('${k}')" title="Sort by ${label}">${label}<span class="sort-ind">${ind}</span></span>`;
+            }).join('')}
+          </div>
           <div class="ei-list">${body}</div>
         </div>
       `;
+    }
+
+    // Click handler for an entity list-head column. First click on a column
+    // sorts descending, a second click on the same column flips to ascending.
+    function eiSortBy(col) {
+      const st = window._eiState;
+      if (st.sortCol === col) st.sortAsc = !st.sortAsc;
+      else { st.sortCol = col; st.sortAsc = false; }
+      eiRender();
+    }
+
+    // Comparable value for an entity in a given sort column. Numeric columns
+    // return numbers (compared numerically); the rest return lower-cased strings.
+    // Missing distance/life sort as the largest/smallest so they sit at one end.
+    function _eiSortVal(e, col) {
+      switch (col) {
+        case 'id':   return (typeof e.id === 'number') ? e.id : (Number(e.id) || 0);
+        case 'name': return String(e.name || (e.path ? String(e.path).split('/').pop() : '')).toLowerCase();
+        case 'path': return String(e.path || '').toLowerCase();
+        case 'type': return String(e.type || '').toLowerCase();
+        case 'life': return (e.life !== undefined && e.life >= 0) ? e.life : -1;
+        case 'dist': return (e.dist !== undefined && e.dist >= 0) ? e.dist : 1e9;
+        default:     return 0;
+      }
     }
 
     // One entity card. Expanded vs collapsed is driven by the global Set
@@ -8966,23 +9579,26 @@
       if (expanded) klass.push('expanded');
       if (e.alive === false) klass.push('dead');
       if (e.sleep === true) klass.push('sleep');
-      const shortName = escHtml(e.name || e.path || '?');
-      const pathTail = e.path ? escHtml('… ' + String(e.path).split('/').slice(-2).join('/')) : '';
-      const lifeStr = (e.life !== undefined && e.life >= 0) ? `${e.life}%` : '';
-      const distStr = (e.dist !== undefined && e.dist >= 0) ? `${e.dist}m` : '';
-      const meta = [
-        lifeStr ? `<span class="ei-head-life">${lifeStr}</span>` : '',
-        distStr ? `<span class="ei-head-dist">${distStr}</span>` : ''
-      ].filter(Boolean).join('');
-      const grpPill = e.group ? `<span style="display:inline-flex;align-items:center;gap:3px;font-size:9px;color:var(--subtext)"><span style="width:8px;height:8px;border-radius:50%;background:${escAttr(grpColorFor(e.group) || '#3aa0ff')}"></span>${escHtml(e.group)}</span>` : '';
+      const name = escHtml(e.name || (e.path ? String(e.path).split('/').pop() : '?'));
+      const fullPath = e.path ? String(e.path) : '';
+      const pathShort = escHtml(fullPath.replace(/^Metadata\//i, '') || '—');
+      const type = escHtml(e.type || '');
+      const lifeStr = (e.life !== undefined && e.life >= 0) ? `${e.life}%` : '—';
+      const distStr = (e.dist !== undefined && e.dist >= 0) ? `${e.dist}m` : '—';
+      const grpDot = e.group
+        ? `<span class="ei-grp-dot" title="${escAttr('Group: ' + e.group)}" style="background:${escAttr(grpColorFor(e.group) || '#3aa0ff')}"></span>`
+        : '';
       const body = expanded ? eiBody(e) : '';
       return `
         <div class="${klass.join(' ')}" data-addr="${escAttr(e.addr)}">
           <div class="ei-head" onclick="eiToggle('${escAttr(e.addr)}')">
             <span class="ei-caret">▶</span>
-            <span class="ei-head-id">#${e.id ?? '?'}</span>
-            <span class="ei-head-name">${shortName} <span class="ei-head-path">${pathTail}</span></span>
-            <span class="ei-head-meta">${grpPill}${meta}</span>
+            <span class="ei-c-id">#${e.id ?? '?'}</span>
+            <span class="ei-c-name">${grpDot}<span class="ei-c-name-txt">${name}</span></span>
+            <span class="ei-c-path" title="${escAttr(fullPath)}">${pathShort}</span>
+            <span class="ei-c-type">${type}</span>
+            <span class="ei-c-life">${lifeStr}</span>
+            <span class="ei-c-dist">${distStr}</span>
           </div>
           <div class="ei-body">${body}</div>
         </div>
@@ -9782,6 +10398,17 @@
         if (!ex || score > ex.score) _byDn.set(key, { s, score });
       }
       const visible = [..._byDn.values()].map(v => v.s);
+      // Optional user column sort (click a header). Default order is preserved
+      // (most-active first) until a column is chosen.
+      if (_skillSortCol) {
+        const asc = _skillSortAsc;
+        visible.sort((a, b) => {
+          let va = _skillSortVal(a, _skillSortCol), vb = _skillSortVal(b, _skillSortCol);
+          if (typeof va === 'number' && typeof vb === 'number') return asc ? va - vb : vb - va;
+          va = String(va); vb = String(vb);
+          return asc ? va.localeCompare(vb) : vb.localeCompare(va);
+        });
+      }
       const usable = visible.filter(s => s.ok);
       const blocked = visible.filter(s => !s.ok);
       const rows = visible.map(s => {
@@ -9812,7 +10439,34 @@
         return `<tr style="cursor:pointer" onclick="blacklistAdd('${escAttr(rawName)}')" data-tip="Click to hide"><td data-tip="${nm}">${icImg}${dn}</td><td class="${statusCls}">${statusTxt}</td><td>${cdText}${cdProgBar}</td><td>${usesText} ${cdBar}</td><td>${s.tu}</td><td data-tip="ID: ${s.ct} / EquipID: ${escHtml(s.eq)}">${escHtml(ctName)}</td></tr>`;
       }).join('');
       const internalPill = `<button class="inv-tog-pill${_showInternalSkills ? ' active' : ''}" type="button" style="margin-left:1em;vertical-align:middle" onclick="_toggleInternalSkills()" title="Also show internal/non-player skills (Move, Ascend, …)">Internal skills${internalCount ? ` (${internalCount})` : ''}</button>`;
-      el.innerHTML = `<div class="skill-header"><span class="skill-count">${usable.length} usable · ${blocked.length} on cooldown · ${visible.length} total</span>${internalPill}<span class="skill-debug" style="opacity:0.5;font-size:0.85em;margin-left:1em">ActiveSkill offset: ${asOff}</span></div><table class="skill-table"><thead><tr><th>Skill</th><th>Status</th><th>Cooldown</th><th>Uses</th><th>Total Uses</th><th>Cast Type</th></tr></thead><tbody>${rows}</tbody></table>`;
+      const skillHead = [['skill','Skill'],['status','Status'],['cooldown','Cooldown'],['uses','Uses'],['total','Total Uses'],['casttype','Cast Type']].map(([k, label]) => {
+        const ind = _skillSortCol === k ? (_skillSortAsc ? '▲' : '▼') : '';
+        return `<th onclick="sortSkillsBy('${k}')">${label}<span class="sort-ind">${ind}</span></th>`;
+      }).join('');
+      el.innerHTML = `<div class="skill-header"><span class="skill-count">${usable.length} usable · ${blocked.length} on cooldown · ${visible.length} total</span>${internalPill}<span class="skill-debug" style="opacity:0.5;font-size:0.85em;margin-left:1em">ActiveSkill offset: ${asOff}</span></div><table class="skill-table"><thead><tr>${skillHead}</tr></thead><tbody>${rows}</tbody></table>`;
+    }
+
+    // Comparable value for a skill row in a given sort column. Numeric columns
+    // return numbers; the rest return lower-cased strings. Status ranks
+    // ready(2) > inactive(1) > blocked(0) so a first (descending) click puts the
+    // ready skills on top.
+    function _skillSortVal(s, col) {
+      switch (col) {
+        case 'skill':    return String(s.dn || s.n || '').toLowerCase();
+        case 'status':   return (!s.ok) ? 0 : ((s.tu === 0 && s.cd === 0 && s.mu === 0) ? 1 : 2);
+        case 'cooldown': return s.rem > 0 ? s.rem : (s.cd || 0);
+        case 'uses':     return (s.mu || 0) - (s.ac || 0);
+        case 'total':    return s.tu || 0;
+        case 'casttype': return String(typeof animName === 'function' ? animName(s.ct) : (s.ct ?? '')).toLowerCase();
+        default:         return 0;
+      }
+    }
+    // Click handler for a skills-table column header. First click sorts the
+    // column descending, a second click on the same column flips to ascending.
+    function sortSkillsBy(col) {
+      if (_skillSortCol === col) _skillSortAsc = !_skillSortAsc;
+      else { _skillSortCol = col; _skillSortAsc = false; }
+      if (_lastSkillsRaw != null) updateSkills(_lastSkillsRaw);
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -9852,7 +10506,7 @@
     // ═══════════════════════════════════════════════════════════════════
     //  CONFIG HELPERS
     // ═══════════════════════════════════════════════════════════════════
-    const _cfgSectionIds = ['status', 'overview', 'toggles', 'integrations', 'autoflask', 'autopilot', 'rangecircles', 'radar', 'maphack', 'blacklist', 'entities', 'actions', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
+    const _cfgSectionIds = ['status', 'overview', 'toggles', 'integrations', 'autoflask', 'autopilot', 'rangecircles', 'radar', 'maphack', 'blacklist', 'actions', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
     let _cfgSectionsGuard = 0;
     let _cfgSectionsLoaded = false;
 

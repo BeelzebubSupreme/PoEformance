@@ -3422,10 +3422,20 @@ class PoE2GameStateReader extends PoE2InventoryReader
         for _, rid in removeIds
             cache.Delete(rid)
 
-        ; Build sample array from cache for downstream consumers
+        ; Build sample array from cache for downstream consumers. The global junk
+        ; path-filter is applied HERE because the fast radar path assembles the
+        ; awake sample from the persistent entity cache, not via
+        ; CollectEntityMapCandidates — so this is the chokepoint the radar and the
+        ; Entities browser actually read. Filtering per frame (not at cache insert)
+        ; keeps toggling the filter live in both directions.
         awakeSample := []
         for _, entry in cache
+        {
+            jent := entry.Has("entity") ? entry["entity"] : 0
+            if (jent && Type(jent) = "Map" && IsJunkEntity(jent.Has("path") ? jent["path"] : ""))
+                continue
             awakeSample.Push(entry)
+        }
 
         awakeEntities := Map(
             "address", awakeMapAddress,
