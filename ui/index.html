@@ -5153,6 +5153,49 @@
           </details>
         </div>
 
+        <div class="cfg-section">
+          <details id="det-stashmover" ontoggle="syncCfgSections()">
+            <summary>
+              <div class="cfg-header">📦 Stash Mover</div>
+            </summary>
+            <div class="cfg-subsection">
+              <div class="cfg-help">
+                Ctrl+Clicks every backpack item into the currently open container
+                (stash tab, vendor, trade, gambling). Open the container in-game,
+                then trigger via the hotkey or the on-screen button next to the inventory.
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Enable Stash Mover</span>
+                <label class="toggle"><input type="checkbox" id="sm-enabled"
+                    onchange="ahkCall('SetStashMover','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Show overlay button</span>
+                <label class="toggle"><input type="checkbox" id="sm-showButton"
+                    onchange="ahkCall('SetStashMover','showButton', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-label">Hotkey (AHK syntax, e.g. <code>F4</code> or <code>^d</code>)</span>
+                <input type="text" class="cfg-input" id="sm-hotkey" placeholder="none" style="width:120px"
+                    onchange="ahkCall('SetStashMover','hotkey', this.value)">
+              </div>
+              <div class="al-line">
+                <label class="al-field"><span class="al-cap">Per-item delay (ms)</span><span class="hk-num"><input type="number" id="sm-perItemDelayMs" min="5" max="500" step="5" onchange="ahkCall('SetStashMover','perItemDelayMs',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
+                <label class="al-field"><span class="al-cap">Settle delay (ms)</span><span class="hk-num"><input type="number" id="sm-settleDelayMs" min="0" max="300" step="2" onchange="ahkCall('SetStashMover','settleDelayMs',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
+              </div>
+              <div class="al-line">
+                <label class="al-field"><span class="al-cap">Grid offset X (px)</span><span class="hk-num"><input type="number" id="sm-offsetX" min="-300" max="300" step="1" onchange="ahkCall('SetStashMover','offsetX',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
+                <label class="al-field"><span class="al-cap">Grid offset Y (px)</span><span class="hk-num"><input type="number" id="sm-offsetY" min="-300" max="300" step="1" onchange="ahkCall('SetStashMover','offsetY',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
+              </div>
+              <div class="cfg-help">
+                Grid offset only matters if the auto-detected inventory rectangle is
+                slightly off — nudge until the simulated clicks land on the cells.
+              </div>
+              <div class="cfg-row">
+                <button class="hk-btn" onclick="ahkCall('StashMoveDump')">▼ Dump now (test)</button>
+              </div>
+            </div>
+          </details>
+        </div>
+
         </div><!-- /cfg-subpanel automation -->
 
         <!-- ════════════════════════════════════════════════════════════
@@ -6834,6 +6877,20 @@
       if (opa && document.activeElement !== opa) { opa.value = s.barOpacity; _sb(opa, 'lt-barOpacity-bub', s.barOpacity); }
       const sc = document.getElementById('lt-uiScale');
       if (sc && document.activeElement !== sc) { sc.value = s.uiScale; _sb(sc, 'lt-uiScale-bub', s.uiScale); }
+    }
+
+    // Stash Mover header settings -> form widgets (skips a field being edited).
+    function stashMoverSyncFromHeader(s) {
+      if (!s) return;
+      const chk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = v === true || v === 1 || v === '1' || v === 'true'; };
+      const val = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
+      chk('sm-enabled', s.enabled);
+      chk('sm-showButton', s.showButton);
+      val('sm-hotkey', s.hotkey);
+      val('sm-perItemDelayMs', s.perItemDelayMs);
+      val('sm-settleDelayMs', s.settleDelayMs);
+      val('sm-offsetX', s.offsetX);
+      val('sm-offsetY', s.offsetY);
     }
 
     // Live run + session aggregates + price status (pushed ~1 Hz from AHK).
@@ -8690,6 +8747,7 @@
       if (d.groups !== undefined) applyGroupsFromHeader(d.groups);
       if (d.alerts !== undefined) applyAlertsFromHeader(d.alerts);
       if (d.loot !== undefined) lootSyncFromHeader(d.loot);
+      if (d.stashMover !== undefined) stashMoverSyncFromHeader(d.stashMover);
 
       // Version tags
       const verApp = document.getElementById('ver-app');
@@ -10779,7 +10837,7 @@
     // ═══════════════════════════════════════════════════════════════════
     //  CONFIG HELPERS
     // ═══════════════════════════════════════════════════════════════════
-    const _cfgSectionIds = ['status', 'overview', 'toggles', 'integrations', 'autoflask', 'autopilot', 'rangecircles', 'radar', 'maphack', 'blacklist', 'actions', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
+    const _cfgSectionIds = ['status', 'overview', 'toggles', 'integrations', 'autoflask', 'autopilot', 'stashmover', 'rangecircles', 'radar', 'maphack', 'blacklist', 'actions', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
     let _cfgSectionsGuard = 0;
     let _cfgSectionsLoaded = false;
 

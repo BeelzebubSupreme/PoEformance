@@ -97,6 +97,9 @@ UpdateRadarFast()
         TryLootTrackerTick(radarSnap)
         Profiler.End("tick.loot")
 
+        ; ── Stash Mover overlay button — position/show next to the inventory grid ──
+        StashMoverTick(radarSnap)
+
         ; ── Atlas overlay snapshot (self-gated on g_atlasOverlayEnabled, throttled) ──
         TryBuildAtlasRender(radarSnap)
         if !IsObject(g_overlayManager)

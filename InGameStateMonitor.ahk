@@ -47,7 +47,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.3"
+POEFORMANCE_VERSION := "0.45.13.4"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -326,6 +326,7 @@ LoadEntityJunkFilter()    ; global path-based junk entity suppressor + [JunkFilt
 LoadLocalApiConfig()      ; local HTTP API (MCP backend) settings + Winsock constants
 LoadLootTracker()         ; map-run / session loot tracker state + [LootTracker] config
 LoadLootPricing()         ; poe.ninja price layer (loads cache, kicks refresh if stale)
+LoadStashMover()          ; "dump backpack to open stash" feature + [StashMover] config
 LoadOverlaySystem()       ; build the OverlayManager + all overlays; wire legacy globals
 InitProfiler()            ; QPC profiler singleton (disabled until Shift+F3 enables it)
 ItemSizeRegistry.Load()   ; ~4000-entry path→(w,h) map used by loot fit-check
@@ -356,6 +357,7 @@ SetTimer(() => GgpkToolBridge.MaybeAutoRefresh(), -8000)
 g_combatAutoEnabled := g_autoPilotEnabled
 g_exploreEnabled := g_autoPilotEnabled
 RegisterCombatHotkey()
+RegisterStashMoverHotkey() ; configurable "dump backpack to stash" hotkey (only while PoE2 is focused)
 RegisterW2STuneHotkeys()   ; Ctrl +/- tune g_combatW2SScale in-game (only while PoE2 is focused)
 _AIP_RegisterProbeHotkeys()   ; TEMP: Ctrl+Alt+Shift+T triggers the Targetable probe in-game
 
@@ -938,6 +940,7 @@ OnTreeTabChanged(*)
 #Include ahk/GgpkToolBridge.ahk
 
 #Include ahk/AutoFlask.ahk
+#Include ahk/StashMover.ahk
 #Include ahk/AvoidZones.ahk
 #Include ahk/TerrainHeights.ahk
 #Include ahk/ClickNav.ahk
