@@ -4,7 +4,7 @@
 
 **A modern AutoHotkey v2 toolset for *Path of Exile 2* — overlays, automation, reverse-engineering workbench, and GGPK-level map reveal in one place.**
 
-![Version](https://img.shields.io/badge/version-v0.45.13.1-blue)
+![Version](https://img.shields.io/badge/version-v0.45.13.2-blue)
 ![Build](https://img.shields.io/badge/build-stable-green)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Language](https://img.shields.io/badge/language-AutoHotkey%20v2-orange)
@@ -142,6 +142,11 @@ A full **map-run / session loot accountant** — a port of the GameHelper2 `Loot
 - **Valuable-drops breakdown** — a session-wide table of the recognised (priced) drops sorted by value, each with its count, unit price and total — exactly what drove your div/h. Sub-0.5-ex clutter (Wisdom scrolls, Transmutes) is hidden by design.
 - **On-screen bars + history** — a slim strip while mapping and a compact session bar in the hideout (both GDI, auto-hiding), plus an on-disk session history you can browse, re-open and delete from the Loot tab.
 
+<div align="center">
+  <img src="assets/LootTracker.png" width="800" alt="Loot Tracker — live run, session totals and the priced valuable-drops breakdown">
+  <p><em>The Loot tab — live run timer + profit (Exalted / Divine), kills by rarity, session totals with per-map rows, and the poe.ninja-priced <strong>valuable-drops</strong> breakdown.</em></p>
+</div>
+
 ### 🗺 Overlays
 
 **Radar** — high-performance GDI overlay with minimap + large-map modes, full-zone reveal, entity icons (NPCs, Bosses, Waypoints, Chests), distance indicators, and isometric projection. The large-map maphack is **source-clipped** to the on-screen viewport (it transforms only the visible slice of the terrain bitmap, not the whole ~1 MPixel image) and **HUD-masked** so its outline never paints over the game's orbs, skill / flask / XP bars or the area / quest panel — tunable clip rectangles, with a debug toggle to outline them.
@@ -172,6 +177,21 @@ Three path-driven layers decide what the radar shows — and what it shouts abou
 - **Groups** — give any metadata-path family its own colour; a matching path group overrides the default type colour on the radar dots, so specific monsters / chests / strongboxes get painted exactly how you want them. Edit, filter and colour-pick groups in-app (shared GGPK colour picker).
 - **Alerts** — a per-tick alert engine off the radar snapshot: match entities by path or group, rank by severity, and fire **banner + sound (any `wav/` file) + window-flash + radar-highlight + log** outputs. Town/hideout-suppressed and per-area reset, with zone-entry and cooldown-gated proximity timing so you're warned once, not spammed.
 - **Junk Filter** — a global path-based suppressor (cosmetic / engine / daemon / pets / markers / hideout doodads) hooked at the single sample chokepoint, so radar, entity browser, trees, exports *and* the bot all skip the noise at once. Master + per-category + per-pattern toggles, plus your own custom terms.
+
+<div align="center">
+  <img src="assets/Groups.png" width="800" alt="Groups tab — path/metaGroup colour groups">
+  <p><em>Groups tab — comma-separated path / metaGroup terms per colour group; the first enabled match wins for the entity-list pill, radar colouring and group alerts.</em></p>
+</div>
+
+<div align="center">
+  <img src="assets/Alerts.png" width="800" alt="Alerts tab — conditions, timing and outputs">
+  <p><em>Alerts tab — Conditions (rarity / type / path / group + optional distance), Timing (zone-entry vs. cooldown-gated proximity), and Output (banner · sound · window-flash · radar-highlight · log).</em></p>
+</div>
+
+<div align="center">
+  <img src="assets/JunkFilter.png" width="800" alt="Entities tab — Entity Classes filter and the Junk Filter categories">
+  <p><em>Entities tab — the global <strong>Entity Classes</strong> type filter and the <strong>Junk Filter</strong>'s collapsible categories (cosmetic · engine · daemon · pets · markers · hideout) with per-pattern toggles and custom terms.</em></p>
+</div>
 
 ### 🗺 GGPK Maphack
 
