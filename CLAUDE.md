@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.10`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.11`.
 
 ## Language
 
@@ -383,13 +383,16 @@ rectangle from the UI tree.
     the settle is `× rand(0.6..1.4)`, and the mouse-down hold is `rand(6..14) ms`.
   - Destination context (stash vs vendor vs trade): same Ctrl+Click action works for
     all of them; `_SmDetectContext()` only refines the label/verb + the sell guard.
-    **Stash** = inventory id 27 (authoritative; never present at a vendor, so a sale
-    can't be mislabeled "stash"). **Vendor/Trade** = `_SmScanContextUi()` BFS over the
-    VISIBLE UI subtree, classifying StringIds by case-insensitive substring
-    (`sell`/`vendor`/`purchase`/`gamble` → vendor, `trade` → trade) so it's robust to
-    unknown exact StringIds; else "unknown" (still acts, generic label). Context is
-    cached ~700 ms (`_SmContextCached`) for the per-tick button caption, detected fresh
-    once per dump. The overlay button reads "Dump → Stash" / "Sell → Vendor" /
+    Confirmed in-game (2026-06-23 via the diagnostic): PoE2 uses ONE shared
+    trade/stash window with StringId **`NPCBuyWindow`**, hierarchically visible only
+    while a stash OR vendor is open. It's a **vendor** when an **`NPCHeader`** is
+    visible inside it (an NPC is trading), otherwise the player's **stash**. (The old
+    inventory-id-27 signal was wrong — every inventory, incl. id 27, is always
+    enumerated, so it always read "stash".) A `_SmScanContextUi()` keyword scan
+    (`sell`/`buy`/`vendor`/`purchase`/`gamble`→vendor, `trade`→trade) is the fallback
+    for other container windows; else "unknown" (still acts, generic label). Context is
+    cached ~700 ms (`_SmRefreshContext`/`_SmCurrentCtx`) for the per-tick button
+    caption, detected fresh once per dump. The overlay button reads "Dump → Stash" / "Sell → Vendor" /
     "Move → Trade" / "Dump items"; the result tooltip verb is Stashed/Sold/Moved.
     `allowSell` (default ON) gates the vendor path — off = refuse to act when a vendor
     is open (stash-only safety). Header exposes `allowSell` + `context`; the UI shows a

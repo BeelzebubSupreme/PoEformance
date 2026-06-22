@@ -542,24 +542,6 @@ _SmReadBackpack(sdPtr)
     return 0
 }
 
-; True when the game server reports an open stash tab (inventoryId == 27). This is
-; the authoritative stash signal — the server populates id 27 with whichever stash
-; tab is visible, and it's never present at a vendor / trade window.
-_SmStashOpen(sdPtr)
-{
-    global g_reader
-    if (!IsObject(g_reader) || !sdPtr)
-        return false
-    invs := 0
-    try invs := g_reader.ReadAllPlayerInventories(sdPtr)
-    if !(invs && Type(invs) = "Array")
-        return false
-    for _, inv in invs
-        if (inv && IsObject(inv) && inv.Has("inventoryId") && inv["inventoryId"] = 27)
-            return true
-    return false
-}
-
 ; ── Destination context (stash vs vendor vs trade) ───────────────────────────
 
 ; Returns the context descriptor for a kind: Map(kind, verb, button). The verb is
@@ -575,14 +557,13 @@ _SmCtxFor(kind)
     }
 }
 
-; Classifies a UI element StringId into a destination kind by keyword (substring,
-; case-insensitive — robust against unknown exact StringIds). Stash is detected
-; separately via inventory id 27, so it's deliberately NOT matched here (an open
-; stash never carries id 27 at a vendor, so this can't mislabel a sale as a stash).
+; Fallback classifier for OTHER container windows (gambling / expedition / async
+; trade …) when the primary NPCBuyWindow check didn't apply. Keyword substring,
+; case-insensitive. Primary stash/vendor detection lives in _SmDetectContext.
 _SmClassifyStringId(sid)
 {
     s := StrLower(sid "")
-    if (InStr(s, "sell") || InStr(s, "vendor") || InStr(s, "purchase") || InStr(s, "haggle") || InStr(s, "gamble"))
+    if (InStr(s, "sell") || InStr(s, "buy") || InStr(s, "vendor") || InStr(s, "purchase") || InStr(s, "haggle") || InStr(s, "gamble"))
         return "vendor"
     if (InStr(s, "trade"))
         return "trade"
@@ -651,23 +632,31 @@ _SmScanContextUi(reader, gameUi)
     return tradeHit ? "trade" : ""
 }
 
-; Detects the current destination context. Stash is authoritative via inventory
-; id 27 (reliable, never present at a vendor); vendor / trade come from the UI
-; scan; otherwise "unknown" (the action still works — Ctrl+Click moves to whatever
-; container is open — only the label is generic). Returns a Map(kind,verb,button).
+; Detects the current destination context from the UI tree (confirmed in-game
+; 2026-06-23 via the diagnostic). PoE2 uses ONE shared trade/stash window with the
+; StringId "NPCBuyWindow": it's hierarchically visible only while a stash OR a
+; vendor is open. It's a VENDOR when an "NPCHeader" (the trading NPC's header) is
+; visible inside it, otherwise it's the player's own STASH. When that window isn't
+; open, a keyword scan catches other container windows (gambling / async trade …);
+; else "unknown" (the Ctrl+Click still works — only the label is generic).
+; Returns a Map(kind, verb, button).
 _SmDetectContext()
 {
     global g_reader
-    sdPtr := _SmResolveServerData()
-    if (sdPtr && _SmStashOpen(sdPtr))
-        return _SmCtxFor("stash")
-    uiKind := ""
-    if IsObject(g_reader)
+    if !IsObject(g_reader)
+        return _SmCtxFor("unknown")
+    gameUi := _UiBrowser_GetGameUiPtr()
+    if !g_reader.IsProbablyValidPointer(gameUi)
+        return _SmCtxFor("unknown")
+    buyWin := _SmBfsFindStringId(g_reader, gameUi, "NPCBuyWindow", 3)
+    if (buyWin && UiTree_HierarchicallyVisible(g_reader, buyWin))
     {
-        gameUi := _UiBrowser_GetGameUiPtr()
-        if g_reader.IsProbablyValidPointer(gameUi)
-            uiKind := _SmScanContextUi(g_reader, gameUi)
+        hdr := _SmBfsFindStringId(g_reader, buyWin, "NPCHeader", 5)
+        if (hdr && UiTree_HierarchicallyVisible(g_reader, hdr))
+            return _SmCtxFor("vendor")    ; an NPC is involved → buying/selling
+        return _SmCtxFor("stash")          ; no NPC → the player's own stash
     }
+    uiKind := _SmScanContextUi(g_reader, gameUi)
     return _SmCtxFor(uiKind != "" ? uiKind : "unknown")
 }
 
