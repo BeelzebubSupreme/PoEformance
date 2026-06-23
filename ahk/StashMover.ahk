@@ -557,89 +557,14 @@ _SmCtxFor(kind)
     }
 }
 
-; Fallback classifier for OTHER container windows (gambling / expedition / async
-; trade …) when the primary NPCBuyWindow check didn't apply. Keyword substring,
-; case-insensitive. Primary stash/vendor detection lives in _SmDetectContext.
-_SmClassifyStringId(sid)
-{
-    s := StrLower(sid "")
-    if (InStr(s, "sell") || InStr(s, "buy") || InStr(s, "vendor") || InStr(s, "purchase") || InStr(s, "haggle") || InStr(s, "gamble"))
-        return "vendor"
-    if (InStr(s, "trade"))
-        return "trade"
-    return ""
-}
-
-; Scans the VISIBLE UI subtree for a vendor / trade window. Prunes hidden subtrees
-; (so only on-screen windows count) and returns "vendor" (preferred) or "trade",
-; else "". Bounded by node count + depth so it stays cheap.
-_SmScanContextUi(reader, gameUi)
-{
-    if !reader.IsProbablyValidPointer(gameUi)
-        return ""
-    idOff    := PoE2Offsets.UiElementBase["StringIdPtr"]
-    flagsOff := PoE2Offsets.UiElementBase["Flags"]
-    queue := [{ptr: gameUi, d: 0}]
-    seen := Map()
-    nodes := 0
-    tradeHit := false
-    while (queue.Length > 0 && nodes < 2500)
-    {
-        it := queue.RemoveAt(1)
-        p := it.ptr
-        if (seen.Has(p) || !reader.IsProbablyValidPointer(p))
-            continue
-        seen[p] := true
-        nodes += 1
-        ; Prune hidden subtrees (bit 11). The root is always treated as visible.
-        if (p != gameUi)
-        {
-            fl := 0
-            try fl := reader.Mem.ReadUInt(p + flagsOff)
-            if (((fl >> 11) & 1) = 0)
-                continue
-        }
-        sid := ""
-        try sid := reader.ReadStdWStringAt(p + idOff, 48)
-        if (sid != "")
-        {
-            k := _SmClassifyStringId(sid)
-            if (k = "vendor")
-                return "vendor"
-            if (k = "trade")
-                tradeHit := true
-        }
-        if (it.d >= 12)
-            continue
-        hdr := reader.Mem.ReadBytes(p, 0x20)
-        if !hdr
-            continue
-        cf := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
-        cl := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
-        if (!reader.IsProbablyValidPointer(cf) || cl <= cf)
-            continue
-        n := Min((cl - cf) // A_PtrSize, 256)
-        buf := reader.Mem.ReadBytes(cf, n * A_PtrSize)
-        if !buf
-            continue
-        Loop n
-        {
-            cp := NumGet(buf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
-            if reader.IsProbablyValidPointer(cp)
-                queue.Push({ptr: cp, d: it.d + 1})
-        }
-    }
-    return tradeHit ? "trade" : ""
-}
-
 ; Detects the current destination context from the UI tree (confirmed in-game
-; 2026-06-23 via the diagnostic). PoE2 uses ONE shared trade/stash window with the
-; StringId "NPCBuyWindow": it's hierarchically visible only while a stash OR a
-; vendor is open. It's a VENDOR when an "NPCHeader" (the trading NPC's header) is
-; visible inside it, otherwise it's the player's own STASH. When that window isn't
-; open, a keyword scan catches other container windows (gambling / async trade …);
-; else "unknown" (the Ctrl+Click still works — only the label is generic).
-; Returns a Map(kind, verb, button).
+; 2026-06-23 via the diagnostic). The "NPCBuyWindow" top-level panel is visible
+; only while trading with an NPC, so it cleanly identifies a VENDOR. The player's
+; own stash / inventory panels are NOT children of this root — they're reachable
+; via pointer fields on the root struct (like GameHelper2's RightPanel), which a
+; child-traversal can't see; stash detection is pending the panel-pointer scan
+; (see StashMoverDiagnose). Until then a non-vendor container reads "unknown" (the
+; Ctrl+Click still works — only the label is generic). Returns a Map(kind,verb,button).
 _SmDetectContext()
 {
     global g_reader
@@ -650,36 +575,18 @@ _SmDetectContext()
         return _SmCtxFor("unknown")
     buyWin := _SmBfsFindStringId(g_reader, gameUi, "NPCBuyWindow", 3)
     if (buyWin && UiTree_HierarchicallyVisible(g_reader, buyWin))
-    {
-        hdr := _SmBfsFindStringId(g_reader, buyWin, "NPCHeader", 5)
-        if (hdr && UiTree_HierarchicallyVisible(g_reader, hdr))
-            return _SmCtxFor("vendor")    ; an NPC is involved → buying/selling
-        return _SmCtxFor("stash")          ; no NPC → the player's own stash
-    }
-    uiKind := _SmScanContextUi(g_reader, gameUi)
-    return _SmCtxFor(uiKind != "" ? uiKind : "unknown")
+        return _SmCtxFor("vendor")
+    return _SmCtxFor("unknown")
 }
 
 ; Refreshes the detected-destination context for the live "Detected destination"
-; readout — runs regardless of game focus (so the readout updates while the user is
-; in the tool window). Gated on a panel being open (cheap snapshot field) so the
-; inventory read + UI scan don't run during normal mapping; throttled ~1.4 Hz.
-; Pushes the header when the kind changes. Param: radarSnap - the current snapshot.
+; readout — runs every tick (throttled ~1.4 Hz), regardless of game focus so the
+; readout updates while the user glances at the always-on-top tool. Detection is
+; UI-tree only (no inventory read), so it's cheap. Pushes the header on a kind
+; change. Param: radarSnap - unused (kept for signature symmetry).
 _SmRefreshContext(radarSnap)
 {
     global g_smCtx, g_smCtxKind, g_smCtxTick
-    pv := (IsObject(radarSnap) && radarSnap.Has("panelVisibility")) ? radarSnap["panelVisibility"] : 0
-    open := (IsObject(pv) && pv.Has("anyPanelOpen")) ? pv["anyPanelOpen"] : false
-    if !open
-    {
-        ; Nothing open — clear the stale readout once.
-        if (g_smCtxKind != "")
-        {
-            g_smCtx := 0, g_smCtxKind := ""
-            SetTimer(PushHeaderToWebView, -50)
-        }
-        return
-    }
     if ((A_TickCount - g_smCtxTick) < 700)
         return
     g_smCtxTick := A_TickCount
@@ -876,10 +783,62 @@ _SmDiagShallowVisible(reader, gameUi, maxDepth := 3)
     return (out != "" ? out : "  (none)`n")
 }
 
+; Scans the GameUi root STRUCT (not its children array) for UiElement pointer
+; FIELDS — this is where PoE2 keeps panel pointers like the inventory / stash /
+; vendor (à la GameHelper2's RightPanel), which a child-traversal can't reach.
+; For each pointer that looks like a UiElement, reports the field offset, StringId,
+; UnscaledSize, visibility and screen pos. Run with the inventory/stash OPEN to
+; find the inventory grid's pointer + screen rect. Returns a newline string.
+_SmDiagPanelPointers(reader, gameUi)
+{
+    if !reader.IsProbablyValidPointer(gameUi)
+        return "  (gameUi invalid)`n"
+    parentOff := PoE2Offsets.UiElementBase["ParentPtr"]
+    idOff     := PoE2Offsets.UiElementBase["StringIdPtr"]
+    flagsOff  := PoE2Offsets.UiElementBase["Flags"]
+    sizeOff   := PoE2Offsets.UiElementBase["UnscaledSize"]
+    out := ""
+    cnt := 0
+    off := 0x300
+    while (off < 0x1200)
+    {
+        p := reader.Mem.ReadPtr(gameUi + off)
+        cur := off
+        off += 8
+        if (!reader.IsProbablyValidPointer(p) || p >= 0x7FF000000000)
+            continue
+        ; UiElement-ish: a valid Parent pointer at +0xB8.
+        par := reader.Mem.ReadPtr(p + parentOff)
+        if !reader.IsProbablyValidPointer(par)
+            continue
+        sid := ""
+        try sid := reader.ReadStdWStringAt(p + idOff, 64)
+        w := 0.0, h := 0.0
+        szb := reader.Mem.ReadBytes(p + sizeOff, 8)
+        if szb
+        {
+            w := NumGet(szb.Ptr, 0, "Float")
+            h := NumGet(szb.Ptr, 4, "Float")
+        }
+        ; Skip tiny, unnamed noise — keep named elements and panel-sized ones.
+        if (sid = "" && (w < 150 || h < 150))
+            continue
+        vis := false
+        try vis := ((reader.Mem.ReadUInt(p + flagsOff) >> 11) & 1) ? true : false
+        sp := UiTree_GetScreenPos(reader, p)
+        out .= Format("  +0x{:03X}  '{}'  {:.0f}x{:.0f}  {}  uiPos({:.0f},{:.0f})`n"
+            , cur, sid, w, h, (vis ? "[visible]" : "[hidden]"), sp["x"], sp["y"])
+        if (++cnt >= 90)
+            break
+    }
+    return (out != "" ? out : "  (none)`n")
+}
+
 ; Shows a MsgBox report of the live destination signals: ServerData / GameUi
 ; resolution, every open inventory id (+ grid + item count), the top-level panel
-; StringIds (visible/hidden), the keyword-matched visible StringIds, and the
-; current detected kind. Run this at a stash AND at a vendor to pin the signals.
+; StringIds (visible/hidden), the keyword-matched visible StringIds, the panel
+; POINTER FIELDS on the root struct (where inventory/stash live), and the current
+; detected kind. Run this at a stash AND at a vendor to pin the signals.
 StashMoverDiagnose()
 {
     global g_reader
@@ -921,6 +880,7 @@ StashMoverDiagnose()
         out .= "Top-level panels (direct children of GameUi):`n" _SmDiagTopPanels(g_reader, gameUi) "`n"
         out .= "Visible keyword-matched StringIds (deep):`n" _SmDiagVisibleMatches(g_reader, gameUi) "`n"
         out .= "All visible named StringIds (depth <= 3):`n" _SmDiagShallowVisible(g_reader, gameUi, 3) "`n"
+        out .= "Panel POINTER FIELDS on the root struct (inventory/stash live here):`n" _SmDiagPanelPointers(g_reader, gameUi) "`n"
 
         ctx := _SmDetectContext()
         out .= "Currently detected kind:  " ctx["kind"]
