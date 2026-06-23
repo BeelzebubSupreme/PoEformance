@@ -1507,11 +1507,17 @@ _SmEnsureGui()
     global g_smGui, g_smBtnCtrl
     if IsObject(g_smGui)
         return
+    ; Themed plaque: dark codex background + gold serif label, as a clickable Text
+    ; (not a default grey Windows button) so it matches the PoEformance look.
+    ; NOACTIVATE (WS_EX_NOACTIVATE) so clicking it never steals focus from the game.
     g_smGui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000000")
     g_smGui.MarginX := 0
     g_smGui.MarginY := 0
-    g_smGui.BackColor := "1A1A1A"
-    g_smBtnCtrl := g_smGui.AddButton("x0 y0 w120 h24", "Dump → Stash")
+    g_smGui.BackColor := "171008"            ; dark codex brown-black
+    ; +0x200 = SS_CENTERIMAGE (vertical-centre the text); +0x100 = SS_NOTIFY (so the
+    ; static fires Click events).
+    g_smBtnCtrl := g_smGui.AddText("x0 y0 w160 h28 Center +0x200 +0x100", "Dump → Stash")
+    g_smBtnCtrl.SetFont("s10 Bold cCBA135", "Georgia")
     g_smBtnCtrl.OnEvent("Click", _SmOnButtonClick)
 }
 
@@ -1575,12 +1581,14 @@ StashMoverTick(radarSnap := 0)
 
     _SmEnsureGui()
     _SmUpdateButtonText()
-    btnW := 130, btnH := 24
-    ; Anchor at the grid's top-right, just above the first row.
-    bx := Round(rect["x"] + rect["w"] - btnW)
-    by := Round(rect["y"] - btnH - 4)
+    btnW := 160, btnH := 28
+    ; Anchor just to the LEFT of the inventory grid, vertically centred on it.
+    bx := Round(rect["x"] - btnW - 10)
+    by := Round(rect["y"] + (rect["h"] - btnH) / 2)
+    if (bx < 0)
+        bx := Round(rect["x"] + 6)   ; no room on the left → fall back inside the grid
     if (by < 0)
-        by := Round(rect["y"] + 4)   ; fall back to inside the grid if off-screen
+        by := 0
     try {
         g_smGui.Show("x" bx " y" by " w" btnW " h" btnH " NoActivate")
         g_smGuiShown := true
@@ -1599,7 +1607,12 @@ _SmUpdateButtonText()
     txt := ctx["button"]
     if (txt != g_smLastBtnText)
     {
-        try g_smBtnCtrl.Text := txt
+        ; Amber when it will SELL (vendor), gold otherwise — mirrors the UI readout.
+        col := (ctx["kind"] = "vendor") ? "cE3A07E" : "cCBA135"
+        try {
+            g_smBtnCtrl.SetFont("s10 Bold " col, "Georgia")
+            g_smBtnCtrl.Text := txt
+        }
         g_smLastBtnText := txt
     }
 }

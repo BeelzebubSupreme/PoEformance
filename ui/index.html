@@ -5203,17 +5203,27 @@
                 By default only gear is sold; Uniques, Currency and Maps are kept.
               </div>
               <div class="cfg-row">
-                <span class="cfg-label">Hotkey (AHK syntax, e.g. <code>F4</code> or <code>^d</code>)</span>
-                <input type="text" class="cfg-input" id="sm-hotkey" placeholder="none" style="width:120px"
-                    onchange="ahkCall('SetStashMover','hotkey', this.value)">
+                <span class="cfg-label">Hotkey</span>
+                <span style="display:flex;gap:6px;align-items:center">
+                  <button class="hk-btn hk-key-btn" id="sm-hotkey-btn" title="Click, then press a key or key combo" onclick="smCaptureHotkey()">none</button>
+                  <button class="hk-btn" id="sm-hotkey-clear" title="Clear hotkey" onclick="ahkCall('SetStashMover','hotkey','')">✕</button>
+                </span>
               </div>
-              <div class="al-line">
-                <label class="al-field"><span class="al-cap">Per-item delay (ms)</span><span class="hk-num"><input type="number" id="sm-perItemDelayMs" min="5" max="500" step="5" onchange="ahkCall('SetStashMover','perItemDelayMs',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
-                <label class="al-field"><span class="al-cap">Settle delay (ms)</span><span class="hk-num"><input type="number" id="sm-settleDelayMs" min="0" max="300" step="2" onchange="ahkCall('SetStashMover','settleDelayMs',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
+              <div class="cfg-row">
+                <span class="cfg-label">Per-item delay (ms)</span>
+                <span class="hk-num"><input type="number" id="sm-perItemDelayMs" min="5" max="500" step="5" onchange="ahkCall('SetStashMover','perItemDelayMs',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
               </div>
-              <div class="al-line">
-                <label class="al-field"><span class="al-cap">Grid offset X (px)</span><span class="hk-num"><input type="number" id="sm-offsetX" min="-300" max="300" step="1" onchange="ahkCall('SetStashMover','offsetX',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
-                <label class="al-field"><span class="al-cap">Grid offset Y (px)</span><span class="hk-num"><input type="number" id="sm-offsetY" min="-300" max="300" step="1" onchange="ahkCall('SetStashMover','offsetY',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
+              <div class="cfg-row">
+                <span class="cfg-label">Settle delay (ms)</span>
+                <span class="hk-num"><input type="number" id="sm-settleDelayMs" min="0" max="300" step="2" onchange="ahkCall('SetStashMover','settleDelayMs',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-label">Grid offset X (px)</span>
+                <span class="hk-num"><input type="number" id="sm-offsetX" min="-300" max="300" step="1" onchange="ahkCall('SetStashMover','offsetX',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-label">Grid offset Y (px)</span>
+                <span class="hk-num"><input type="number" id="sm-offsetY" min="-300" max="300" step="1" onchange="ahkCall('SetStashMover','offsetY',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
               </div>
               <div class="cfg-help">
                 Grid offset only matters if the auto-detected inventory rectangle is
@@ -6953,7 +6963,8 @@
       chk('sm-sellUniques', s.sellUniques);
       chk('sm-sellCurrency', s.sellCurrency);
       chk('sm-sellMaps', s.sellMaps);
-      val('sm-hotkey', s.hotkey);
+      const hkBtn = document.getElementById('sm-hotkey-btn');
+      if (hkBtn) hkBtn.textContent = smPrettyHotkey(s.hotkey || '');
       val('sm-perItemDelayMs', s.perItemDelayMs);
       val('sm-settleDelayMs', s.settleDelayMs);
       val('sm-offsetX', s.offsetX);
@@ -6966,6 +6977,40 @@
       }
       _smIgnore = Array.isArray(s.ignore) ? s.ignore : [];
       stashRenderIgnore();
+    }
+
+    // ── Stash Mover hotkey capture (reuses the Hotkeys-tab #hk-capture overlay) ──
+    // Click the hotkey button → "Press a key…" overlay → the next key/mouse combo is
+    // stored as an AHK hotkey string (e.g. "^d") via SetStashMover.
+    let smHotkeyCapturing = false;
+    function smCaptureHotkey() {
+      smHotkeyCapturing = true;
+      document.getElementById('hk-capture').style.display = 'flex';
+    }
+    function smHotkeyCancel() {
+      smHotkeyCapturing = false;
+      document.getElementById('hk-capture').style.display = 'none';
+    }
+    function smHotkeyApply(ahk) {
+      smHotkeyCapturing = false;
+      document.getElementById('hk-capture').style.display = 'none';
+      ahkCall('SetStashMover', 'hotkey', ahk);
+      const b = document.getElementById('sm-hotkey-btn');
+      if (b) b.textContent = smPrettyHotkey(ahk);   // optimistic; header confirms
+    }
+    // Builds an AHK hotkey string from a key name (hkKeyName) + modifier flags.
+    function smBuildAhkHotkey(name, mods) {
+      let pre = '';
+      if (mods) { if (mods.ctrl) pre += '^'; if (mods.shift) pre += '+'; if (mods.alt) pre += '!'; }
+      return pre + name;
+    }
+    // Pretty label for an AHK hotkey string: "^d" -> "Ctrl + D", "F1" -> "F1".
+    function smPrettyHotkey(s) {
+      if (!s) return 'none';
+      const map = { '^': 'Ctrl + ', '+': 'Shift + ', '!': 'Alt + ', '#': 'Win + ' };
+      let out = '', rest = s;
+      while (rest && map[rest[0]] !== undefined) { out += map[rest[0]]; rest = rest.slice(1); }
+      return out + (rest.length === 1 ? rest.toUpperCase() : rest);
     }
 
     // Renders the "Ignored base types" chips from _smIgnore. Handlers reference the
@@ -8233,6 +8278,13 @@
       return (e.key && e.key.length === 1) ? e.key.toLowerCase() : '';
     }
     document.addEventListener('keydown', function (e) {
+      if (smHotkeyCapturing) {                 // Stash Mover capture takes precedence
+        e.preventDefault();
+        const nm = hkKeyName(e);
+        if (nm === '') { smHotkeyCancel(); return; }   // Escape / unmappable → cancel
+        smHotkeyApply(smBuildAhkHotkey(nm, { ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey }));
+        return;
+      }
       if (!hkCapture) return;
       e.preventDefault();
       const name = hkKeyName(e);
@@ -8244,11 +8296,17 @@
       hkFinishCapture(name, { ctrl: e.ctrlKey ? 1 : 0, shift: e.shiftKey ? 1 : 0, alt: e.altKey ? 1 : 0, gamepadLT: 0 });
     }, true);
     document.addEventListener('mousedown', function (e) {
+      const btnMap = { 0: 'LButton', 1: 'MButton', 2: 'RButton', 3: 'XButton1', 4: 'XButton2' };
+      if (smHotkeyCapturing) {
+        e.preventDefault();
+        const nm = btnMap[e.button];
+        if (nm) smHotkeyApply(nm);             // mouse buttons carry no modifiers here
+        return;
+      }
       if (!hkCapture) return;
       // Ignore clicks on the cancel overlay box itself except as a button trigger.
       e.preventDefault();
-      const btn = { 0: 'LButton', 1: 'MButton', 2: 'RButton', 3: 'XButton1', 4: 'XButton2' };
-      const name = btn[e.button];
+      const name = btnMap[e.button];
       if (name) hkFinishCapture(name, null);
     }, true);
 

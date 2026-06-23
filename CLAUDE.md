@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.17`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.18`.
 
 ## Language
 
@@ -357,10 +357,13 @@ rectangle from the UI tree.
     focus loss. Click points are precomputed up front (grid cells are stable as items
     leave) and deduped by item pointer. Activates the PoE window first on the hotkey
     path; the overlay button is `WS_EX_NOACTIVATE` so it never steals foreground.
-  - Overlay button: a lazily-built always-on-top, NOACTIVATE Gui (`_SmEnsureGui`);
-    `StashMoverTick(radarSnap)` (called from `UpdateRadarFast` after
-    `TryLootTrackerTick`) positions it at the grid's top-right and shows/hides it
-    based on enable + game-focus + grid-visibility.
+  - Overlay button: a lazily-built always-on-top, NOACTIVATE Gui (`_SmEnsureGui`) —
+    a themed plaque (dark codex background + gold serif `Text`, clickable via the
+    Text's Click event, `SS_NOTIFY`), NOT a default Windows button. Caption + colour
+    follow the context (gold "Dump → Stash" / amber "Sell → Vendor").
+    `StashMoverTick(radarSnap)` (from `UpdateRadarFast` after `TryLootTrackerTick`)
+    positions it just LEFT of the inventory grid (vertically centred) and shows/hides
+    it on enable + game-focus + grid-visibility.
   - Config: self-persists `[StashMover]` (`enabled`, `hotkey`, `showButton`,
     `perItemDelayMs`, `settleDelayMs`, `offsetX`, `offsetY`, `skipQuest`, `jitter`,
     `ignore`); `LoadStashMover()` seeds ALL globals unconditionally (init gotcha).
@@ -426,7 +429,12 @@ rectangle from the UI tree.
   (`det-stashmover`, registered in `_cfgSectionIds`) + `stashMoverSyncFromHeader` +
   the Ignore-filter sub-panel (`updateStashInventory`, `smInvToggle`,
   `smIgnoreRemove`, `stashRenderIgnore`) + the Skip-quest / Randomise / Allow-sell
-  toggles + the "Detected destination" readout (from header `context`).
+  toggles + the "Detected destination" readout (from header `context`). Settings use
+  the Config-native `.cfg-row`/`.cfg-label` layout (one per row) — NOT the
+  alerts-scoped `.al-*` classes (those are only styled under `#panel-alerts`, which
+  left the labels unstyled). The hotkey uses a capture button (`smCaptureHotkey` →
+  reuses the Hotkeys-tab `#hk-capture` overlay + `hkKeyName`; builds an AHK hotkey
+  string), not a text field.
 
 ### Pending (needs the game + Windows)
 - Verify the `InventoryPanel` StringId resolves and its rect equals the 12×N grid
