@@ -4,7 +4,7 @@
 
 **A modern AutoHotkey v2 toolset for *Path of Exile 2* — overlays, automation, reverse-engineering workbench, and GGPK-level map reveal in one place.**
 
-![Version](https://img.shields.io/badge/version-v0.45.13.26-blue)
+![Version](https://img.shields.io/badge/version-v0.45.13.27-blue)
 ![Build](https://img.shields.io/badge/build-stable-green)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Language](https://img.shields.io/badge/language-AutoHotkey%20v2-orange)
@@ -169,12 +169,10 @@ The feature is split into two independent halves — **Auto Stashing** (left) an
 - **Humanised input** — optional randomisation jitters each click's position inside its cell and varies the inter-click delay and mouse-down hold, with per-side **per-item / settle** timing and **grid-offset** fine-tuning.
 - **On-screen button** — a slim header-pill-styled overlay (gold outline, small-caps) sits above the inventory grid, NOACTIVATE so clicking it never steals focus from the game; its icon + label follow the detected destination (`▼ Dump → Stash` gold, `$ Sell → Vendor` amber as a "this sells" cue).
 
-<!-- Add a screenshot once captured, e.g.:
 <div align="center">
   <img src="assets/stashmover.png" width="800" alt="Stash Mover configuration — auto-stash / auto-sell columns + shared options">
   <p><em>Stash Mover — the auto-stash and auto-sell halves with their own ignore filters and randomisation, plus the shared overlay-button / hotkey options.</em></p>
 </div>
--->
 
 ### 🗺 Overlays
 
