@@ -4,12 +4,19 @@
 
 **A modern AutoHotkey v2 toolset for *Path of Exile 2* — overlays, automation, reverse-engineering workbench, and GGPK-level map reveal in one place.**
 
-![Version](https://img.shields.io/badge/version-v0.45.13.15-blue)
+![Version](https://img.shields.io/badge/version-v0.45.13.16-blue)
 ![Build](https://img.shields.io/badge/build-stable-green)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Language](https://img.shields.io/badge/language-AutoHotkey%20v2-orange)
 ![UI](https://img.shields.io/badge/UI-WebView2-7eb0e0)
 
+</div>
+
+---
+
+<div align="center">
+  <video src="https://github.com/imm0r/PoEformance/raw/master/assets/1minPoEformance.mp4" autoplay loop muted playsinline controls width="900"></video>
+  <p><em>One-minute tour of PoEformance.</em></p>
 </div>
 
 ---
