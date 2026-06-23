@@ -3567,8 +3567,10 @@
     .sm-rnd-cell .cfg-label { width: auto; min-width: 0; font-size: 10.5px; line-height: 1.2 }
     .sm-rnd-cell .hk-num { align-self: flex-start }
     .sm-rnd-cell .hk-num > input[type="number"] { width: 58px }
-    /* Default (shipped) ignore chip — non-removable, e.g. Quest items / sell categories. */
+    /* Default (shipped) ignore chip — non-removable, e.g. Quest items. */
     .sm-def-chip { opacity: .8; font-style: italic }
+    /* Sell-side category toggle chip (active by default, click to deactivate). */
+    .sm-cat-chip { border-style: dashed }
 
     .slider-wrap {
       position: relative;
@@ -5038,9 +5040,10 @@
                           <span id="sm-sell-ignore-meta" class="ent-junk-custom-meta"></span></div></summary>
                         <div class="sm-sub-body">
                           <div class="cfg-help">
-                            Only normal/magic/rare gear is sold. Quest items, Uniques, Currency and
-                            Maps &amp; Waystones are always kept (shipped defaults). Add more base
-                            types below: refresh, then click an item to keep it.
+                            Only normal/magic/rare gear is sold. Uniques, Currency and
+                            Maps &amp; Waystones are kept by default — click a category chip below
+                            to allow selling that class. Quest items are always kept. Add more
+                            base types: refresh, then click an item to keep it.
                           </div>
                           <div class="cfg-row" style="gap:8px;flex-wrap:wrap">
                             <button class="hk-btn" onclick="ahkCall('StashRequestInventory','sell')">⟳ Refresh</button>
@@ -7052,37 +7055,56 @@
       return out + (rest.length === 1 ? rest.toUpperCase() : rest);
     }
 
-    // Shipped (non-removable) default filter chips per side. Quest items can never be
-    // moved at all; on the sell side Uniques / Currency / Maps & Waystones are kept by
-    // default too (they replace the old sell-category toggles — only gear is sold).
+    // Shipped (non-removable) default chip per side — quest items can never be moved.
     const _smDefaultChips = {
       stash: [{ name: 'Quest items', tip: 'Shipped default — quest items can never be stashed' }],
-      sell: [
-        { name: 'Quest items', tip: 'Shipped default — quest items can never be sold' },
-        { name: 'Uniques', tip: 'Shipped default — uniques are never auto-sold' },
-        { name: 'Currency', tip: 'Shipped default — currency is never auto-sold' },
-        { name: 'Maps & Waystones', tip: 'Shipped default — maps/waystones are never auto-sold' }
-      ]
+      sell: [{ name: 'Quest items', tip: 'Shipped default — quest items can never be sold' }]
     };
-    // Renders one side's kept/ignored chips: the shipped default chips (🔒, non-removable)
-    // lead the list, then the user entries. User entries reference themselves by index
-    // (smIgnoreRemove) so paths/names never get inlined into an HTML attribute.
+    // Sell-side category filters: ON by default (seeded in the sell ignore set as the
+    // special "@cat:*" keys) but DEACTIVATABLE — clicking a chip toggles whether that
+    // whole class is kept (not sold) or allowed to be auto-sold.
+    const _smSellCats = [
+      { key: '@cat:unique',   name: 'Uniques' },
+      { key: '@cat:currency', name: 'Currency' },
+      { key: '@cat:map',      name: 'Maps & Waystones' }
+    ];
+    // Renders one side's kept/ignored chips: the 🔒 quest default first; on the sell side
+    // the three category toggle chips next (struck through when deactivated = will be sold);
+    // then the user's own base-type entries (removable). User entries reference themselves
+    // by their ORIGINAL index so the "@cat:*" keys (skipped here) don't shift removal ids.
     function stashRenderIgnore(side) {
       const arr = _smIgnore[side] || [];
+      const userEntries = arr.map((e, i) => ({ e, i })).filter(x => !String(x.e.path || '').startsWith('@cat:'));
       const meta = document.getElementById('sm-' + side + '-ignore-meta');
-      if (meta) meta.textContent = arr.length ? String(arr.length) : '';
+      if (meta) meta.textContent = userEntries.length ? String(userEntries.length) : '';
       const host = document.getElementById('sm-' + side + '-ignore-list');
       if (!host) return;
-      const def = (_smDefaultChips[side] || []).map(d =>
+      let html = (_smDefaultChips[side] || []).map(d =>
         `<span class="ent-chip sm-def-chip" title="${escAttr(d.tip)}"><span class="ent-chip-txt">🔒 ${escHtml(d.name)}</span></span>`).join('');
-      const user = arr.map((e, i) =>
+      if (side === 'sell') {
+        const active = new Set(arr.map(e => e.path));
+        html += _smSellCats.map(c => {
+          const on = active.has(c.key);
+          const sty = on ? '' : 'opacity:.45;text-decoration:line-through';
+          const tip = on ? `${c.name} are kept — click to ALLOW auto-selling them`
+                         : `${c.name} will be SOLD — click to keep them`;
+          return `<span class="ent-chip sm-cat-chip" style="cursor:pointer;${sty}" title="${escAttr(tip)}" `
+            + `onclick="smCatToggle('${c.key}',${on ? 0 : 1})"><span class="ent-chip-txt">${on ? '🛡 ' : '💰 '}${escHtml(c.name)}</span></span>`;
+        }).join('');
+      }
+      html += userEntries.map(({ e, i }) =>
         `<span class="ent-chip" title="${escAttr(e.path)}"><span class="ent-chip-txt">${escHtml(e.name || e.path)}</span>`
         + `<button class="ent-chip-x" title="Remove" onclick="smIgnoreRemove('${side}',${i})">✕</button></span>`).join('');
-      host.innerHTML = def + user;
+      host.innerHTML = html;
     }
     function smIgnoreRemove(side, i) {
       const e = (_smIgnore[side] || [])[i];
       if (e) ahkCall('SetStashIgnore', side, e.path, '', '0');
+    }
+    // Toggle a sell-side category filter on (keep) / off (allow auto-selling).
+    function smCatToggle(key, on) {
+      const c = _smSellCats.find(x => x.key === key);
+      ahkCall('SetStashIgnore', 'sell', key, c ? c.name : key, on ? '1' : '0');
     }
 
     // Live backpack list per side (pushed by AHK after StashRequestInventory with the

@@ -64,8 +64,12 @@ LoadStashMover()
     ; Per-side ignore filters — path -> display name. Items whose base-type path
     ; is in the active side's set are never moved. Built from the live inventory.
     ; Quest items are ALWAYS skipped on top of these (a shipped default filter).
+    ; The sell set is also seeded (once) with three category "filters" — special
+    ; "@cat:unique|currency|map" keys that keep whole rarity/type classes from being
+    ; auto-sold. They're ON by default but the user can toggle them off (see below).
     global g_smStashIgnore := Map()
     global g_smSellIgnore := Map()
+    global g_smSellCatsSeeded := false         ; have the sell category defaults been seeded?
 
     ; Detected destination context: "stash" | "vendor" | "trade" | "unknown".
     ; Drives the overlay button label, the result tooltip verb and the sell guard.
@@ -120,6 +124,19 @@ LoadStashMover()
         g_smSellOffsetY    := Integer(IniRead(f, "StashMover", "sellOffsetY", oldOffY))
 
         g_smStashIgnore  := _SmIgnoreDeserialize(IniRead(f, "StashMover", "stashIgnore", oldIgnore))
+        g_smSellCatsSeeded := (IniRead(f, "StashMover", "sellCatsSeeded", "0") = "1")
+        ; Seed the sell category filters ON the first ever load (when the flag is absent),
+        ; so a fresh install keeps uniques / currency / maps out of the auto-sell by
+        ; default. They're normal ignore entries, so the user can deactivate (remove) or
+        ; re-activate them later via the category chips; once any save writes the flag we
+        ; never re-seed, so a deliberate removal sticks.
+        if (!g_smSellCatsSeeded)
+        {
+            g_smSellIgnore["@cat:unique"]   := "Uniques"
+            g_smSellIgnore["@cat:currency"] := "Currency"
+            g_smSellIgnore["@cat:map"]      := "Maps & Waystones"
+            g_smSellCatsSeeded := true
+        }
         g_smSellIgnore   := _SmIgnoreDeserialize(IniRead(f, "StashMover", "sellIgnore", oldIgnore))
     } catch as ex {
         LogError("LoadStashMover", ex)
@@ -133,7 +150,7 @@ SaveStashMover()
     global g_smStashEnabled, g_smSellEnabled, g_smHotkey, g_smShowButton, g_smJitter
     global g_smStashPerItemMs, g_smStashSettleMs, g_smStashOffsetX, g_smStashOffsetY
     global g_smSellPerItemMs, g_smSellSettleMs, g_smSellOffsetX, g_smSellOffsetY
-    global g_smStashIgnore, g_smSellIgnore, g_smConfigFile
+    global g_smStashIgnore, g_smSellIgnore, g_smSellCatsSeeded, g_smConfigFile
     f := g_smConfigFile
     try {
         IniWrite(g_smStashEnabled ? "1" : "0", f, "StashMover", "stashEnabled")
@@ -151,6 +168,7 @@ SaveStashMover()
         IniWrite(g_smSellOffsetY, f, "StashMover", "sellOffsetY")
         IniWrite(_SmIgnoreSerialize(g_smStashIgnore), f, "StashMover", "stashIgnore")
         IniWrite(_SmIgnoreSerialize(g_smSellIgnore), f, "StashMover", "sellIgnore")
+        IniWrite(g_smSellCatsSeeded ? "1" : "0", f, "StashMover", "sellCatsSeeded")
     } catch as ex {
         LogError("SaveStashMover", ex)
     }
@@ -1259,10 +1277,16 @@ _SmShouldSkip(item, nowTick, side := "stash")
     ptr := item.Has("itemEntityPtr") ? item["itemEntityPtr"] : 0
     if (ptr && g_smFailed.Has(ptr) && (nowTick - g_smFailed[ptr]) < g_smFailCooldownMs)
         return "failed"
-    ; Sell side only sells normal/magic/rare GEAR — uniques, currency and maps are
-    ; kept (shipped default; no per-category toggles). Stashing dumps everything.
-    if (sideKey = "sell" && _SmItemCategory(d) != "gear")
-        return "filter"
+    ; Sell side: keep a non-gear item (unique / currency / map) only while that
+    ; category's filter is active (its "@cat:<category>" key is in the sell ignore set).
+    ; Gear is always sold; deactivating a category chip lets that class be sold too.
+    ; Stashing dumps everything regardless.
+    if (sideKey = "sell")
+    {
+        cat := _SmItemCategory(d)
+        if (cat != "gear" && ignoreMap.Has("@cat:" cat))
+            return "filter"
+    }
     return ""
 }
 
