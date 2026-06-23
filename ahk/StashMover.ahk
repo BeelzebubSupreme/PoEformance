@@ -478,10 +478,131 @@ _SmBfsFindStringId(reader, root, targetId, maxDepth := 10)
     return 0
 }
 
-; Resolves the inventory grid's ABSOLUTE screen rectangle in pixels.
-; Returns Map("x","y","w","h") for the grid panel, or 0 when the inventory grid
-; isn't found / not actually on screen. The conversion mirrors UiBrowserHandler:
-; screen px = uiPos * (clientHeight / 1600), origin = client-area top-left.
+; Finds the player inventory side PANEL: the RIGHTMOST visible direct child of the
+; GameUi root that's a half-screen-tall side panel. Confirmed in-game (2026-06-23):
+; PoE2 keeps these as direct children of the root (e.g. the inventory side =
+; ~986×1600 at uiPos x≈2837; the stash side = the same at x≈0). Returns ptr or 0.
+_SmFindInventoryPanel(reader, gameUi)
+{
+    if !reader.IsProbablyValidPointer(gameUi)
+        return 0
+    hdr := reader.Mem.ReadBytes(gameUi, 0x20)
+    if !hdr
+        return 0
+    cf := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+    cl := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
+    if (!reader.IsProbablyValidPointer(cf) || cl <= cf)
+        return 0
+    n := Min((cl - cf) // A_PtrSize, 256)
+    buf := reader.Mem.ReadBytes(cf, n * A_PtrSize)
+    if !buf
+        return 0
+    flagsOff := PoE2Offsets.UiElementBase["Flags"]
+    sizeOff  := PoE2Offsets.UiElementBase["UnscaledSize"]
+    best := 0
+    bestX := -99999.0
+    Loop n
+    {
+        cp := NumGet(buf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
+        if !reader.IsProbablyValidPointer(cp)
+            continue
+        vis := false
+        try vis := ((reader.Mem.ReadUInt(cp + flagsOff) >> 11) & 1) ? true : false
+        if !vis
+            continue
+        szb := reader.Mem.ReadBytes(cp + sizeOff, 8)
+        if !szb
+            continue
+        w := NumGet(szb.Ptr, 0, "Float")
+        h := NumGet(szb.Ptr, 4, "Float")
+        if (w < 700 || w > 1200 || h < 1400)   ; a half-screen-tall side panel
+            continue
+        sp := UiTree_GetScreenPos(reader, cp)
+        if (sp["x"] > bestX)                    ; rightmost = the player's inventory
+        {
+            bestX := sp["x"]
+            best := cp
+        }
+    }
+    return best
+}
+
+; Finds the 12×5 backpack GRID inside the inventory panel: the visible descendant
+; with a ~12:5 (2.4) aspect ratio (square cells) and the largest area. Bounded BFS,
+; prunes hidden subtrees. Returns the grid element ptr, or 0.
+_SmFindGridIn(reader, panel)
+{
+    if !reader.IsProbablyValidPointer(panel)
+        return 0
+    flagsOff := PoE2Offsets.UiElementBase["Flags"]
+    sizeOff  := PoE2Offsets.UiElementBase["UnscaledSize"]
+    queue := [{ptr: panel, d: 0}]
+    seen := Map()
+    nodes := 0
+    best := 0
+    bestArea := 0.0
+    while (queue.Length > 0 && nodes < 600)
+    {
+        it := queue.RemoveAt(1)
+        p := it.ptr
+        if (seen.Has(p) || !reader.IsProbablyValidPointer(p))
+            continue
+        seen[p] := true
+        nodes += 1
+        if (p != panel)
+        {
+            fl := 0
+            try fl := reader.Mem.ReadUInt(p + flagsOff)
+            if (((fl >> 11) & 1) = 0)
+                continue
+        }
+        szb := reader.Mem.ReadBytes(p + sizeOff, 8)
+        if szb
+        {
+            w := NumGet(szb.Ptr, 0, "Float")
+            h := NumGet(szb.Ptr, 4, "Float")
+            if (h > 0 && w > 300)
+            {
+                aspect := w / h
+                if (aspect >= 2.0 && aspect <= 2.9)
+                {
+                    area := w * h
+                    if (area > bestArea)
+                    {
+                        bestArea := area
+                        best := p
+                    }
+                }
+            }
+        }
+        if (it.d >= 8)
+            continue
+        chdr := reader.Mem.ReadBytes(p, 0x20)
+        if !chdr
+            continue
+        cf := NumGet(chdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+        cl := NumGet(chdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
+        if (!reader.IsProbablyValidPointer(cf) || cl <= cf)
+            continue
+        cn := Min((cl - cf) // A_PtrSize, 128)
+        cbuf := reader.Mem.ReadBytes(cf, cn * A_PtrSize)
+        if !cbuf
+            continue
+        Loop cn
+        {
+            cp := NumGet(cbuf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
+            if reader.IsProbablyValidPointer(cp)
+                queue.Push({ptr: cp, d: it.d + 1})
+        }
+    }
+    return best
+}
+
+; Resolves the backpack GRID's ABSOLUTE screen rectangle in pixels, or 0 when the
+; inventory isn't open. Finds the inventory side panel, then the 12×5 grid inside
+; it. The UI→pixel conversion mirrors the (working) UI-browser highlight:
+; screenPx = uiPos * (clientHeight / 1600), origin = client-area top-left; plus the
+; manual offsetX/offsetY fine-tune.
 _SmInventoryGridRect()
 {
     global g_reader, g_smOffsetX, g_smOffsetY
@@ -490,17 +611,16 @@ _SmInventoryGridRect()
     gameUi := _UiBrowser_GetGameUiPtr()
     if !g_reader.IsProbablyValidPointer(gameUi)
         return 0
-    panel := _SmBfsFindStringId(g_reader, gameUi, "InventoryPanel", 10)
-    if !g_reader.IsProbablyValidPointer(panel)
+    panel := _SmFindInventoryPanel(g_reader, gameUi)
+    if !panel
         return 0
-    ; Must be hierarchically visible — otherwise the grid isn't on screen and the
-    ; cell pixels would be meaningless.
-    if !UiTree_HierarchicallyVisible(g_reader, panel)
+    grid := _SmFindGridIn(g_reader, panel)
+    if !grid
         return 0
-    elem := UiTree_ReadElement(g_reader, panel)
+    elem := UiTree_ReadElement(g_reader, grid)
     if !elem
         return 0
-    sp := UiTree_GetScreenPos(g_reader, panel)
+    sp := UiTree_GetScreenPos(g_reader, grid)
     gameHwnd := ResolvePoEWindow()
     cr := gameHwnd ? NavClientRect(gameHwnd) : 0
     if !IsObject(cr)
@@ -881,6 +1001,75 @@ _SmDiagPanelPointers(reader, gameUi)
     return (out != "" ? out : "  (none)`n")
 }
 
+; Dumps the inventory side panel's subtree (StringId + size + aspect + uiPos +
+; visible), flagging ~12:5-aspect elements and marking the one _SmFindGridIn
+; currently auto-picks as the backpack grid. Lets us confirm/fix the grid pick.
+_SmDiagInventorySubtree(reader, gameUi)
+{
+    panel := _SmFindInventoryPanel(reader, gameUi)
+    if !panel
+        return "  (inventory side panel not found — open your inventory)`n"
+    picked := _SmFindGridIn(reader, panel)
+    flagsOff := PoE2Offsets.UiElementBase["Flags"]
+    sizeOff  := PoE2Offsets.UiElementBase["UnscaledSize"]
+    idOff    := PoE2Offsets.UiElementBase["StringIdPtr"]
+    out := Format("  PANEL @0x{:X}   auto-picked GRID @0x{:X}`n", panel, picked)
+    queue := [{ptr: panel, d: 0}]
+    seen := Map()
+    nodes := 0
+    while (queue.Length > 0 && nodes < 400)
+    {
+        it := queue.RemoveAt(1)
+        p := it.ptr
+        if (seen.Has(p) || !reader.IsProbablyValidPointer(p))
+            continue
+        seen[p] := true
+        nodes += 1
+        vis := false
+        try vis := ((reader.Mem.ReadUInt(p + flagsOff) >> 11) & 1) ? true : false
+        if (p != panel && !vis)
+            continue
+        sid := ""
+        try sid := reader.ReadStdWStringAt(p + idOff, 48)
+        w := 0.0, h := 0.0
+        szb := reader.Mem.ReadBytes(p + sizeOff, 8)
+        if szb
+        {
+            w := NumGet(szb.Ptr, 0, "Float")
+            h := NumGet(szb.Ptr, 4, "Float")
+        }
+        if (sid != "" || (w > 200 && h > 100))
+        {
+            sp := UiTree_GetScreenPos(reader, p)
+            asp := (h > 0) ? (w / h) : 0
+            tag := (p = picked) ? "  <== PICKED"
+                 : ((asp >= 2.0 && asp <= 2.9 && w > 300) ? "  <-- grid?" : "")
+            out .= Format("  d{} '{}' {:.0f}x{:.0f} a{:.2f} {} uiPos({:.0f},{:.0f}){}`n"
+                , it.d, sid, w, h, asp, (vis ? "V" : "h"), sp["x"], sp["y"], tag)
+        }
+        if (it.d >= 8)
+            continue
+        chdr := reader.Mem.ReadBytes(p, 0x20)
+        if !chdr
+            continue
+        cf := NumGet(chdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+        cl := NumGet(chdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
+        if (!reader.IsProbablyValidPointer(cf) || cl <= cf)
+            continue
+        cn := Min((cl - cf) // A_PtrSize, 128)
+        cbuf := reader.Mem.ReadBytes(cf, cn * A_PtrSize)
+        if !cbuf
+            continue
+        Loop cn
+        {
+            cp := NumGet(cbuf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
+            if reader.IsProbablyValidPointer(cp)
+                queue.Push({ptr: cp, d: it.d + 1})
+        }
+    }
+    return out
+}
+
 ; Shows a MsgBox report of the live destination signals: ServerData / GameUi
 ; resolution, every open inventory id (+ grid + item count), the top-level panel
 ; StringIds (visible/hidden), the keyword-matched visible StringIds, the panel
@@ -929,6 +1118,7 @@ StashMoverDiagnose()
         out .= "All visible named StringIds (depth <= 3):`n" _SmDiagShallowVisible(g_reader, gameUi, 3) "`n"
         out .= "Panel POINTER FIELDS on the root struct (inventory/stash live here):`n" _SmDiagPanelPointers(g_reader, gameUi) "`n"
         out .= "ALL direct GameUi children by index (stash = Gordin's [36]; find inventory here):`n" _SmDiagAllChildren(g_reader, gameUi) "`n"
+        out .= "INVENTORY panel subtree (auto-picked backpack grid marked PICKED):`n" _SmDiagInventorySubtree(g_reader, gameUi) "`n"
 
         ctx := _SmDetectContext()
         out .= "Currently detected kind:  " ctx["kind"]
@@ -1000,12 +1190,12 @@ _SmSellCategoryEnabled(cat)
 }
 
 ; True when the destination is a selling context the sell filter must apply to.
-; Vendor is the obvious one; "unknown" is treated as possibly-a-vendor so a
-; missed detection can't accidentally sell uniques / currency / maps. Stash and
-; trade dump everything (minus ignore / quest / failed).
+; Only the CONFIRMED vendor (NPCBuyWindow, reliably detected) — so the stash and
+; the plain inventory ("unknown") dump everything (minus ignore / quest / failed),
+; which is what the user wants when stashing.
 _SmIsSellingKind(kind)
 {
-    return (kind = "vendor" || kind = "unknown")
+    return (kind = "vendor")
 }
 
 ; Decides whether a backpack item should be skipped this run, and why.
