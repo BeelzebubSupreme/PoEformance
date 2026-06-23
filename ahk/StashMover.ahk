@@ -46,6 +46,12 @@ LoadStashMover()
     global g_smSkipQuest := true               ; never try to stash quest items (they can't be)
     global g_smJitter := true                  ; randomise click position + inter-click delay
     global g_smAllowSell := true               ; allow acting when the open container is a vendor (sells!)
+    ; Vendor sell filter — which item categories to actually sell. Only applied
+    ; when the destination is a vendor (or unrecognised); stashing dumps everything.
+    global g_smSellGear := true                 ; normal/magic/rare gear (armour, weapons, jewellery …)
+    global g_smSellUniques := false            ; unique / relic items
+    global g_smSellCurrency := false           ; currency (rarityId 5)
+    global g_smSellMaps := false               ; maps / waystones (Metadata/Items/Maps/)
     global g_smConfigFile := _ConfigPath()
 
     ; Ignore filter — path -> display name. Items whose base-type path is in here
@@ -85,6 +91,10 @@ LoadStashMover()
         g_smSkipQuest      := (IniRead(f, "StashMover", "skipQuest", g_smSkipQuest ? "1" : "0") = "1")
         g_smJitter         := (IniRead(f, "StashMover", "jitter", g_smJitter ? "1" : "0") = "1")
         g_smAllowSell      := (IniRead(f, "StashMover", "allowSell", g_smAllowSell ? "1" : "0") = "1")
+        g_smSellGear       := (IniRead(f, "StashMover", "sellGear", g_smSellGear ? "1" : "0") = "1")
+        g_smSellUniques    := (IniRead(f, "StashMover", "sellUniques", g_smSellUniques ? "1" : "0") = "1")
+        g_smSellCurrency   := (IniRead(f, "StashMover", "sellCurrency", g_smSellCurrency ? "1" : "0") = "1")
+        g_smSellMaps       := (IniRead(f, "StashMover", "sellMaps", g_smSellMaps ? "1" : "0") = "1")
         g_smIgnore         := _SmIgnoreDeserialize(IniRead(f, "StashMover", "ignore", ""))
     } catch as ex {
         LogError("LoadStashMover", ex)
@@ -97,6 +107,7 @@ SaveStashMover()
 {
     global g_smEnabled, g_smHotkey, g_smShowButton, g_smPerItemDelayMs
     global g_smSettleDelayMs, g_smOffsetX, g_smOffsetY, g_smSkipQuest, g_smJitter, g_smAllowSell
+    global g_smSellGear, g_smSellUniques, g_smSellCurrency, g_smSellMaps
     global g_smIgnore, g_smConfigFile
     f := g_smConfigFile
     try {
@@ -110,6 +121,10 @@ SaveStashMover()
         IniWrite(g_smSkipQuest ? "1" : "0", f, "StashMover", "skipQuest")
         IniWrite(g_smJitter ? "1" : "0", f, "StashMover", "jitter")
         IniWrite(g_smAllowSell ? "1" : "0", f, "StashMover", "allowSell")
+        IniWrite(g_smSellGear ? "1" : "0", f, "StashMover", "sellGear")
+        IniWrite(g_smSellUniques ? "1" : "0", f, "StashMover", "sellUniques")
+        IniWrite(g_smSellCurrency ? "1" : "0", f, "StashMover", "sellCurrency")
+        IniWrite(g_smSellMaps ? "1" : "0", f, "StashMover", "sellMaps")
         IniWrite(_SmIgnoreSerialize(g_smIgnore), f, "StashMover", "ignore")
     } catch as ex {
         LogError("SaveStashMover", ex)
@@ -169,9 +184,18 @@ _SmApplySetting(key, val)
 {
     global g_smEnabled, g_smHotkey, g_smShowButton, g_smPerItemDelayMs
     global g_smSettleDelayMs, g_smOffsetX, g_smOffsetY, g_smSkipQuest, g_smJitter, g_smAllowSell
+    global g_smSellGear, g_smSellUniques, g_smSellCurrency, g_smSellMaps
     needRebind := false
     switch key
     {
+        case "sellGear":
+            g_smSellGear := _SmTruthy(val)
+        case "sellUniques":
+            g_smSellUniques := _SmTruthy(val)
+        case "sellCurrency":
+            g_smSellCurrency := _SmTruthy(val)
+        case "sellMaps":
+            g_smSellMaps := _SmTruthy(val)
         case "enabled":
             g_smEnabled := _SmTruthy(val)
             needRebind := true
@@ -215,6 +239,7 @@ BuildStashMoverHeaderJson()
     global g_smEnabled, g_smHotkey, g_smShowButton, g_smPerItemDelayMs
     global g_smSettleDelayMs, g_smOffsetX, g_smOffsetY, g_smSkipQuest, g_smJitter
     global g_smAllowSell, g_smIgnore, g_smCtxKind
+    global g_smSellGear, g_smSellUniques, g_smSellCurrency, g_smSellMaps
     j := "{"
     j .= '"enabled":'        (g_smEnabled ? "true" : "false")
     j .= ',"hotkey":'        _JsStr(g_smHotkey)
@@ -222,6 +247,10 @@ BuildStashMoverHeaderJson()
     j .= ',"skipQuest":'     (g_smSkipQuest ? "true" : "false")
     j .= ',"jitter":'        (g_smJitter ? "true" : "false")
     j .= ',"allowSell":'     (g_smAllowSell ? "true" : "false")
+    j .= ',"sellGear":'      (g_smSellGear ? "true" : "false")
+    j .= ',"sellUniques":'   (g_smSellUniques ? "true" : "false")
+    j .= ',"sellCurrency":'  (g_smSellCurrency ? "true" : "false")
+    j .= ',"sellMaps":'      (g_smSellMaps ? "true" : "false")
     j .= ',"perItemDelayMs":' (g_smPerItemDelayMs + 0)
     j .= ',"settleDelayMs":'  (g_smSettleDelayMs + 0)
     j .= ',"offsetX":'        (g_smOffsetX + 0)
@@ -449,10 +478,131 @@ _SmBfsFindStringId(reader, root, targetId, maxDepth := 10)
     return 0
 }
 
-; Resolves the inventory grid's ABSOLUTE screen rectangle in pixels.
-; Returns Map("x","y","w","h") for the grid panel, or 0 when the inventory grid
-; isn't found / not actually on screen. The conversion mirrors UiBrowserHandler:
-; screen px = uiPos * (clientHeight / 1600), origin = client-area top-left.
+; Finds the player inventory side PANEL: the RIGHTMOST visible direct child of the
+; GameUi root that's a half-screen-tall side panel. Confirmed in-game (2026-06-23):
+; PoE2 keeps these as direct children of the root (e.g. the inventory side =
+; ~986×1600 at uiPos x≈2837; the stash side = the same at x≈0). Returns ptr or 0.
+_SmFindInventoryPanel(reader, gameUi)
+{
+    if !reader.IsProbablyValidPointer(gameUi)
+        return 0
+    hdr := reader.Mem.ReadBytes(gameUi, 0x20)
+    if !hdr
+        return 0
+    cf := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+    cl := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
+    if (!reader.IsProbablyValidPointer(cf) || cl <= cf)
+        return 0
+    n := Min((cl - cf) // A_PtrSize, 256)
+    buf := reader.Mem.ReadBytes(cf, n * A_PtrSize)
+    if !buf
+        return 0
+    flagsOff := PoE2Offsets.UiElementBase["Flags"]
+    sizeOff  := PoE2Offsets.UiElementBase["UnscaledSize"]
+    best := 0
+    bestX := -99999.0
+    Loop n
+    {
+        cp := NumGet(buf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
+        if !reader.IsProbablyValidPointer(cp)
+            continue
+        vis := false
+        try vis := ((reader.Mem.ReadUInt(cp + flagsOff) >> 11) & 1) ? true : false
+        if !vis
+            continue
+        szb := reader.Mem.ReadBytes(cp + sizeOff, 8)
+        if !szb
+            continue
+        w := NumGet(szb.Ptr, 0, "Float")
+        h := NumGet(szb.Ptr, 4, "Float")
+        if (w < 700 || w > 1200 || h < 1400)   ; a half-screen-tall side panel
+            continue
+        sp := UiTree_GetScreenPos(reader, cp)
+        if (sp["x"] > bestX)                    ; rightmost = the player's inventory
+        {
+            bestX := sp["x"]
+            best := cp
+        }
+    }
+    return best
+}
+
+; Finds the 12×5 backpack GRID inside the inventory panel: the visible descendant
+; with a ~12:5 (2.4) aspect ratio (square cells) and the largest area. Bounded BFS,
+; prunes hidden subtrees. Returns the grid element ptr, or 0.
+_SmFindGridIn(reader, panel)
+{
+    if !reader.IsProbablyValidPointer(panel)
+        return 0
+    flagsOff := PoE2Offsets.UiElementBase["Flags"]
+    sizeOff  := PoE2Offsets.UiElementBase["UnscaledSize"]
+    queue := [{ptr: panel, d: 0}]
+    seen := Map()
+    nodes := 0
+    best := 0
+    bestArea := 0.0
+    while (queue.Length > 0 && nodes < 600)
+    {
+        it := queue.RemoveAt(1)
+        p := it.ptr
+        if (seen.Has(p) || !reader.IsProbablyValidPointer(p))
+            continue
+        seen[p] := true
+        nodes += 1
+        if (p != panel)
+        {
+            fl := 0
+            try fl := reader.Mem.ReadUInt(p + flagsOff)
+            if (((fl >> 11) & 1) = 0)
+                continue
+        }
+        szb := reader.Mem.ReadBytes(p + sizeOff, 8)
+        if szb
+        {
+            w := NumGet(szb.Ptr, 0, "Float")
+            h := NumGet(szb.Ptr, 4, "Float")
+            if (h > 0 && w > 300)
+            {
+                aspect := w / h
+                if (aspect >= 2.0 && aspect <= 2.9)
+                {
+                    area := w * h
+                    if (area > bestArea)
+                    {
+                        bestArea := area
+                        best := p
+                    }
+                }
+            }
+        }
+        if (it.d >= 8)
+            continue
+        chdr := reader.Mem.ReadBytes(p, 0x20)
+        if !chdr
+            continue
+        cf := NumGet(chdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+        cl := NumGet(chdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
+        if (!reader.IsProbablyValidPointer(cf) || cl <= cf)
+            continue
+        cn := Min((cl - cf) // A_PtrSize, 128)
+        cbuf := reader.Mem.ReadBytes(cf, cn * A_PtrSize)
+        if !cbuf
+            continue
+        Loop cn
+        {
+            cp := NumGet(cbuf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
+            if reader.IsProbablyValidPointer(cp)
+                queue.Push({ptr: cp, d: it.d + 1})
+        }
+    }
+    return best
+}
+
+; Resolves the backpack GRID's ABSOLUTE screen rectangle in pixels, or 0 when the
+; inventory isn't open. Finds the inventory side panel, then the 12×5 grid inside
+; it. The UI→pixel conversion mirrors the (working) UI-browser highlight:
+; screenPx = uiPos * (clientHeight / 1600), origin = client-area top-left; plus the
+; manual offsetX/offsetY fine-tune.
 _SmInventoryGridRect()
 {
     global g_reader, g_smOffsetX, g_smOffsetY
@@ -461,17 +611,16 @@ _SmInventoryGridRect()
     gameUi := _UiBrowser_GetGameUiPtr()
     if !g_reader.IsProbablyValidPointer(gameUi)
         return 0
-    panel := _SmBfsFindStringId(g_reader, gameUi, "InventoryPanel", 10)
-    if !g_reader.IsProbablyValidPointer(panel)
+    panel := _SmFindInventoryPanel(g_reader, gameUi)
+    if !panel
         return 0
-    ; Must be hierarchically visible — otherwise the grid isn't on screen and the
-    ; cell pixels would be meaningless.
-    if !UiTree_HierarchicallyVisible(g_reader, panel)
+    grid := _SmFindGridIn(g_reader, panel)
+    if !grid
         return 0
-    elem := UiTree_ReadElement(g_reader, panel)
+    elem := UiTree_ReadElement(g_reader, grid)
     if !elem
         return 0
-    sp := UiTree_GetScreenPos(g_reader, panel)
+    sp := UiTree_GetScreenPos(g_reader, grid)
     gameHwnd := ResolvePoEWindow()
     cr := gameHwnd ? NavClientRect(gameHwnd) : 0
     if !IsObject(cr)
@@ -513,24 +662,6 @@ _SmReadBackpack(sdPtr)
     return 0
 }
 
-; True when the game server reports an open stash tab (inventoryId == 27). This is
-; the authoritative stash signal — the server populates id 27 with whichever stash
-; tab is visible, and it's never present at a vendor / trade window.
-_SmStashOpen(sdPtr)
-{
-    global g_reader
-    if (!IsObject(g_reader) || !sdPtr)
-        return false
-    invs := 0
-    try invs := g_reader.ReadAllPlayerInventories(sdPtr)
-    if !(invs && Type(invs) = "Array")
-        return false
-    for _, inv in invs
-        if (inv && IsObject(inv) && inv.Has("inventoryId") && inv["inventoryId"] = 27)
-            return true
-    return false
-}
-
 ; ── Destination context (stash vs vendor vs trade) ───────────────────────────
 
 ; Returns the context descriptor for a kind: Map(kind, verb, button). The verb is
@@ -546,34 +677,108 @@ _SmCtxFor(kind)
     }
 }
 
-; Classifies a UI element StringId into a destination kind by keyword (substring,
-; case-insensitive — robust against unknown exact StringIds). Stash is detected
-; separately via inventory id 27, so it's deliberately NOT matched here (an open
-; stash never carries id 27 at a vendor, so this can't mislabel a sale as a stash).
-_SmClassifyStringId(sid)
+; Detects the current destination context from the UI tree (confirmed in-game
+; 2026-06-23 via the diagnostic). The "NPCBuyWindow" top-level panel is visible
+; only while trading with an NPC, so it cleanly identifies a VENDOR. The player's
+; own stash / inventory panels are NOT children of this root — they're reachable
+; via pointer fields on the root struct (like GameHelper2's RightPanel), which a
+; child-traversal can't see; stash detection is pending the panel-pointer scan
+; (see StashMoverDiagnose). Until then a non-vendor container reads "unknown" (the
+; Ctrl+Click still works — only the label is generic). Returns a Map(kind,verb,button).
+_SmDetectContext()
 {
-    s := StrLower(sid "")
-    if (InStr(s, "sell") || InStr(s, "vendor") || InStr(s, "purchase") || InStr(s, "haggle") || InStr(s, "gamble"))
-        return "vendor"
-    if (InStr(s, "trade"))
-        return "trade"
-    return ""
+    global g_reader
+    if !IsObject(g_reader)
+        return _SmCtxFor("unknown")
+    gameUi := _UiBrowser_GetGameUiPtr()
+    if !g_reader.IsProbablyValidPointer(gameUi)
+        return _SmCtxFor("unknown")
+    buyWin := _SmBfsFindStringId(g_reader, gameUi, "NPCBuyWindow", 3)
+    if (buyWin && UiTree_HierarchicallyVisible(g_reader, buyWin))
+        return _SmCtxFor("vendor")
+    return _SmCtxFor("unknown")
 }
 
-; Scans the VISIBLE UI subtree for a vendor / trade window. Prunes hidden subtrees
-; (so only on-screen windows count) and returns "vendor" (preferred) or "trade",
-; else "". Bounded by node count + depth so it stays cheap.
-_SmScanContextUi(reader, gameUi)
+; Refreshes the detected-destination context for the live "Detected destination"
+; readout — runs every tick (throttled ~1.4 Hz), regardless of game focus so the
+; readout updates while the user glances at the always-on-top tool. Detection is
+; UI-tree only (no inventory read), so it's cheap. Pushes the header on a kind
+; change. Param: radarSnap - unused (kept for signature symmetry).
+_SmRefreshContext(radarSnap)
+{
+    global g_smCtx, g_smCtxKind, g_smCtxTick
+    if ((A_TickCount - g_smCtxTick) < 700)
+        return
+    g_smCtxTick := A_TickCount
+    prev := g_smCtxKind
+    g_smCtx := _SmDetectContext()
+    g_smCtxKind := g_smCtx["kind"]
+    if (g_smCtxKind != prev)
+        SetTimer(PushHeaderToWebView, -50)
+}
+
+; Returns the current cached context Map (for the button label), or the "unknown"
+; descriptor when nothing has been detected yet.
+_SmCurrentCtx()
+{
+    global g_smCtx
+    return IsObject(g_smCtx) ? g_smCtx : _SmCtxFor("unknown")
+}
+
+; ── Destination diagnostic (RE aid — find the real stash/vendor signals) ─────
+
+; Lists the StringId + visibility of the direct children of the GameUi root (the
+; top-level panels). This is the cleanest discriminator for which window is open.
+; Returns a newline string like "  PurchasePanel  [visible]".
+_SmDiagTopPanels(reader, gameUi)
+{
+    out := ""
+    if !reader.IsProbablyValidPointer(gameUi)
+        return "  (gameUi invalid)`n"
+    hdr := reader.Mem.ReadBytes(gameUi, 0x20)
+    if !hdr
+        return "  (root unreadable)`n"
+    cf := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+    cl := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
+    if (!reader.IsProbablyValidPointer(cf) || cl <= cf)
+        return "  (no children)`n"
+    n := Min((cl - cf) // A_PtrSize, 256)
+    buf := reader.Mem.ReadBytes(cf, n * A_PtrSize)
+    if !buf
+        return "  (children unreadable)`n"
+    idOff := PoE2Offsets.UiElementBase["StringIdPtr"]
+    flagsOff := PoE2Offsets.UiElementBase["Flags"]
+    Loop n
+    {
+        cp := NumGet(buf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
+        if !reader.IsProbablyValidPointer(cp)
+            continue
+        sid := ""
+        try sid := reader.ReadStdWStringAt(cp + idOff, 64)
+        if (sid = "")
+            continue
+        vis := false
+        try vis := ((reader.Mem.ReadUInt(cp + flagsOff) >> 11) & 1) ? true : false
+        out .= "  " sid (vis ? "  [visible]" : "  [hidden]") "`n"
+    }
+    return (out != "" ? out : "  (no named children)`n")
+}
+
+; Collects VISIBLE element StringIds containing any destination-ish keyword, deep
+; in the tree (pruning hidden subtrees). Deduped + capped. Returns a newline string.
+_SmDiagVisibleMatches(reader, gameUi)
 {
     if !reader.IsProbablyValidPointer(gameUi)
-        return ""
-    idOff    := PoE2Offsets.UiElementBase["StringIdPtr"]
+        return "  (gameUi invalid)`n"
+    kws := ["buy", "sell", "vendor", "purchase", "merchant", "shop", "store", "wares"
+          , "trade", "stash", "gamble", "haggle", "wager", "npc", "barter", "sale"]
+    idOff := PoE2Offsets.UiElementBase["StringIdPtr"]
     flagsOff := PoE2Offsets.UiElementBase["Flags"]
     queue := [{ptr: gameUi, d: 0}]
     seen := Map()
+    found := Map()
     nodes := 0
-    tradeHit := false
-    while (queue.Length > 0 && nodes < 2500)
+    while (queue.Length > 0 && nodes < 6000)
     {
         it := queue.RemoveAt(1)
         p := it.ptr
@@ -581,7 +786,6 @@ _SmScanContextUi(reader, gameUi)
             continue
         seen[p] := true
         nodes += 1
-        ; Prune hidden subtrees (bit 11). The root is always treated as visible.
         if (p != gameUi)
         {
             fl := 0
@@ -590,16 +794,20 @@ _SmScanContextUi(reader, gameUi)
                 continue
         }
         sid := ""
-        try sid := reader.ReadStdWStringAt(p + idOff, 48)
+        try sid := reader.ReadStdWStringAt(p + idOff, 64)
         if (sid != "")
         {
-            k := _SmClassifyStringId(sid)
-            if (k = "vendor")
-                return "vendor"
-            if (k = "trade")
-                tradeHit := true
+            low := StrLower(sid)
+            for _, kw in kws
+            {
+                if InStr(low, kw)
+                {
+                    found[sid] := true
+                    break
+                }
+            }
         }
-        if (it.d >= 12)
+        if (it.d >= 18)
             continue
         hdr := reader.Mem.ReadBytes(p, 0x20)
         if !hdr
@@ -608,51 +816,338 @@ _SmScanContextUi(reader, gameUi)
         cl := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
         if (!reader.IsProbablyValidPointer(cf) || cl <= cf)
             continue
-        n := Min((cl - cf) // A_PtrSize, 256)
-        buf := reader.Mem.ReadBytes(cf, n * A_PtrSize)
-        if !buf
+        cn := Min((cl - cf) // A_PtrSize, 256)
+        cbuf := reader.Mem.ReadBytes(cf, cn * A_PtrSize)
+        if !cbuf
             continue
-        Loop n
+        Loop cn
         {
-            cp := NumGet(buf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
+            cpp := NumGet(cbuf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
+            if reader.IsProbablyValidPointer(cpp)
+                queue.Push({ptr: cpp, d: it.d + 1})
+        }
+    }
+    out := ""
+    cnt := 0
+    for sid in found
+    {
+        out .= "  " sid "`n"
+        if (++cnt >= 40)
+            break
+    }
+    return (out != "" ? out : "  (none matched)`n")
+}
+
+; Lists ALL visible, named StringIds down to maxDepth (regardless of keywords), so
+; the open window's real StringId is captured even if it matches no keyword. Prunes
+; hidden subtrees; deduped + capped. Returns a newline string.
+_SmDiagShallowVisible(reader, gameUi, maxDepth := 3)
+{
+    if !reader.IsProbablyValidPointer(gameUi)
+        return "  (gameUi invalid)`n"
+    idOff := PoE2Offsets.UiElementBase["StringIdPtr"]
+    flagsOff := PoE2Offsets.UiElementBase["Flags"]
+    queue := [{ptr: gameUi, d: 0}]
+    seen := Map()
+    found := Map()
+    order := []
+    while (queue.Length > 0)
+    {
+        it := queue.RemoveAt(1)
+        p := it.ptr
+        if (seen.Has(p) || !reader.IsProbablyValidPointer(p))
+            continue
+        seen[p] := true
+        if (p != gameUi)
+        {
+            fl := 0
+            try fl := reader.Mem.ReadUInt(p + flagsOff)
+            if (((fl >> 11) & 1) = 0)
+                continue
+            sid := ""
+            try sid := reader.ReadStdWStringAt(p + idOff, 64)
+            if (sid != "" && !found.Has(sid))
+            {
+                found[sid] := true
+                order.Push("  d" it.d "  " sid)
+            }
+        }
+        if (it.d >= maxDepth)
+            continue
+        hdr := reader.Mem.ReadBytes(p, 0x20)
+        if !hdr
+            continue
+        cf := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+        cl := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
+        if (!reader.IsProbablyValidPointer(cf) || cl <= cf)
+            continue
+        cn := Min((cl - cf) // A_PtrSize, 256)
+        cbuf := reader.Mem.ReadBytes(cf, cn * A_PtrSize)
+        if !cbuf
+            continue
+        Loop cn
+        {
+            cpp := NumGet(cbuf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
+            if reader.IsProbablyValidPointer(cpp)
+                queue.Push({ptr: cpp, d: it.d + 1})
+        }
+    }
+    out := ""
+    cnt := 0
+    for _, line in order
+    {
+        out .= line "`n"
+        if (++cnt >= 120)
+            break
+    }
+    return (out != "" ? out : "  (none)`n")
+}
+
+; Enumerates EVERY direct child of the GameUi root by index (named or not), with
+; StringId, UnscaledSize, visibility and screen pos. This mirrors what the UI
+; browser shows (e.g. Gordin's stash = GameUi child [36]); run with the inventory
+; AND stash open to identify the inventory grid's child index. Returns a string.
+_SmDiagAllChildren(reader, gameUi)
+{
+    if !reader.IsProbablyValidPointer(gameUi)
+        return "  (gameUi invalid)`n"
+    hdr := reader.Mem.ReadBytes(gameUi, 0x20)
+    if !hdr
+        return "  (root unreadable)`n"
+    cf := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+    cl := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
+    if (!reader.IsProbablyValidPointer(cf) || cl <= cf)
+        return "  (no children)`n"
+    n := Min((cl - cf) // A_PtrSize, 256)
+    buf := reader.Mem.ReadBytes(cf, n * A_PtrSize)
+    if !buf
+        return "  (children unreadable)`n"
+    idOff    := PoE2Offsets.UiElementBase["StringIdPtr"]
+    flagsOff := PoE2Offsets.UiElementBase["Flags"]
+    sizeOff  := PoE2Offsets.UiElementBase["UnscaledSize"]
+    out := ""
+    Loop n
+    {
+        idx := A_Index - 1
+        cp := NumGet(buf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
+        if !reader.IsProbablyValidPointer(cp)
+            continue
+        sid := ""
+        try sid := reader.ReadStdWStringAt(cp + idOff, 64)
+        w := 0.0, h := 0.0
+        szb := reader.Mem.ReadBytes(cp + sizeOff, 8)
+        if szb
+        {
+            w := NumGet(szb.Ptr, 0, "Float")
+            h := NumGet(szb.Ptr, 4, "Float")
+        }
+        vis := false
+        try vis := ((reader.Mem.ReadUInt(cp + flagsOff) >> 11) & 1) ? true : false
+        sp := UiTree_GetScreenPos(reader, cp)
+        out .= Format("  [{}]  '{}'  {:.0f}x{:.0f}  {}  uiPos({:.0f},{:.0f})`n"
+            , idx, sid, w, h, (vis ? "[visible]" : "[hidden]"), sp["x"], sp["y"])
+    }
+    return (out != "" ? out : "  (none)`n")
+}
+
+; Scans the GameUi root STRUCT (not its children array) for UiElement pointer
+; FIELDS — this is where PoE2 keeps panel pointers like the inventory / stash /
+; vendor (à la GameHelper2's RightPanel), which a child-traversal can't reach.
+; For each pointer that looks like a UiElement, reports the field offset, StringId,
+; UnscaledSize, visibility and screen pos. Run with the inventory/stash OPEN to
+; find the inventory grid's pointer + screen rect. Returns a newline string.
+_SmDiagPanelPointers(reader, gameUi)
+{
+    if !reader.IsProbablyValidPointer(gameUi)
+        return "  (gameUi invalid)`n"
+    parentOff := PoE2Offsets.UiElementBase["ParentPtr"]
+    idOff     := PoE2Offsets.UiElementBase["StringIdPtr"]
+    flagsOff  := PoE2Offsets.UiElementBase["Flags"]
+    sizeOff   := PoE2Offsets.UiElementBase["UnscaledSize"]
+    out := ""
+    cnt := 0
+    off := 0x300
+    while (off < 0x1200)
+    {
+        p := reader.Mem.ReadPtr(gameUi + off)
+        cur := off
+        off += 8
+        if (!reader.IsProbablyValidPointer(p) || p >= 0x7FF000000000)
+            continue
+        ; UiElement-ish: a valid Parent pointer at +0xB8.
+        par := reader.Mem.ReadPtr(p + parentOff)
+        if !reader.IsProbablyValidPointer(par)
+            continue
+        sid := ""
+        try sid := reader.ReadStdWStringAt(p + idOff, 64)
+        w := 0.0, h := 0.0
+        szb := reader.Mem.ReadBytes(p + sizeOff, 8)
+        if szb
+        {
+            w := NumGet(szb.Ptr, 0, "Float")
+            h := NumGet(szb.Ptr, 4, "Float")
+        }
+        ; Skip tiny, unnamed noise — keep named elements and panel-sized ones.
+        if (sid = "" && (w < 150 || h < 150))
+            continue
+        vis := false
+        try vis := ((reader.Mem.ReadUInt(p + flagsOff) >> 11) & 1) ? true : false
+        sp := UiTree_GetScreenPos(reader, p)
+        out .= Format("  +0x{:03X}  '{}'  {:.0f}x{:.0f}  {}  uiPos({:.0f},{:.0f})`n"
+            , cur, sid, w, h, (vis ? "[visible]" : "[hidden]"), sp["x"], sp["y"])
+        if (++cnt >= 90)
+            break
+    }
+    return (out != "" ? out : "  (none)`n")
+}
+
+; Dumps the inventory side panel's subtree (StringId + size + aspect + uiPos +
+; visible), flagging ~12:5-aspect elements and marking the one _SmFindGridIn
+; currently auto-picks as the backpack grid. Lets us confirm/fix the grid pick.
+_SmDiagInventorySubtree(reader, gameUi)
+{
+    panel := _SmFindInventoryPanel(reader, gameUi)
+    if !panel
+        return "  (inventory side panel not found — open your inventory)`n"
+    picked := _SmFindGridIn(reader, panel)
+    flagsOff := PoE2Offsets.UiElementBase["Flags"]
+    sizeOff  := PoE2Offsets.UiElementBase["UnscaledSize"]
+    idOff    := PoE2Offsets.UiElementBase["StringIdPtr"]
+    out := Format("  PANEL @0x{:X}   auto-picked GRID @0x{:X}`n", panel, picked)
+    queue := [{ptr: panel, d: 0}]
+    seen := Map()
+    nodes := 0
+    while (queue.Length > 0 && nodes < 400)
+    {
+        it := queue.RemoveAt(1)
+        p := it.ptr
+        if (seen.Has(p) || !reader.IsProbablyValidPointer(p))
+            continue
+        seen[p] := true
+        nodes += 1
+        vis := false
+        try vis := ((reader.Mem.ReadUInt(p + flagsOff) >> 11) & 1) ? true : false
+        if (p != panel && !vis)
+            continue
+        sid := ""
+        try sid := reader.ReadStdWStringAt(p + idOff, 48)
+        w := 0.0, h := 0.0
+        szb := reader.Mem.ReadBytes(p + sizeOff, 8)
+        if szb
+        {
+            w := NumGet(szb.Ptr, 0, "Float")
+            h := NumGet(szb.Ptr, 4, "Float")
+        }
+        if (sid != "" || (w > 200 && h > 100))
+        {
+            sp := UiTree_GetScreenPos(reader, p)
+            asp := (h > 0) ? (w / h) : 0
+            tag := (p = picked) ? "  <== PICKED"
+                 : ((asp >= 2.0 && asp <= 2.9 && w > 300) ? "  <-- grid?" : "")
+            out .= Format("  d{} '{}' {:.0f}x{:.0f} a{:.2f} {} uiPos({:.0f},{:.0f}){}`n"
+                , it.d, sid, w, h, asp, (vis ? "V" : "h"), sp["x"], sp["y"], tag)
+        }
+        if (it.d >= 8)
+            continue
+        chdr := reader.Mem.ReadBytes(p, 0x20)
+        if !chdr
+            continue
+        cf := NumGet(chdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+        cl := NumGet(chdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
+        if (!reader.IsProbablyValidPointer(cf) || cl <= cf)
+            continue
+        cn := Min((cl - cf) // A_PtrSize, 128)
+        cbuf := reader.Mem.ReadBytes(cf, cn * A_PtrSize)
+        if !cbuf
+            continue
+        Loop cn
+        {
+            cp := NumGet(cbuf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
             if reader.IsProbablyValidPointer(cp)
                 queue.Push({ptr: cp, d: it.d + 1})
         }
     }
-    return tradeHit ? "trade" : ""
+    return out
 }
 
-; Detects the current destination context. Stash is authoritative via inventory
-; id 27 (reliable, never present at a vendor); vendor / trade come from the UI
-; scan; otherwise "unknown" (the action still works — Ctrl+Click moves to whatever
-; container is open — only the label is generic). Returns a Map(kind,verb,button).
-_SmDetectContext()
+; Shows a MsgBox report of the live destination signals: ServerData / GameUi
+; resolution, every open inventory id (+ grid + item count), the top-level panel
+; StringIds (visible/hidden), the keyword-matched visible StringIds, the panel
+; POINTER FIELDS on the root struct (where inventory/stash live), and the current
+; detected kind. Run this at a stash AND at a vendor to pin the signals.
+StashMoverDiagnose()
 {
     global g_reader
-    sdPtr := _SmResolveServerData()
-    if (sdPtr && _SmStashOpen(sdPtr))
-        return _SmCtxFor("stash")
-    uiKind := ""
-    if IsObject(g_reader)
+    if !IsObject(g_reader)
     {
-        gameUi := _UiBrowser_GetGameUiPtr()
-        if g_reader.IsProbablyValidPointer(gameUi)
-            uiKind := _SmScanContextUi(g_reader, gameUi)
+        try MsgBox("Game not connected.", "Stash Mover Diagnostic", 0x10)
+        return
     }
-    return _SmCtxFor(uiKind != "" ? uiKind : "unknown")
-}
+    out := "Stash Mover — destination diagnostic`n`n"
+    try
+    {
+        sdPtr := _SmResolveServerData()
+        out .= "ServerData: " (sdPtr ? Format("0x{:X}", sdPtr) : "0  (FAILED to resolve)") "`n`n"
 
-; Cached wrapper for the per-tick button label (recomputes at most ~1.4 Hz so the
-; inventory read + UI scan don't run on every overlay tick). Returns a context Map.
-_SmContextCached()
-{
-    global g_smCtx, g_smCtxKind, g_smCtxTick
-    if (IsObject(g_smCtx) && (A_TickCount - g_smCtxTick) < 700)
-        return g_smCtx
-    g_smCtx := _SmDetectContext()
-    g_smCtxKind := g_smCtx["kind"]
-    g_smCtxTick := A_TickCount
-    return g_smCtx
+        out .= "Open inventory IDs:`n"
+        invLines := ""
+        if sdPtr
+        {
+            invs := 0
+            try invs := g_reader.ReadAllPlayerInventories(sdPtr)
+            if (invs && Type(invs) = "Array")
+            {
+                for _, inv in invs
+                {
+                    if !(inv && IsObject(inv))
+                        continue
+                    id := inv.Has("inventoryId") ? inv["inventoryId"] : -1
+                    x := inv.Has("totalBoxesX") ? inv["totalBoxesX"] : 0
+                    y := inv.Has("totalBoxesY") ? inv["totalBoxesY"] : 0
+                    cnt := (inv.Has("items") && inv["items"] is Array) ? inv["items"].Length : 0
+                    invLines .= "  id=" id "   " x "x" y "   items=" cnt "`n"
+                }
+            }
+        }
+        out .= (invLines != "" ? invLines : "  (none)`n") "`n"
+
+        gameUi := _UiBrowser_GetGameUiPtr()
+        out .= "GameUi: " (g_reader.IsProbablyValidPointer(gameUi) ? Format("0x{:X}", gameUi) : "0  (FAILED)") "`n`n"
+        out .= "Top-level panels (direct children of GameUi):`n" _SmDiagTopPanels(g_reader, gameUi) "`n"
+        out .= "Visible keyword-matched StringIds (deep):`n" _SmDiagVisibleMatches(g_reader, gameUi) "`n"
+        out .= "All visible named StringIds (depth <= 3):`n" _SmDiagShallowVisible(g_reader, gameUi, 3) "`n"
+        out .= "Panel POINTER FIELDS on the root struct (inventory/stash live here):`n" _SmDiagPanelPointers(g_reader, gameUi) "`n"
+        out .= "ALL direct GameUi children by index (stash = Gordin's [36]; find inventory here):`n" _SmDiagAllChildren(g_reader, gameUi) "`n"
+        out .= "INVENTORY panel subtree (auto-picked backpack grid marked PICKED):`n" _SmDiagInventorySubtree(g_reader, gameUi) "`n"
+
+        ctx := _SmDetectContext()
+        out .= "Currently detected kind:  " ctx["kind"]
+    }
+    catch as ex
+    {
+        out .= "`n`nEXCEPTION: " (ex.HasOwnProp("Message") ? ex.Message : "?")
+    }
+    ; Write the full report to debug\ (the MsgBox truncates long lists) and show
+    ; only the path + the detected kind.
+    outDir := A_ScriptDir "\debug"
+    if !DirExist(outDir)
+        try DirCreate(outDir)
+    outPath := outDir "\stashmover_diag_" FormatTime(A_Now, "yyyyMMdd_HHmmss") ".txt"
+    wrote := false
+    try {
+        FileAppend(out, outPath, "UTF-8")
+        wrote := true
+    }
+    kindNow := ""
+    try kindNow := _SmDetectContext()["kind"]
+    if wrote
+    {
+        try MsgBox("Diagnostic written to:`n" outPath "`n`nDetected kind: " kindNow, "Stash Mover Diagnostic", 0x40)
+    }
+    else
+    {
+        try MsgBox(out, "Stash Mover Diagnostic", 0x40)   ; fallback if the file write failed
+    }
 }
 
 ; True when the metadata path looks like a quest item (these can't be stashed).
@@ -662,10 +1157,52 @@ _SmIsQuestItem(path)
     return (InStr(p, "questitem") || InStr(p, "/quests/")) ? true : false
 }
 
+; Classifies an item into one category for the vendor sell filter:
+; "map" (Metadata/Items/Maps/ waystones) > "currency" (rarityId 5) >
+; "unique" (rarityId 3/4) > "gear" (everything else: normal/magic/rare equipment).
+; Maps win over rarity so a unique/rare waystone is still treated as a map.
+_SmItemCategory(details)
+{
+    if !(details && IsObject(details))
+        return "gear"
+    path := details.Has("metadataPath") ? details["metadataPath"] : ""
+    if (InStr(StrLower(path), "/maps/"))
+        return "map"
+    rid := details.Has("rarityId") ? details["rarityId"] : -1
+    if (rid = 5)
+        return "currency"
+    if (rid = 3 || rid = 4)
+        return "unique"
+    return "gear"
+}
+
+; True when the given sell category is enabled for selling.
+_SmSellCategoryEnabled(cat)
+{
+    global g_smSellGear, g_smSellUniques, g_smSellCurrency, g_smSellMaps
+    switch cat
+    {
+        case "map":      return g_smSellMaps
+        case "currency": return g_smSellCurrency
+        case "unique":   return g_smSellUniques
+        default:         return g_smSellGear   ; "gear"
+    }
+}
+
+; True when the destination is a selling context the sell filter must apply to.
+; Only the CONFIRMED vendor (NPCBuyWindow, reliably detected) — so the stash and
+; the plain inventory ("unknown") dump everything (minus ignore / quest / failed),
+; which is what the user wants when stashing.
+_SmIsSellingKind(kind)
+{
+    return (kind = "vendor")
+}
+
 ; Decides whether a backpack item should be skipped this run, and why.
-; Returns "" (move it) or a reason: "ignore" | "quest" | "failed".
-; Param: item - one backpack item Map; nowTick - A_TickCount for cooldown checks.
-_SmShouldSkip(item, nowTick)
+; Returns "" (move it) or a reason: "ignore" | "quest" | "failed" | "filter".
+; Params: item - one backpack item Map; nowTick - A_TickCount for cooldown checks;
+; kind - the detected destination kind (drives the vendor sell filter).
+_SmShouldSkip(item, nowTick, kind := "")
 {
     global g_smIgnore, g_smSkipQuest, g_smFailed, g_smFailCooldownMs
     d := item.Has("details") ? item["details"] : 0
@@ -677,6 +1214,9 @@ _SmShouldSkip(item, nowTick)
     ptr := item.Has("itemEntityPtr") ? item["itemEntityPtr"] : 0
     if (ptr && g_smFailed.Has(ptr) && (nowTick - g_smFailed[ptr]) < g_smFailCooldownMs)
         return "failed"
+    ; Vendor sell filter — only when selling. Keep the categories the user opted out of.
+    if (_SmIsSellingKind(kind) && !_SmSellCategoryEnabled(_SmItemCategory(d)))
+        return "filter"
     return ""
 }
 
@@ -730,9 +1270,11 @@ StashMoverDump(source := "")
     cols := bp["cols"], rows := bp["rows"]
     cellW := rect["w"] / cols
     cellH := rect["h"] / rows
-    ; Position jitter radius: keep clicks well inside the cell (~30% of the
-    ; smaller half-cell), so a stray pixel can never spill into a neighbour.
-    jr := g_smJitter ? Max(0, Round(Min(cellW, cellH) * 0.30)) : 0
+    ; Position jitter radius: a SMALL random offset (~12% of a cell, i.e. ±~8px on a
+    ; typical cell) — enough to not be perfectly static, but well clear of the cell
+    ; edge so a high/low jitter never misses the item. (Was 0.30 = ~30% of a full
+    ; cell, which occasionally clicked just above an item.)
+    jr := g_smJitter ? Max(0, Round(Min(cellW, cellH) * 0.12)) : 0
 
     ; Prune stale failed entries so items become retry-able after the cooldown.
     now := A_TickCount
@@ -748,7 +1290,7 @@ StashMoverDump(source := "")
     points := []
     queuedPtrs := []
     seen := Map()
-    skipped := Map("ignore", 0, "quest", 0, "failed", 0)
+    skipped := Map("ignore", 0, "quest", 0, "failed", 0, "filter", 0)
     for _, it in bp["items"]
     {
         if !(it && IsObject(it))
@@ -758,7 +1300,7 @@ StashMoverDump(source := "")
             continue
         if ptr
             seen[ptr] := true
-        reason := _SmShouldSkip(it, now)
+        reason := _SmShouldSkip(it, now, ctx["kind"])
         if (reason != "")
         {
             if skipped.Has(reason)
@@ -781,8 +1323,8 @@ StashMoverDump(source := "")
     if (points.Length = 0)
     {
         msg := "Stash Mover: nothing to move"
-        if (skipped["ignore"] || skipped["quest"] || skipped["failed"])
-            msg .= " (" skipped["ignore"] " ignored, " skipped["quest"] " quest, " skipped["failed"] " on cooldown)"
+        if (skipped["ignore"] || skipped["quest"] || skipped["failed"] || skipped["filter"])
+            msg .= " (" skipped["ignore"] " ignored, " skipped["filter"] " filtered, " skipped["quest"] " quest, " skipped["failed"] " on cooldown)"
         _SmTooltip(msg ".", 1800)
         return
     }
@@ -998,8 +1540,17 @@ StashMoverTick(radarSnap := 0)
 {
     global g_smEnabled, g_smShowButton, g_smRunning, g_smGui, g_smGuiShown
     static _lastBfsTick := 0
-    ; Cheap gates every tick so the button hides promptly.
-    if (!g_smEnabled || !g_smShowButton || g_smRunning)
+    if !g_smEnabled
+    {
+        _SmHideGui()
+        return
+    }
+    ; Keep the "Detected destination" readout live even when the game isn't focused
+    ; (the user is usually in the tool window while configuring). Cheap-gated inside.
+    _SmRefreshContext(radarSnap)
+
+    ; The overlay button needs the button enabled, no active run, and game focus.
+    if (!g_smShowButton || g_smRunning)
     {
         _SmHideGui()
         return
@@ -1044,7 +1595,7 @@ _SmUpdateButtonText()
     global g_smBtnCtrl, g_smLastBtnText
     if !IsObject(g_smBtnCtrl)
         return
-    ctx := _SmContextCached()
+    ctx := _SmCurrentCtx()
     txt := ctx["button"]
     if (txt != g_smLastBtnText)
     {

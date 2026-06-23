@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.6`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.16`.
 
 ## Language
 
@@ -379,21 +379,40 @@ rectangle from the UI tree.
     item. If NOTHING moved it warns (stash full / not stashable) instead of silently
     retrying. Stale failed entries are pruned at each dump start.
   - Randomness (`jitter`, default ON): each click lands at a random offset inside its
-    cell (±~30% of the half-cell), the inter-click delay is `perItemDelay × rand(0.75..1.45)`,
+    cell (±~12% of a cell), the inter-click delay is `perItemDelay × rand(0.75..1.45)`,
     the settle is `× rand(0.6..1.4)`, and the mouse-down hold is `rand(6..14) ms`.
   - Destination context (stash vs vendor vs trade): same Ctrl+Click action works for
     all of them; `_SmDetectContext()` only refines the label/verb + the sell guard.
-    **Stash** = inventory id 27 (authoritative; never present at a vendor, so a sale
-    can't be mislabeled "stash"). **Vendor/Trade** = `_SmScanContextUi()` BFS over the
-    VISIBLE UI subtree, classifying StringIds by case-insensitive substring
-    (`sell`/`vendor`/`purchase`/`gamble` → vendor, `trade` → trade) so it's robust to
-    unknown exact StringIds; else "unknown" (still acts, generic label). Context is
-    cached ~700 ms (`_SmContextCached`) for the per-tick button caption, detected fresh
-    once per dump. The overlay button reads "Dump → Stash" / "Sell → Vendor" /
+    Confirmed in-game (2026-06-23 via the diagnostic): PoE2 uses ONE shared
+    trade/stash window with StringId **`NPCBuyWindow`**, hierarchically visible only
+    while a stash OR vendor is open. It's a **vendor** when an **`NPCHeader`** is
+    visible inside it (an NPC is trading), otherwise the player's **stash**. (The old
+    inventory-id-27 signal was wrong — every inventory, incl. id 27, is always
+    enumerated, so it always read "stash".) A `_SmScanContextUi()` keyword scan
+    (`sell`/`buy`/`vendor`/`purchase`/`gamble`→vendor, `trade`→trade) is the fallback
+    for other container windows; else "unknown" (still acts, generic label). Context is
+    cached ~700 ms (`_SmRefreshContext`/`_SmCurrentCtx`) for the per-tick button
+    caption, detected fresh once per dump. The overlay button reads "Dump → Stash" / "Sell → Vendor" /
     "Move → Trade" / "Dump items"; the result tooltip verb is Stashed/Sold/Moved.
     `allowSell` (default ON) gates the vendor path — off = refuse to act when a vendor
     is open (stash-only safety). Header exposes `allowSell` + `context`; the UI shows a
     "Detected destination" readout (vendor shown in amber as it SELLS).
+  - Vendor sell filter: when the destination is a vendor (or "unknown" — a possibly-
+    missed vendor, kept safe), each item is classified by `_SmItemCategory` into
+    `map` (path `/maps/` waystones) > `currency` (rarityId 5) > `unique` (rarityId 3/4)
+    > `gear` (everything else), and skipped (reason "filter") unless its category's
+    sell toggle is on. Toggles `sellGear` (default ON), `sellUniques` / `sellCurrency`
+    / `sellMaps` (default OFF) — so by default only normal/magic/rare gear is sold and
+    uniques, currency and maps are kept. The filter is NOT applied to stash / trade
+    (those dump everything, minus ignore/quest/failed). `_SmSellCategoryEnabled` /
+    `_SmIsSellingKind` gate it; UI = 4 `.filter-pill`s in the Stash Mover section.
+  - The "Detected destination" readout refreshes via `_SmRefreshContext(radarSnap)`
+    in `StashMoverTick` BEFORE the focus gate (so it updates while the user is in the
+    tool), cheap-gated on `panelVisibility.anyPanelOpen`, throttled ~700 ms, pushing
+    the header on a kind change. `StashMoverDiagnose()` (bridge `StashMoverDiag`, UI
+    "🔍 Diagnose destination") MsgBoxes the live signals — open inventory ids (+grid),
+    top-level panel StringIds (visible/hidden), keyword-matched visible StringIds, and
+    the detected kind — the RE aid for pinning the real stash/vendor signals in-game.
 
 ### Edited files
 - **InGameStateMonitor.ahk** — `#Include ahk/StashMover.ahk`; `LoadStashMover()` at
