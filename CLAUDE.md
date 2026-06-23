@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.19`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.20`.
 
 ## Language
 
@@ -358,20 +358,25 @@ rectangle from the UI tree.
     leave) and deduped by item pointer. Activates the PoE window first on the hotkey
     path; the overlay button is `WS_EX_NOACTIVATE` so it never steals foreground.
   - Overlay button: a lazily-built always-on-top, NOACTIVATE Gui (`_SmEnsureGui`) —
-    a themed plaque (dark codex background + gold serif `Text`, clickable via the
-    Text's Click event, `SS_NOTIFY`), NOT a default Windows button. Caption + colour
-    follow the context (gold "Dump → Stash" / amber "Sell → Vendor").
-    `StashMoverTick(radarSnap)` (from `UpdateRadarFast` after `TryLootTrackerTick`)
-    positions it just LEFT of the inventory grid (vertically centred) and shows/hides
-    it on enable + game-focus + grid-visibility.
+    styled like the config "filter pills": a dark parchment `Text` face (`Background251812`)
+    inset 2px inside the Gui's gilded background (`F0D68A`), so the 2px gold frame reads
+    as the pill's glowing outline (a real GDI+ glow isn't available to a Gui control).
+    Clickable via the Text's Click event (`SS_NOTIFY`); a leading "▾" icon + context
+    caption ("▾ Dump → Stash" gold / "▾ Sell → Vendor" amber — `_SmUpdateButtonText`
+    recolours both the Gui frame and the text). Size via `_SmBtnW()/_SmBtnH()` (184×30;
+    functions, not module globals — init gotcha). `StashMoverTick(radarSnap)` (from
+    `UpdateRadarFast` after `TryLootTrackerTick`) positions it in the dark margin just
+    LEFT of the inventory grid (vertically centred) and shows/hides it on
+    `_SmActive()` + the matching side enabled + game-focus + grid-visibility.
   - Config (per-side split): the feature is split into a STASH half and a SELL half,
     each independently toggleable (`g_smStashEnabled` / `g_smSellEnabled`;
     `_SmActive()` = either on). The options the two sides do NOT share are per-side:
     enable, ignore filter, `perItemMs`, `settleMs`, `offsetX`, `offsetY` (e.g.
     `g_smStashPerItemMs` vs `g_smSellPerItemMs`). Shared: `hotkey`, `showButton`,
-    `jitter`. Sell-only: the `sellGear/Uniques/Currency/Maps` category filter.
+    `jitter`. The sell side always sells only normal/magic/rare GEAR — the old
+    per-category sell toggles are gone (see below).
     Self-persists `[StashMover]` (`stashEnabled`, `sellEnabled`, `hotkey`, `showButton`,
-    `jitter`, `stash*`/`sell*` timing+offsets, `sellGear/…`, `stashIgnore`, `sellIgnore`);
+    `jitter`, `stash*`/`sell*` timing+offsets, `stashIgnore`, `sellIgnore`);
     `LoadStashMover()` seeds ALL globals unconditionally (init gotcha) and migrates the
     pre-split keys (`enabled`/`allowSell`/`perItemDelayMs`/…/`ignore`) as the defaults so
     an existing install carries over. A run picks its side from the detected destination
@@ -414,15 +419,15 @@ rectangle from the UI tree.
     per-side replacement for the old `allowSell` switch. Likewise a stash/unknown maps
     to side "stash" and needs `g_smStashEnabled`. Header exposes `context`; the UI shows
     a "Detected destination" readout (vendor shown in amber as it SELLS).
-  - Vendor sell filter (side "sell" only): each item is classified by `_SmItemCategory`
-    into `map` (path `/maps/` waystones) > `currency` (rarityId 5) > `unique` (rarityId
-    3/4) > `gear` (everything else), and skipped (reason "filter") unless its category's
-    sell toggle is on. Toggles `sellGear` (default ON), `sellUniques` / `sellCurrency`
-    / `sellMaps` (default OFF) — so by default only normal/magic/rare gear is sold and
-    uniques, currency and maps are kept. The filter is NOT applied on side "stash"
-    (stash/trade/unknown dump everything, minus ignore/quest/failed).
-    `_SmSellCategoryEnabled` gates it (via the `side="sell"` branch of `_SmShouldSkip`);
-    UI = 4 `.filter-pill`s in the right (sell) column.
+  - Sell side = GEAR only (no per-category toggles): the old `sellGear/Uniques/Currency
+    /Maps` pills are removed. Each item is classified by `_SmItemCategory` into `map`
+    (path `/maps/` waystones) > `currency` (rarityId 5) > `unique` (rarityId 3/4) >
+    `gear` (everything else); the `side="sell"` branch of `_SmShouldSkip` skips anything
+    that isn't `gear` (reason "filter"). So only normal/magic/rare gear is auto-sold;
+    quest items, uniques, currency and maps/waystones are always kept — shown as
+    non-removable 🔒 default chips (JS `_smDefaultChips.sell`) in the sell "Kept base
+    types" list (the stash list shows only the 🔒 Quest items chip). The filter is NOT
+    applied on side "stash" (stash/trade/unknown dump everything, minus ignore/quest/failed).
   - The "Detected destination" readout refreshes via `_SmRefreshContext(radarSnap)`
     in `StashMoverTick` BEFORE the focus gate (so it updates while the user is in the
     tool), cheap-gated on `panelVisibility.anyPanelOpen`, throttled ~700 ms, pushing
@@ -440,20 +445,24 @@ rectangle from the UI tree.
   `ClearStashIgnore side` (the ignore cases now carry a "stash"/"sell" side arg).
 - **WebViewBridge.ahk** — `stashMover` block (incl. the `stashIgnore`/`sellIgnore`
   arrays) in the header push.
-- **ui/index.html** — "📦 Stash Mover" section in **Config → Automation**, now FIRST
-  (before AutoPilot; the orphaned retired-AutoFlask box was removed). The section is
-  split horizontally into two equal columns (`.sm-cols` > `.sm-col`, divider via
-  `border-left`): LEFT = stashing, RIGHT = auto-selling. Each column has its own enable
-  toggle, an "Ignore filter" `<details>` (`sm-<side>-inv-list` / `sm-<side>-ignore-list`,
-  requested per side via `StashRequestInventory '<side>'`) and a "Randomization"
-  `<details>` holding a 2×2 `.sm-rnd-grid` (Per-item delay + Settle delay row, Grid
-  offset X + Y row). The right column also has the 4 sell-category `.filter-pill`s. A
-  full-width `.sm-shared` box below holds the shared options (Show overlay button,
-  Randomise toggle, Hotkey, Detected destination, Dump/Diagnose buttons). JS:
-  `stashMoverSyncFromHeader` (per-side keys + both ignore arrays), `stashRenderIgnore(side)`
-  (prepends a non-removable 🔒 quest-default chip), `updateStashInventory` (reads
-  `d.side`), `smInvToggle(side,i)`, `smIgnoreRemove(side,i)`; `_smIgnore`/`_smInvItems`
-  are now `{stash,sell}` objects. Settings use the Config-native `.cfg-row`/`.cfg-label`
+- **ui/index.html** — "📦 Stash Mover" section in **Config → Automation**, FIRST
+  (before AutoPilot; the orphaned retired-AutoFlask box was removed). Split into two
+  equal columns (`.sm-cols` > `.sm-col`, `border-left` divider): LEFT = stashing,
+  RIGHT = auto-selling. Each side is its OWN collapsible top box (`<details class="sm-sub
+  sm-top" open>` with a gilded `.sm-top-title` summary — "📥 Auto Stashing" / "🛒 Auto
+  Selling"), and a third full-width collapsible "⚙️ Shared Options" box sits below the
+  columns. Each side box holds its enable toggle, an "Ignore filter" `<details>`
+  (`sm-<side>-inv-list` / `sm-<side>-ignore-list`, requested per side via
+  `StashRequestInventory '<side>'`) and a "Randomization" `<details>` whose body is a
+  single `.sm-rnd-row` (`justify-content:space-between`): per-item + settle delay pinned
+  LEFT (`.sm-rnd-group`), grid offset X + Y pinned RIGHT, each a compact stacked
+  label-over-input `.sm-rnd-cell`. The sell-category pills are GONE (sell = gear only;
+  uniques/currency/maps are non-removable 🔒 default chips in the sell ignore list).
+  Shared box: Show overlay button, Randomise toggle, Hotkey, Detected destination,
+  Dump/Diagnose. JS: `stashMoverSyncFromHeader` (per-side keys + both ignore arrays),
+  `stashRenderIgnore(side)` (prepends `_smDefaultChips[side]` 🔒 chips), `updateStashInventory`
+  (reads `d.side`), `smInvToggle(side,i)`, `smIgnoreRemove(side,i)`; `_smIgnore`/`_smInvItems`
+  are `{stash,sell}` objects. Settings use the Config-native `.cfg-row`/`.cfg-label`
   layout — NOT the alerts-scoped `.al-*` classes (only styled under `#panel-alerts`).
   The hotkey uses a capture button (`smCaptureHotkey` → reuses the Hotkeys-tab
   `#hk-capture` overlay + `hkKeyName`; builds an AHK hotkey string), not a text field.

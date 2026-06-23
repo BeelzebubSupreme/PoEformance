@@ -56,11 +56,9 @@ LoadStashMover()
     global g_smSellOffsetX := 0                ; sell: screen-px calibration (X) of the grid origin
     global g_smSellOffsetY := 0                ; sell: screen-px calibration (Y) of the grid origin
 
-    ; ── Sell category filter (right column only; stashing always dumps all). ──
-    global g_smSellGear := true                 ; normal/magic/rare gear (armour, weapons, jewellery …)
-    global g_smSellUniques := false            ; unique / relic items
-    global g_smSellCurrency := false           ; currency (rarityId 5)
-    global g_smSellMaps := false               ; maps / waystones (Metadata/Items/Maps/)
+    ; Sell side always sells only normal/magic/rare GEAR. Uniques, currency and
+    ; maps/waystones are kept (shipped default filter — no per-category toggles); they
+    ; show as non-removable default chips in the sell ignore list.
     global g_smConfigFile := _ConfigPath()
 
     ; Per-side ignore filters — path -> display name. Items whose base-type path
@@ -121,10 +119,6 @@ LoadStashMover()
         g_smSellOffsetX    := Integer(IniRead(f, "StashMover", "sellOffsetX", oldOffX))
         g_smSellOffsetY    := Integer(IniRead(f, "StashMover", "sellOffsetY", oldOffY))
 
-        g_smSellGear     := (IniRead(f, "StashMover", "sellGear", g_smSellGear ? "1" : "0") = "1")
-        g_smSellUniques  := (IniRead(f, "StashMover", "sellUniques", g_smSellUniques ? "1" : "0") = "1")
-        g_smSellCurrency := (IniRead(f, "StashMover", "sellCurrency", g_smSellCurrency ? "1" : "0") = "1")
-        g_smSellMaps     := (IniRead(f, "StashMover", "sellMaps", g_smSellMaps ? "1" : "0") = "1")
         g_smStashIgnore  := _SmIgnoreDeserialize(IniRead(f, "StashMover", "stashIgnore", oldIgnore))
         g_smSellIgnore   := _SmIgnoreDeserialize(IniRead(f, "StashMover", "sellIgnore", oldIgnore))
     } catch as ex {
@@ -139,7 +133,6 @@ SaveStashMover()
     global g_smStashEnabled, g_smSellEnabled, g_smHotkey, g_smShowButton, g_smJitter
     global g_smStashPerItemMs, g_smStashSettleMs, g_smStashOffsetX, g_smStashOffsetY
     global g_smSellPerItemMs, g_smSellSettleMs, g_smSellOffsetX, g_smSellOffsetY
-    global g_smSellGear, g_smSellUniques, g_smSellCurrency, g_smSellMaps
     global g_smStashIgnore, g_smSellIgnore, g_smConfigFile
     f := g_smConfigFile
     try {
@@ -156,10 +149,6 @@ SaveStashMover()
         IniWrite(g_smSellSettleMs, f, "StashMover", "sellSettleMs")
         IniWrite(g_smSellOffsetX, f, "StashMover", "sellOffsetX")
         IniWrite(g_smSellOffsetY, f, "StashMover", "sellOffsetY")
-        IniWrite(g_smSellGear ? "1" : "0", f, "StashMover", "sellGear")
-        IniWrite(g_smSellUniques ? "1" : "0", f, "StashMover", "sellUniques")
-        IniWrite(g_smSellCurrency ? "1" : "0", f, "StashMover", "sellCurrency")
-        IniWrite(g_smSellMaps ? "1" : "0", f, "StashMover", "sellMaps")
         IniWrite(_SmIgnoreSerialize(g_smStashIgnore), f, "StashMover", "stashIgnore")
         IniWrite(_SmIgnoreSerialize(g_smSellIgnore), f, "StashMover", "sellIgnore")
     } catch as ex {
@@ -223,7 +212,6 @@ _SmApplySetting(key, val)
     global g_smStashEnabled, g_smSellEnabled, g_smHotkey, g_smShowButton, g_smJitter
     global g_smStashPerItemMs, g_smStashSettleMs, g_smStashOffsetX, g_smStashOffsetY
     global g_smSellPerItemMs, g_smSellSettleMs, g_smSellOffsetX, g_smSellOffsetY
-    global g_smSellGear, g_smSellUniques, g_smSellCurrency, g_smSellMaps
     needRebind := false
     switch key
     {
@@ -240,14 +228,6 @@ _SmApplySetting(key, val)
             g_smShowButton := _SmTruthy(val)
         case "jitter":
             g_smJitter := _SmTruthy(val)
-        case "sellGear":
-            g_smSellGear := _SmTruthy(val)
-        case "sellUniques":
-            g_smSellUniques := _SmTruthy(val)
-        case "sellCurrency":
-            g_smSellCurrency := _SmTruthy(val)
-        case "sellMaps":
-            g_smSellMaps := _SmTruthy(val)
         case "stashPerItemMs":
             g_smStashPerItemMs := Integer(val)
         case "stashSettleMs":
@@ -285,7 +265,6 @@ BuildStashMoverHeaderJson()
     global g_smStashEnabled, g_smSellEnabled, g_smHotkey, g_smShowButton, g_smJitter
     global g_smStashPerItemMs, g_smStashSettleMs, g_smStashOffsetX, g_smStashOffsetY
     global g_smSellPerItemMs, g_smSellSettleMs, g_smSellOffsetX, g_smSellOffsetY
-    global g_smSellGear, g_smSellUniques, g_smSellCurrency, g_smSellMaps
     global g_smStashIgnore, g_smSellIgnore, g_smCtxKind
     j := "{"
     j .= '"stashEnabled":'   (g_smStashEnabled ? "true" : "false")
@@ -293,10 +272,6 @@ BuildStashMoverHeaderJson()
     j .= ',"hotkey":'        _JsStr(g_smHotkey)
     j .= ',"showButton":'    (g_smShowButton ? "true" : "false")
     j .= ',"jitter":'        (g_smJitter ? "true" : "false")
-    j .= ',"sellGear":'      (g_smSellGear ? "true" : "false")
-    j .= ',"sellUniques":'   (g_smSellUniques ? "true" : "false")
-    j .= ',"sellCurrency":'  (g_smSellCurrency ? "true" : "false")
-    j .= ',"sellMaps":'      (g_smSellMaps ? "true" : "false")
     j .= ',"stashPerItemMs":' (g_smStashPerItemMs + 0)
     j .= ',"stashSettleMs":'  (g_smStashSettleMs + 0)
     j .= ',"stashOffsetX":'   (g_smStashOffsetX + 0)
@@ -759,10 +734,10 @@ _SmCtxFor(kind)
 {
     switch kind
     {
-        case "stash":  return Map("kind", "stash",  "verb", "Stashed", "button", "Dump → Stash")
-        case "vendor": return Map("kind", "vendor", "verb", "Sold",    "button", "Sell → Vendor")
-        case "trade":  return Map("kind", "trade",  "verb", "Moved",   "button", "Move → Trade")
-        default:       return Map("kind", "unknown","verb", "Moved",   "button", "Dump items")
+        case "stash":  return Map("kind", "stash",  "verb", "Stashed", "button", "▾  Dump → Stash")
+        case "vendor": return Map("kind", "vendor", "verb", "Sold",    "button", "▾  Sell → Vendor")
+        case "trade":  return Map("kind", "trade",  "verb", "Moved",   "button", "▾  Move → Trade")
+        default:       return Map("kind", "unknown","verb", "Moved",   "button", "▾  Dump items")
     }
 }
 
@@ -1265,19 +1240,6 @@ _SmItemCategory(details)
     return "gear"
 }
 
-; True when the given sell category is enabled for selling.
-_SmSellCategoryEnabled(cat)
-{
-    global g_smSellGear, g_smSellUniques, g_smSellCurrency, g_smSellMaps
-    switch cat
-    {
-        case "map":      return g_smSellMaps
-        case "currency": return g_smSellCurrency
-        case "unique":   return g_smSellUniques
-        default:         return g_smSellGear   ; "gear"
-    }
-}
-
 ; Decides whether a backpack item should be skipped this run, and why.
 ; Returns "" (move it) or a reason: "ignore" | "quest" | "failed" | "filter".
 ; Params: item - one backpack item Map; nowTick - A_TickCount for cooldown checks;
@@ -1297,8 +1259,9 @@ _SmShouldSkip(item, nowTick, side := "stash")
     ptr := item.Has("itemEntityPtr") ? item["itemEntityPtr"] : 0
     if (ptr && g_smFailed.Has(ptr) && (nowTick - g_smFailed[ptr]) < g_smFailCooldownMs)
         return "failed"
-    ; Vendor sell filter — only when selling. Keep the categories the user opted out of.
-    if (sideKey = "sell" && !_SmSellCategoryEnabled(_SmItemCategory(d)))
+    ; Sell side only sells normal/magic/rare GEAR — uniques, currency and maps are
+    ; kept (shipped default; no per-category toggles). Stashing dumps everything.
+    if (sideKey = "sell" && _SmItemCategory(d) != "gear")
         return "filter"
     return ""
 }
@@ -1599,25 +1562,32 @@ _SmTooltip(text, ms := 1500)
 
 ; ── Interactive overlay button ───────────────────────────────────────────────
 
+; Button geometry — kept in sync between _SmEnsureGui and StashMoverTick's Show().
+; (Constants, not module globals: a top-level `global x := …` initializer wouldn't run
+; for an #Include'd module — see the AHK v2 init gotcha — so they're returned by a fn.)
+_SmBtnW() => 184
+_SmBtnH() => 30
+
 ; Lazily creates the always-on-top, NOACTIVATE button window. NOACTIVATE
 ; (WS_EX_NOACTIVATE 0x08000000) lets the button receive clicks WITHOUT stealing
 ; foreground from the game, so the synthetic Ctrl+Clicks still land on PoE2.
+; Styled like the config "filter pills": a dark parchment face inside a glowing
+; gilded outline. The outline is the Gui's own background showing through a 2px
+; inset around the dark Text face (a real GDI+ glow isn't available to a Gui control).
 _SmEnsureGui()
 {
     global g_smGui, g_smBtnCtrl
     if IsObject(g_smGui)
         return
-    ; Themed plaque: dark codex background + gold serif label, as a clickable Text
-    ; (not a default grey Windows button) so it matches the PoEformance look.
-    ; NOACTIVATE (WS_EX_NOACTIVATE) so clicking it never steals focus from the game.
     g_smGui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000000")
     g_smGui.MarginX := 0
     g_smGui.MarginY := 0
-    g_smGui.BackColor := "171008"            ; dark codex brown-black
-    ; +0x200 = SS_CENTERIMAGE (vertical-centre the text); +0x100 = SS_NOTIFY (so the
-    ; static fires Click events).
-    g_smBtnCtrl := g_smGui.AddText("x0 y0 w160 h28 Center +0x200 +0x100", "Dump → Stash")
-    g_smBtnCtrl.SetFont("s10 Bold cCBA135", "Georgia")
+    g_smGui.BackColor := "F0D68A"            ; --codex-gold-hi: the glowing pill outline
+    ; Inner pill face: dark codex parchment, inset 2px so the gold frame reads as the
+    ; outline. +0x200 = SS_CENTERIMAGE (v-centre), +0x100 = SS_NOTIFY (fire Click),
+    ; Background<hex> paints the face dark so only the 2px border stays gold.
+    g_smBtnCtrl := g_smGui.AddText("x2 y2 w" (_SmBtnW() - 4) " h" (_SmBtnH() - 4) " Center +0x200 +0x100 Background251812", "▾  Dump items")
+    g_smBtnCtrl.SetFont("s10 Bold cF0D68A", "Georgia")
     g_smBtnCtrl.OnEvent("Click", _SmOnButtonClick)
 }
 
@@ -1693,9 +1663,10 @@ StashMoverTick(radarSnap := 0)
 
     _SmEnsureGui()
     _SmUpdateButtonText()
-    btnW := 160, btnH := 28
-    ; Anchor just to the LEFT of the inventory grid, vertically centred on it.
-    bx := Round(rect["x"] - btnW - 10)
+    btnW := _SmBtnW(), btnH := _SmBtnH()
+    ; Anchor in the dark margin to the LEFT of the inventory grid, vertically centred
+    ; on it (matches the requested placement next to the grid's left edge).
+    bx := Round(rect["x"] - btnW - 14)
     by := Round(rect["y"] + (rect["h"] - btnH) / 2)
     if (bx < 0)
         bx := Round(rect["x"] + 6)   ; no room on the left → fall back inside the grid
@@ -1715,14 +1686,18 @@ _SmUpdateButtonText()
     global g_smBtnCtrl, g_smLastBtnText
     if !IsObject(g_smBtnCtrl)
         return
+    global g_smGui
     ctx := _SmCurrentCtx()
     txt := ctx["button"]
     if (txt != g_smLastBtnText)
     {
-        ; Amber when it will SELL (vendor), gold otherwise — mirrors the UI readout.
-        col := (ctx["kind"] = "vendor") ? "cE3A07E" : "cCBA135"
+        ; Vendor SELLS → warmer amber outline+text as a warning; gilded gold otherwise.
+        ; The Gui background is the pill's glowing outline; the Text colour is the label.
+        col := (ctx["kind"] = "vendor") ? "E3A07E" : "F0D68A"
         try {
-            g_smBtnCtrl.SetFont("s10 Bold " col, "Georgia")
+            if IsObject(g_smGui)
+                g_smGui.BackColor := col
+            g_smBtnCtrl.SetFont("s10 Bold c" col, "Georgia")
             g_smBtnCtrl.Text := txt
         }
         g_smLastBtnText := txt
