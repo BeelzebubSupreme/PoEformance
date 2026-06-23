@@ -1270,9 +1270,11 @@ StashMoverDump(source := "")
     cols := bp["cols"], rows := bp["rows"]
     cellW := rect["w"] / cols
     cellH := rect["h"] / rows
-    ; Position jitter radius: keep clicks well inside the cell (~30% of the
-    ; smaller half-cell), so a stray pixel can never spill into a neighbour.
-    jr := g_smJitter ? Max(0, Round(Min(cellW, cellH) * 0.30)) : 0
+    ; Position jitter radius: a SMALL random offset (~12% of a cell, i.e. ±~8px on a
+    ; typical cell) — enough to not be perfectly static, but well clear of the cell
+    ; edge so a high/low jitter never misses the item. (Was 0.30 = ~30% of a full
+    ; cell, which occasionally clicked just above an item.)
+    jr := g_smJitter ? Max(0, Round(Min(cellW, cellH) * 0.12)) : 0
 
     ; Prune stale failed entries so items become retry-able after the cooldown.
     now := A_TickCount

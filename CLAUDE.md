@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.14`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.15`.
 
 ## Language
 
@@ -379,7 +379,7 @@ rectangle from the UI tree.
     item. If NOTHING moved it warns (stash full / not stashable) instead of silently
     retrying. Stale failed entries are pruned at each dump start.
   - Randomness (`jitter`, default ON): each click lands at a random offset inside its
-    cell (±~30% of the half-cell), the inter-click delay is `perItemDelay × rand(0.75..1.45)`,
+    cell (±~12% of a cell), the inter-click delay is `perItemDelay × rand(0.75..1.45)`,
     the settle is `× rand(0.6..1.4)`, and the mouse-down hold is `rand(6..14) ms`.
   - Destination context (stash vs vendor vs trade): same Ctrl+Click action works for
     all of them; `_SmDetectContext()` only refines the label/verb + the sell guard.
