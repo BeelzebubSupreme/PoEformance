@@ -162,14 +162,16 @@ _DispatchBridgeCall(method, args)
             SetTimer(StashMoverDiagnose, -1)
         case "StashRequestInventory":
             ; Push the live backpack (deduped by base type) so the user can build
-            ; the ignore filter from what they currently carry.
-            SetTimer(_SmPushInventory, -1)
+            ; the ignore filter from what they currently carry. args[1] = side.
+            smSide := (args.Length >= 1) ? args[1] : "stash"
+            SetTimer(() => _SmPushInventory(smSide), -1)
         case "SetStashIgnore":
-            ; args[1] = base-type path, args[2] = display name, args[3] = on/off.
-            if (args.Length >= 1)
-                SetStashIgnore(args[1], (args.Length >= 2) ? args[2] : "", (args.Length >= 3) ? args[3] : true)
+            ; args[1] = side ("stash"|"sell"), args[2] = path, args[3] = display
+            ; name, args[4] = on/off.
+            if (args.Length >= 2)
+                SetStashIgnore(args[1], args[2], (args.Length >= 3) ? args[3] : "", (args.Length >= 4) ? args[4] : true)
         case "ClearStashIgnore":
-            ClearStashIgnore()
+            ClearStashIgnore((args.Length >= 1) ? args[1] : "stash")
         case "LootNewSession":
             ; Archive the current session to disk, then start a fresh one.
             _LtResetSession()
