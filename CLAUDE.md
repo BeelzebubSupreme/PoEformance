@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.23`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.24`.
 
 ## Language
 
@@ -365,9 +365,10 @@ rectangle from the UI tree.
     caption ("▾ Dump → Stash" gold / "▾ Sell → Vendor" amber — `_SmUpdateButtonText`
     recolours both the Gui frame and the text). Size via `_SmBtnW()/_SmBtnH()` (184×30;
     functions, not module globals — init gotcha). `StashMoverTick(radarSnap)` (from
-    `UpdateRadarFast` after `TryLootTrackerTick`) positions it in the dark margin just
-    LEFT of the inventory grid (vertically centred) and shows/hides it on
-    `_SmActive()` + the matching side enabled + game-focus + grid-visibility.
+    `UpdateRadarFast` after `TryLootTrackerTick`) positions it just ABOVE the inventory
+    grid, aligned to its left edge (the margin between the equipment panel and the
+    backpack grid), and shows/hides it on `_SmActive()` + the matching side enabled +
+    game-focus + grid-visibility.
   - Config (per-side split): the feature is split into a STASH half and a SELL half,
     each independently toggleable (`g_smStashEnabled` / `g_smSellEnabled`;
     `_SmActive()` = either on). The options the two sides do NOT share are per-side:

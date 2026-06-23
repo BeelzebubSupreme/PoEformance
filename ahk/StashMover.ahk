@@ -1215,9 +1215,9 @@ StashMoverDiagnose()
         if IsObject(gr)
         {
             bw := _SmBtnW(), bh := _SmBtnH()
-            bx := Round(gr["x"] - bw - 14), by := Round(gr["y"] + (gr["h"] - bh) / 2)
+            bx := Round(gr["x"]), by := Round(gr["y"] - bh - 6)
             out .= "  grid:   x=" Round(gr["x"]) " y=" Round(gr["y"]) " w=" Round(gr["w"]) " h=" Round(gr["h"]) "`n"
-            out .= "  button: x=" bx " y=" by " w=" bw " h=" bh "  (left of grid, vertically centred)`n"
+            out .= "  button: x=" bx " y=" by " w=" bw " h=" bh "  (above the grid, left-aligned)`n"
         }
         else
             out .= "  grid:   (not resolved — open your inventory first)`n"
@@ -1715,14 +1715,15 @@ StashMoverTick(radarSnap := 0)
     _SmEnsureGui()
     _SmUpdateButtonText()
     btnW := _SmBtnW(), btnH := _SmBtnH()
-    ; Anchor in the dark margin to the LEFT of the inventory grid, vertically centred
-    ; on it (matches the requested placement next to the grid's left edge).
-    bx := Round(rect["x"] - btnW - 14)
-    by := Round(rect["y"] + (rect["h"] - btnH) / 2)
-    if (bx < 0)
-        bx := Round(rect["x"] + 6)   ; no room on the left → fall back inside the grid
+    ; Anchor the button just ABOVE the inventory grid, aligned to its left edge — it
+    ; sits in the margin between the equipment panel and the backpack grid (the
+    ; requested placement).
+    bx := Round(rect["x"])
+    by := Round(rect["y"] - btnH - 6)
     if (by < 0)
-        by := 0
+        by := Round(rect["y"] + 4)   ; no room above → tuck just inside the grid top
+    if (bx < 0)
+        bx := 0
     try {
         g_smGui.Show("x" bx " y" by " w" btnW " h" btnH " NoActivate")
         g_smGuiShown := true
