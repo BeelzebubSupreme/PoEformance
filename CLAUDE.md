@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.18`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.19`.
 
 ## Language
 
@@ -364,18 +364,30 @@ rectangle from the UI tree.
     `StashMoverTick(radarSnap)` (from `UpdateRadarFast` after `TryLootTrackerTick`)
     positions it just LEFT of the inventory grid (vertically centred) and shows/hides
     it on enable + game-focus + grid-visibility.
-  - Config: self-persists `[StashMover]` (`enabled`, `hotkey`, `showButton`,
-    `perItemDelayMs`, `settleDelayMs`, `offsetX`, `offsetY`, `skipQuest`, `jitter`,
-    `ignore`); `LoadStashMover()` seeds ALL globals unconditionally (init gotcha).
-    Default OFF, hotkey empty.
-  - Ignore filter: `g_smIgnore` Map(base-type path → display name), built by the
-    user from the live inventory. `_SmPushInventory()` (bridge `StashRequestInventory`)
-    reads the backpack deduped by path and pushes `updateStashInventory`; clicking an
-    item toggles `SetStashIgnore(path,name,on)`. Persisted in `ignore` (RS/US-delimited
-    via `_SmIgnoreSerialize/Deserialize`), echoed in the header `ignore` array so chips
-    survive a refresh. `_SmShouldSkip(item,now)` drops ignored items from the dump.
-  - Safety: quest items are auto-skipped (`_SmIsQuestItem` path match, toggle
-    `skipQuest`). After a run, `_SmVerify()` (scheduled ~5×perItemDelay after the last
+  - Config (per-side split): the feature is split into a STASH half and a SELL half,
+    each independently toggleable (`g_smStashEnabled` / `g_smSellEnabled`;
+    `_SmActive()` = either on). The options the two sides do NOT share are per-side:
+    enable, ignore filter, `perItemMs`, `settleMs`, `offsetX`, `offsetY` (e.g.
+    `g_smStashPerItemMs` vs `g_smSellPerItemMs`). Shared: `hotkey`, `showButton`,
+    `jitter`. Sell-only: the `sellGear/Uniques/Currency/Maps` category filter.
+    Self-persists `[StashMover]` (`stashEnabled`, `sellEnabled`, `hotkey`, `showButton`,
+    `jitter`, `stash*`/`sell*` timing+offsets, `sellGear/…`, `stashIgnore`, `sellIgnore`);
+    `LoadStashMover()` seeds ALL globals unconditionally (init gotcha) and migrates the
+    pre-split keys (`enabled`/`allowSell`/`perItemDelayMs`/…/`ignore`) as the defaults so
+    an existing install carries over. A run picks its side from the detected destination
+    via `_SmSideForKind(kind)` (vendor→sell, else stash) and copies that side's timing
+    into the run-state `g_smRunPerItemMs`/`g_smRunSettleMs`. Default OFF, hotkey empty.
+  - Ignore filters (one per side): `g_smStashIgnore` / `g_smSellIgnore`
+    Map(base-type path → display name), built from the live inventory.
+    `_SmPushInventory(side)` (bridge `StashRequestInventory side`) reads the backpack
+    deduped by path and pushes `updateStashInventory` (with the side echoed back);
+    clicking an item toggles `SetStashIgnore(side,path,name,on)`. Persisted in
+    `stashIgnore`/`sellIgnore` (RS/US-delimited via `_SmIgnoreSerialize/Deserialize`),
+    echoed in the header `stashIgnore`/`sellIgnore` arrays so chips survive a refresh.
+    `_SmShouldSkip(item,now,side)` drops the active side's ignored items from the dump.
+  - Safety: quest items are ALWAYS auto-skipped (`_SmIsQuestItem` path match — a shipped
+    default filter, no toggle; shown as a non-removable 🔒 chip in both ignore lists).
+    After a run, `_SmVerify()` (scheduled ~5×perItemDelay after the last
     click so the server inventory has settled) re-reads the backpack; item ptrs still
     present = "failed", recorded in `g_smFailed[ptr]=tick` and skipped for
     `g_smFailCooldownMs` (8 s) so a repeated trigger can't re-hammer an un-stashable
@@ -397,18 +409,20 @@ rectangle from the UI tree.
     cached ~700 ms (`_SmRefreshContext`/`_SmCurrentCtx`) for the per-tick button
     caption, detected fresh once per dump. The overlay button reads "Dump → Stash" / "Sell → Vendor" /
     "Move → Trade" / "Dump items"; the result tooltip verb is Stashed/Sold/Moved.
-    `allowSell` (default ON) gates the vendor path — off = refuse to act when a vendor
-    is open (stash-only safety). Header exposes `allowSell` + `context`; the UI shows a
-    "Detected destination" readout (vendor shown in amber as it SELLS).
-  - Vendor sell filter: when the destination is a vendor (or "unknown" — a possibly-
-    missed vendor, kept safe), each item is classified by `_SmItemCategory` into
-    `map` (path `/maps/` waystones) > `currency` (rarityId 5) > `unique` (rarityId 3/4)
-    > `gear` (everything else), and skipped (reason "filter") unless its category's
+    Selling is gated by the SELL side being enabled: a vendor maps to side "sell", and
+    if `g_smSellEnabled` is off the run refuses ("auto selling is disabled") — the new
+    per-side replacement for the old `allowSell` switch. Likewise a stash/unknown maps
+    to side "stash" and needs `g_smStashEnabled`. Header exposes `context`; the UI shows
+    a "Detected destination" readout (vendor shown in amber as it SELLS).
+  - Vendor sell filter (side "sell" only): each item is classified by `_SmItemCategory`
+    into `map` (path `/maps/` waystones) > `currency` (rarityId 5) > `unique` (rarityId
+    3/4) > `gear` (everything else), and skipped (reason "filter") unless its category's
     sell toggle is on. Toggles `sellGear` (default ON), `sellUniques` / `sellCurrency`
     / `sellMaps` (default OFF) — so by default only normal/magic/rare gear is sold and
-    uniques, currency and maps are kept. The filter is NOT applied to stash / trade
-    (those dump everything, minus ignore/quest/failed). `_SmSellCategoryEnabled` /
-    `_SmIsSellingKind` gate it; UI = 4 `.filter-pill`s in the Stash Mover section.
+    uniques, currency and maps are kept. The filter is NOT applied on side "stash"
+    (stash/trade/unknown dump everything, minus ignore/quest/failed).
+    `_SmSellCategoryEnabled` gates it (via the `side="sell"` branch of `_SmShouldSkip`);
+    UI = 4 `.filter-pill`s in the right (sell) column.
   - The "Detected destination" readout refreshes via `_SmRefreshContext(radarSnap)`
     in `StashMoverTick` BEFORE the focus gate (so it updates while the user is in the
     tool), cheap-gated on `panelVisibility.anyPanelOpen`, throttled ~700 ms, pushing
@@ -422,19 +436,27 @@ rectangle from the UI tree.
   startup; `RegisterStashMoverHotkey()` after `RegisterCombatHotkey()`; version bump.
 - **AutoFlask.ahk** — `StashMoverTick(radarSnap)` after `TryLootTrackerTick`.
 - **BridgeDispatch.ahk** — `SetStashMover` (apply → persist → re-bind hotkey),
-  `StashMoveDump` (manual trigger), `StashRequestInventory`, `SetStashIgnore`,
-  `ClearStashIgnore`.
-- **WebViewBridge.ahk** — `stashMover` block (incl. the `ignore` array) in the header push.
-- **ui/index.html** — "📦 Stash Mover" section in **Config → Automation**
-  (`det-stashmover`, registered in `_cfgSectionIds`) + `stashMoverSyncFromHeader` +
-  the Ignore-filter sub-panel (`updateStashInventory`, `smInvToggle`,
-  `smIgnoreRemove`, `stashRenderIgnore`) + the Skip-quest / Randomise / Allow-sell
-  toggles + the "Detected destination" readout (from header `context`). Settings use
-  the Config-native `.cfg-row`/`.cfg-label` layout (one per row) — NOT the
-  alerts-scoped `.al-*` classes (those are only styled under `#panel-alerts`, which
-  left the labels unstyled). The hotkey uses a capture button (`smCaptureHotkey` →
-  reuses the Hotkeys-tab `#hk-capture` overlay + `hkKeyName`; builds an AHK hotkey
-  string), not a text field.
+  `StashMoveDump` (manual trigger), `StashRequestInventory side`, `SetStashIgnore side`,
+  `ClearStashIgnore side` (the ignore cases now carry a "stash"/"sell" side arg).
+- **WebViewBridge.ahk** — `stashMover` block (incl. the `stashIgnore`/`sellIgnore`
+  arrays) in the header push.
+- **ui/index.html** — "📦 Stash Mover" section in **Config → Automation**, now FIRST
+  (before AutoPilot; the orphaned retired-AutoFlask box was removed). The section is
+  split horizontally into two equal columns (`.sm-cols` > `.sm-col`, divider via
+  `border-left`): LEFT = stashing, RIGHT = auto-selling. Each column has its own enable
+  toggle, an "Ignore filter" `<details>` (`sm-<side>-inv-list` / `sm-<side>-ignore-list`,
+  requested per side via `StashRequestInventory '<side>'`) and a "Randomization"
+  `<details>` holding a 2×2 `.sm-rnd-grid` (Per-item delay + Settle delay row, Grid
+  offset X + Y row). The right column also has the 4 sell-category `.filter-pill`s. A
+  full-width `.sm-shared` box below holds the shared options (Show overlay button,
+  Randomise toggle, Hotkey, Detected destination, Dump/Diagnose buttons). JS:
+  `stashMoverSyncFromHeader` (per-side keys + both ignore arrays), `stashRenderIgnore(side)`
+  (prepends a non-removable 🔒 quest-default chip), `updateStashInventory` (reads
+  `d.side`), `smInvToggle(side,i)`, `smIgnoreRemove(side,i)`; `_smIgnore`/`_smInvItems`
+  are now `{stash,sell}` objects. Settings use the Config-native `.cfg-row`/`.cfg-label`
+  layout — NOT the alerts-scoped `.al-*` classes (only styled under `#panel-alerts`).
+  The hotkey uses a capture button (`smCaptureHotkey` → reuses the Hotkeys-tab
+  `#hk-capture` overlay + `hkKeyName`; builds an AHK hotkey string), not a text field.
 
 ### Pending (needs the game + Windows)
 - Verify the `InventoryPanel` StringId resolves and its rect equals the 12×N grid

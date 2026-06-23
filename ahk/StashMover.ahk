@@ -36,27 +36,38 @@
 ; the persisted [StashMover] section. Called once at startup by the main script.
 LoadStashMover()
 {
-    global g_smEnabled := false               ; master switch for the whole feature
+    ; ── Per-side master switches (the config is split into a stash half and a
+    ; sell half; either, both or neither can be active). ─────────────────────
+    global g_smStashEnabled := false           ; "Enable auto stashing" (left column)
+    global g_smSellEnabled := false            ; "Enable auto selling"  (right column)
+
+    ; ── Shared options (apply to both stash and sell). ───────────────────────
     global g_smHotkey := ""                    ; AHK hotkey string, e.g. "F4" / "^d" (empty = none)
     global g_smShowButton := true              ; draw the clickable overlay button
-    global g_smPerItemDelayMs := 35            ; base pause between consecutive item clicks
-    global g_smSettleDelayMs := 16             ; base pause after moving the cursor, before the click
-    global g_smOffsetX := 0                    ; manual screen-px calibration (X) of the grid origin
-    global g_smOffsetY := 0                    ; manual screen-px calibration (Y) of the grid origin
-    global g_smSkipQuest := true               ; never try to stash quest items (they can't be)
     global g_smJitter := true                  ; randomise click position + inter-click delay
-    global g_smAllowSell := true               ; allow acting when the open container is a vendor (sells!)
-    ; Vendor sell filter — which item categories to actually sell. Only applied
-    ; when the destination is a vendor (or unrecognised); stashing dumps everything.
+
+    ; ── Per-side timing + grid calibration (NOT shared between the two sides). ─
+    global g_smStashPerItemMs := 35            ; stash: base pause between consecutive item clicks
+    global g_smStashSettleMs := 16             ; stash: base pause after the cursor move, before the click
+    global g_smStashOffsetX := 0               ; stash: screen-px calibration (X) of the grid origin
+    global g_smStashOffsetY := 0               ; stash: screen-px calibration (Y) of the grid origin
+    global g_smSellPerItemMs := 35             ; sell: base pause between consecutive item clicks
+    global g_smSellSettleMs := 16              ; sell: base pause after the cursor move, before the click
+    global g_smSellOffsetX := 0                ; sell: screen-px calibration (X) of the grid origin
+    global g_smSellOffsetY := 0                ; sell: screen-px calibration (Y) of the grid origin
+
+    ; ── Sell category filter (right column only; stashing always dumps all). ──
     global g_smSellGear := true                 ; normal/magic/rare gear (armour, weapons, jewellery …)
     global g_smSellUniques := false            ; unique / relic items
     global g_smSellCurrency := false           ; currency (rarityId 5)
     global g_smSellMaps := false               ; maps / waystones (Metadata/Items/Maps/)
     global g_smConfigFile := _ConfigPath()
 
-    ; Ignore filter — path -> display name. Items whose base-type path is in here
-    ; are never moved. Built by the user from the live inventory in the UI.
-    global g_smIgnore := Map()
+    ; Per-side ignore filters — path -> display name. Items whose base-type path
+    ; is in the active side's set are never moved. Built from the live inventory.
+    ; Quest items are ALWAYS skipped on top of these (a shipped default filter).
+    global g_smStashIgnore := Map()
+    global g_smSellIgnore := Map()
 
     ; Detected destination context: "stash" | "vendor" | "trade" | "unknown".
     ; Drives the overlay button label, the result tooltip verb and the sell guard.
@@ -78,24 +89,44 @@ LoadStashMover()
     global g_smFailed := Map()                 ; itemEntityPtr -> A_TickCount when it failed to move
     global g_smFailCooldownMs := 8000          ; how long a failed item is skipped before retry
     global g_smRegisteredHotkey := ""          ; last hotkey actually bound (for clean re-register)
+    global g_smRunPerItemMs := 35              ; active per-item delay for the current run (set per side)
+    global g_smRunSettleMs := 16               ; active settle delay for the current run (set per side)
 
     f := g_smConfigFile
     try {
-        g_smEnabled        := (IniRead(f, "StashMover", "enabled", g_smEnabled ? "1" : "0") = "1")
-        g_smHotkey         := IniRead(f, "StashMover", "hotkey", g_smHotkey)
-        g_smShowButton     := (IniRead(f, "StashMover", "showButton", g_smShowButton ? "1" : "0") = "1")
-        g_smPerItemDelayMs := Integer(IniRead(f, "StashMover", "perItemDelayMs", g_smPerItemDelayMs))
-        g_smSettleDelayMs  := Integer(IniRead(f, "StashMover", "settleDelayMs", g_smSettleDelayMs))
-        g_smOffsetX        := Integer(IniRead(f, "StashMover", "offsetX", g_smOffsetX))
-        g_smOffsetY        := Integer(IniRead(f, "StashMover", "offsetY", g_smOffsetY))
-        g_smSkipQuest      := (IniRead(f, "StashMover", "skipQuest", g_smSkipQuest ? "1" : "0") = "1")
-        g_smJitter         := (IniRead(f, "StashMover", "jitter", g_smJitter ? "1" : "0") = "1")
-        g_smAllowSell      := (IniRead(f, "StashMover", "allowSell", g_smAllowSell ? "1" : "0") = "1")
-        g_smSellGear       := (IniRead(f, "StashMover", "sellGear", g_smSellGear ? "1" : "0") = "1")
-        g_smSellUniques    := (IniRead(f, "StashMover", "sellUniques", g_smSellUniques ? "1" : "0") = "1")
-        g_smSellCurrency   := (IniRead(f, "StashMover", "sellCurrency", g_smSellCurrency ? "1" : "0") = "1")
-        g_smSellMaps       := (IniRead(f, "StashMover", "sellMaps", g_smSellMaps ? "1" : "0") = "1")
-        g_smIgnore         := _SmIgnoreDeserialize(IniRead(f, "StashMover", "ignore", ""))
+        ; Back-compat: a pre-split install stored a single set of keys. Seed the
+        ; new per-side keys from those old values so existing settings carry over
+        ; (old master -> stash on; old master+allowSell -> sell on; the old single
+        ; delay/offset/ignore become the default for BOTH sides).
+        oldEnabled := (IniRead(f, "StashMover", "enabled", "0") = "1")
+        oldAllow   := (IniRead(f, "StashMover", "allowSell", "1") = "1")
+        oldPerItem := Integer(IniRead(f, "StashMover", "perItemDelayMs", "35"))
+        oldSettle  := Integer(IniRead(f, "StashMover", "settleDelayMs", "16"))
+        oldOffX    := Integer(IniRead(f, "StashMover", "offsetX", "0"))
+        oldOffY    := Integer(IniRead(f, "StashMover", "offsetY", "0"))
+        oldIgnore  := IniRead(f, "StashMover", "ignore", "")
+
+        g_smStashEnabled := (IniRead(f, "StashMover", "stashEnabled", oldEnabled ? "1" : "0") = "1")
+        g_smSellEnabled  := (IniRead(f, "StashMover", "sellEnabled", (oldEnabled && oldAllow) ? "1" : "0") = "1")
+        g_smHotkey       := IniRead(f, "StashMover", "hotkey", g_smHotkey)
+        g_smShowButton   := (IniRead(f, "StashMover", "showButton", g_smShowButton ? "1" : "0") = "1")
+        g_smJitter       := (IniRead(f, "StashMover", "jitter", g_smJitter ? "1" : "0") = "1")
+
+        g_smStashPerItemMs := Integer(IniRead(f, "StashMover", "stashPerItemMs", oldPerItem))
+        g_smStashSettleMs  := Integer(IniRead(f, "StashMover", "stashSettleMs", oldSettle))
+        g_smStashOffsetX   := Integer(IniRead(f, "StashMover", "stashOffsetX", oldOffX))
+        g_smStashOffsetY   := Integer(IniRead(f, "StashMover", "stashOffsetY", oldOffY))
+        g_smSellPerItemMs  := Integer(IniRead(f, "StashMover", "sellPerItemMs", oldPerItem))
+        g_smSellSettleMs   := Integer(IniRead(f, "StashMover", "sellSettleMs", oldSettle))
+        g_smSellOffsetX    := Integer(IniRead(f, "StashMover", "sellOffsetX", oldOffX))
+        g_smSellOffsetY    := Integer(IniRead(f, "StashMover", "sellOffsetY", oldOffY))
+
+        g_smSellGear     := (IniRead(f, "StashMover", "sellGear", g_smSellGear ? "1" : "0") = "1")
+        g_smSellUniques  := (IniRead(f, "StashMover", "sellUniques", g_smSellUniques ? "1" : "0") = "1")
+        g_smSellCurrency := (IniRead(f, "StashMover", "sellCurrency", g_smSellCurrency ? "1" : "0") = "1")
+        g_smSellMaps     := (IniRead(f, "StashMover", "sellMaps", g_smSellMaps ? "1" : "0") = "1")
+        g_smStashIgnore  := _SmIgnoreDeserialize(IniRead(f, "StashMover", "stashIgnore", oldIgnore))
+        g_smSellIgnore   := _SmIgnoreDeserialize(IniRead(f, "StashMover", "sellIgnore", oldIgnore))
     } catch as ex {
         LogError("LoadStashMover", ex)
     }
@@ -105,27 +136,32 @@ LoadStashMover()
 ; Persists the current StashMover settings to the [StashMover] INI section.
 SaveStashMover()
 {
-    global g_smEnabled, g_smHotkey, g_smShowButton, g_smPerItemDelayMs
-    global g_smSettleDelayMs, g_smOffsetX, g_smOffsetY, g_smSkipQuest, g_smJitter, g_smAllowSell
+    global g_smStashEnabled, g_smSellEnabled, g_smHotkey, g_smShowButton, g_smJitter
+    global g_smStashPerItemMs, g_smStashSettleMs, g_smStashOffsetX, g_smStashOffsetY
+    global g_smSellPerItemMs, g_smSellSettleMs, g_smSellOffsetX, g_smSellOffsetY
     global g_smSellGear, g_smSellUniques, g_smSellCurrency, g_smSellMaps
-    global g_smIgnore, g_smConfigFile
+    global g_smStashIgnore, g_smSellIgnore, g_smConfigFile
     f := g_smConfigFile
     try {
-        IniWrite(g_smEnabled ? "1" : "0", f, "StashMover", "enabled")
+        IniWrite(g_smStashEnabled ? "1" : "0", f, "StashMover", "stashEnabled")
+        IniWrite(g_smSellEnabled ? "1" : "0", f, "StashMover", "sellEnabled")
         IniWrite(g_smHotkey, f, "StashMover", "hotkey")
         IniWrite(g_smShowButton ? "1" : "0", f, "StashMover", "showButton")
-        IniWrite(g_smPerItemDelayMs, f, "StashMover", "perItemDelayMs")
-        IniWrite(g_smSettleDelayMs, f, "StashMover", "settleDelayMs")
-        IniWrite(g_smOffsetX, f, "StashMover", "offsetX")
-        IniWrite(g_smOffsetY, f, "StashMover", "offsetY")
-        IniWrite(g_smSkipQuest ? "1" : "0", f, "StashMover", "skipQuest")
         IniWrite(g_smJitter ? "1" : "0", f, "StashMover", "jitter")
-        IniWrite(g_smAllowSell ? "1" : "0", f, "StashMover", "allowSell")
+        IniWrite(g_smStashPerItemMs, f, "StashMover", "stashPerItemMs")
+        IniWrite(g_smStashSettleMs, f, "StashMover", "stashSettleMs")
+        IniWrite(g_smStashOffsetX, f, "StashMover", "stashOffsetX")
+        IniWrite(g_smStashOffsetY, f, "StashMover", "stashOffsetY")
+        IniWrite(g_smSellPerItemMs, f, "StashMover", "sellPerItemMs")
+        IniWrite(g_smSellSettleMs, f, "StashMover", "sellSettleMs")
+        IniWrite(g_smSellOffsetX, f, "StashMover", "sellOffsetX")
+        IniWrite(g_smSellOffsetY, f, "StashMover", "sellOffsetY")
         IniWrite(g_smSellGear ? "1" : "0", f, "StashMover", "sellGear")
         IniWrite(g_smSellUniques ? "1" : "0", f, "StashMover", "sellUniques")
         IniWrite(g_smSellCurrency ? "1" : "0", f, "StashMover", "sellCurrency")
         IniWrite(g_smSellMaps ? "1" : "0", f, "StashMover", "sellMaps")
-        IniWrite(_SmIgnoreSerialize(g_smIgnore), f, "StashMover", "ignore")
+        IniWrite(_SmIgnoreSerialize(g_smStashIgnore), f, "StashMover", "stashIgnore")
+        IniWrite(_SmIgnoreSerialize(g_smSellIgnore), f, "StashMover", "sellIgnore")
     } catch as ex {
         LogError("SaveStashMover", ex)
     }
@@ -135,9 +171,11 @@ SaveStashMover()
 ; produce a multi-minute run or a zero-delay machine-gun click storm.
 _SmClampConfig()
 {
-    global g_smPerItemDelayMs, g_smSettleDelayMs
-    g_smPerItemDelayMs := Max(5, Min(500, g_smPerItemDelayMs + 0))
-    g_smSettleDelayMs  := Max(0, Min(300, g_smSettleDelayMs + 0))
+    global g_smStashPerItemMs, g_smStashSettleMs, g_smSellPerItemMs, g_smSellSettleMs
+    g_smStashPerItemMs := Max(5, Min(500, g_smStashPerItemMs + 0))
+    g_smStashSettleMs  := Max(0, Min(300, g_smStashSettleMs + 0))
+    g_smSellPerItemMs  := Max(5, Min(500, g_smSellPerItemMs + 0))
+    g_smSellSettleMs   := Max(0, Min(300, g_smSellSettleMs + 0))
 }
 
 ; Serialises the ignore Map(path->name) to a single INI-safe string. Entries are
@@ -182,12 +220,26 @@ _SmIgnoreDeserialize(s)
 ; Returns true when the value changed something that needs a hotkey re-register.
 _SmApplySetting(key, val)
 {
-    global g_smEnabled, g_smHotkey, g_smShowButton, g_smPerItemDelayMs
-    global g_smSettleDelayMs, g_smOffsetX, g_smOffsetY, g_smSkipQuest, g_smJitter, g_smAllowSell
+    global g_smStashEnabled, g_smSellEnabled, g_smHotkey, g_smShowButton, g_smJitter
+    global g_smStashPerItemMs, g_smStashSettleMs, g_smStashOffsetX, g_smStashOffsetY
+    global g_smSellPerItemMs, g_smSellSettleMs, g_smSellOffsetX, g_smSellOffsetY
     global g_smSellGear, g_smSellUniques, g_smSellCurrency, g_smSellMaps
     needRebind := false
     switch key
     {
+        case "stashEnabled":
+            g_smStashEnabled := _SmTruthy(val)
+            needRebind := true          ; the hotkey is gated on either side being on
+        case "sellEnabled":
+            g_smSellEnabled := _SmTruthy(val)
+            needRebind := true
+        case "hotkey":
+            g_smHotkey := Trim(val "")
+            needRebind := true
+        case "showButton":
+            g_smShowButton := _SmTruthy(val)
+        case "jitter":
+            g_smJitter := _SmTruthy(val)
         case "sellGear":
             g_smSellGear := _SmTruthy(val)
         case "sellUniques":
@@ -196,28 +248,22 @@ _SmApplySetting(key, val)
             g_smSellCurrency := _SmTruthy(val)
         case "sellMaps":
             g_smSellMaps := _SmTruthy(val)
-        case "enabled":
-            g_smEnabled := _SmTruthy(val)
-            needRebind := true
-        case "hotkey":
-            g_smHotkey := Trim(val "")
-            needRebind := true
-        case "showButton":
-            g_smShowButton := _SmTruthy(val)
-        case "skipQuest":
-            g_smSkipQuest := _SmTruthy(val)
-        case "jitter":
-            g_smJitter := _SmTruthy(val)
-        case "allowSell":
-            g_smAllowSell := _SmTruthy(val)
-        case "perItemDelayMs":
-            g_smPerItemDelayMs := Integer(val)
-        case "settleDelayMs":
-            g_smSettleDelayMs := Integer(val)
-        case "offsetX":
-            g_smOffsetX := Integer(val)
-        case "offsetY":
-            g_smOffsetY := Integer(val)
+        case "stashPerItemMs":
+            g_smStashPerItemMs := Integer(val)
+        case "stashSettleMs":
+            g_smStashSettleMs := Integer(val)
+        case "stashOffsetX":
+            g_smStashOffsetX := Integer(val)
+        case "stashOffsetY":
+            g_smStashOffsetY := Integer(val)
+        case "sellPerItemMs":
+            g_smSellPerItemMs := Integer(val)
+        case "sellSettleMs":
+            g_smSellSettleMs := Integer(val)
+        case "sellOffsetX":
+            g_smSellOffsetX := Integer(val)
+        case "sellOffsetY":
+            g_smSellOffsetY := Integer(val)
     }
     _SmClampConfig()
     return needRebind
@@ -236,38 +282,45 @@ _SmTruthy(v)
 ; including the ignore list so the chips survive a UI refresh.
 BuildStashMoverHeaderJson()
 {
-    global g_smEnabled, g_smHotkey, g_smShowButton, g_smPerItemDelayMs
-    global g_smSettleDelayMs, g_smOffsetX, g_smOffsetY, g_smSkipQuest, g_smJitter
-    global g_smAllowSell, g_smIgnore, g_smCtxKind
+    global g_smStashEnabled, g_smSellEnabled, g_smHotkey, g_smShowButton, g_smJitter
+    global g_smStashPerItemMs, g_smStashSettleMs, g_smStashOffsetX, g_smStashOffsetY
+    global g_smSellPerItemMs, g_smSellSettleMs, g_smSellOffsetX, g_smSellOffsetY
     global g_smSellGear, g_smSellUniques, g_smSellCurrency, g_smSellMaps
+    global g_smStashIgnore, g_smSellIgnore, g_smCtxKind
     j := "{"
-    j .= '"enabled":'        (g_smEnabled ? "true" : "false")
+    j .= '"stashEnabled":'   (g_smStashEnabled ? "true" : "false")
+    j .= ',"sellEnabled":'   (g_smSellEnabled ? "true" : "false")
     j .= ',"hotkey":'        _JsStr(g_smHotkey)
     j .= ',"showButton":'    (g_smShowButton ? "true" : "false")
-    j .= ',"skipQuest":'     (g_smSkipQuest ? "true" : "false")
     j .= ',"jitter":'        (g_smJitter ? "true" : "false")
-    j .= ',"allowSell":'     (g_smAllowSell ? "true" : "false")
     j .= ',"sellGear":'      (g_smSellGear ? "true" : "false")
     j .= ',"sellUniques":'   (g_smSellUniques ? "true" : "false")
     j .= ',"sellCurrency":'  (g_smSellCurrency ? "true" : "false")
     j .= ',"sellMaps":'      (g_smSellMaps ? "true" : "false")
-    j .= ',"perItemDelayMs":' (g_smPerItemDelayMs + 0)
-    j .= ',"settleDelayMs":'  (g_smSettleDelayMs + 0)
-    j .= ',"offsetX":'        (g_smOffsetX + 0)
-    j .= ',"offsetY":'        (g_smOffsetY + 0)
+    j .= ',"stashPerItemMs":' (g_smStashPerItemMs + 0)
+    j .= ',"stashSettleMs":'  (g_smStashSettleMs + 0)
+    j .= ',"stashOffsetX":'   (g_smStashOffsetX + 0)
+    j .= ',"stashOffsetY":'   (g_smStashOffsetY + 0)
+    j .= ',"sellPerItemMs":'  (g_smSellPerItemMs + 0)
+    j .= ',"sellSettleMs":'   (g_smSellSettleMs + 0)
+    j .= ',"sellOffsetX":'    (g_smSellOffsetX + 0)
+    j .= ',"sellOffsetY":'    (g_smSellOffsetY + 0)
     j .= ',"context":'        _JsStr(g_smCtxKind)
-    j .= ',"ignore":' _SmIgnoreJsonArray()
+    j .= ',"stashIgnore":' _SmIgnoreJsonArray(g_smStashIgnore)
+    j .= ',"sellIgnore":'  _SmIgnoreJsonArray(g_smSellIgnore)
     j .= "}"
     return j
 }
 
 ; Builds a JSON array of the ignore entries: [{"path":..,"name":..}, …].
-_SmIgnoreJsonArray()
+; Param: ignoreMap - a Map(path->name) (one of the per-side ignore sets).
+_SmIgnoreJsonArray(ignoreMap)
 {
-    global g_smIgnore
+    if !(IsObject(ignoreMap) && ignoreMap is Map)
+        return "[]"
     out := "["
     first := true
-    for path, name in g_smIgnore
+    for path, name in ignoreMap
     {
         out .= (first ? "" : ",") '{"path":' _JsStr(path) ',"name":' _JsStr(name) "}"
         first := false
@@ -277,40 +330,59 @@ _SmIgnoreJsonArray()
 
 ; ── Ignore filter (built from the live inventory) ─────────────────────────────
 
-; Adds or removes one base-type path from the ignore set, persists, and refreshes
-; both the header (chips) and the inventory list (pill states).
-; Params: path, name (display), on (truthy = add, falsy = remove).
-SetStashIgnore(path, name := "", on := true)
+; Normalises a side string to "stash" | "sell" (defaults to "stash").
+_SmSideKey(side)
 {
-    global g_smIgnore
+    return (StrLower(Trim(side "")) = "sell") ? "sell" : "stash"
+}
+
+; Returns the ignore Map for a side ("stash" -> g_smStashIgnore, "sell" -> g_smSellIgnore).
+_SmIgnoreSetFor(side)
+{
+    global g_smStashIgnore, g_smSellIgnore
+    return (_SmSideKey(side) = "sell") ? g_smSellIgnore : g_smStashIgnore
+}
+
+; Adds or removes one base-type path from a side's ignore set, persists, and
+; refreshes both the header (chips) and that side's inventory list (pill states).
+; Params: side ("stash"|"sell"), path, name (display), on (truthy = add).
+SetStashIgnore(side, path, name := "", on := true)
+{
+    sideKey := _SmSideKey(side)
+    ignoreMap := _SmIgnoreSetFor(sideKey)
     path := Trim(path "")
     if (path = "")
         return
     if _SmTruthy(on)
-        g_smIgnore[path] := (Trim(name "") != "" ? Trim(name "") : path)
-    else if g_smIgnore.Has(path)
-        g_smIgnore.Delete(path)
+        ignoreMap[path] := (Trim(name "") != "" ? Trim(name "") : path)
+    else if ignoreMap.Has(path)
+        ignoreMap.Delete(path)
     SaveStashMover()
     SetTimer(PushHeaderToWebView, -50)
-    SetTimer(_SmPushInventory, -50)
+    SetTimer(() => _SmPushInventory(sideKey), -50)
 }
 
-; Clears the whole ignore set.
-ClearStashIgnore()
+; Clears a side's whole ignore set.
+ClearStashIgnore(side)
 {
-    global g_smIgnore
-    g_smIgnore := Map()
+    global g_smStashIgnore, g_smSellIgnore
+    sideKey := _SmSideKey(side)
+    if (sideKey = "sell")
+        g_smSellIgnore := Map()
+    else
+        g_smStashIgnore := Map()
     SaveStashMover()
     SetTimer(PushHeaderToWebView, -50)
-    SetTimer(_SmPushInventory, -50)
+    SetTimer(() => _SmPushInventory(sideKey), -50)
 }
 
 ; Reads the live backpack and pushes a deduped (by base-type path) item list to
-; the WebView (JS updateStashInventory) so the user can pick ignore entries.
-; Each row: {path, name, rarity, count, ignored}.
-_SmPushInventory()
+; the WebView (JS updateStashInventory) so the user can pick ignore entries for a
+; side. Each row: {path, name, rarity, count, ignored}. Param: side ("stash"|"sell").
+_SmPushInventory(side := "stash")
 {
-    global g_smIgnore
+    sideKey := _SmSideKey(side)
+    ignoreMap := _SmIgnoreSetFor(sideKey)
     sdPtr := _SmResolveServerData()
     bp := sdPtr ? _SmReadBackpack(sdPtr) : 0
     rows := Map()   ; path -> Map(name,rarity,count)
@@ -353,12 +425,12 @@ _SmPushInventory()
             . ',"name":' _JsStr(r["name"])
             . ',"rarity":' _JsStr(r["rarity"])
             . ',"count":' (r["count"] + 0)
-            . ',"ignored":' (g_smIgnore.Has(path) ? "true" : "false")
+            . ',"ignored":' (ignoreMap.Has(path) ? "true" : "false")
             . "}"
         first := false
     }
     arr .= "]"
-    payload := '{"items":' arr ',"connected":' (IsObject(bp) ? "true" : "false") "}"
+    payload := '{"side":' _JsStr(sideKey) ',"items":' arr ',"connected":' (IsObject(bp) ? "true" : "false") "}"
     try WebViewExec("updateStashInventory(" payload ")")
 }
 
@@ -369,7 +441,7 @@ _SmPushInventory()
 ; window via HotIf so the key passes through normally everywhere else).
 RegisterStashMoverHotkey()
 {
-    global g_smEnabled, g_smHotkey, g_smRegisteredHotkey
+    global g_smHotkey, g_smRegisteredHotkey
     if (g_smRegisteredHotkey != "")
     {
         try {
@@ -380,7 +452,7 @@ RegisterStashMoverHotkey()
         g_smRegisteredHotkey := ""
     }
     hk := Trim(g_smHotkey)
-    if (!g_smEnabled || hk = "")
+    if (!_SmActive() || hk = "")
         return
     try {
         HotIf(_SmPoeActive)
@@ -404,6 +476,22 @@ _SmPoeActive(*)
 _OnStashMoveHotkey(*)
 {
     StashMoverDump("hotkey")
+}
+
+; True when at least one side (stash or sell) is enabled, i.e. the feature does
+; anything at all. Gates the hotkey, the overlay button and the dump entry point.
+_SmActive()
+{
+    global g_smStashEnabled, g_smSellEnabled
+    return (g_smStashEnabled || g_smSellEnabled)
+}
+
+; Maps a detected destination kind to the config side that governs it: a vendor
+; uses the SELL half (sell ignore/timing/offsets + the sell category filter);
+; everything else (stash / trade / unknown) uses the STASH half (dump everything).
+_SmSideForKind(kind)
+{
+    return (kind = "vendor") ? "sell" : "stash"
 }
 
 ; ── Memory / geometry resolution ─────────────────────────────────────────────
@@ -602,10 +690,11 @@ _SmFindGridIn(reader, panel)
 ; inventory isn't open. Finds the inventory side panel, then the 12×5 grid inside
 ; it. The UI→pixel conversion mirrors the (working) UI-browser highlight:
 ; screenPx = uiPos * (clientHeight / 1600), origin = client-area top-left; plus the
-; manual offsetX/offsetY fine-tune.
-_SmInventoryGridRect()
+; manual offsetX/offsetY fine-tune (passed in — the stash and sell sides each carry
+; their own calibration even though it's the same physical grid).
+_SmInventoryGridRect(offX := 0, offY := 0)
 {
-    global g_reader, g_smOffsetX, g_smOffsetY
+    global g_reader
     if !IsObject(g_reader)
         return 0
     gameUi := _UiBrowser_GetGameUiPtr()
@@ -626,8 +715,8 @@ _SmInventoryGridRect()
     if !IsObject(cr)
         return 0
     hScale := (cr["h"] > 0) ? (cr["h"] / 1600.0) : 1.0
-    x := cr["x"] + sp["x"] * hScale + g_smOffsetX
-    y := cr["y"] + sp["y"] * hScale + g_smOffsetY
+    x := cr["x"] + sp["x"] * hScale + offX
+    y := cr["y"] + sp["y"] * hScale + offY
     w := elem["sizeW"] * hScale
     h := elem["sizeH"] * hScale
     if (w < 20 || h < 20)
@@ -1189,33 +1278,27 @@ _SmSellCategoryEnabled(cat)
     }
 }
 
-; True when the destination is a selling context the sell filter must apply to.
-; Only the CONFIRMED vendor (NPCBuyWindow, reliably detected) — so the stash and
-; the plain inventory ("unknown") dump everything (minus ignore / quest / failed),
-; which is what the user wants when stashing.
-_SmIsSellingKind(kind)
-{
-    return (kind = "vendor")
-}
-
 ; Decides whether a backpack item should be skipped this run, and why.
 ; Returns "" (move it) or a reason: "ignore" | "quest" | "failed" | "filter".
 ; Params: item - one backpack item Map; nowTick - A_TickCount for cooldown checks;
-; kind - the detected destination kind (drives the vendor sell filter).
-_SmShouldSkip(item, nowTick, kind := "")
+; side - the active config side ("stash" | "sell"); the sell category filter is
+; applied only on the "sell" side. Quest items are ALWAYS skipped (shipped default).
+_SmShouldSkip(item, nowTick, side := "stash")
 {
-    global g_smIgnore, g_smSkipQuest, g_smFailed, g_smFailCooldownMs
+    global g_smFailed, g_smFailCooldownMs
+    sideKey := _SmSideKey(side)
+    ignoreMap := _SmIgnoreSetFor(sideKey)
     d := item.Has("details") ? item["details"] : 0
     path := (d && IsObject(d) && d.Has("metadataPath")) ? d["metadataPath"] : ""
-    if (path != "" && g_smIgnore.Has(path))
+    if (path != "" && ignoreMap.Has(path))
         return "ignore"
-    if (g_smSkipQuest && _SmIsQuestItem(path))
+    if (_SmIsQuestItem(path))                 ; quest items can't be stashed — always skip
         return "quest"
     ptr := item.Has("itemEntityPtr") ? item["itemEntityPtr"] : 0
     if (ptr && g_smFailed.Has(ptr) && (nowTick - g_smFailed[ptr]) < g_smFailCooldownMs)
         return "failed"
     ; Vendor sell filter — only when selling. Keep the categories the user opted out of.
-    if (_SmIsSellingKind(kind) && !_SmSellCategoryEnabled(_SmItemCategory(d)))
+    if (sideKey = "sell" && !_SmSellCategoryEnabled(_SmItemCategory(d)))
         return "filter"
     return ""
 }
@@ -1227,11 +1310,15 @@ _SmShouldSkip(item, nowTick, kind := "")
 ; Param: source - "hotkey" | "button" | "ui" (for diagnostics only).
 StashMoverDump(source := "")
 {
-    global g_reader, g_smEnabled, g_smRunning, g_smJitter, g_smAllowSell
+    global g_reader, g_smRunning, g_smJitter
+    global g_smStashEnabled, g_smSellEnabled
+    global g_smStashOffsetX, g_smStashOffsetY, g_smSellOffsetX, g_smSellOffsetY
+    global g_smStashPerItemMs, g_smStashSettleMs, g_smSellPerItemMs, g_smSellSettleMs
+    global g_smRunPerItemMs, g_smRunSettleMs
     global g_smQueue, g_smQueueIdx, g_smMovedCount, g_smQueuedPtrs
     global g_smFailed, g_smFailCooldownMs
     global g_smCtx, g_smCtxKind, g_smCtxTick, g_smRunVerb
-    if !g_smEnabled
+    if !_SmActive()
         return
     if g_smRunning
         return
@@ -1241,8 +1328,32 @@ StashMoverDump(source := "")
         return
     }
 
+    ; Detect what's open (stash vs vendor vs trade) FIRST — it selects which config
+    ; side governs the run (sell half for a vendor, stash half otherwise) and the
+    ; result verb. The Ctrl+Click action itself is identical for every destination.
+    ctx := _SmDetectContext()
+    g_smCtx := ctx, g_smCtxKind := ctx["kind"], g_smCtxTick := A_TickCount
+    side := _SmSideForKind(ctx["kind"])
+    if (side = "sell" && !g_smSellEnabled)
+    {
+        _SmTooltip("Stash Mover: a vendor is open but auto selling is disabled.", 2000)
+        return
+    }
+    if (side = "stash" && !g_smStashEnabled)
+    {
+        _SmTooltip("Stash Mover: auto stashing is disabled.", 2000)
+        return
+    }
+    g_smRunVerb := ctx["verb"]
+
+    ; Pick the side's calibration + timing for this run.
+    offX := (side = "sell") ? g_smSellOffsetX : g_smStashOffsetX
+    offY := (side = "sell") ? g_smSellOffsetY : g_smStashOffsetY
+    g_smRunPerItemMs := (side = "sell") ? g_smSellPerItemMs : g_smStashPerItemMs
+    g_smRunSettleMs  := (side = "sell") ? g_smSellSettleMs : g_smStashSettleMs
+
     ; The grid must be on screen to click its cells.
-    rect := _SmInventoryGridRect()
+    rect := _SmInventoryGridRect(offX, offY)
     if !IsObject(rect)
     {
         _SmTooltip("Stash Mover: inventory not visible.", 1500)
@@ -1255,17 +1366,6 @@ StashMoverDump(source := "")
         _SmTooltip("Stash Mover: can't read backpack.", 1500)
         return
     }
-
-    ; Detect what's open (stash vs vendor vs trade) — drives the result verb and
-    ; the optional sell guard. The Ctrl+Click action itself is identical.
-    ctx := _SmDetectContext()
-    g_smCtx := ctx, g_smCtxKind := ctx["kind"], g_smCtxTick := A_TickCount
-    if (ctx["kind"] = "vendor" && !g_smAllowSell)
-    {
-        _SmTooltip("Stash Mover: a vendor is open and selling is disabled.", 2000)
-        return
-    }
-    g_smRunVerb := ctx["verb"]
 
     cols := bp["cols"], rows := bp["rows"]
     cellW := rect["w"] / cols
@@ -1300,7 +1400,7 @@ StashMoverDump(source := "")
             continue
         if ptr
             seen[ptr] := true
-        reason := _SmShouldSkip(it, now, ctx["kind"])
+        reason := _SmShouldSkip(it, now, side)
         if (reason != "")
         {
             if skipped.Has(reason)
@@ -1362,7 +1462,7 @@ StashMoverDump(source := "")
 _SmStep()
 {
     global g_smRunning, g_smQueue, g_smQueueIdx, g_smMovedCount
-    global g_smPerItemDelayMs, g_smJitter
+    global g_smRunPerItemMs, g_smJitter
     if !g_smRunning
         return
 
@@ -1379,7 +1479,7 @@ _SmStep()
         ; Done clicking — release Ctrl and verify after a short settle so the
         ; server inventory has time to reflect the moves.
         _SmReleaseCtrl()
-        SetTimer(_SmVerify, -Max(250, g_smPerItemDelayMs * 5))
+        SetTimer(_SmVerify, -Max(250, g_smRunPerItemMs * 5))
         return
     }
 
@@ -1389,9 +1489,9 @@ _SmStep()
     g_smMovedCount += 1
 
     ; Jittered inter-click delay so the cadence isn't perfectly static.
-    delay := g_smPerItemDelayMs
+    delay := g_smRunPerItemMs
     if g_smJitter
-        delay := Round(g_smPerItemDelayMs * _SmRandF(0.75, 1.45))
+        delay := Round(g_smRunPerItemMs * _SmRandF(0.75, 1.45))
     SetTimer(_SmStep, -Max(1, delay))
 }
 
@@ -1465,7 +1565,7 @@ _SmFinish(msg := "")
 ; treats it as a move. Param: jr - max jitter radius in px (0 = none).
 _SmClickAt(x, y, jr := 0)
 {
-    global g_smSettleDelayMs, g_smJitter
+    global g_smRunSettleMs, g_smJitter
     cx := x, cy := y
     if (jr > 0)
     {
@@ -1473,9 +1573,9 @@ _SmClickAt(x, y, jr := 0)
         cy += Random(-jr, jr)
     }
     DllCall("SetCursorPos", "int", cx, "int", cy)
-    settle := g_smSettleDelayMs
+    settle := g_smRunSettleMs
     if g_smJitter
-        settle := Round(g_smSettleDelayMs * _SmRandF(0.6, 1.4))
+        settle := Round(g_smRunSettleMs * _SmRandF(0.6, 1.4))
     Sleep(Max(1, settle))
     DllCall("mouse_event", "uint", 0x0002, "int", 0, "int", 0, "uint", 0, "uptr", 0)   ; LEFTDOWN
     Sleep(g_smJitter ? Random(6, 14) : 8)
@@ -1544,9 +1644,11 @@ _SmHideGui()
 ; Self-gated and cheap when disabled. Param: radarSnap (unused, kept for symmetry).
 StashMoverTick(radarSnap := 0)
 {
-    global g_smEnabled, g_smShowButton, g_smRunning, g_smGui, g_smGuiShown
+    global g_smShowButton, g_smRunning, g_smGui, g_smGuiShown
+    global g_smStashEnabled, g_smSellEnabled
+    global g_smStashOffsetX, g_smStashOffsetY, g_smSellOffsetX, g_smSellOffsetY
     static _lastBfsTick := 0
-    if !g_smEnabled
+    if !_SmActive()
     {
         _SmHideGui()
         return
@@ -1567,12 +1669,22 @@ StashMoverTick(radarSnap := 0)
         _SmHideGui()
         return
     }
+    ; The side governing the current destination must be enabled, else there's
+    ; nothing to trigger (e.g. a vendor is open but auto selling is off → no button).
+    side := _SmSideForKind(_SmCurrentCtx()["kind"])
+    if ((side = "sell" && !g_smSellEnabled) || (side = "stash" && !g_smStashEnabled))
+    {
+        _SmHideGui()
+        return
+    }
     ; Throttle the (heavier) UI-tree resolve to ~4 Hz regardless of state; on
     ; skipped ticks leave the button as-is (≤250 ms latency to show/hide is fine).
     if ((A_TickCount - _lastBfsTick) < 250)
         return
     _lastBfsTick := A_TickCount
-    rect := _SmInventoryGridRect()
+    offX := (side = "sell") ? g_smSellOffsetX : g_smStashOffsetX
+    offY := (side = "sell") ? g_smSellOffsetY : g_smStashOffsetY
+    rect := _SmInventoryGridRect(offX, offY)
     if !IsObject(rect)
     {
         _SmHideGui()

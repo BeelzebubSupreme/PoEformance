@@ -3534,6 +3534,38 @@
       transform: scale(0.97)
     }
 
+    /* ── STASH MOVER — two-column split (stash | sell) + shared box. ─────── */
+    .sm-cols { display: flex; gap: 0; width: 100%; align-items: stretch }
+    .sm-col { flex: 1 1 0; min-width: 0; padding: 0 12px; display: flex; flex-direction: column; gap: 4px }
+    .sm-col:first-child { padding-left: 0 }
+    .sm-col:last-child { padding-right: 0 }
+    .sm-col + .sm-col { border-left: 1px solid var(--codex-rule) }
+    .sm-col-title {
+      font-family: var(--codex-serif);
+      font-size: 13px; font-weight: 700;
+      color: var(--codex-gold, #cba135);
+      padding-bottom: 3px; margin-bottom: 2px;
+      border-bottom: 1px solid var(--codex-rule)
+    }
+    .sm-shared {
+      margin-top: 12px; padding-top: 10px;
+      border-top: 1px solid var(--codex-rule)
+    }
+    /* Collapsible sub-box (ignore filter / randomization) inside a column. */
+    .sm-sub {
+      margin-top: 6px;
+      border: 1px solid var(--codex-rule); border-radius: 4px;
+      background: rgba(0,0,0,0.12)
+    }
+    .sm-sub > summary { cursor: pointer; padding: 5px 7px; list-style: none }
+    .sm-sub > summary::-webkit-details-marker { display: none }
+    .sm-sub-body { padding: 4px 7px 7px 7px }
+    /* Randomization: 2×2 grid of small stacked (label-over-input) cells. */
+    .sm-rnd-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 10px }
+    .sm-rnd-cell { display: flex; flex-direction: column; gap: 3px }
+    .sm-rnd-cell .cfg-label { width: auto; min-width: 0; font-size: 11px }
+    .sm-rnd-cell .hk-num { align-self: flex-start }
+
     .slider-wrap {
       position: relative;
       flex: 1;
@@ -4915,52 +4947,159 @@
              ════════════════════════════════════════════════════════════ -->
         <div class="cfg-subpanel" data-cfgtab="automation">
 
+        <!-- ── STASH MOVER (first in Automation, before AutoPilot) ────────
+             Split horizontally into two equal halves: LEFT = everything for
+             stashing, RIGHT = everything for auto-selling at a vendor. The
+             options the two sides do NOT share (enable, ignore filter, timing,
+             grid offsets) live per-column; the shared options sit in a full-
+             width box below. ──────────────────────────────────────────────── -->
         <div class="cfg-section">
-          <!-- AutoFlask retired: replaced by the default "Flasks" hotkey presets (Hotkeys tab). Section hidden; code pending removal. -->
-          <details id="det-autoflask" style="display:none"
-            ontoggle="syncCfgSections(); if(this.open) requestAnimationFrame(_sbInitAll)">
+          <details id="det-stashmover" ontoggle="syncCfgSections()">
             <summary>
-              <div class="cfg-header">Autoflask</div>
-              <!-- Reason badge — mirrors the body cfg-status so the user
-                   can see WHY autoflask did/didn't fire even when the
-                   section is collapsed. AHK keeps writing to
-                   #cfg-af-reason as before; this element is updated by
-                   the same setText() call in updateConfigToggles. -->
-              <span id="cfg-af-reason-summary" class="cfg-summary-status">—</span>
+              <div class="cfg-header">📦 Stash Mover</div>
             </summary>
             <div class="cfg-subsection">
-              <div class="cfg-row"><span class="cfg-label">Enable AutoFlask</span>
-                <label class="toggle"><input type="checkbox" id="tog-flask" onchange="ahkCall('ToggleAutoFlask')"><span
-                    class="toggle-slider"></span></label>
+              <div class="cfg-help">
+                Ctrl+Clicks every backpack item into the currently open container.
+                Open a stash in-game for the LEFT (stash) settings, or a vendor for
+                the RIGHT (sell) settings, then trigger via the hotkey or the
+                on-screen button next to the inventory.
               </div>
-              <div class="cfg-row"><span class="cfg-label">AF Performance Mode</span>
-                <label class="toggle"><input type="checkbox" id="tog-afperf"
-                    onchange="ahkCall('ToggleAutoFlaskPerf')"><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-slider-pair">
-                <div class="cfg-slider-item">
-                  <span class="cfg-label">Life %</span>
-                  <div class="slider-wrap">
-                    <span class="slider-val" id="life-bub">50</span>
-                    <input type="range" id="inp-life" min="1" max="100" value="50"
-                      oninput="_sb(this,'life-bub',this.value); ahkCall('SetThresholds', this.value, document.getElementById('inp-mana').value)">
+
+              <div class="sm-cols">
+                <!-- ══ LEFT: STASHING ════════════════════════════════════ -->
+                <div class="sm-col">
+                  <div class="sm-col-title">📥 Auto Stashing</div>
+                  <div class="cfg-row"><span class="cfg-label">Enable auto stashing</span>
+                    <label class="toggle"><input type="checkbox" id="sm-stashEnabled"
+                        onchange="ahkCall('SetStashMover','stashEnabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
                   </div>
+
+                  <details class="sm-sub" ontoggle="if(this.open) ahkCall('StashRequestInventory','stash')">
+                    <summary><div class="cfg-header" style="font-size:12px">🚫 Ignore filter
+                      <span id="sm-stash-ignore-meta" class="ent-junk-custom-meta"></span></div></summary>
+                    <div class="sm-sub-body">
+                      <div class="cfg-help">
+                        Base types you never want stashed. Quest items are always skipped.
+                        Refresh to list what you carry, then click an item to toggle it.
+                      </div>
+                      <div class="cfg-row" style="gap:8px;flex-wrap:wrap">
+                        <button class="hk-btn" onclick="ahkCall('StashRequestInventory','stash')">⟳ Refresh</button>
+                        <button class="hk-btn" onclick="if(confirm('Clear the stash ignore list?'))ahkCall('ClearStashIgnore','stash')">Clear</button>
+                      </div>
+                      <div class="cfg-label" style="margin-top:6px">Current inventory (click to ignore):</div>
+                      <div id="sm-stash-inv-list" class="ent-junk-chips" style="margin-top:4px"><span class="ent-chip-empty">Refresh to load…</span></div>
+                      <div class="cfg-label" style="margin-top:8px">Ignored base types:</div>
+                      <div id="sm-stash-ignore-list" class="ent-junk-chips" style="margin-top:4px"></div>
+                    </div>
+                  </details>
+
+                  <details class="sm-sub">
+                    <summary><div class="cfg-header" style="font-size:12px">🎲 Randomization</div></summary>
+                    <div class="sm-sub-body">
+                      <div class="sm-rnd-grid">
+                        <div class="sm-rnd-cell"><span class="cfg-label">Per-item delay (ms)</span>
+                          <span class="hk-num"><input type="number" id="sm-stashPerItemMs" min="5" max="500" step="5" onchange="ahkCall('SetStashMover','stashPerItemMs',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></div>
+                        <div class="sm-rnd-cell"><span class="cfg-label">Settle delay (ms)</span>
+                          <span class="hk-num"><input type="number" id="sm-stashSettleMs" min="0" max="300" step="2" onchange="ahkCall('SetStashMover','stashSettleMs',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></div>
+                        <div class="sm-rnd-cell"><span class="cfg-label">Grid offset X (px)</span>
+                          <span class="hk-num"><input type="number" id="sm-stashOffsetX" min="-300" max="300" step="1" onchange="ahkCall('SetStashMover','stashOffsetX',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></div>
+                        <div class="sm-rnd-cell"><span class="cfg-label">Grid offset Y (px)</span>
+                          <span class="hk-num"><input type="number" id="sm-stashOffsetY" min="-300" max="300" step="1" onchange="ahkCall('SetStashMover','stashOffsetY',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></div>
+                      </div>
+                    </div>
+                  </details>
                 </div>
-                <div class="cfg-slider-item">
-                  <span class="cfg-label">Mana %</span>
-                  <div class="slider-wrap">
-                    <span class="slider-val" id="mana-bub">30</span>
-                    <input type="range" id="inp-mana" min="1" max="100" value="30"
-                      oninput="_sb(this,'mana-bub',this.value); ahkCall('SetThresholds', document.getElementById('inp-life').value, this.value)">
+
+                <!-- ══ RIGHT: AUTO SELLING ═══════════════════════════════ -->
+                <div class="sm-col">
+                  <div class="sm-col-title">🛒 Auto Selling</div>
+                  <div class="cfg-row"><span class="cfg-label">Enable auto selling</span>
+                    <label class="toggle"><input type="checkbox" id="sm-sellEnabled"
+                        onchange="ahkCall('SetStashMover','sellEnabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
                   </div>
+
+                  <div class="cfg-label" style="margin-top:6px">Sell which categories:</div>
+                  <div class="ent-boxes" style="margin-top:4px;gap:6px;display:flex;flex-wrap:wrap">
+                    <label class="filter-pill"><input type="checkbox" id="sm-sellGear"
+                        onchange="ahkCall('SetStashMover','sellGear',this.checked?'1':'0')"> Gear (normal/magic/rare)</label>
+                    <label class="filter-pill"><input type="checkbox" id="sm-sellUniques"
+                        onchange="ahkCall('SetStashMover','sellUniques',this.checked?'1':'0')"> Uniques</label>
+                    <label class="filter-pill"><input type="checkbox" id="sm-sellCurrency"
+                        onchange="ahkCall('SetStashMover','sellCurrency',this.checked?'1':'0')"> Currency</label>
+                    <label class="filter-pill"><input type="checkbox" id="sm-sellMaps"
+                        onchange="ahkCall('SetStashMover','sellMaps',this.checked?'1':'0')"> Maps / Waystones</label>
+                  </div>
+                  <div class="cfg-help">By default only gear is sold; Uniques, Currency and Maps are kept.</div>
+
+                  <details class="sm-sub" ontoggle="if(this.open) ahkCall('StashRequestInventory','sell')">
+                    <summary><div class="cfg-header" style="font-size:12px">🚫 Ignore filter
+                      <span id="sm-sell-ignore-meta" class="ent-junk-custom-meta"></span></div></summary>
+                    <div class="sm-sub-body">
+                      <div class="cfg-help">
+                        Base types you never want sold. Quest items are always skipped.
+                        Refresh to list what you carry, then click an item to toggle it.
+                      </div>
+                      <div class="cfg-row" style="gap:8px;flex-wrap:wrap">
+                        <button class="hk-btn" onclick="ahkCall('StashRequestInventory','sell')">⟳ Refresh</button>
+                        <button class="hk-btn" onclick="if(confirm('Clear the sell ignore list?'))ahkCall('ClearStashIgnore','sell')">Clear</button>
+                      </div>
+                      <div class="cfg-label" style="margin-top:6px">Current inventory (click to ignore):</div>
+                      <div id="sm-sell-inv-list" class="ent-junk-chips" style="margin-top:4px"><span class="ent-chip-empty">Refresh to load…</span></div>
+                      <div class="cfg-label" style="margin-top:8px">Ignored base types:</div>
+                      <div id="sm-sell-ignore-list" class="ent-junk-chips" style="margin-top:4px"></div>
+                    </div>
+                  </details>
+
+                  <details class="sm-sub">
+                    <summary><div class="cfg-header" style="font-size:12px">🎲 Randomization</div></summary>
+                    <div class="sm-sub-body">
+                      <div class="sm-rnd-grid">
+                        <div class="sm-rnd-cell"><span class="cfg-label">Per-item delay (ms)</span>
+                          <span class="hk-num"><input type="number" id="sm-sellPerItemMs" min="5" max="500" step="5" onchange="ahkCall('SetStashMover','sellPerItemMs',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></div>
+                        <div class="sm-rnd-cell"><span class="cfg-label">Settle delay (ms)</span>
+                          <span class="hk-num"><input type="number" id="sm-sellSettleMs" min="0" max="300" step="2" onchange="ahkCall('SetStashMover','sellSettleMs',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></div>
+                        <div class="sm-rnd-cell"><span class="cfg-label">Grid offset X (px)</span>
+                          <span class="hk-num"><input type="number" id="sm-sellOffsetX" min="-300" max="300" step="1" onchange="ahkCall('SetStashMover','sellOffsetX',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></div>
+                        <div class="sm-rnd-cell"><span class="cfg-label">Grid offset Y (px)</span>
+                          <span class="hk-num"><input type="number" id="sm-sellOffsetY" min="-300" max="300" step="1" onchange="ahkCall('SetStashMover','sellOffsetY',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></div>
+                      </div>
+                    </div>
+                  </details>
+                </div>
+              </div><!-- /sm-cols -->
+
+              <!-- ══ SHARED OPTIONS (full width) ═══════════════════════════ -->
+              <div class="sm-shared">
+                <div class="sm-col-title">⚙️ Shared options</div>
+                <div class="cfg-row"><span class="cfg-label">Show overlay button</span>
+                  <label class="toggle"><input type="checkbox" id="sm-showButton"
+                      onchange="ahkCall('SetStashMover','showButton', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+                </div>
+                <div class="cfg-row"><span class="cfg-label">Randomise click position &amp; timing</span>
+                  <label class="toggle"><input type="checkbox" id="sm-jitter"
+                      onchange="ahkCall('SetStashMover','jitter', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+                </div>
+                <div class="cfg-row">
+                  <span class="cfg-label">Hotkey</span>
+                  <span style="display:flex;gap:6px;align-items:center">
+                    <button class="hk-btn hk-key-btn" id="sm-hotkey-btn" title="Click, then press a key or key combo" onclick="smCaptureHotkey()">none</button>
+                    <button class="hk-btn" id="sm-hotkey-clear" title="Clear hotkey" onclick="ahkCall('SetStashMover','hotkey','')">✕</button>
+                  </span>
+                </div>
+                <div class="cfg-row"><span class="cfg-label">Detected destination</span>
+                  <span id="sm-context" class="cfg-status" style="color:#7ec8e3;font-weight:600">—</span>
+                </div>
+                <div class="cfg-row" style="gap:8px;flex-wrap:wrap">
+                  <button class="hk-btn" onclick="ahkCall('StashMoveDump')">▼ Dump now (test)</button>
+                  <button class="hk-btn" onclick="ahkCall('StashMoverDiag')">🔍 Diagnose destination</button>
+                </div>
+                <div class="cfg-help">
+                  The hotkey &amp; button act on whatever container is open: a stash uses the
+                  LEFT settings, a vendor the RIGHT. "Diagnose destination" pops up the live
+                  detection signals — run it once at a stash and once at a vendor.
                 </div>
               </div>
-              <!-- The body Reason row is gone — its content lives in
-                   the collapsible summary as #cfg-af-reason-summary, so
-                   the reason is visible whether the section is open or
-                   closed. AHK still writes to #cfg-af-reason below for
-                   back-compat with anything that reads it directly. -->
-              <span id="cfg-af-reason" class="cfg-status" style="display:none">—</span>
             </div>
           </details>
         </div>
@@ -5148,118 +5287,6 @@
                   <input type="range" id="radar-alpha" min="20" max="255" value="255"
                     oninput="_sb(this,'radar-alpha-bub',Math.round(this.value/255*100)+'%'); ahkCall('SetRadarAlpha', parseInt(this.value))">
                 </div>
-              </div>
-            </div>
-          </details>
-        </div>
-
-        <div class="cfg-section">
-          <details id="det-stashmover" ontoggle="syncCfgSections()">
-            <summary>
-              <div class="cfg-header">📦 Stash Mover</div>
-            </summary>
-            <div class="cfg-subsection">
-              <div class="cfg-help">
-                Ctrl+Clicks every backpack item into the currently open container
-                (stash tab, vendor, trade, gambling). Open the container in-game,
-                then trigger via the hotkey or the on-screen button next to the inventory.
-              </div>
-              <div class="cfg-row"><span class="cfg-label">Enable Stash Mover</span>
-                <label class="toggle"><input type="checkbox" id="sm-enabled"
-                    onchange="ahkCall('SetStashMover','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-row"><span class="cfg-label">Show overlay button</span>
-                <label class="toggle"><input type="checkbox" id="sm-showButton"
-                    onchange="ahkCall('SetStashMover','showButton', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-row"><span class="cfg-label">Skip quest items (can't be stashed)</span>
-                <label class="toggle"><input type="checkbox" id="sm-skipQuest"
-                    onchange="ahkCall('SetStashMover','skipQuest', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-row"><span class="cfg-label">Randomise click position &amp; timing</span>
-                <label class="toggle"><input type="checkbox" id="sm-jitter"
-                    onchange="ahkCall('SetStashMover','jitter', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-row"><span class="cfg-label">Allow selling to a vendor (else stash only)</span>
-                <label class="toggle"><input type="checkbox" id="sm-allowSell"
-                    onchange="ahkCall('SetStashMover','allowSell', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-row"><span class="cfg-label">Detected destination</span>
-                <span id="sm-context" class="cfg-status" style="color:#7ec8e3;font-weight:600">—</span>
-              </div>
-              <div class="cfg-label" style="margin-top:6px">Vendor sell filter (what to sell — stashing always dumps everything):</div>
-              <div class="ent-boxes" style="margin-top:4px;gap:6px;display:flex;flex-wrap:wrap">
-                <label class="filter-pill"><input type="checkbox" id="sm-sellGear"
-                    onchange="ahkCall('SetStashMover','sellGear',this.checked?'1':'0')"> Gear (normal/magic/rare)</label>
-                <label class="filter-pill"><input type="checkbox" id="sm-sellUniques"
-                    onchange="ahkCall('SetStashMover','sellUniques',this.checked?'1':'0')"> Uniques</label>
-                <label class="filter-pill"><input type="checkbox" id="sm-sellCurrency"
-                    onchange="ahkCall('SetStashMover','sellCurrency',this.checked?'1':'0')"> Currency</label>
-                <label class="filter-pill"><input type="checkbox" id="sm-sellMaps"
-                    onchange="ahkCall('SetStashMover','sellMaps',this.checked?'1':'0')"> Maps / Waystones</label>
-              </div>
-              <div class="cfg-help">
-                Applies only when selling at a vendor (or an unrecognised container).
-                By default only gear is sold; Uniques, Currency and Maps are kept.
-              </div>
-              <div class="cfg-row">
-                <span class="cfg-label">Hotkey</span>
-                <span style="display:flex;gap:6px;align-items:center">
-                  <button class="hk-btn hk-key-btn" id="sm-hotkey-btn" title="Click, then press a key or key combo" onclick="smCaptureHotkey()">none</button>
-                  <button class="hk-btn" id="sm-hotkey-clear" title="Clear hotkey" onclick="ahkCall('SetStashMover','hotkey','')">✕</button>
-                </span>
-              </div>
-              <div class="cfg-row">
-                <span class="cfg-label">Per-item delay (ms)</span>
-                <span class="hk-num"><input type="number" id="sm-perItemDelayMs" min="5" max="500" step="5" onchange="ahkCall('SetStashMover','perItemDelayMs',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
-              </div>
-              <div class="cfg-row">
-                <span class="cfg-label">Settle delay (ms)</span>
-                <span class="hk-num"><input type="number" id="sm-settleDelayMs" min="0" max="300" step="2" onchange="ahkCall('SetStashMover','settleDelayMs',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
-              </div>
-              <div class="cfg-row">
-                <span class="cfg-label">Grid offset X (px)</span>
-                <span class="hk-num"><input type="number" id="sm-offsetX" min="-300" max="300" step="1" onchange="ahkCall('SetStashMover','offsetX',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
-              </div>
-              <div class="cfg-row">
-                <span class="cfg-label">Grid offset Y (px)</span>
-                <span class="hk-num"><input type="number" id="sm-offsetY" min="-300" max="300" step="1" onchange="ahkCall('SetStashMover','offsetY',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
-              </div>
-              <div class="cfg-help">
-                Grid offset only matters if the auto-detected inventory rectangle is
-                slightly off — nudge until the simulated clicks land on the cells.
-              </div>
-
-              <details class="cfg-subsection" style="margin-top:8px"
-                       ontoggle="if(this.open) ahkCall('StashRequestInventory')">
-                <summary style="cursor:pointer;padding:4px 0">
-                  <div class="cfg-header" style="font-size:12px">🚫 Ignore filter
-                    <span id="sm-ignore-meta" class="ent-junk-custom-meta"></span></div>
-                </summary>
-                <div style="margin-top:4px;padding:4px 0 4px 2px">
-                  <div class="cfg-help">
-                    Base types you never want stashed. Open your inventory in-game, hit
-                    refresh to list what you currently carry, then click an item to toggle it.
-                  </div>
-                  <div class="cfg-row" style="gap:8px;flex-wrap:wrap">
-                    <button class="hk-btn" onclick="ahkCall('StashRequestInventory')">⟳ Refresh from inventory</button>
-                    <button class="hk-btn" onclick="if(confirm('Clear the whole ignore list?'))ahkCall('ClearStashIgnore')">Clear list</button>
-                  </div>
-                  <div class="cfg-label" style="margin-top:6px">Current inventory (click to ignore):</div>
-                  <div id="sm-inv-list" class="ent-junk-chips" style="margin-top:4px"><span class="ent-chip-empty">Refresh to load…</span></div>
-                  <div class="cfg-label" style="margin-top:8px">Ignored base types:</div>
-                  <div id="sm-ignore-list" class="ent-junk-chips" style="margin-top:4px"></div>
-                </div>
-              </details>
-
-              <div class="cfg-row" style="gap:8px;flex-wrap:wrap">
-                <button class="hk-btn" onclick="ahkCall('StashMoveDump')">▼ Dump now (test)</button>
-                <button class="hk-btn" onclick="ahkCall('StashMoverDiag')">🔍 Diagnose destination</button>
-              </div>
-              <div class="cfg-help">
-                "Diagnose destination" pops up the live signals (open inventory IDs,
-                top-level panel StringIds, detected kind). Run it once at a stash and
-                once at a vendor — the report identifies how each is recognised.
               </div>
             </div>
           </details>
@@ -6949,34 +6976,40 @@
     }
 
     // Stash Mover header settings -> form widgets (skips a field being edited).
-    let _smIgnore = [];   // mirrors the AHK ignore set (array of {path,name})
+    // Per-side ignore sets (mirrors the AHK maps). Each is an array of {path,name}.
+    let _smIgnore = { stash: [], sell: [] };
     function stashMoverSyncFromHeader(s) {
       if (!s) return;
       const chk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = v === true || v === 1 || v === '1' || v === 'true'; };
       const val = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
-      chk('sm-enabled', s.enabled);
+      chk('sm-stashEnabled', s.stashEnabled);
+      chk('sm-sellEnabled', s.sellEnabled);
       chk('sm-showButton', s.showButton);
-      chk('sm-skipQuest', s.skipQuest);
       chk('sm-jitter', s.jitter);
-      chk('sm-allowSell', s.allowSell);
       chk('sm-sellGear', s.sellGear);
       chk('sm-sellUniques', s.sellUniques);
       chk('sm-sellCurrency', s.sellCurrency);
       chk('sm-sellMaps', s.sellMaps);
       const hkBtn = document.getElementById('sm-hotkey-btn');
       if (hkBtn) hkBtn.textContent = smPrettyHotkey(s.hotkey || '');
-      val('sm-perItemDelayMs', s.perItemDelayMs);
-      val('sm-settleDelayMs', s.settleDelayMs);
-      val('sm-offsetX', s.offsetX);
-      val('sm-offsetY', s.offsetY);
+      val('sm-stashPerItemMs', s.stashPerItemMs);
+      val('sm-stashSettleMs', s.stashSettleMs);
+      val('sm-stashOffsetX', s.stashOffsetX);
+      val('sm-stashOffsetY', s.stashOffsetY);
+      val('sm-sellPerItemMs', s.sellPerItemMs);
+      val('sm-sellSettleMs', s.sellSettleMs);
+      val('sm-sellOffsetX', s.sellOffsetX);
+      val('sm-sellOffsetY', s.sellOffsetY);
       const ctxEl = document.getElementById('sm-context');
       if (ctxEl) {
         const m = { stash: 'Stash', vendor: 'Vendor (will SELL)', trade: 'Trade', unknown: '— (open a stash/vendor)' };
         ctxEl.textContent = m[s.context] || '—';
         ctxEl.style.color = (s.context === 'vendor') ? '#e3a07e' : '#7ec8e3';
       }
-      _smIgnore = Array.isArray(s.ignore) ? s.ignore : [];
-      stashRenderIgnore();
+      _smIgnore.stash = Array.isArray(s.stashIgnore) ? s.stashIgnore : [];
+      _smIgnore.sell = Array.isArray(s.sellIgnore) ? s.sellIgnore : [];
+      stashRenderIgnore('stash');
+      stashRenderIgnore('sell');
     }
 
     // ── Stash Mover hotkey capture (reuses the Hotkeys-tab #hk-capture overlay) ──
@@ -7013,47 +7046,53 @@
       return out + (rest.length === 1 ? rest.toUpperCase() : rest);
     }
 
-    // Renders the "Ignored base types" chips from _smIgnore. Handlers reference the
-    // entry by index (smIgnoreRemove) so item paths/names never have to be inlined
-    // into an HTML attribute (avoids quoting bugs with apostrophes etc.).
-    function stashRenderIgnore() {
-      const meta = document.getElementById('sm-ignore-meta');
-      if (meta) meta.textContent = _smIgnore.length ? String(_smIgnore.length) : '';
-      const host = document.getElementById('sm-ignore-list');
+    // Renders one side's "Ignored base types" chips from _smIgnore[side]. A shipped,
+    // non-removable "Quest items" chip leads the list (quest items can never be moved).
+    // User entries reference themselves by index (smIgnoreRemove) so paths/names never
+    // have to be inlined into an HTML attribute (avoids quoting bugs with apostrophes).
+    function stashRenderIgnore(side) {
+      const arr = _smIgnore[side] || [];
+      const meta = document.getElementById('sm-' + side + '-ignore-meta');
+      if (meta) meta.textContent = arr.length ? String(arr.length) : '';
+      const host = document.getElementById('sm-' + side + '-ignore-list');
       if (!host) return;
-      host.innerHTML = _smIgnore.length
-        ? _smIgnore.map((e, i) =>
-            `<span class="ent-chip" title="${escAttr(e.path)}"><span class="ent-chip-txt">${escHtml(e.name || e.path)}</span>`
-            + `<button class="ent-chip-x" title="Remove" onclick="smIgnoreRemove(${i})">✕</button></span>`).join('')
-        : `<span class="ent-chip-empty">Nothing ignored yet.</span>`;
+      const def = `<span class="ent-chip" title="Shipped default — quest items can never be stashed or sold" `
+        + `style="opacity:.75;font-style:italic"><span class="ent-chip-txt">🔒 Quest items (default)</span></span>`;
+      const user = arr.map((e, i) =>
+        `<span class="ent-chip" title="${escAttr(e.path)}"><span class="ent-chip-txt">${escHtml(e.name || e.path)}</span>`
+        + `<button class="ent-chip-x" title="Remove" onclick="smIgnoreRemove('${side}',${i})">✕</button></span>`).join('');
+      host.innerHTML = def + user;
     }
-    function smIgnoreRemove(i) {
-      const e = _smIgnore[i];
-      if (e) ahkCall('SetStashIgnore', e.path, '', '0');
+    function smIgnoreRemove(side, i) {
+      const e = (_smIgnore[side] || [])[i];
+      if (e) ahkCall('SetStashIgnore', side, e.path, '', '0');
     }
 
-    // Live backpack list (pushed by AHK after StashRequestInventory). Each row is a
-    // clickable chip (by index); ignored ones are dimmed/struck so the state is clear.
-    let _smInvItems = [];
+    // Live backpack list per side (pushed by AHK after StashRequestInventory with the
+    // side echoed back). Each row is a clickable chip (by index); ignored ones are
+    // dimmed/struck so the state is clear for that side's filter.
+    let _smInvItems = { stash: [], sell: [] };
     function updateStashInventory(json) {
       let d; try { d = typeof json === 'string' ? JSON.parse(json) : json; } catch (e) { return; }
-      const host = document.getElementById('sm-inv-list');
+      const side = (d && d.side === 'sell') ? 'sell' : 'stash';
+      const host = document.getElementById('sm-' + side + '-inv-list');
       if (!host) return;
-      _smInvItems = (d && Array.isArray(d.items)) ? d.items : [];
+      _smInvItems[side] = (d && Array.isArray(d.items)) ? d.items : [];
+      const items = _smInvItems[side];
       if (d && d.connected === false) { host.innerHTML = `<span class="ent-chip-empty">Game not connected.</span>`; return; }
-      if (!_smInvItems.length) { host.innerHTML = `<span class="ent-chip-empty">Backpack empty / not readable.</span>`; return; }
-      host.innerHTML = _smInvItems.map((it, i) => {
+      if (!items.length) { host.innerHTML = `<span class="ent-chip-empty">Backpack empty / not readable.</span>`; return; }
+      host.innerHTML = items.map((it, i) => {
         const cnt = it.count > 1 ? ` ×${it.count}` : '';
         const lbl = (it.name || it.path) + cnt;
         const sty = it.ignored ? 'opacity:.5;text-decoration:line-through' : '';
         const tip = it.ignored ? 'Click to stop ignoring' : 'Click to ignore';
-        return `<span class="ent-chip" style="cursor:pointer;${sty}" title="${escAttr(tip + ' — ' + it.path)}" onclick="smInvToggle(${i})">`
+        return `<span class="ent-chip" style="cursor:pointer;${sty}" title="${escAttr(tip + ' — ' + it.path)}" onclick="smInvToggle('${side}',${i})">`
           + `${it.ignored ? '🚫 ' : ''}<span class="ent-chip-txt">${escHtml(lbl)}</span></span>`;
       }).join('');
     }
-    function smInvToggle(i) {
-      const it = _smInvItems[i];
-      if (it) ahkCall('SetStashIgnore', it.path, it.name || '', it.ignored ? '0' : '1');
+    function smInvToggle(side, i) {
+      const it = (_smInvItems[side] || [])[i];
+      if (it) ahkCall('SetStashIgnore', side, it.path, it.name || '', it.ignored ? '0' : '1');
     }
 
     // Live run + session aggregates + price status (pushed ~1 Hz from AHK).
