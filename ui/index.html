@@ -6158,13 +6158,6 @@
         <span class="hk-hint">Output is bound to your in-game flask/skill slots; trigger key is captured separately.</span>
       </div>
       <div id="hk-groups" ondragover="hkDragOver(event,'group')" ondragleave="hkDragLeave(event)" ondrop="hkDropEnd(event,'group',0,0)"><div class="hk-empty">Loading hotkeys…</div></div>
-      <!-- Hidden key-capture overlay -->
-      <div id="hk-capture" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;">
-        <div style="background:var(--surface);border:1px solid var(--accent);border-radius:8px;padding:24px 32px;text-align:center;color:var(--text);">
-          <div style="font-size:15px;margin-bottom:8px;">Press a key or mouse button…</div>
-          <div style="color:var(--subtext);font-size:12px;">Esc to cancel</div>
-        </div>
-      </div>
       <!-- Delete confirmation for groups / hotkeys (with an optional export-first). -->
       <div id="hk-confirm" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;align-items:center;justify-content:center;" onclick="if(event.target===this)hkConfirmCancel()">
         <div style="background:var(--surface);border:1px solid var(--codex-rule);border-radius:6px;padding:22px 26px;max-width:440px;color:var(--text);box-shadow:0 10px 34px rgba(0,0,0,.55);">
@@ -6180,6 +6173,17 @@
     </div>
 
   </div><!-- /content -->
+
+  <!-- Key-capture overlay — TOP-LEVEL (outside the tab panels) on purpose: it is shared
+       by the Hotkeys tab AND the Config tab (e.g. the Stash Mover hotkey). A tab-panel
+       ancestor with display:none would otherwise hide this position:fixed overlay, so the
+       listener would be active but invisible. -->
+  <div id="hk-capture" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:var(--surface);border:1px solid var(--accent);border-radius:8px;padding:24px 32px;text-align:center;color:var(--text);">
+      <div style="font-size:15px;margin-bottom:8px;">Press a key or mouse button…</div>
+      <div style="color:var(--subtext);font-size:12px;">Esc to cancel</div>
+    </div>
+  </div>
 
   <!-- STATUS BAR -->
   <div id="status-bar"><span id="status-left">Initializing…</span><span id="status-right"></span></div>
