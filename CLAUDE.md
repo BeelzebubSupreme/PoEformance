@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.27`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.28`.
 
 ## Language
 
@@ -483,6 +483,28 @@ rectangle from the UI tree.
 - Verify real alert matches; banner position/size; WAV playback; `FlashWindowEx` struct; the
   `currentAreaHash` zone-change signal; group colors on radar dots.
 - Optional deferred refactor: migrate **PlayerHUD**, then **RadarOverlay**, onto `GdiOverlayBase`.
+
+## Value-aware loot radar (WIP) — `ahk/LootRadarValue.ahk`
+
+Goal: price GROUND loot via the existing poe.ninja layer and surface it — a value label
+on each ground-item radar dot, a "valuable nearby" ranked overlay list, and a
+banner/sound alert above a threshold. Scope: Currency, Uniques, Waystones,
+Fragments/Tablets, Div-Cards (rares stay unpriced, like the LootTracker breakdown).
+
+- **Key RE finding:** ground items in PoE2 are full item-bearing entities — `PoE2EntityReader`
+  reads their rarity straight off `Mods`/`ObjectMagicProperties` (`PoE2EntityReader.ahk:1076`),
+  so `entity["address"]` IS the item entity ptr. `ReadItemArtPath()` resolves `RenderItem`
+  BY NAME (offset-agnostic), so `g_reader.ReadItemArtPath(groundAddr)` should yield the
+  unique's render art — i.e. **uniques are likely priceable with NO new memory offset.**
+- **Step 0 (shipped, this module):** `_LrvPriceGround(addr,path,rarityId,&dds,&renderArt,&unit,&label)`
+  reuses `_LtArtIdFromDds` + `_LtBuildItemKey` + `_LtTryPriceItem`. `LootValueDiagnose()`
+  (bridge `LootValueDiag`, Config → General → Actions button "🔍 Loot value diagnose")
+  walks the radar snapshot's ground items and reports path/rarity/addr/art/price + a
+  verdict on whether ground uniques resolve an art id. Run it in-game over a unique drop
+  to confirm before building the full feature. Needs Loot pricing data loaded for prices.
+- **Next (after verify):** per-tick (~4 Hz, cached by addr) annotation pass; radar dot
+  label via `RadarOverlay._DrawText`; ranked nearby-loot `GdiOverlayBase` overlay; value
+  threshold in `EntityAlerts._AlertSeverityFor`; config section + min-label/alert thresholds.
 
 ## Reference
 
