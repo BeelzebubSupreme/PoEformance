@@ -4,7 +4,7 @@
 
 **A modern AutoHotkey v2 toolset for *Path of Exile 2* — overlays, automation, reverse-engineering workbench, and GGPK-level map reveal in one place.**
 
-![Version](https://img.shields.io/badge/version-v0.45.13.25-blue)
+![Version](https://img.shields.io/badge/version-v0.45.13.26-blue)
 ![Build](https://img.shields.io/badge/build-stable-green)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Language](https://img.shields.io/badge/language-AutoHotkey%20v2-orange)
@@ -36,6 +36,7 @@
   - [Custom Hotkeys](#️-custom-hotkeys))
   - [Loot Pickup](#-loot-pickup)
   - [Loot Tracker](#-loot-tracker)
+  - [Stash Mover](#-stash-mover)
   - [Overlays](#-overlays)
   - [Entity Alerts, Groups & Junk Filter](#-entity-alerts-groups--junk-filter)
   - [GGPK Maphack](#-ggpk-maphack)
@@ -60,6 +61,8 @@
 💎 **Loot Pickup** — rarity-filtered ground-item collection with a persistent cache (drops noticed during combat aren't forgotten) and an actual **per-item-size fit check** against the live backpack grid — fed by a 4 040-entry registry of every PoE2 base item.
 
 📊 **Loot Tracker** — times every map run (auto-paused in town / hideout, resumed by instance hash), diffs your backpack for net loot, prices it live via **poe.ninja** (Exalted / Divine), tallies kills per rarity, and keeps a browsable session history — surfaced as two on-screen bars *and* a full WebView tab with a per-item breakdown of the priced drops that drove your div/h.
+
+📦 **Stash Mover** — one hotkey (or an on-screen pill button) Ctrl+Clicks your whole backpack into the open container — **stash, vendor, trade or gambling**, auto-detected. Split into an *auto-stash* and an *auto-sell* half with **independent ignore filters**, a **gear-only** sell guard (uniques / currency / maps kept by default, each toggleable), always-on quest-item safety, post-run verification and humanised click timing.
 
 🗺 **GGPK Maphack** — patches PoE2's minimap shaders directly in the bundle, with configurable outline + background colors and one-click apply/revert. Reveals the full zone in-game without the radar overlay running.
 
@@ -153,6 +156,25 @@ A full **map-run / session loot accountant** — a port of the GameHelper2 `Loot
   <img src="assets/LootTracker.png" width="800" alt="Loot Tracker — live run, session totals and the priced valuable-drops breakdown">
   <p><em>The Loot tab — live run timer + profit (Exalted / Divine), kills by rarity, session totals with per-map rows, and the poe.ninja-priced <strong>valuable-drops</strong> breakdown.</em></p>
 </div>
+
+### 📦 Stash Mover
+
+A one-press **"dump my backpack"** helper. Open any container in-game and trigger it — by a configurable hotkey or an on-screen pill button drawn just above the inventory grid — and it simulates a Ctrl+Click on every backpack item so the game moves them into whatever is open: a **stash tab, a vendor (sell), a trade window or a gambling window**. The destination is auto-detected (a vendor is recognised by the `NPCBuyWindow`), which only refines the label/verb and the sell guard — the Ctrl+Click action itself is identical everywhere. It reuses the already reverse-engineered inventory reader (item base types + grid cells) and resolves the grid's on-screen rectangle from the UI tree, so no manual calibration is needed.
+
+The feature is split into two independent halves — **Auto Stashing** (left) and **Auto Selling** (right) — each separately toggleable, with the options the two don't share kept per-side and the shared ones in a box below.
+
+- **Per-side ignore filters** — build a keep-list for each side from your *live* inventory: refresh to list what you're carrying, click an item to keep it. Stashing and selling have their own lists.
+- **Gear-only selling** — the sell side only ever sells normal/magic/rare **gear**. **Uniques, Currency and Maps & Waystones are kept by default** as toggleable category chips (deactivate one to allow auto-selling that class); **quest items are always kept** (they can't be moved at all).
+- **Safety net** — after a run it re-reads the backpack and flags anything that didn't actually move (stash full / not stashable) for a short cooldown so a repeat trigger can't hammer an un-stashable item; if *nothing* moved it warns instead of silently retrying.
+- **Humanised input** — optional randomisation jitters each click's position inside its cell and varies the inter-click delay and mouse-down hold, with per-side **per-item / settle** timing and **grid-offset** fine-tuning.
+- **On-screen button** — a slim header-pill-styled overlay (gold outline, small-caps) sits above the inventory grid, NOACTIVATE so clicking it never steals focus from the game; its icon + label follow the detected destination (`▼ Dump → Stash` gold, `$ Sell → Vendor` amber as a "this sells" cue).
+
+<!-- Add a screenshot once captured, e.g.:
+<div align="center">
+  <img src="assets/stashmover.png" width="800" alt="Stash Mover configuration — auto-stash / auto-sell columns + shared options">
+  <p><em>Stash Mover — the auto-stash and auto-sell halves with their own ignore filters and randomisation, plus the shared overlay-button / hotkey options.</em></p>
+</div>
+-->
 
 ### 🗺 Overlays
 
