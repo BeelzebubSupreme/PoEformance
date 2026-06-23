@@ -752,10 +752,10 @@ _SmCtxFor(kind)
 {
     switch kind
     {
-        case "stash":  return Map("kind", "stash",  "verb", "Stashed", "button", "▼  Dump → Stash")
-        case "vendor": return Map("kind", "vendor", "verb", "Sold",    "button", "▼  Sell → Vendor")
-        case "trade":  return Map("kind", "trade",  "verb", "Moved",   "button", "▼  Move → Trade")
-        default:       return Map("kind", "unknown","verb", "Moved",   "button", "▼  Dump items")
+        case "stash":  return Map("kind", "stash",  "verb", "Stashed", "button", "▼  DUMP → STASH")
+        case "vendor": return Map("kind", "vendor", "verb", "Sold",    "button", "$  SELL → VENDOR")
+        case "trade":  return Map("kind", "trade",  "verb", "Moved",   "button", "↔  MOVE → TRADE")
+        default:       return Map("kind", "unknown","verb", "Moved",   "button", "▼  DUMP ITEMS")
     }
 }
 
@@ -1616,14 +1616,15 @@ _SmTooltip(text, ms := 1500)
 ; Button geometry — kept in sync between _SmEnsureGui and StashMoverTick's Show().
 ; (Constants, not module globals: a top-level `global x := …` initializer wouldn't run
 ; for an #Include'd module — see the AHK v2 init gotcha — so they're returned by a fn.)
-_SmBtnW() => 184
-_SmBtnH() => 30
+; Slim, like a main header pill ("Radar on").
+_SmBtnW() => 150
+_SmBtnH() => 24
 
 ; Lazily creates the always-on-top, NOACTIVATE button window. NOACTIVATE
 ; (WS_EX_NOACTIVATE 0x08000000) lets the button receive clicks WITHOUT stealing
 ; foreground from the game, so the synthetic Ctrl+Clicks still land on PoE2.
-; Styled like the config "filter pills": a dark parchment face inside a glowing
-; gilded outline. The outline is the Gui's own background showing through a 2px
+; Styled like a main header pill: a dark face inside a thin gilded outline, with a
+; small-caps gold label. The outline is the Gui's own background showing through a 2px
 ; inset around the dark Text face (a real GDI+ glow isn't available to a Gui control).
 _SmEnsureGui()
 {
@@ -1633,12 +1634,12 @@ _SmEnsureGui()
     g_smGui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x08000000")
     g_smGui.MarginX := 0
     g_smGui.MarginY := 0
-    g_smGui.BackColor := "F0D68A"            ; --codex-gold-hi: the glowing pill outline
+    g_smGui.BackColor := "C8A85A"            ; --codex-gold: the pill outline
     ; Inner pill face: dark codex parchment, inset 2px so the gold frame reads as the
     ; outline. +0x200 = SS_CENTERIMAGE (v-centre), +0x100 = SS_NOTIFY (fire Click),
     ; Background<hex> paints the face dark so only the 2px border stays gold.
-    g_smBtnCtrl := g_smGui.AddText("x2 y2 w" (_SmBtnW() - 4) " h" (_SmBtnH() - 4) " Center +0x200 +0x100 Background251812", "▼  Dump items")
-    g_smBtnCtrl.SetFont("s10 Bold cF0D68A", "Georgia")
+    g_smBtnCtrl := g_smGui.AddText("x2 y2 w" (_SmBtnW() - 4) " h" (_SmBtnH() - 4) " Center +0x200 +0x100 Background251812", "▼  DUMP ITEMS")
+    g_smBtnCtrl.SetFont("s9 Bold cF0D68A", "Georgia")
     g_smBtnCtrl.OnEvent("Click", _SmOnButtonClick)
 }
 
@@ -1743,13 +1744,15 @@ _SmUpdateButtonText()
     txt := ctx["button"]
     if (txt != g_smLastBtnText)
     {
-        ; Vendor SELLS → warmer amber outline+text as a warning; gilded gold otherwise.
-        ; The Gui background is the pill's glowing outline; the Text colour is the label.
-        col := (ctx["kind"] = "vendor") ? "E3A07E" : "F0D68A"
+        ; Pill palette: gold outline (--codex-gold) + gilded-highlight label
+        ; (--codex-gold-hi). A vendor SELLS, so both go warm amber as a warning cue.
+        isVendor := (ctx["kind"] = "vendor")
+        borderCol := isVendor ? "E3A07E" : "C8A85A"
+        textCol   := isVendor ? "E3A07E" : "F0D68A"
         try {
             if IsObject(g_smGui)
-                g_smGui.BackColor := col
-            g_smBtnCtrl.SetFont("s10 Bold c" col, "Georgia")
+                g_smGui.BackColor := borderCol
+            g_smBtnCtrl.SetFont("s9 Bold c" textCol, "Georgia")
             g_smBtnCtrl.Text := txt
         }
         g_smLastBtnText := txt

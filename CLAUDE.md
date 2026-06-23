@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.24`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.25`.
 
 ## Language
 
@@ -358,16 +358,16 @@ rectangle from the UI tree.
     leave) and deduped by item pointer. Activates the PoE window first on the hotkey
     path; the overlay button is `WS_EX_NOACTIVATE` so it never steals foreground.
   - Overlay button: a lazily-built always-on-top, NOACTIVATE Gui (`_SmEnsureGui`) —
-    styled like the config "filter pills": a dark parchment `Text` face (`Background251812`)
-    inset 2px inside the Gui's gilded background (`F0D68A`), so the 2px gold frame reads
-    as the pill's glowing outline (a real GDI+ glow isn't available to a Gui control).
-    Clickable via the Text's Click event (`SS_NOTIFY`); a leading "▾" icon + context
-    caption ("▾ Dump → Stash" gold / "▾ Sell → Vendor" amber — `_SmUpdateButtonText`
-    recolours both the Gui frame and the text). Size via `_SmBtnW()/_SmBtnH()` (184×30;
-    functions, not module globals — init gotcha). `StashMoverTick(radarSnap)` (from
-    `UpdateRadarFast` after `TryLootTrackerTick`) positions it just ABOVE the inventory
-    grid, aligned to its left edge (the margin between the equipment panel and the
-    backpack grid), and shows/hides it on `_SmActive()` + the matching side enabled +
+    styled like a main header pill ("Radar on"): a dark parchment `Text` face
+    (`Background251812`) inset 2px inside the Gui's gilded background (gold `C8A85A`
+    border, gold-hi `F0D68A` small-caps label), slim (`_SmBtnW()/_SmBtnH()` = 150×24,
+    functions not module globals — init gotcha). Clickable via the Text's Click event
+    (`SS_NOTIFY`); a per-context icon + uppercase caption ("▼ DUMP → STASH" gold /
+    "$ SELL → VENDOR" amber / "↔ MOVE → TRADE" — `_SmUpdateButtonText` recolours the
+    Gui frame + text, amber for a vendor as a "this SELLS" cue). `StashMoverTick(radarSnap)`
+    (from `UpdateRadarFast` after `TryLootTrackerTick`) positions it just ABOVE the
+    inventory grid, aligned to its left edge (the margin between the equipment panel and
+    the backpack grid), and shows/hides it on `_SmActive()` + the matching side enabled +
     game-focus + grid-visibility.
   - Config (per-side split): the feature is split into a STASH half and a SELL half,
     each independently toggleable (`g_smStashEnabled` / `g_smSellEnabled`;
