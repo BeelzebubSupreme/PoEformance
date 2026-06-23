@@ -7084,7 +7084,7 @@
       const host = document.getElementById('sm-' + side + '-ignore-list');
       if (!host) return;
       let html = (_smDefaultChips[side] || []).map(d =>
-        `<span class="ent-chip sm-def-chip" title="${escAttr(d.tip)}"><span class="ent-chip-txt">🔒 ${escHtml(d.name)}</span></span>`).join('');
+        `<span class="ent-chip sm-def-chip" data-tip="${escAttr(d.tip)}"><span class="ent-chip-txt">🔒 ${escHtml(d.name)}</span></span>`).join('');
       if (side === 'sell') {
         const active = new Set(arr.map(e => e.path));
         html += _smSellCats.map(c => {
@@ -7092,13 +7092,13 @@
           const sty = on ? '' : 'opacity:.45;text-decoration:line-through';
           const tip = on ? `${c.name} are kept — click to ALLOW auto-selling them`
                          : `${c.name} will be SOLD — click to keep them`;
-          return `<span class="ent-chip sm-cat-chip" style="cursor:pointer;${sty}" title="${escAttr(tip)}" `
+          return `<span class="ent-chip sm-cat-chip" style="cursor:pointer;${sty}" data-tip="${escAttr(tip)}" `
             + `onclick="smCatToggle('${c.key}',${on ? 0 : 1})"><span class="ent-chip-txt">${on ? '🛡 ' : '💰 '}${escHtml(c.name)}</span></span>`;
         }).join('');
       }
       html += userEntries.map(({ e, i }) =>
-        `<span class="ent-chip" title="${escAttr(e.path)}"><span class="ent-chip-txt">${escHtml(e.name || e.path)}</span>`
-        + `<button class="ent-chip-x" title="Remove" onclick="smIgnoreRemove('${side}',${i})">✕</button></span>`).join('');
+        `<span class="ent-chip" data-tip="${escAttr(e.path)}"><span class="ent-chip-txt">${escHtml(e.name || e.path)}</span>`
+        + `<button class="ent-chip-x" data-tip="Remove" onclick="smIgnoreRemove('${side}',${i})">✕</button></span>`).join('');
       host.innerHTML = html;
     }
     function smIgnoreRemove(side, i) {
@@ -7129,7 +7129,7 @@
         const lbl = (it.name || it.path) + cnt;
         const sty = it.ignored ? 'opacity:.5;text-decoration:line-through' : '';
         const tip = it.ignored ? 'Click to stop ignoring' : 'Click to ignore';
-        return `<span class="ent-chip" style="cursor:pointer;${sty}" title="${escAttr(tip + ' — ' + it.path)}" onclick="smInvToggle('${side}',${i})">`
+        return `<span class="ent-chip" style="cursor:pointer;${sty}" data-tip="${escAttr(tip + ' — ' + it.path)}" onclick="smInvToggle('${side}',${i})">`
           + `${it.ignored ? '🚫 ' : ''}<span class="ent-chip-txt">${escHtml(lbl)}</span></span>`;
       }).join('');
     }

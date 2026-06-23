@@ -752,10 +752,10 @@ _SmCtxFor(kind)
 {
     switch kind
     {
-        case "stash":  return Map("kind", "stash",  "verb", "Stashed", "button", "▾  Dump → Stash")
-        case "vendor": return Map("kind", "vendor", "verb", "Sold",    "button", "▾  Sell → Vendor")
-        case "trade":  return Map("kind", "trade",  "verb", "Moved",   "button", "▾  Move → Trade")
-        default:       return Map("kind", "unknown","verb", "Moved",   "button", "▾  Dump items")
+        case "stash":  return Map("kind", "stash",  "verb", "Stashed", "button", "▼  Dump → Stash")
+        case "vendor": return Map("kind", "vendor", "verb", "Sold",    "button", "▼  Sell → Vendor")
+        case "trade":  return Map("kind", "trade",  "verb", "Moved",   "button", "▼  Move → Trade")
+        default:       return Map("kind", "unknown","verb", "Moved",   "button", "▼  Dump items")
     }
 }
 
@@ -1202,6 +1202,27 @@ StashMoverDiagnose()
         out .= "ALL direct GameUi children by index (stash = Gordin's [36]; find inventory here):`n" _SmDiagAllChildren(g_reader, gameUi) "`n"
         out .= "INVENTORY panel subtree (auto-picked backpack grid marked PICKED):`n" _SmDiagInventorySubtree(g_reader, gameUi) "`n"
 
+        ; Resolved backpack grid rectangle + where the overlay button would anchor.
+        ; (Helps verify the on-screen button placement without the game on hand.)
+        out .= "Backpack GRID rect + overlay-button anchor:`n"
+        gHwnd := ResolvePoEWindow()
+        cr := gHwnd ? NavClientRect(gHwnd) : 0
+        if IsObject(cr)
+            out .= "  client: x=" Round(cr["x"]) " y=" Round(cr["y"]) " w=" Round(cr["w"]) " h=" Round(cr["h"]) "`n"
+        else
+            out .= "  client: (unavailable)`n"
+        gr := _SmInventoryGridRect(0, 0)
+        if IsObject(gr)
+        {
+            bw := _SmBtnW(), bh := _SmBtnH()
+            bx := Round(gr["x"] - bw - 14), by := Round(gr["y"] + (gr["h"] - bh) / 2)
+            out .= "  grid:   x=" Round(gr["x"]) " y=" Round(gr["y"]) " w=" Round(gr["w"]) " h=" Round(gr["h"]) "`n"
+            out .= "  button: x=" bx " y=" by " w=" bw " h=" bh "  (left of grid, vertically centred)`n"
+        }
+        else
+            out .= "  grid:   (not resolved — open your inventory first)`n"
+        out .= "`n"
+
         ctx := _SmDetectContext()
         out .= "Currently detected kind:  " ctx["kind"]
     }
@@ -1239,17 +1260,23 @@ _SmIsQuestItem(path)
     return (InStr(p, "questitem") || InStr(p, "/quests/")) ? true : false
 }
 
-; Classifies an item into one category for the vendor sell filter:
-; "map" (Metadata/Items/Maps/ waystones) > "currency" (rarityId 5) >
-; "unique" (rarityId 3/4) > "gear" (everything else: normal/magic/rare equipment).
-; Maps win over rarity so a unique/rare waystone is still treated as a map.
+; Classifies an item into one category for the auto-sell filter:
+; "map" (Metadata/Items/Maps|Waystones) > "currency" (path .../Currency/… OR rarityId 5)
+; > "unique" (rarityId 3/4) > "gear" (everything else: normal/magic/rare equipment).
+; Currency / maps are matched by PATH first because those classes carry no real rarity
+; (e.g. a Scroll of Identification has no Mods component, so rarityId comes back -1 and
+; the old rarityId-only check let it slip through to "gear" and got sold). Maps win over
+; rarity so a unique/rare waystone is still treated as a map.
 _SmItemCategory(details)
 {
     if !(details && IsObject(details))
         return "gear"
     path := details.Has("metadataPath") ? details["metadataPath"] : ""
-    if (InStr(StrLower(path), "/maps/"))
+    lp := StrLower(path)
+    if (InStr(lp, "/maps/") || InStr(lp, "/waystones/"))
         return "map"
+    if (InStr(lp, "/currency/"))
+        return "currency"
     rid := details.Has("rarityId") ? details["rarityId"] : -1
     if (rid = 5)
         return "currency"
@@ -1610,7 +1637,7 @@ _SmEnsureGui()
     ; Inner pill face: dark codex parchment, inset 2px so the gold frame reads as the
     ; outline. +0x200 = SS_CENTERIMAGE (v-centre), +0x100 = SS_NOTIFY (fire Click),
     ; Background<hex> paints the face dark so only the 2px border stays gold.
-    g_smBtnCtrl := g_smGui.AddText("x2 y2 w" (_SmBtnW() - 4) " h" (_SmBtnH() - 4) " Center +0x200 +0x100 Background251812", "▾  Dump items")
+    g_smBtnCtrl := g_smGui.AddText("x2 y2 w" (_SmBtnW() - 4) " h" (_SmBtnH() - 4) " Center +0x200 +0x100 Background251812", "▼  Dump items")
     g_smBtnCtrl.SetFont("s10 Bold cF0D68A", "Georgia")
     g_smBtnCtrl.OnEvent("Click", _SmOnButtonClick)
 }
