@@ -783,6 +783,53 @@ _SmDiagShallowVisible(reader, gameUi, maxDepth := 3)
     return (out != "" ? out : "  (none)`n")
 }
 
+; Enumerates EVERY direct child of the GameUi root by index (named or not), with
+; StringId, UnscaledSize, visibility and screen pos. This mirrors what the UI
+; browser shows (e.g. Gordin's stash = GameUi child [36]); run with the inventory
+; AND stash open to identify the inventory grid's child index. Returns a string.
+_SmDiagAllChildren(reader, gameUi)
+{
+    if !reader.IsProbablyValidPointer(gameUi)
+        return "  (gameUi invalid)`n"
+    hdr := reader.Mem.ReadBytes(gameUi, 0x20)
+    if !hdr
+        return "  (root unreadable)`n"
+    cf := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+    cl := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
+    if (!reader.IsProbablyValidPointer(cf) || cl <= cf)
+        return "  (no children)`n"
+    n := Min((cl - cf) // A_PtrSize, 256)
+    buf := reader.Mem.ReadBytes(cf, n * A_PtrSize)
+    if !buf
+        return "  (children unreadable)`n"
+    idOff    := PoE2Offsets.UiElementBase["StringIdPtr"]
+    flagsOff := PoE2Offsets.UiElementBase["Flags"]
+    sizeOff  := PoE2Offsets.UiElementBase["UnscaledSize"]
+    out := ""
+    Loop n
+    {
+        idx := A_Index - 1
+        cp := NumGet(buf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
+        if !reader.IsProbablyValidPointer(cp)
+            continue
+        sid := ""
+        try sid := reader.ReadStdWStringAt(cp + idOff, 64)
+        w := 0.0, h := 0.0
+        szb := reader.Mem.ReadBytes(cp + sizeOff, 8)
+        if szb
+        {
+            w := NumGet(szb.Ptr, 0, "Float")
+            h := NumGet(szb.Ptr, 4, "Float")
+        }
+        vis := false
+        try vis := ((reader.Mem.ReadUInt(cp + flagsOff) >> 11) & 1) ? true : false
+        sp := UiTree_GetScreenPos(reader, cp)
+        out .= Format("  [{}]  '{}'  {:.0f}x{:.0f}  {}  uiPos({:.0f},{:.0f})`n"
+            , idx, sid, w, h, (vis ? "[visible]" : "[hidden]"), sp["x"], sp["y"])
+    }
+    return (out != "" ? out : "  (none)`n")
+}
+
 ; Scans the GameUi root STRUCT (not its children array) for UiElement pointer
 ; FIELDS — this is where PoE2 keeps panel pointers like the inventory / stash /
 ; vendor (à la GameHelper2's RightPanel), which a child-traversal can't reach.
@@ -881,6 +928,7 @@ StashMoverDiagnose()
         out .= "Visible keyword-matched StringIds (deep):`n" _SmDiagVisibleMatches(g_reader, gameUi) "`n"
         out .= "All visible named StringIds (depth <= 3):`n" _SmDiagShallowVisible(g_reader, gameUi, 3) "`n"
         out .= "Panel POINTER FIELDS on the root struct (inventory/stash live here):`n" _SmDiagPanelPointers(g_reader, gameUi) "`n"
+        out .= "ALL direct GameUi children by index (stash = Gordin's [36]; find inventory here):`n" _SmDiagAllChildren(g_reader, gameUi) "`n"
 
         ctx := _SmDetectContext()
         out .= "Currently detected kind:  " ctx["kind"]
