@@ -25,6 +25,7 @@ class OverlayManager
         this.Register(FocusOverlay())
         this.Register(LootMapStripOverlay())
         this.Register(LootCompactBarOverlay())
+        this.Register(LootValueOverlay())
         this.Register(DebugOverlay())
     }
 

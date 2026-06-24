@@ -4917,6 +4917,7 @@
               <button class="cfg-btn" onclick="ahkCall('WatchNpc')">👁 Add NPC Watch</button>
               <button class="cfg-btn" onclick="ahkCall('ToggleTreePane')">🌲 Toggle Tree Pane</button>
               <button class="cfg-btn" onclick="ahkCall('DumpEntities')">💾 Dump Entities</button>
+              <button class="cfg-btn" onclick="ahkCall('LootValueDiag')" title="RE test for the value-aware loot radar: open over ground loot (ideally a unique) to check if drops can be priced">🔍 Loot value diagnose</button>
             </div>
           </details>
         </div>
@@ -5388,6 +5389,91 @@
                     onchange="ahkCall('TogglePanelDetection')" checked><span class="toggle-slider"></span></label>
               </div>
               <div class="cfg-help">Pauses click-to-walk / skill firing while a game UI panel is open (inventory, stash, vendor). Turn off only if you're debugging panel discovery.</div>
+            </div>
+          </details>
+        </div>
+
+        <div class="cfg-section">
+          <details id="det-lootvalue" ontoggle="syncCfgSections()">
+            <summary>
+              <div class="cfg-header">💰 Loot Value Radar</div>
+            </summary>
+            <div class="cfg-subsection">
+              <div class="cfg-help">
+                Prices ground drops live via poe.ninja (the same data the Loot Tracker uses) and
+                warns when something valuable lands. Currency / fragments / runes / essences price
+                on any league; uniques only where poe.ninja has data (Standard has none, so uniques
+                stay untagged there). Enable Loot pricing in the Loot tab first, or values stay 0.
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Enable loot value radar</span>
+                <label class="toggle"><input type="checkbox" id="lrv-enabled"
+                    onchange="ahkCall('SetLootRadarValue','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Banner on valuable drop</span>
+                <label class="toggle"><input type="checkbox" id="lrv-alertEnabled"
+                    onchange="ahkCall('SetLootRadarValue','alertEnabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-label">Min. value to track (ex)</span>
+                <span class="hk-num"><input type="number" id="lrv-minLabelEx" min="0" max="100000" step="0.5" onchange="ahkCall('SetLootRadarValue','minLabelEx',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-label">Alert threshold (ex)</span>
+                <span class="hk-num"><input type="number" id="lrv-alertEx" min="0" max="100000" step="1" onchange="ahkCall('SetLootRadarValue','alertEx',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Show "valuable nearby" list</span>
+                <label class="toggle"><input type="checkbox" id="lrv-showList"
+                    onchange="ahkCall('SetLootRadarValue','showList', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-label">Max rows in the list</span>
+                <span class="hk-num"><input type="number" id="lrv-listMax" min="1" max="20" step="1" onchange="ahkCall('SetLootRadarValue','listMax',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+              </div>
+              <div class="cfg-help">
+                Valued ground drops are labelled on the radar with the matching currency orb
+                (Exalted / Divine) instead of a "1ex / 1div" text, and the "valuable nearby" list
+                shows the top drops in range on the left of the screen. Use "🔍 Loot value diagnose"
+                (General → Actions) to check what nearby ground loot is being priced. Currency /
+                fragments price on any league; uniques only where poe.ninja has data.
+              </div>
+
+              <details class="cfg-subsection" style="margin-top:8px">
+                <summary><div class="cfg-header" style="font-size:13px">🛡️ Unique pricing via the official Trade API (advanced)</div></summary>
+                <div class="cfg-help" style="border-left:2px solid #b58b46;padding-left:8px">
+                  <b>Security note — read first.</b> This fills the unique-price gap poe.ninja leaves on
+                  Standard by querying the <b>official PoE2 trade site inside a logged-in browser
+                  window</b>. It is <b>off by default</b>. The lookups run as same-origin requests in
+                  that window, so your login / cookies (POESESSID, cf_clearance) <b>stay inside the
+                  browser</b> — PoEformance never reads, copies or stores them. You just sign in once.
+                  Note: automated trade access is against GGG's ToS and carries some account risk;
+                  requests are strictly rate-limited, on-demand only, and heavily cached.
+                </div>
+                <div class="cfg-row"><span class="cfg-label">Enable trade-API unique pricing</span>
+                  <label class="toggle"><input type="checkbox" id="lt-trade-enabled"
+                      onchange="ahkCall('SetLootTradePricing','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+                </div>
+                <div class="cfg-row"><span class="cfg-label">League</span>
+                  <input type="text" id="lt-trade-league" class="cfg-input" style="width:160px" placeholder="Standard"
+                      onchange="ahkCall('SetLootTradePricing','league', this.value)">
+                </div>
+                <div class="cfg-row"><span class="cfg-label">Auto-hide window after sign-in</span>
+                  <label class="toggle"><input type="checkbox" id="lt-trade-autohide"
+                      onchange="ahkCall('SetLootTradePricing','autoHide', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+                </div>
+                <div class="cfg-help" style="margin-top:6px">
+                  Click "Open PoE trade session", sign in to pathofexile.com once (and pass any
+                  Cloudflare check). With auto-hide on, the window disappears to the background after
+                  the first successful lookup and keeps pricing silently — it pops back up only if the
+                  status shows "blocked / sign-in needed", so you can sign in again. Use "Hide window"
+                  to tuck it away manually at any time.
+                </div>
+                <div class="cfg-row" style="gap:8px">
+                  <button type="button" class="cfg-btn" id="lt-trade-openbtn" onclick="ahkCall('PoeTradeOpen')">Open PoE trade session</button>
+                  <button type="button" class="cfg-btn" id="lt-trade-hidebtn" onclick="ahkCall('PoeTradeHide')">Hide window</button>
+                  <button type="button" class="cfg-btn" onclick="ahkCall('LootTradePriceNow')">Price queued now</button>
+                </div>
+                <div class="cfg-help" id="lt-trade-status">Session: closed · status: idle</div>
+              </details>
             </div>
           </details>
         </div>
@@ -6993,6 +7079,43 @@
     }
 
     // Stash Mover header settings -> form widgets (skips a field being edited).
+    // Loot Value Radar header settings -> form widgets (skips a field being edited).
+    function lootRadarValueSyncFromHeader(s) {
+      if (!s) return;
+      const chk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = v === true || v === 1 || v === '1' || v === 'true'; };
+      const val = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
+      chk('lrv-enabled', s.enabled);
+      chk('lrv-alertEnabled', s.alertEnabled);
+      val('lrv-minLabelEx', s.minLabelEx);
+      val('lrv-alertEx', s.alertEx);
+      chk('lrv-showList', s.showList);
+      val('lrv-listMax', s.listMax);
+    }
+
+    function lootTradePricingSyncFromHeader(s) {
+      if (!s) return;
+      const chk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = v === true || v === 1 || v === '1' || v === 'true'; };
+      const val = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
+      chk('lt-trade-enabled', s.enabled);
+      chk('lt-trade-autohide', s.autoHide);
+      val('lt-trade-league', s.league || '');
+      const ob = document.getElementById('lt-trade-openbtn');
+      if (ob) ob.textContent = s.sessionHidden ? 'Show window' : 'Open PoE trade session';
+      const hb = document.getElementById('lt-trade-hidebtn');
+      if (hb) hb.disabled = !(s.sessionOpen && !s.sessionHidden);
+      const st = document.getElementById('lt-trade-status');
+      if (st) {
+        const parts = [];
+        parts.push('Session: ' + (s.sessionOpen ? (s.sessionHidden ? 'hidden (running)' : (s.sessionReady ? 'open (ready)' : 'open (sign in)')) : 'closed'));
+        parts.push('status: ' + (s.status || 'idle'));
+        if (typeof s.cacheCount === 'number') parts.push(s.cacheCount + ' cached');
+        if (s.queueCount) parts.push(s.queueCount + ' queued');
+        let txt = parts.join(' · ');
+        if (s.error) txt += '  —  ' + s.error;
+        st.textContent = txt;
+      }
+    }
+
     // Per-side ignore sets (mirrors the AHK maps). Each is an array of {path,name}.
     let _smIgnore = { stash: [], sell: [] };
     function stashMoverSyncFromHeader(s) {
@@ -9006,6 +9129,8 @@
       if (d.alerts !== undefined) applyAlertsFromHeader(d.alerts);
       if (d.loot !== undefined) lootSyncFromHeader(d.loot);
       if (d.stashMover !== undefined) stashMoverSyncFromHeader(d.stashMover);
+      if (d.lootRadarValue !== undefined) lootRadarValueSyncFromHeader(d.lootRadarValue);
+      if (d.lootTradePricing !== undefined) lootTradePricingSyncFromHeader(d.lootTradePricing);
 
       // Version tags
       const verApp = document.getElementById('ver-app');
@@ -11095,7 +11220,7 @@
     // ═══════════════════════════════════════════════════════════════════
     //  CONFIG HELPERS
     // ═══════════════════════════════════════════════════════════════════
-    const _cfgSectionIds = ['status', 'overview', 'toggles', 'integrations', 'autoflask', 'autopilot', 'stashmover', 'rangecircles', 'radar', 'maphack', 'blacklist', 'actions', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
+    const _cfgSectionIds = ['status', 'overview', 'toggles', 'integrations', 'autoflask', 'autopilot', 'stashmover', 'rangecircles', 'radar', 'lootvalue', 'maphack', 'blacklist', 'actions', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
     let _cfgSectionsGuard = 0;
     let _cfgSectionsLoaded = false;
 

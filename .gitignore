@@ -40,6 +40,13 @@ sessions/
 data/loot_prices.tsv
 data/loot_prices.tsv.tmp
 
+# Trade-API unique pricing — WebView2 login profile (holds the session cookies) + price cache
+# (NEVER commit). The whole config/ dir is user-local: wv2_poe/ is the trade-session browser
+# profile where POESESSID / cf_clearance live; they never leave the browser.
+config/
+data/trade_prices.tsv
+data/trade_prices.tsv.tmp
+
 # Dev notes (not for repo)
 NEXT_STEPS.md
 QUICKSTART.md

@@ -300,6 +300,14 @@ class GdiOverlayBase
         DllCall("TextOutW", "Ptr", this.memDC, "Int", sx, "Int", sy, "Str", text, "Int", StrLen(text))
     }
 
+    ; Blits a cached overlay icon (see OverlayImage.ahk) onto the back-buffer, scaled to
+    ; w x h at x,y (source-over alpha). Returns true when the icon was drawn, false when
+    ; GDI+/the asset is unavailable so the caller can fall back to a text label.
+    _DrawIcon(key, x, y, w, h)
+    {
+        return DrawOverlayIcon(this.memDC, key, x, y, w, h)
+    }
+
     ; Measures text extent (px) for a font handle without needing the back-buffer.
     ; Returns Map("w", cx, "h", cy).
     _MeasureText(font, text)

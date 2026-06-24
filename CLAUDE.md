@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.27`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.35`.
 
 ## Language
 
@@ -483,6 +483,106 @@ rectangle from the UI tree.
 - Verify real alert matches; banner position/size; WAV playback; `FlashWindowEx` struct; the
   `currentAreaHash` zone-change signal; group colors on radar dots.
 - Optional deferred refactor: migrate **PlayerHUD**, then **RadarOverlay**, onto `GdiOverlayBase`.
+
+## Value-aware loot radar (WIP) — `ahk/LootRadarValue.ahk`
+
+Goal: price GROUND loot via the existing poe.ninja layer and surface it — a value label
+on each ground-item radar dot, a "valuable nearby" ranked overlay list, and a
+banner/sound alert above a threshold. Scope: Currency, Uniques, Waystones,
+Fragments/Tablets, Div-Cards (rares stay unpriced, like the LootTracker breakdown).
+
+- **RE: SOLVED (in-game 2026-06-23).** A ground drop is a `Metadata/MiscellaneousObjects/WorldItem`
+  WRAPPER entity (rarity 0, no art) whose `WorldItem` component points at **+0x28** to the inner
+  ITEM entity (path/rarity/Mods/RenderItem). Chain: wrapper → WorldItem comp → +0x28 → inner.
+  `_LrvResolveInnerItem()` finds the comp via `ReadEntityComponentLookupBasic` and tries 0x28
+  first (then a 0x08..0xA0 sweep fallback). The inner item then prices via the existing reads
+  (`ReadItemRarity` + `ReadItemArtPath` → `_LtArtIdFromDds` → `_LtBuildItemKey` → `_LtTryPriceItem`).
+- **poe.ninja coverage caveat:** unique prices only exist on a live temp league. On **Standard**
+  poe.ninja returns empty `lines` for unique item types (valid types, no 404 — just no data), so
+  uniques stay untagged on Standard; currency/fragments/runes/essences DO price. The fetch
+  (`tools/poe_ninja_prices.ps1`) now also requests UniqueWeapons/Armours/Accessories/Flasks.
+- **Step 1 (shipped):** the engine + config + alert. `LoadLootRadarValue()` / `[LootRadarValue]`
+  (`enabled`, `alertEnabled`, `minLabelEx`, `alertEx`). `TryLootRadarValue(radarSnap)` (in
+  `UpdateRadarFast` after `TryLootTrackerTick`, throttled ~4 Hz, per-area reset via
+  `currentAreaHash`) prices ground drops × stack count, caches `g_lrvAnnot[wrapperAddr]` and a
+  sorted `g_lrvNearby`, and fires a one-shot `NotifyOverlay.SetBanner` per area when a drop ≥
+  `alertEx`. `LrvLabelFor(addr)` exposes the value label for the radar dot. Bridge
+  `SetLootRadarValue`; header `lootRadarValue`; UI section Config → Overlay (`det-lootvalue`).
+  `LootValueDiagnose()` (Actions button) stays as the verification aid.
+- **Currency-image value labels (shipped 0.45.13.32):** the value is NEVER shown as a
+  "1ex / 1div" text — it is the matching currency ORB image. `LrvValueParts(ex)` splits a
+  value into `Map("icon","exalted"|"divine","num","12")` (Divine once `g_ltDivToEx`>0 and
+  `ex≥rate`, else Exalted; `_LrvFmtNum` keeps it short). `LrvIconPartsFor(addr)` is the
+  per-dot accessor (same gating as `LrvLabelFor`). Orb PNGs ship in `img/currency/`
+  (`exalted.png`, `divine.png`, `chaos.png`; 64×64 RGBA, fetched from poecdn) and are
+  committed source data.
+  - **`ahk/OverlayImage.ahk` (new):** tiny persistent GDI+ image layer — `LoadOverlayIcons()`
+    starts GDI+ once + loads the PNGs into `g_oiBitmaps`; `DrawOverlayIcon(hdc,key,x,y,w,h)`
+    + `DrawOverlayIconsBatch(hdc,batch)` blit (source-over alpha) onto any GDI memDC;
+    `OverlayIconReady(key)` gates the image-vs-text choice; `StopOverlayIcons()` on exit.
+    Degrades to no-op (text fallback) if GDI+/an asset is missing. Wired in
+    `InGameStateMonitor.ahk` (`#Include` first in the overlay block, `LoadOverlayIcons()`
+    before `LoadOverlaySystem()`, `OnExit StopOverlayIcons`).
+  - **`GdiOverlayBase.ahk`:** new `_DrawIcon(key,x,y,w,h)` → `DrawOverlayIcon(this.memDC,…)`.
+- **Step 2 (shipped 0.45.13.32) — `ahk/LootValueOverlay.ahk`:** `LootValueOverlay extends
+  GdiOverlayBase`, registered in `OverlayManager`. Reads the sorted `g_lrvNearby`, draws a
+  ranked "valuable nearby" list (title + up to `g_lrvListMax` rows) anchored left/mid-screen;
+  each row = orb image + amount + item name. Gated on `g_lrvEnabled && g_lrvShowList`,
+  foreground, and hidden while a big panel is open. New config `g_lrvShowList` (default on) +
+  `g_lrvListMax` (default 8), persisted in `[LootRadarValue]`, in the header + UI.
+- **Step 3 (shipped 0.45.13.32) — `RadarOverlay.ahk`:** ground `WorldItem` wrappers (otherwise
+  filtered out of the entity draw) are intercepted right after projection; a valued drop
+  (`LrvIconPartsFor(addr)`) gets a gold marker dot + orb image + amount via a new `_iconBatch`
+  (queued by `_DrawIconBatched`, flushed in `_FlushBatch` between dots and text, one shared
+  GDI+ Graphics). Text fallback when the orb icons are unavailable.
+- **Verify in-game (steps 2&3):** orb images render on the radar dots + the "valuable
+  nearby" list, scaling/anchor look right, list hides behind big panels.
+
+## Trade-API unique pricing — Tier 2, in-browser (shipped 0.45.13.34)
+
+Official PoE2 trade-API (`trade2`) price layer for UNIQUES, to fill the gap poe.ninja leaves
+on Standard (no unique prices). Docks into the value-aware loot radar: when poe.ninja can't
+price a dropped unique, `_LrvPriceInner` resolves its English name via the reader
+(`ReadUniqueIviId` → `GetUniqueNameByIvi`, from `data/unique_ivi_name_map.tsv` — works on a
+localized client), checks the trade cache, and otherwise enqueues it for background pricing.
+
+- **RE confirmed (2026-06-24):** name bridge already in `PoE2InventoryReader` (`ReadUniqueIviId`
+  reads the ItemVisualIdentity Id at Base+0x30; `GetUniqueNameByIvi` → English name). Trade
+  contract: `POST /api/trade2/search/poe2/<League>` then `GET /api/trade2/fetch/<ids>?query=<id>&realm=poe2`.
+  The endpoints are **Cloudflare-gated** — a POESESSID alone usually 403s; `cf_clearance` + the
+  matching browser User-Agent + (often) the browser's TLS fingerprint are also required. A
+  separate HTTP client (PowerShell/.NET) therefore can't reliably replay the cookies.
+- **Transport = Tier 2 = `ahk/PoeTradeSession.ahk` (chosen for reliability + security):** a
+  dedicated WebView2 window (`WebViewGui`, own gitignored profile `config/wv2_poe`) navigated to
+  the PoE2 trade site. The search/fetch run as **same-origin `fetch()` INSIDE that logged-in
+  browser** via an injected helper (`AddScriptToExecuteOnDocumentCreatedAsync`), so the request
+  carries the browser's own cookies/UA/TLS → Cloudflare is satisfied and **no secret ever leaves
+  the browser** (we read/store/log nothing; the session lives only in the WebView2 profile).
+  AHK↔page bridge: `PostWebMessageAsJson({cmd:"tradeQuery",id,name,league})` →
+  helper posts back `{id,ok,status,listings:[{amount,currency}]}` → `_PoeTradeOnMessage` →
+  `_LtTradeOnResult`. The window opens on demand (user signs in once; `tradeHelperReady` resumes
+  the drain). NOTE: the `Cookie`/`CookieManager` route was available but deliberately NOT used —
+  Tier 2 keeps the secrets in the browser entirely.
+- **`ahk/LootTradePricing.ahk`** owns config + queue + cache + currency conversion + rate limit:
+  `[LootTradePricing]` (`enabled`,`league`,`ttlHours`=24/`negTtlHours`=12). `LtTradeEnqueue` (only
+  uniques poe.ninja missed, dedup, cap `g_ltTradeMaxQueue`), `_LtTradeDrain` (one query in flight,
+  ≥3.5 s spacing `g_ltTradeMinIntervalMs`, 5-min `g_ltTradeCooldownMs` after a blocked/error
+  result), `_LtTradeOnResult` (401/403/0 → `blocked`+raise window+requeue; else convert+cache).
+  Conversion `_LtTradeListingToEx` uses the poe.ninja rates already loaded (`g_ltDivToEx` +
+  `g_ltPricesByName`); `_LtTradeRobustPrice` = median of the cheapest ≤8 listings. Positive AND
+  negative results cached (`data/trade_prices.tsv`, gitignored) so worthless uniques aren't
+  re-queried. `LtTradePriceForName` is the fresh-cache lookup `_LrvPriceInner` reads.
+- **Wiring:** `LoadPoeTradeSession()` + `LoadLootTradePricing()` at startup. Bridge
+  `SetLootTradePricing` / `PoeTradeOpen` / `PoeTradeClose` / `LootTradePriceNow`; header
+  `lootTradePricing` (`enabled,league,ttlHours,negTtlHours,sessionOpen,sessionReady,status,error,
+  cacheCount,queueCount` — no secrets exist to expose); UI: advanced `<details>` in `det-lootvalue`
+  (security note, enable, league, "Open PoE trade session" + "Price queued now", status). The old
+  Tier-1 PowerShell child + secret-file inputs were removed.
+- **Pending (needs the game + a real account; unverifiable from this env — Cloudflare blocks the
+  egress IP):** that a second `WebViewGui` opens with its own profile, the user can sign in, the
+  injected helper's same-origin fetch passes Cloudflare, the `{id,ok,listings}` round-trip works,
+  the response shape (`result` / `listing.price.{amount,currency}`) matches, currency ids convert,
+  and the rate-limit/cooldown behave.
 
 ## Reference
 

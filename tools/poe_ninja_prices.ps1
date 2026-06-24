@@ -41,7 +41,14 @@ $ExchangeTypes = @(
     'SoulCores', 'Idols', 'Runes', 'Ritual', 'Expedition', 'Delirium', 'Breach', 'Verisium'
 )
 # stash/current/item/overview — individually-listed gear (uniques, tablets).
-$ItemTypes = @('UniqueJewels', 'UniqueCharms', 'UniqueTablets', 'PrecursorTablets')
+# NOTE: a wrong/unknown type slug just lands in the per-type catch below (recorded in
+# the #meta errors field) and is skipped — so it's safe to list candidates. The big
+# unique classes (weapons/armours/accessories/flasks) are what make dropped uniques
+# like rings/amulets/staves price; jewels/charms/tablets were the only ones before.
+$ItemTypes = @(
+    'UniqueWeapons', 'UniqueArmours', 'UniqueAccessories', 'UniqueFlasks',
+    'UniqueJewels', 'UniqueCharms', 'UniqueRelics', 'UniqueTablets', 'PrecursorTablets'
+)
 
 function Normalize([string]$s) {
     if (-not $s) { return '' }
