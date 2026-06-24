@@ -3446,11 +3446,20 @@
       padding: 4px 0 0 0
     }
 
-    /* Loot Value Radar: even spacing between the grouped subsections, and a clear
-       nesting cue (indent + left rule) on the items inside an expanded group. */
-    #det-lootvalue details.cfg-subsection {
+    /* Nested config groups (AutoPilot, Radar, Loot Value Radar, …): uniform
+       spacing between the grouped subsections so every chapter's inner groups
+       line up the same way. */
+    .cfg-section details.cfg-subsection {
       margin-top: 6px
     }
+    /* Body wrapper inside a nested group whose rows aren't direct children
+       (e.g. AutoPilot's slider-heavy groups) — matches the subsection spacing. */
+    .cfg-subsection-body {
+      margin-top: 4px;
+      padding: 6px 0 4px 4px
+    }
+    /* Loot Value Radar keeps the extra nesting cue (indent + left rule) on the
+       items inside an expanded group. */
     #det-lootvalue details.cfg-subsection > .cfg-row,
     #det-lootvalue details.cfg-subsection > .cfg-help {
       margin-left: 14px;
@@ -5196,11 +5205,11 @@
                    doing right now. Loot status + cache count live here
                    too because they're a live readout, not a setting.
                    ════════════════════════════════════════════════════ -->
-              <details open style="margin-top:8px">
-                <summary style="cursor:pointer;padding:4px 0">
+              <details class="cfg-subsection" open>
+                <summary>
                   <div class="cfg-header">📊 Live Status</div>
                 </summary>
-                <div style="margin-top:4px;padding:6px 0 4px 4px">
+                <div class="cfg-subsection-body">
                   <div class="cfg-row"><span class="cfg-label">State</span><span id="cfg-autopilot-state"
                       class="cfg-status idle">idle</span></div>
                   <div class="cfg-row"><span class="cfg-label">Combat</span><span id="cfg-combat-state"
@@ -5219,11 +5228,11 @@
                    ⚔ COMBAT — engage / disengage ranges, GCD, world-to-
                    screen scale, plus the dynamic skill-slot list.
                    ════════════════════════════════════════════════════ -->
-              <details ontoggle="if(this.open) requestAnimationFrame(_sbInitAll)" style="margin-top:8px">
-                <summary style="cursor:pointer;padding:4px 0">
+              <details class="cfg-subsection" ontoggle="if(this.open) requestAnimationFrame(_sbInitAll)">
+                <summary>
                   <div class="cfg-header">⚔ Combat</div>
                 </summary>
-                <div style="margin-top:4px;padding:6px 0 4px 4px">
+                <div class="cfg-subsection-body">
                   <div class="cfg-slider-pair">
                     <div class="cfg-slider-item">
                       <span class="cfg-label">Engage</span>
@@ -5269,11 +5278,11 @@
               <!-- ════════════════════════════════════════════════════
                    🧭 EXPLORATION — target coverage %.
                    ════════════════════════════════════════════════════ -->
-              <details ontoggle="if(this.open) requestAnimationFrame(_sbInitAll)" style="margin-top:8px">
-                <summary style="cursor:pointer;padding:4px 0">
+              <details class="cfg-subsection" ontoggle="if(this.open) requestAnimationFrame(_sbInitAll)">
+                <summary>
                   <div class="cfg-header">🧭 Exploration</div>
                 </summary>
-                <div style="margin-top:4px;padding:6px 0 4px 4px">
+                <div class="cfg-subsection-body">
                   <div class="cfg-slider-row">
                     <span class="cfg-label">Explore Ziel %</span>
                     <div class="slider-wrap">
@@ -5295,11 +5304,11 @@
                    Live Status above; this sub-section is only for
                    *configuring* the pickup behaviour.
                    ════════════════════════════════════════════════════ -->
-              <details style="margin-top:8px">
-                <summary style="cursor:pointer;padding:4px 0">
+              <details class="cfg-subsection">
+                <summary>
                   <div class="cfg-header">💎 Loot Pickup</div>
                 </summary>
-                <div style="margin-top:4px;padding:6px 0 4px 4px">
+                <div class="cfg-subsection-body">
                   <div class="cfg-help">
                     Picks up ground items matching the selected rarities. Cached items persist
                     across ticks — drops noticed during combat are collected once the area is safe.
@@ -5391,11 +5400,11 @@
                    pill row; each monster category is now a standard toggle row.
                    Keeps id="radar-filters" (opacity dim when radar off) and the
                    rf-* ids / setRadarFilter handlers so header sync is unchanged. -->
-              <details style="margin-top:6px">
-                <summary style="cursor:pointer;padding:4px 0">
+              <details class="cfg-subsection">
+                <summary>
                   <div class="cfg-header">Entity Markers</div>
                 </summary>
-                <div style="margin-top:4px;padding:6px 0 4px 4px">
+                <div class="cfg-subsection-body">
                   <div class="cfg-help">Which monster categories the radar draws on the minimap and on-screen overlay. Off = invisible to the radar, even if the entity is in range.</div>
                   <div id="radar-filters">
                     <div class="cfg-row"><span class="cfg-label">Normal</span>
