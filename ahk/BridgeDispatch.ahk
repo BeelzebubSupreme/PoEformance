@@ -175,14 +175,12 @@ _DispatchBridgeCall(method, args)
                 _LtTradeApplySetting(args[1], args[2])
             SaveLootTradePricing()
             SetTimer(PushHeaderToWebView, -50)
-        case "SetPoeTradeAuth":
-            ; Write the gitignored session file. args[1]=POESESSID, args[2]=cf_clearance,
-            ; args[3]=User-Agent. The secrets are NEVER logged or pushed back to the UI.
-            SetPoeTradeAuth(args.Has(1) ? args[1] : "", args.Has(2) ? args[2] : "", args.Has(3) ? args[3] : "")
-            SetTimer(PushHeaderToWebView, -50)
-        case "ClearPoeTradeAuth":
-            ClearPoeTradeAuth()
-            SetTimer(PushHeaderToWebView, -50)
+        case "PoeTradeOpen":
+            ; Open / focus the WebView2 trade-session window so the user signs in once.
+            ; The login + cookies stay inside that browser; nothing is read out or stored by us.
+            SetTimer(LtTradeOpenSession, -1)
+        case "PoeTradeClose":
+            SetTimer(PoeTradeSessionClose, -1)
         case "LootTradePriceNow":
             ; Manual trigger: drain the pending trade-pricing queue immediately.
             SetTimer(_LtTradeDrain, -1)

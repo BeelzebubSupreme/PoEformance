@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.33`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.34`.
 
 ## Language
 
@@ -538,7 +538,7 @@ Fragments/Tablets, Div-Cards (rares stay unpriced, like the LootTracker breakdow
 - **Verify in-game (steps 2&3):** orb images render on the radar dots + the "valuable
   nearby" list, scaling/anchor look right, list hides behind big panels.
 
-## Trade-API unique pricing (shipped 0.45.13.33) — `ahk/LootTradePricing.ahk`
+## Trade-API unique pricing — Tier 2, in-browser (shipped 0.45.13.34)
 
 Official PoE2 trade-API (`trade2`) price layer for UNIQUES, to fill the gap poe.ninja leaves
 on Standard (no unique prices). Docks into the value-aware loot radar: when poe.ninja can't
@@ -546,38 +546,43 @@ price a dropped unique, `_LrvPriceInner` resolves its English name via the reade
 (`ReadUniqueIviId` → `GetUniqueNameByIvi`, from `data/unique_ivi_name_map.tsv` — works on a
 localized client), checks the trade cache, and otherwise enqueues it for background pricing.
 
-- **RE confirmed (2026-06-24):** the name bridge already exists in `PoE2InventoryReader`
-  (`ReadUniqueIviId` reads the ItemVisualIdentity Id at Base+0x30; `GetUniqueNameByIvi` maps
-  it to the English unique name). The trade contract: `POST /api/trade2/search/poe2/<League>`
-  then `GET /api/trade2/fetch/<ids>?query=<id>&realm=poe2`. The endpoints are **Cloudflare-
-  gated** — a POESESSID alone usually 403s (HTML body); a `cf_clearance` cookie + the matching
-  browser User-Agent are also required and expire (the env's datacenter IP is blocked outright,
-  so this could only be RE'd via docs + a live tool, not from here).
-- **SECURITY-FIRST (`Sicherheit über Funktionalität`):** OFF by default. All secrets
-  (POESESSID / cf_clearance / User-Agent) live in ONE gitignored file
-  (`config/poe_trade_auth.txt`; the whole `config/` dir is gitignored). The module passes only
-  the file PATH to the child, never logs/echoes the values, and the header exposes only
-  `hasAuth`. Strictly rate-limited in the child (≥3.5 s/call, 429/Retry-After), stops + reports
-  `blocked` on 403/Cloudflare (no hammering) with a 5-min drain cooldown.
-- **On-demand + heavily cached:** only uniques poe.ninja missed are queued; positive AND
-  negative results cached (`data/trade_prices.tsv`, gitignored; TTL `ttlHours`=24 /
-  `negTtlHours`=12) so worthless uniques aren't re-queried. Queue capped (`g_ltTradeMaxQueue`).
-- **`tools/poe2_trade_prices.ps1` (new):** PowerShell child (like the poe.ninja one). Reads
-  secrets from `-AuthFile`, fetches poe.ninja's public PoE2 currency exchange for the
-  currency→Exalted rates, does the 2-step trade query per name (cap 6/run, 10 listings each),
-  converts listings to Exalted (skips unknown currencies), takes the median of the cheapest
-  few, writes a small delta TSV the AHK side merges. Never prints the secrets.
-- **Wiring:** `LoadLootTradePricing()` (seeds globals, loads cache, detects saved session);
-  `[LootTradePricing]` (`enabled`,`league`,`ttlHours`,`negTtlHours`). Bridge
-  `SetLootTradePricing` / `SetPoeTradeAuth` / `ClearPoeTradeAuth` / `LootTradePriceNow`; header
-  `lootTradePricing` (`enabled,league,hasAuth,status,error,cacheCount,queueCount` — never the
-  secrets); UI: an advanced `<details>` inside `det-lootvalue` (security warning, enable, league,
-  masked write-only session inputs that clear after save, status readout).
-- **Pending (needs the game + a real account/IP):** the whole authenticated flow is
-  unverifiable from this env (Cloudflare blocks the egress IP). Verify on the user's machine:
-  the exact request shape is accepted, cf_clearance+UA make it past Cloudflare, the response
-  JSON shape (`result`/`listing.price.{amount,currency}`) matches the parser, currency ids
-  (`exalted`/`divine`/`chaos`/…) map correctly, and rate-limit behaviour is safe.
+- **RE confirmed (2026-06-24):** name bridge already in `PoE2InventoryReader` (`ReadUniqueIviId`
+  reads the ItemVisualIdentity Id at Base+0x30; `GetUniqueNameByIvi` → English name). Trade
+  contract: `POST /api/trade2/search/poe2/<League>` then `GET /api/trade2/fetch/<ids>?query=<id>&realm=poe2`.
+  The endpoints are **Cloudflare-gated** — a POESESSID alone usually 403s; `cf_clearance` + the
+  matching browser User-Agent + (often) the browser's TLS fingerprint are also required. A
+  separate HTTP client (PowerShell/.NET) therefore can't reliably replay the cookies.
+- **Transport = Tier 2 = `ahk/PoeTradeSession.ahk` (chosen for reliability + security):** a
+  dedicated WebView2 window (`WebViewGui`, own gitignored profile `config/wv2_poe`) navigated to
+  the PoE2 trade site. The search/fetch run as **same-origin `fetch()` INSIDE that logged-in
+  browser** via an injected helper (`AddScriptToExecuteOnDocumentCreatedAsync`), so the request
+  carries the browser's own cookies/UA/TLS → Cloudflare is satisfied and **no secret ever leaves
+  the browser** (we read/store/log nothing; the session lives only in the WebView2 profile).
+  AHK↔page bridge: `PostWebMessageAsJson({cmd:"tradeQuery",id,name,league})` →
+  helper posts back `{id,ok,status,listings:[{amount,currency}]}` → `_PoeTradeOnMessage` →
+  `_LtTradeOnResult`. The window opens on demand (user signs in once; `tradeHelperReady` resumes
+  the drain). NOTE: the `Cookie`/`CookieManager` route was available but deliberately NOT used —
+  Tier 2 keeps the secrets in the browser entirely.
+- **`ahk/LootTradePricing.ahk`** owns config + queue + cache + currency conversion + rate limit:
+  `[LootTradePricing]` (`enabled`,`league`,`ttlHours`=24/`negTtlHours`=12). `LtTradeEnqueue` (only
+  uniques poe.ninja missed, dedup, cap `g_ltTradeMaxQueue`), `_LtTradeDrain` (one query in flight,
+  ≥3.5 s spacing `g_ltTradeMinIntervalMs`, 5-min `g_ltTradeCooldownMs` after a blocked/error
+  result), `_LtTradeOnResult` (401/403/0 → `blocked`+raise window+requeue; else convert+cache).
+  Conversion `_LtTradeListingToEx` uses the poe.ninja rates already loaded (`g_ltDivToEx` +
+  `g_ltPricesByName`); `_LtTradeRobustPrice` = median of the cheapest ≤8 listings. Positive AND
+  negative results cached (`data/trade_prices.tsv`, gitignored) so worthless uniques aren't
+  re-queried. `LtTradePriceForName` is the fresh-cache lookup `_LrvPriceInner` reads.
+- **Wiring:** `LoadPoeTradeSession()` + `LoadLootTradePricing()` at startup. Bridge
+  `SetLootTradePricing` / `PoeTradeOpen` / `PoeTradeClose` / `LootTradePriceNow`; header
+  `lootTradePricing` (`enabled,league,ttlHours,negTtlHours,sessionOpen,sessionReady,status,error,
+  cacheCount,queueCount` — no secrets exist to expose); UI: advanced `<details>` in `det-lootvalue`
+  (security note, enable, league, "Open PoE trade session" + "Price queued now", status). The old
+  Tier-1 PowerShell child + secret-file inputs were removed.
+- **Pending (needs the game + a real account; unverifiable from this env — Cloudflare blocks the
+  egress IP):** that a second `WebViewGui` opens with its own profile, the user can sign in, the
+  injected helper's same-origin fetch passes Cloudflare, the `{id,ok,listings}` round-trip works,
+  the response shape (`result` / `listing.price.{amount,currency}`) matches, currency ids convert,
+  and the rate-limit/cooldown behave.
 
 ## Reference
 

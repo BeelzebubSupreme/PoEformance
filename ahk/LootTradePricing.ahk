@@ -2,52 +2,45 @@
 ; Official PoE2 trade-API (trade2) price layer for UNIQUE items — fills the gap poe.ninja
 ; leaves on Standard (no unique prices there). Docks into the value-aware loot radar: when
 ; poe.ninja cannot price a dropped unique, its English name (resolved from the item's
-; ItemVisualIdentity via the reader) is queued and priced through the trade API, cached for
-; a long TTL, and read back like any other price.
+; ItemVisualIdentity via the reader) is queued, priced through the trade API, cached for a
+; long TTL, and read back like any other price.
 ;
-; SECURITY-FIRST (the user explicitly wants security over functionality):
-;   * OFF by default. Nothing hits GGG until the user enables it AND saves a session.
-;   * All secrets (POESESSID, cf_clearance, User-Agent) live in ONE gitignored file
-;     (config\poe_trade_auth.txt). This module only ever passes the file PATH to the child
-;     and never logs / echoes / pushes the secret values (the header exposes only hasAuth).
-;   * The network + auth happen in a PowerShell child (tools\poe2_trade_prices.ps1) so the
-;     radar hot path is never blocked, with a hard min interval between calls, 429/Retry-After
-;     handling, and a "blocked" status + cooldown on Cloudflare/auth failures (no hammering).
-;   * On-demand + heavily cached: only uniques poe.ninja missed are queued; positive AND
-;     negative results are cached so worthless uniques are not re-queried.
+; TRANSPORT = Tier 2 (PoeTradeSession.ahk): the actual trade search/fetch run as same-origin
+; fetch() calls INSIDE a logged-in WebView2 on pathofexile.com. So the request uses the
+; browser's own cookies (POESESSID / cf_clearance), User-Agent and TLS fingerprint — Cloudflare
+; is satisfied and NO secret ever leaves the browser (we store / read / log nothing). This
+; module only owns the config, the on-demand queue, the long-TTL cache, currency conversion to
+; Exalted, and the rate limiting.
 ;
-; Globals are seeded in LoadLootTradePricing() (NOT via top-level initializers — see the
-; AHK v2 module-init gotcha in CLAUDE.md). Included by InGameStateMonitor.ahk.
+; SECURITY-FIRST: OFF by default. Nothing happens until enabled AND the user opens + signs into
+; the trade session window once (the session lives only in the gitignored WebView2 profile).
+;
+; Globals are seeded in LoadLootTradePricing() (NOT via top-level initializers — AHK v2
+; module-init gotcha; this file is #Include'd at the bottom). Included by InGameStateMonitor.
 
 ; ── Init ───────────────────────────────────────────────────────────────────────
-; Seeds all globals (defaults first, unconditionally), loads the on-disk cache, and detects
-; whether a saved session exists. Called once at startup before the main script's return.
-; NOTE: this module is #Include'd at the BOTTOM of the main script, so top-level global
-; initializers would NOT run (AHK v2 init gotcha) — every global is seeded HERE instead.
 LoadLootTradePricing()
 {
     ; Tunables
-    global g_ltTradeMaxQueue := 40       ; cap pending names (avoid runaway enqueue)
-    global g_ltTradeCooldownMs := 300000 ; pause draining for 5 min after a blocked/error run
+    global g_ltTradeMaxQueue := 40        ; cap pending names (avoid runaway enqueue)
+    global g_ltTradeCooldownMs := 300000  ; pause draining for 5 min after a blocked/error result
+    global g_ltTradeMinIntervalMs := 3500 ; min spacing between trade queries (rate-limit safety)
 
     global g_ltTradeEnabled := false
     global g_ltTradeLeague := "Standard"
-    global g_ltTradeTtlHours := 24       ; positive-result cache lifetime
-    global g_ltTradeNegTtlHours := 12    ; negative-result (no listings) cache lifetime
+    global g_ltTradeTtlHours := 24        ; positive-result cache lifetime
+    global g_ltTradeNegTtlHours := 12     ; negative-result (no listings) cache lifetime
     global g_ltTradeConfigFile := _ConfigPath()
-    global g_ltTradeAuthFile  := A_ScriptDir "\config\poe_trade_auth.txt"
     global g_ltTradeCacheFile := A_ScriptDir "\data\trade_prices.tsv"
-    global g_ltTradeNamesFile := A_ScriptDir "\config\trade_names.txt"
-    global g_ltTradeOutFile   := A_ScriptDir "\config\trade_out.tsv"
-    global g_ltTradeScript    := A_ScriptDir "\tools\poe2_trade_prices.ps1"
-    ; Runtime (never persisted to INI)
-    global g_ltTradePrices := Map()   ; normName -> Map("ex","epoch","count")
-    global g_ltTradeQueue  := Map()   ; normName -> displayName (pending)
-    global g_ltTradeStatus := "idle"  ; "idle"|"syncing"|"ready"|"blocked"|"error"
+    ; Runtime
+    global g_ltTradePrices := Map()    ; normName -> Map("ex","epoch","count","name")
+    global g_ltTradeQueue  := Map()    ; normName -> displayName (pending)
+    global g_ltTradePendingById := Map()  ; query id -> displayName (in flight)
+    global g_ltTradeStatus := "idle"   ; "idle"|"signin"|"syncing"|"ready"|"blocked"|"error"
     global g_ltTradeError  := ""
-    global g_ltTradeHasAuth := false
-    global g_ltTradeRefreshPid := 0
-    global g_ltTradeStartTick := 0
+    global g_ltTradeBusy := false
+    global g_ltTradeSeq := 0
+    global g_ltTradeLastSendTick := 0
     global g_ltTradeCooldownUntil := 0
 
     global g_ltLeague
@@ -63,10 +56,9 @@ LoadLootTradePricing()
     }
     _LtTradeClamp()
     _LtTradeLoadCache()
-    g_ltTradeHasAuth := _LtTradeAuthPresent()
 }
 
-; Persists the trade-pricing settings (never the secrets) to [LootTradePricing].
+; Persists the trade-pricing settings to [LootTradePricing] (no secrets exist to persist).
 SaveLootTradePricing()
 {
     global g_ltTradeEnabled, g_ltTradeLeague, g_ltTradeTtlHours, g_ltTradeNegTtlHours, g_ltTradeConfigFile
@@ -92,7 +84,6 @@ _LtTradeClamp()
     g_ltTradeNegTtlHours := Max(1, Min(720, Integer(g_ltTradeNegTtlHours)))
 }
 
-; Applies one setting from the UI/bridge.
 _LtTradeApplySetting(key, val)
 {
     global g_ltTradeEnabled, g_ltTradeLeague, g_ltTradeTtlHours, g_ltTradeNegTtlHours
@@ -125,17 +116,18 @@ _LtTradeNum(v)
     return 0
 }
 
-; Header JSON — exposes status + whether a session is saved, but NEVER the secret values.
+; Header JSON — status + whether the session window is open. No secrets exist to expose.
 BuildLootTradePricingHeaderJson()
 {
     global g_ltTradeEnabled, g_ltTradeLeague, g_ltTradeTtlHours, g_ltTradeNegTtlHours
-    global g_ltTradeHasAuth, g_ltTradeStatus, g_ltTradeError, g_ltTradePrices, g_ltTradeQueue
+    global g_ltTradeStatus, g_ltTradeError, g_ltTradePrices, g_ltTradeQueue
     j := "{"
     j .= '"enabled":'  (g_ltTradeEnabled ? "true" : "false")
     j .= ',"league":'  _LtTradeJStr(g_ltTradeLeague)
     j .= ',"ttlHours":' (g_ltTradeTtlHours + 0)
     j .= ',"negTtlHours":' (g_ltTradeNegTtlHours + 0)
-    j .= ',"hasAuth":' (g_ltTradeHasAuth ? "true" : "false")
+    j .= ',"sessionOpen":' (PoeTradeSessionOpen() ? "true" : "false")
+    j .= ',"sessionReady":' (PoeTradeSessionReady() ? "true" : "false")
     j .= ',"status":'  _LtTradeJStr(g_ltTradeStatus)
     j .= ',"error":'   _LtTradeJStr(g_ltTradeError)
     j .= ',"cacheCount":' (g_ltTradePrices.Count + 0)
@@ -144,7 +136,6 @@ BuildLootTradePricingHeaderJson()
     return j
 }
 
-; Minimal JSON string encoder for header values.
 _LtTradeJStr(s)
 {
     s := s ""
@@ -156,66 +147,16 @@ _LtTradeJStr(s)
     return '"' s '"'
 }
 
-; ── Secret (session) handling ───────────────────────────────────────────────────
-; Writes the gitignored auth file from the UI. The values are written to disk and NEVER
-; logged / echoed / pushed back. Empty fields are simply omitted. Returns nothing.
-SetPoeTradeAuth(poesessid, cfClearance, userAgent)
+; Opens / focuses the trade session window (bridge "PoeTradeOpen"). The user signs in once.
+LtTradeOpenSession()
 {
-    global g_ltTradeAuthFile, g_ltTradeHasAuth
-    sess := Trim(poesessid "")
-    cf   := Trim(cfClearance "")
-    ua   := Trim(userAgent "")
-
-    dir := RegExReplace(g_ltTradeAuthFile, "[\\/][^\\/]+$", "")
-    if (dir != "" && !DirExist(dir))
-        try DirCreate(dir)
-
-    body := "# PoEformance trade auth — DO NOT COMMIT (this folder is gitignored).`n"
-          . "# Refresh CF_CLEARANCE + USER_AGENT from your browser if pricing reports 'blocked'.`n"
-    if (sess != "")
-        body .= "POESESSID=" sess "`n"
-    if (cf != "")
-        body .= "CF_CLEARANCE=" cf "`n"
-    if (ua != "")
-        body .= "USER_AGENT=" ua "`n"
-
-    try {
-        if FileExist(g_ltTradeAuthFile)
-            FileDelete(g_ltTradeAuthFile)
-        FileAppend(body, g_ltTradeAuthFile, "UTF-8")
-    } catch as ex {
-        LogError("SetPoeTradeAuth", ex)   ; ex.Message must never include the secret (it won't)
-    }
-    g_ltTradeHasAuth := _LtTradeAuthPresent()
+    global g_ltTradeLeague, g_ltTradeCooldownUntil
+    g_ltTradeCooldownUntil := 0   ; a manual open clears any block cooldown
+    PoeTradeSessionShow(g_ltTradeLeague)
+    try SetTimer(PushHeaderToWebView, -50)
 }
 
-; Deletes the saved session file.
-ClearPoeTradeAuth()
-{
-    global g_ltTradeAuthFile, g_ltTradeHasAuth
-    try {
-        if FileExist(g_ltTradeAuthFile)
-            FileDelete(g_ltTradeAuthFile)
-    }
-    g_ltTradeHasAuth := false
-}
-
-; True when the auth file exists and contains a POESESSID line. Reads the file but stores
-; nothing — only a boolean leaves this function.
-_LtTradeAuthPresent()
-{
-    global g_ltTradeAuthFile
-    if !FileExist(g_ltTradeAuthFile)
-        return false
-    try {
-        raw := FileRead(g_ltTradeAuthFile, "UTF-8")
-        return (InStr(raw, "POESESSID=") > 0)
-    }
-    return false
-}
-
-; ── Cache ────────────────────────────────────────────────────────────────────────
-; Cache file: tab-separated  <normName>\t<exOrEmpty>\t<epoch>\t<count>\t<displayName>
+; ── Cache (tab-separated: normName \t exOrEmpty \t epoch \t count \t displayName) ─────
 _LtTradeLoadCache()
 {
     global g_ltTradePrices, g_ltTradeCacheFile
@@ -231,20 +172,16 @@ _LtTradeLoadCache()
         if (line = "" || SubStr(line, 1, 1) = "#")
             continue
         c := StrSplit(line, "`t")
-        if (c.Length < 4)
-            continue
-        nk := c[1]
-        if (nk = "")
+        if (c.Length < 4 || c[1] = "")
             continue
         ex    := (c[2] != "" && IsNumber(c[2])) ? c[2] + 0.0 : 0.0
         epoch := (c[3] != "" && IsNumber(c[3])) ? Integer(c[3]) : 0
         cnt   := (c.Has(4) && c[4] != "" && IsNumber(c[4])) ? Integer(c[4]) : 0
         nm    := c.Has(5) ? c[5] : ""
-        g_ltTradePrices[nk] := Map("ex", ex, "epoch", epoch, "count", cnt, "name", nm)
+        g_ltTradePrices[c[1]] := Map("ex", ex, "epoch", epoch, "count", cnt, "name", nm)
     }
 }
 
-; Persists the whole (small) cache to disk.
 _LtTradeSaveCache()
 {
     global g_ltTradePrices, g_ltTradeCacheFile
@@ -265,13 +202,12 @@ _LtTradeEpoch()
     return DateDiff(A_NowUTC, "19700101000000", "Seconds")
 }
 
-; Normalize a unique name the same way the PowerShell child does (lowercase, alnum only).
+; Normalize a unique name the same way poe.ninja keys are normalized (lowercase, alnum only).
 _LtTradeNorm(name)
 {
     return RegExReplace(StrLower(name ""), "[^a-z0-9]", "")
 }
 
-; Cache freshness: positive entries live ttlHours, negative entries negTtlHours.
 _LtTradeFresh(e)
 {
     global g_ltTradeTtlHours, g_ltTradeNegTtlHours
@@ -282,8 +218,7 @@ _LtTradeFresh(e)
     return (ageH <= ttl)
 }
 
-; Looks up a fresh trade price for a unique name. Returns true + sets unit (Exalted) when a
-; fresh POSITIVE price is cached. A fresh negative entry returns false (caller won't re-queue).
+; Fresh POSITIVE cached price for a unique name -> true + unit (Exalted). Fresh negative -> false.
 LtTradePriceForName(name, &unit)
 {
     global g_ltTradePrices
@@ -298,10 +233,9 @@ LtTradePriceForName(name, &unit)
         unit := e["ex"]
         return true
     }
-    return false   ; fresh negative — priced as "no listings"
+    return false
 }
 
-; True when this unique name is already covered by a fresh cache entry (positive or negative).
 _LtTradeCached(name)
 {
     global g_ltTradePrices
@@ -309,13 +243,12 @@ _LtTradeCached(name)
     return (nk != "" && g_ltTradePrices.Has(nk) && _LtTradeFresh(g_ltTradePrices[nk]))
 }
 
-; Enqueues a unique name for background trade pricing. No-op unless the feature is enabled,
-; a session is saved, the name isn't already fresh-cached, and the queue has room. Schedules
-; a (debounced) drain.
+; Enqueues a unique name for background trade pricing. No-op unless enabled, not already
+; fresh-cached, and the queue has room. Schedules a (debounced) drain.
 LtTradeEnqueue(name)
 {
-    global g_ltTradeEnabled, g_ltTradeHasAuth, g_ltTradeQueue, g_ltTradeMaxQueue
-    if !(g_ltTradeEnabled && g_ltTradeHasAuth)
+    global g_ltTradeEnabled, g_ltTradeQueue, g_ltTradeMaxQueue
+    if !g_ltTradeEnabled
         return
     nm := Trim(name "")
     if (nm = "")
@@ -329,182 +262,197 @@ LtTradeEnqueue(name)
     SetTimer(_LtTradeDrain, -800)
 }
 
-; ── Background refresh (spawn PowerShell child, poll, merge) ─────────────────────
-; Drains the queue: writes the pending names, spawns the child, and starts polling. Safe to
-; call repeatedly; honours the syncing flag and the post-failure cooldown.
+; ── Drain (drive the WebView session) ────────────────────────────────────────────
+; Sends the next queued name to the logged-in trade window. Opens the window on demand (the
+; user signs in once); enforces the min interval + post-failure cooldown; one query in flight.
 _LtTradeDrain()
 {
-    global g_ltTradeEnabled, g_ltTradeHasAuth, g_ltTradeQueue, g_ltTradeStatus
-    global g_ltTradeScript, g_ltTradeAuthFile, g_ltTradeNamesFile, g_ltTradeOutFile
-    global g_ltTradeLeague, g_ltTradeRefreshPid, g_ltTradeStartTick, g_ltTradeCooldownUntil, g_ltTradeError
+    global g_ltTradeEnabled, g_ltTradeQueue, g_ltTradeBusy, g_ltTradeStatus, g_ltTradeError
+    global g_ltTradeLeague, g_ltTradeSeq, g_ltTradePendingById, g_ltTradeLastSendTick
+    global g_ltTradeCooldownUntil, g_ltTradeMinIntervalMs, g_notifyOverlay
 
-    if !(g_ltTradeEnabled && g_ltTradeHasAuth)
-        return
-    if (g_ltTradeStatus = "syncing")
-        return
-    if (g_ltTradeQueue.Count = 0)
+    if (!g_ltTradeEnabled || g_ltTradeQueue.Count = 0 || g_ltTradeBusy)
         return
     if (A_TickCount < g_ltTradeCooldownUntil)
         return
-    if !FileExist(g_ltTradeScript)
+
+    ; Open the session window on demand and wait for the helper to come up.
+    if !PoeTradeSessionOpen()
     {
-        g_ltTradeStatus := "error"
-        g_ltTradeError  := "helper missing: " g_ltTradeScript
-        _LtTradeAfter()
+        g_ltTradeStatus := "signin"
+        g_ltTradeError  := "sign in to PoE in the opened window"
+        PoeTradeSessionShow(g_ltTradeLeague)
+        if IsObject(g_notifyOverlay)
+            try g_notifyOverlay.SetBanner("PoE trade pricing — please sign in once in the opened window", 4000)
+        try SetTimer(PushHeaderToWebView, -50)
+        return   ; resumes when the helper signals ready
+    }
+    if !PoeTradeSessionReady()
+    {
+        g_ltTradeStatus := "signin"
+        SetTimer(_LtTradeDrain, -2000)   ; poll until the page helper is up
         return
     }
 
-    ; Write up to 6 queued names (the child caps internally too).
-    names := ""
-    n := 0
-    for nk, nm in g_ltTradeQueue
+    ; Rate-limit spacing.
+    dt := A_TickCount - g_ltTradeLastSendTick
+    if (dt < g_ltTradeMinIntervalMs)
     {
-        names .= nm "`n"
-        if (++n >= 6)
-            break
-    }
-    dir := RegExReplace(g_ltTradeNamesFile, "[\\/][^\\/]+$", "")
-    if (dir != "" && !DirExist(dir))
-        try DirCreate(dir)
-    try {
-        if FileExist(g_ltTradeNamesFile)
-            FileDelete(g_ltTradeNamesFile)
-        FileAppend(names, g_ltTradeNamesFile, "UTF-8")
-        if FileExist(g_ltTradeOutFile)
-            FileDelete(g_ltTradeOutFile)
-    } catch as ex {
-        g_ltTradeStatus := "error"
-        g_ltTradeError  := "queue write failed: " ex.Message
-        _LtTradeAfter()
+        SetTimer(_LtTradeDrain, -(g_ltTradeMinIntervalMs - dt + 50))
         return
     }
 
-    league := (g_ltTradeLeague != "") ? g_ltTradeLeague : "Standard"
-    cmd := 'powershell -NoProfile -ExecutionPolicy Bypass -File "' g_ltTradeScript '"'
-        . ' -League "' league '" -AuthFile "' g_ltTradeAuthFile '"'
-        . ' -NamesFile "' g_ltTradeNamesFile '" -Out "' g_ltTradeOutFile '"'
-    pid := 0
-    try
-        Run(cmd, A_ScriptDir, "Hide", &pid)
-    catch as ex
+    ; Pop the next name and send it.
+    nk := "", nm := ""
+    for k, v in g_ltTradeQueue
     {
-        g_ltTradeStatus := "error"
-        g_ltTradeError  := "spawn failed: " ex.Message
-        _LtTradeAfter()
-        return
+        nk := k, nm := v
+        break
     }
+    if (nk = "")
+        return
+    g_ltTradeQueue.Delete(nk)
 
+    g_ltTradeSeq += 1
+    id := g_ltTradeSeq
+    g_ltTradePendingById[id] := nm
+    g_ltTradeBusy := true
+    g_ltTradeLastSendTick := A_TickCount
     g_ltTradeStatus := "syncing"
-    g_ltTradeError  := ""
-    g_ltTradeRefreshPid := pid
-    g_ltTradeStartTick  := A_TickCount
-    SetTimer(_LtTradePoll, 750)
+    g_ltTradeError := ""
+    if !PoeTradeSend(id, nm, g_ltTradeLeague)
+    {
+        ; Send failed — requeue and back off briefly.
+        g_ltTradePendingById.Delete(id)
+        g_ltTradeQueue[nk] := nm
+        g_ltTradeBusy := false
+        g_ltTradeStatus := "error"
+        g_ltTradeError := "could not reach the trade window"
+        g_ltTradeCooldownUntil := A_TickCount + 5000
+    }
+    try SetTimer(PushHeaderToWebView, -50)
 }
 
-; Poll timer: waits for the child to exit (120 s watchdog), merges its output into the cache,
-; flips the status, and removes the processed names from the queue. Self-stops.
-_LtTradePoll()
+; Result handler (called by PoeTradeSession's message handler).
+;   ok=false + status 401/403/0 -> Cloudflare/login wall: mark blocked, raise window, cooldown.
+;   ok=true                     -> convert listings to Exalted, cache positive/negative.
+_LtTradeOnResult(id, ok, status, listings, err)
 {
-    global g_ltTradeRefreshPid, g_ltTradeStartTick, g_ltTradeStatus, g_ltTradeError
-    global g_ltTradeOutFile, g_ltTradeQueue, g_ltTradeCooldownUntil, g_ltTradeCooldownMs
+    global g_ltTradePendingById, g_ltTradeQueue, g_ltTradePrices, g_ltTradeBusy
+    global g_ltTradeStatus, g_ltTradeError, g_ltTradeCooldownUntil, g_ltTradeCooldownMs
+    global g_ltTradeMinIntervalMs, g_ltTradeLeague
 
-    if (g_ltTradeRefreshPid && ProcessExist(g_ltTradeRefreshPid))
+    g_ltTradeBusy := false
+    if !g_ltTradePendingById.Has(id)
+        return
+    nm := g_ltTradePendingById[id]
+    g_ltTradePendingById.Delete(id)
+    nk := _LtTradeNorm(nm)
+
+    if !ok
     {
-        if (A_TickCount - g_ltTradeStartTick > 120000)
+        if (status = 401 || status = 403 || status = 0)
         {
-            try ProcessClose(g_ltTradeRefreshPid)
-            SetTimer(_LtTradePoll, 0)
-            g_ltTradeRefreshPid := 0
-            g_ltTradeStatus := "error"
-            g_ltTradeError  := "timed out"
+            ; Login / Cloudflare wall — surface it and stop hammering. Requeue this name.
+            g_ltTradeStatus := "blocked"
+            g_ltTradeError  := "sign-in needed (status " status ") — sign in again in the trade window"
+            if (nk != "")
+                g_ltTradeQueue[nk] := nm
             g_ltTradeCooldownUntil := A_TickCount + g_ltTradeCooldownMs
-            _LtTradeAfter()
+            try PoeTradeSessionShow(g_ltTradeLeague)
         }
+        else
+        {
+            g_ltTradeStatus := "error"
+            g_ltTradeError  := "query failed (" (err != "" ? err : status) ")"
+            ; Transient — requeue and brief cooldown.
+            if (nk != "")
+                g_ltTradeQueue[nk] := nm
+            g_ltTradeCooldownUntil := A_TickCount + 15000
+        }
+        try SetTimer(PushHeaderToWebView, -50)
+        SetTimer(_LtTradeDrain, -(g_ltTradeMinIntervalMs))
         return
     }
-    SetTimer(_LtTradePoll, 0)
-    g_ltTradeRefreshPid := 0
 
-    status := "ready", err := ""
-    processed := []
-    if FileExist(g_ltTradeOutFile)
-    {
-        parsed := _LtTradeMergeOut(g_ltTradeOutFile, &status, &err, &processed)
-        if !parsed
-        {
-            status := (status = "" ? "error" : status)
-            if (err = "")
-                err := "empty/garbled trade output"
-        }
-    }
-    else
-    {
-        status := "error"
-        err := "no output (helper failed — check PowerShell / network)"
-    }
-
-    ; Remove handled names from the queue. On a hard block/error nothing was processed, so the
-    ; names stay queued but a cooldown prevents immediate re-spawning (no hammering).
-    for _, nk in processed
-        if g_ltTradeQueue.Has(nk)
-            g_ltTradeQueue.Delete(nk)
-
-    g_ltTradeStatus := status
-    g_ltTradeError  := err
-    if (status = "blocked" || status = "error")
-        g_ltTradeCooldownUntil := A_TickCount + g_ltTradeCooldownMs
-
-    _LtTradeSaveCache()
-    _LtTradeAfter()
-
-    ; More queued and not blocked? Drain again shortly.
-    if (status = "ready" && g_ltTradeQueue.Count > 0)
-        SetTimer(_LtTradeDrain, -1500)
-}
-
-; Parses the child Out delta into the cache. ByRef status/err (from #meta) and processed
-; (array of norm keys written). Returns true if the file parsed (even with 0 rows).
-_LtTradeMergeOut(path, &status, &err, &processed)
-{
-    global g_ltTradePrices
-    status := "", err := "", processed := []
-    try raw := FileRead(path, "UTF-8")
-    catch
-        return false
-    if (StrLen(raw) < 5)
-        return false
+    ; Clean result — price it (empty listings => negative cache).
+    rp := _LtTradeRobustPrice(listings)
     now := _LtTradeEpoch()
-    sawMeta := false
-    Loop Parse, raw, "`n", "`r"
-    {
-        line := A_LoopField
-        if (line = "")
-            continue
-        c := StrSplit(line, "`t")
-        kind := c.Has(1) ? c[1] : ""
-        if (kind = "#meta")
-        {
-            sawMeta := true
-            status := c.Has(3) ? c[3] : ""
-            err    := c.Has(4) ? c[4] : ""
-        }
-        else if (kind = "P")
-        {
-            nk := c.Has(2) ? c[2] : ""
-            if (nk = "")
-                continue
-            ex  := (c.Has(3) && c[3] != "" && IsNumber(c[3])) ? c[3] + 0.0 : 0.0
-            cnt := (c.Has(4) && c[4] != "" && IsNumber(c[4])) ? Integer(c[4]) : 0
-            nm  := c.Has(5) ? c[5] : ""
-            g_ltTradePrices[nk] := Map("ex", ex, "epoch", now, "count", cnt, "name", nm)
-            processed.Push(nk)
-        }
-    }
-    return sawMeta
+    g_ltTradePrices[nk] := Map("ex", rp["ex"], "epoch", now, "count", rp["count"], "name", nm)
+    g_ltTradeStatus := "ready"
+    g_ltTradeError := ""
+    _LtTradeSaveCache()
+    try SetTimer(PushHeaderToWebView, -50)
+    SetTimer(_LtTradeDrain, -(g_ltTradeMinIntervalMs))
 }
 
-; Post-refresh hook: refresh the WebView header so the UI shows the new status/cache count.
-_LtTradeAfter()
+; Converts one listing currency amount to Exalted using the poe.ninja rates already loaded.
+; Unknown currencies return 0 (the caller drops them so a unique is never mis-valued).
+_LtTradeListingToEx(amount, currency)
 {
-    try SetTimer(PushHeaderToWebView, -50)
+    global g_ltDivToEx, g_ltPricesByName
+    amt := (amount = "" || !IsNumber(amount)) ? 0.0 : amount + 0.0
+    if (amt <= 0)
+        return 0.0
+    cur := StrLower(Trim(currency ""))
+    if (cur = "exalted" || cur = "exalt" || cur = "ex")
+        return amt
+    if (cur = "divine" || cur = "div")
+        return (IsSet(g_ltDivToEx) && g_ltDivToEx > 0) ? amt * g_ltDivToEx : 0.0
+    ; Other currencies: map the trade id to the poe.ninja English name and look up its ex price.
+    alias := Map("chaos","Chaos Orb", "regal","Regal Orb", "vaal","Vaal Orb"
+        , "annul","Orb of Annulment", "exalted","Exalted Orb", "divine","Divine Orb"
+        , "alch","Orb of Alchemy", "chance","Orb of Chance", "mirror","Mirror of Kalandra")
+    if (alias.Has(cur) && IsSet(g_ltPricesByName))
+    {
+        pk := _LtNormalize(alias[cur])
+        if (g_ltPricesByName.Has(pk) && g_ltPricesByName[pk] > 0)
+            return amt * g_ltPricesByName[pk]
+    }
+    return 0.0
+}
+
+; Robust price from listing Maps {amount,currency}: median of the cheapest few (in Exalted).
+; Returns Map("ex", price, "count", usedCount). 0/0 when there are no priceable listings.
+_LtTradeRobustPrice(listings)
+{
+    vals := []
+    if (IsObject(listings) && Type(listings) = "Array")
+    {
+        for _, ln in listings
+        {
+            if !(ln && IsObject(ln))
+                continue
+            amt := ln.Has("amount") ? ln["amount"] : 0
+            cur := ln.Has("currency") ? ln["currency"] : ""
+            ex := _LtTradeListingToEx(amt, cur)
+            if (ex > 0)
+                vals.Push(ex)
+        }
+    }
+    n := vals.Length
+    if (n = 0)
+        return Map("ex", 0.0, "count", 0)
+    _LtTradeSortAsc(vals)
+    take := Min(8, n)
+    mid := (take // 2) + 1   ; 1-based median index of the cheapest `take`
+    return Map("ex", Round(vals[mid] + 0.0, 3), "count", take)
+}
+
+; Tiny in-place ascending insertion sort (lists are short).
+_LtTradeSortAsc(arr)
+{
+    i := 2
+    while (i <= arr.Length)
+    {
+        cur := arr[i]
+        j := i - 1
+        while (j >= 1 && arr[j] > cur)
+        {
+            arr[j + 1] := arr[j]
+            j -= 1
+        }
+        arr[j + 1] := cur
+        i += 1
+    }
 }
