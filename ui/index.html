@@ -6204,34 +6204,39 @@
           background: linear-gradient(180deg, rgba(82,58,30,0.96), rgba(40,26,14,0.96));
         }
         #panel-hotkeys .hk-num-btn:active { color: var(--codex-text); }
-        /* Alerts tab — reuse the themed number stepper + codex inputs */
-        #panel-alerts .al-desc, #panel-groups .al-desc { font-family: var(--codex-serif); font-size: 12px; color: var(--subtext); margin: 0 0 8px; }
-        #panel-alerts .al-line { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-bottom: 8px; }
-        #panel-alerts .al-line:last-child { margin-bottom: 0; }
-        #panel-alerts .al-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; font-family: var(--codex-serif); font-size: 13px; color: var(--codex-text); }
-        #panel-alerts .al-field { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; }
-        #panel-alerts .al-cap { font-family: var(--codex-serif); font-size: 13px; color: var(--codex-text); white-space: nowrap; }
-        #panel-alerts .hk-num { position: relative; display: inline-flex; vertical-align: middle; }
-        #panel-alerts .hk-num > input[type=number] { width: 90px; padding-right: 18px; }
+        /* Alerts + Loot tabs — reuse the themed number stepper + codex inputs.
+           The Loot tab borrows the same .al-* / .hk-num layout primitives, so
+           it must be listed alongside #panel-alerts or its Settings section
+           renders unstyled (default font, no row layout, native spinners). */
+        #panel-alerts .al-desc, #panel-groups .al-desc, #panel-loot .al-desc { font-family: var(--codex-serif); font-size: 12px; color: var(--subtext); margin: 0 0 8px; }
+        #panel-alerts .al-line, #panel-loot .al-line { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-bottom: 8px; }
+        #panel-alerts .al-line:last-child, #panel-loot .al-line:last-child { margin-bottom: 0; }
+        #panel-alerts .al-item, #panel-loot .al-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; font-family: var(--codex-serif); font-size: 13px; color: var(--codex-text); }
+        #panel-alerts .al-field, #panel-loot .al-field { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; }
+        #panel-alerts .al-cap, #panel-loot .al-cap { font-family: var(--codex-serif); font-size: 13px; color: var(--codex-text); white-space: nowrap; }
+        #panel-alerts .hk-num, #panel-loot .hk-num { position: relative; display: inline-flex; vertical-align: middle; }
+        #panel-alerts .hk-num > input[type=number], #panel-loot .hk-num > input[type=number] { width: 90px; padding-right: 18px; }
         #panel-alerts .hk-num > input[type=number]::-webkit-inner-spin-button,
-        #panel-alerts .hk-num > input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-        #panel-alerts .hk-num-spin {
+        #panel-alerts .hk-num > input[type=number]::-webkit-outer-spin-button,
+        #panel-loot .hk-num > input[type=number]::-webkit-inner-spin-button,
+        #panel-loot .hk-num > input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        #panel-alerts .hk-num-spin, #panel-loot .hk-num-spin {
           position: absolute; top: 1px; bottom: 1px; right: 1px; width: 15px;
           display: flex; flex-direction: column; overflow: hidden; border-radius: 0 1px 1px 0;
         }
-        #panel-alerts .hk-num-btn {
+        #panel-alerts .hk-num-btn, #panel-loot .hk-num-btn {
           flex: 1; min-height: 0; padding: 0; margin: 0; cursor: pointer;
           display: flex; align-items: center; justify-content: center;
           border: none; border-left: 1px solid rgba(90,62,34,0.6);
           background: linear-gradient(180deg, rgba(60,42,22,0.92), rgba(28,18,10,0.92));
           color: var(--codex-gold); font-size: 7px; line-height: 1;
         }
-        #panel-alerts .hk-num-btn:first-child { border-bottom: 1px solid rgba(90,62,34,0.6); }
-        #panel-alerts .hk-num-btn:hover {
+        #panel-alerts .hk-num-btn:first-child, #panel-loot .hk-num-btn:first-child { border-bottom: 1px solid rgba(90,62,34,0.6); }
+        #panel-alerts .hk-num-btn:hover, #panel-loot .hk-num-btn:hover {
           color: var(--codex-gold-hi);
           background: linear-gradient(180deg, rgba(82,58,30,0.96), rgba(40,26,14,0.96));
         }
-        #panel-alerts .hk-num-btn:active { color: var(--codex-text); }
+        #panel-alerts .hk-num-btn:active, #panel-loot .hk-num-btn:active { color: var(--codex-text); }
         /* Vitals tab (Config panel) — reuse the themed number stepper + pill captions */
         #panel-config .hk-num { position: relative; display: inline-flex; vertical-align: middle; }
         #panel-config .hk-num > input[type=number] { width: 72px; padding-right: 18px; }
