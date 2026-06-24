@@ -104,14 +104,51 @@ _LrvResolveInnerItem(wrapperAddr, &innerPtr, &innerPath, &off, &compAddr, &compN
 ; label. Returns true when priced. (rarityId/path come from the resolved inner entity.)
 _LrvPriceInner(innerPtr, innerPath, rarityId, &dds, &renderArt, &unit, &label)
 {
-    global g_reader
+    global g_reader, g_ltTradeEnabled
     dds := "", renderArt := "", unit := 0.0, label := ""
     if (IsObject(g_reader) && innerPtr)
     {
         try dds := g_reader.ReadItemArtPath(innerPtr)
         renderArt := _LtArtIdFromDds(dds . "")
     }
-    return _LtTryPriceItem(_LtBuildItemKey(rarityId, innerPath, renderArt), &unit, &label)
+    if _LtTryPriceItem(_LtBuildItemKey(rarityId, innerPath, renderArt), &unit, &label)
+        return true
+
+    ; poe.ninja couldn't price it. For UNIQUES, fall back to the official PoE2 trade API
+    ; layer (fills the Standard-league unique gap). Resolve the English name from the item's
+    ; ItemVisualIdentity, use a fresh cached trade price if we have one, else enqueue it for
+    ; background pricing (this drop stays unpriced until the child returns it).
+    if (rarityId = 3 && IsSet(g_ltTradeEnabled) && g_ltTradeEnabled && IsObject(g_reader))
+    {
+        nm := _LrvUniqueName(innerPtr)
+        if (nm != "")
+        {
+            tunit := 0.0
+            if (LtTradePriceForName(nm, &tunit) && tunit > 0)
+            {
+                unit := tunit, label := nm
+                return true
+            }
+            LtTradeEnqueue(nm)
+        }
+    }
+    return false
+}
+
+; Resolves a unique item's English name from its ItemVisualIdentity Id (language-independent,
+; works on a localized client). "" when not a mapped unique. Param: inner item entity ptr.
+_LrvUniqueName(innerPtr)
+{
+    global g_reader
+    if !(IsObject(g_reader) && innerPtr)
+        return ""
+    iviId := ""
+    try iviId := g_reader.ReadUniqueIviId(innerPtr)
+    if (iviId = "")
+        return ""
+    nm := ""
+    try nm := g_reader.GetUniqueNameByIvi(iviId)
+    return nm
 }
 
 ; ── Config + live annotation engine ───────────────────────────────────────────

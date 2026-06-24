@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.32`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.33`.
 
 ## Language
 
@@ -535,10 +535,49 @@ Fragments/Tablets, Div-Cards (rares stay unpriced, like the LootTracker breakdow
   (`LrvIconPartsFor(addr)`) gets a gold marker dot + orb image + amount via a new `_iconBatch`
   (queued by `_DrawIconBatched`, flushed in `_FlushBatch` between dots and text, one shared
   GDI+ Graphics). Text fallback when the orb icons are unavailable.
-- **Next:** official PoE2 Trade-API unique pricing (security-first, POESESSID in a gitignored
-  file, on-demand + heavily cached, strict rate-limit handling, PowerShell child) to fill the
-  Standard-league unique gap — to be planned before coding (outward-facing, hits GGG with the
-  user's session). Verify in-game: orb images render on the radar/list, scaling, anchor.
+- **Verify in-game (steps 2&3):** orb images render on the radar dots + the "valuable
+  nearby" list, scaling/anchor look right, list hides behind big panels.
+
+## Trade-API unique pricing (shipped 0.45.13.33) — `ahk/LootTradePricing.ahk`
+
+Official PoE2 trade-API (`trade2`) price layer for UNIQUES, to fill the gap poe.ninja leaves
+on Standard (no unique prices). Docks into the value-aware loot radar: when poe.ninja can't
+price a dropped unique, `_LrvPriceInner` resolves its English name via the reader
+(`ReadUniqueIviId` → `GetUniqueNameByIvi`, from `data/unique_ivi_name_map.tsv` — works on a
+localized client), checks the trade cache, and otherwise enqueues it for background pricing.
+
+- **RE confirmed (2026-06-24):** the name bridge already exists in `PoE2InventoryReader`
+  (`ReadUniqueIviId` reads the ItemVisualIdentity Id at Base+0x30; `GetUniqueNameByIvi` maps
+  it to the English unique name). The trade contract: `POST /api/trade2/search/poe2/<League>`
+  then `GET /api/trade2/fetch/<ids>?query=<id>&realm=poe2`. The endpoints are **Cloudflare-
+  gated** — a POESESSID alone usually 403s (HTML body); a `cf_clearance` cookie + the matching
+  browser User-Agent are also required and expire (the env's datacenter IP is blocked outright,
+  so this could only be RE'd via docs + a live tool, not from here).
+- **SECURITY-FIRST (`Sicherheit über Funktionalität`):** OFF by default. All secrets
+  (POESESSID / cf_clearance / User-Agent) live in ONE gitignored file
+  (`config/poe_trade_auth.txt`; the whole `config/` dir is gitignored). The module passes only
+  the file PATH to the child, never logs/echoes the values, and the header exposes only
+  `hasAuth`. Strictly rate-limited in the child (≥3.5 s/call, 429/Retry-After), stops + reports
+  `blocked` on 403/Cloudflare (no hammering) with a 5-min drain cooldown.
+- **On-demand + heavily cached:** only uniques poe.ninja missed are queued; positive AND
+  negative results cached (`data/trade_prices.tsv`, gitignored; TTL `ttlHours`=24 /
+  `negTtlHours`=12) so worthless uniques aren't re-queried. Queue capped (`g_ltTradeMaxQueue`).
+- **`tools/poe2_trade_prices.ps1` (new):** PowerShell child (like the poe.ninja one). Reads
+  secrets from `-AuthFile`, fetches poe.ninja's public PoE2 currency exchange for the
+  currency→Exalted rates, does the 2-step trade query per name (cap 6/run, 10 listings each),
+  converts listings to Exalted (skips unknown currencies), takes the median of the cheapest
+  few, writes a small delta TSV the AHK side merges. Never prints the secrets.
+- **Wiring:** `LoadLootTradePricing()` (seeds globals, loads cache, detects saved session);
+  `[LootTradePricing]` (`enabled`,`league`,`ttlHours`,`negTtlHours`). Bridge
+  `SetLootTradePricing` / `SetPoeTradeAuth` / `ClearPoeTradeAuth` / `LootTradePriceNow`; header
+  `lootTradePricing` (`enabled,league,hasAuth,status,error,cacheCount,queueCount` — never the
+  secrets); UI: an advanced `<details>` inside `det-lootvalue` (security warning, enable, league,
+  masked write-only session inputs that clear after save, status readout).
+- **Pending (needs the game + a real account/IP):** the whole authenticated flow is
+  unverifiable from this env (Cloudflare blocks the egress IP). Verify on the user's machine:
+  the exact request shape is accepted, cf_clearance+UA make it past Cloudflare, the response
+  JSON shape (`result`/`listing.price.{amount,currency}`) matches the parser, currency ids
+  (`exalted`/`divine`/`chaos`/…) map correctly, and rate-limit behaviour is safe.
 
 ## Reference
 

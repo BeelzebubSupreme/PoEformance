@@ -40,6 +40,11 @@ sessions/
 data/loot_prices.tsv
 data/loot_prices.tsv.tmp
 
+# Trade-API unique pricing — SECRET session cookies + generated price cache (NEVER commit)
+config/
+data/trade_prices.tsv
+data/trade_prices.tsv.tmp
+
 # Dev notes (not for repo)
 NEXT_STEPS.md
 QUICKSTART.md

@@ -5436,6 +5436,49 @@
                 (General → Actions) to check what nearby ground loot is being priced. Currency /
                 fragments price on any league; uniques only where poe.ninja has data.
               </div>
+
+              <details class="cfg-subsection" style="margin-top:8px">
+                <summary><div class="cfg-header" style="font-size:13px">🛡️ Unique pricing via the official Trade API (advanced)</div></summary>
+                <div class="cfg-help" style="border-left:2px solid #b58b46;padding-left:8px">
+                  <b>Security note — read first.</b> This fills the unique-price gap poe.ninja leaves on
+                  Standard by querying the <b>official PoE2 trade site with YOUR session</b>. It is
+                  <b>off by default</b>. Enabling it means PoEformance makes requests to GGG on your
+                  behalf — automated trade access is against GGG's ToS and carries some account risk.
+                  The trade site is behind Cloudflare, so a POESESSID alone is usually not enough: you
+                  also need a <code>cf_clearance</code> cookie and the <b>exact User-Agent</b> from the
+                  same browser, and these expire (refresh them when the status shows "blocked").
+                  Requests are strictly rate-limited, on-demand only, and heavily cached. Your secrets
+                  are stored locally in a gitignored file and are never logged or shown again.
+                </div>
+                <div class="cfg-row"><span class="cfg-label">Enable trade-API unique pricing</span>
+                  <label class="toggle"><input type="checkbox" id="lt-trade-enabled"
+                      onchange="ahkCall('SetLootTradePricing','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+                </div>
+                <div class="cfg-row"><span class="cfg-label">League</span>
+                  <input type="text" id="lt-trade-league" class="cfg-input" style="width:160px" placeholder="Standard"
+                      onchange="ahkCall('SetLootTradePricing','league', this.value)">
+                </div>
+                <div class="cfg-help" style="margin-top:6px">
+                  Paste from your browser (DevTools → Application → Cookies → pathofexile.com, and the
+                  request User-Agent). Fields are write-only — they clear after saving and are never
+                  echoed back.
+                </div>
+                <div class="cfg-row"><span class="cfg-label">POESESSID</span>
+                  <input type="password" id="lt-trade-sess" class="cfg-input" style="width:220px" autocomplete="off" placeholder="(session cookie)">
+                </div>
+                <div class="cfg-row"><span class="cfg-label">cf_clearance</span>
+                  <input type="password" id="lt-trade-cf" class="cfg-input" style="width:220px" autocomplete="off" placeholder="(Cloudflare cookie)">
+                </div>
+                <div class="cfg-row"><span class="cfg-label">User-Agent</span>
+                  <input type="text" id="lt-trade-ua" class="cfg-input" style="width:220px" autocomplete="off" placeholder="(browser User-Agent)">
+                </div>
+                <div class="cfg-row" style="gap:8px">
+                  <button type="button" class="cfg-btn" onclick="lootTradeSaveAuth()">Save session</button>
+                  <button type="button" class="cfg-btn" onclick="ahkCall('ClearPoeTradeAuth')">Clear session</button>
+                  <button type="button" class="cfg-btn" onclick="ahkCall('LootTradePriceNow')">Price queued now</button>
+                </div>
+                <div class="cfg-help" id="lt-trade-status">Session: not saved · status: idle</div>
+              </details>
             </div>
           </details>
         </div>
@@ -7052,6 +7095,33 @@
       val('lrv-alertEx', s.alertEx);
       chk('lrv-showList', s.showList);
       val('lrv-listMax', s.listMax);
+    }
+
+    function lootTradePricingSyncFromHeader(s) {
+      if (!s) return;
+      const chk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = v === true || v === 1 || v === '1' || v === 'true'; };
+      const val = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
+      chk('lt-trade-enabled', s.enabled);
+      val('lt-trade-league', s.league || '');
+      const st = document.getElementById('lt-trade-status');
+      if (st) {
+        const parts = [];
+        parts.push('Session: ' + (s.hasAuth ? 'saved' : 'not saved'));
+        parts.push('status: ' + (s.status || 'idle'));
+        if (typeof s.cacheCount === 'number') parts.push(s.cacheCount + ' cached');
+        if (s.queueCount) parts.push(s.queueCount + ' queued');
+        let txt = parts.join(' · ');
+        if (s.error) txt += '  —  ' + s.error;
+        st.textContent = txt;
+      }
+    }
+
+    // Writes the session secrets to the gitignored auth file, then clears the inputs so the
+    // values do not linger in the DOM. The header never echoes them back.
+    function lootTradeSaveAuth() {
+      const g = (id) => { const e = document.getElementById(id); return e ? e.value : ''; };
+      ahkCall('SetPoeTradeAuth', g('lt-trade-sess'), g('lt-trade-cf'), g('lt-trade-ua'));
+      ['lt-trade-sess', 'lt-trade-cf', 'lt-trade-ua'].forEach(id => { const e = document.getElementById(id); if (e) e.value = ''; });
     }
 
     // Per-side ignore sets (mirrors the AHK maps). Each is an array of {path,name}.
@@ -9068,6 +9138,7 @@
       if (d.loot !== undefined) lootSyncFromHeader(d.loot);
       if (d.stashMover !== undefined) stashMoverSyncFromHeader(d.stashMover);
       if (d.lootRadarValue !== undefined) lootRadarValueSyncFromHeader(d.lootRadarValue);
+      if (d.lootTradePricing !== undefined) lootTradePricingSyncFromHeader(d.lootTradePricing);
 
       // Version tags
       const verApp = document.getElementById('ver-app');

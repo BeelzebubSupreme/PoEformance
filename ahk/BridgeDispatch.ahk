@@ -169,6 +169,23 @@ _DispatchBridgeCall(method, args)
                 _LrvApplySetting(args[1], args[2])
             SaveLootRadarValue()
             SetTimer(PushHeaderToWebView, -50)
+        case "SetLootTradePricing":
+            ; Official PoE2 trade-API unique pricing. args[1]=key, args[2]=value.
+            if (args.Length >= 2)
+                _LtTradeApplySetting(args[1], args[2])
+            SaveLootTradePricing()
+            SetTimer(PushHeaderToWebView, -50)
+        case "SetPoeTradeAuth":
+            ; Write the gitignored session file. args[1]=POESESSID, args[2]=cf_clearance,
+            ; args[3]=User-Agent. The secrets are NEVER logged or pushed back to the UI.
+            SetPoeTradeAuth(args.Has(1) ? args[1] : "", args.Has(2) ? args[2] : "", args.Has(3) ? args[3] : "")
+            SetTimer(PushHeaderToWebView, -50)
+        case "ClearPoeTradeAuth":
+            ClearPoeTradeAuth()
+            SetTimer(PushHeaderToWebView, -50)
+        case "LootTradePriceNow":
+            ; Manual trigger: drain the pending trade-pricing queue immediately.
+            SetTimer(_LtTradeDrain, -1)
         case "StashRequestInventory":
             ; Push the live backpack (deduped by base type) so the user can build
             ; the ignore filter from what they currently carry. args[1] = side.
