@@ -1,0 +1,20 @@
+# Normalize all text files to LF in the repository and CHECK THEM OUT AS LF too.
+# eol=lf overrides a user's core.autocrlf=true, so Windows clones stop churning
+# data/*.tsv (and every other text file) into CRLF on each pull.
+* text=auto eol=lf
+
+# Files that are intentionally CRLF — freeze them byte-for-byte (no EOL conversion).
+# See CLAUDE.md "Line endings". -text disables normalization so they stay CRLF.
+ahk/BridgeDispatch.ahk -text
+ahk/WebViewBridge.ahk  -text
+ui/animation_names.js  -text
+
+# Binary assets — never normalize (text=auto already detects these; explicit for safety).
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.wav  binary
+*.dll  binary
+*.exe  binary
