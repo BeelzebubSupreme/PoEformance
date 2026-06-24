@@ -1295,7 +1295,7 @@ _DumpInventoryPointerChain(sdPtr, areaAddr, inGsAddr, gameUiPtr)
                                         ; string at each field to locate the unique-name offset.
                                         if (cn = "Base")
                                         {
-                                            uniqRowPtr := NumGet(hb.Ptr, 0x30, "Int64")
+                                            uniqRowPtr := NumGet(hb.Ptr, PoE2Offsets.ItemBaseComponent["UniqueIviRow"], "Int64")
                                             if g_reader.IsProbablyValidPointer(uniqRowPtr)
                                             {
                                                 out .= "`n              → [Base+0x30] uniqueRow @ 0x" Format("{:016X}", uniqRowPtr)

@@ -756,11 +756,11 @@ class PoE2PlayerComponentsReader extends PoE2EntityReader
         if !this.IsProbablyValidPointer(statesPtr) || stateIndex < 0 || stateIndex > 1024
             return ""
 
-        stateNamesBase := this.Mem.ReadPtr(statesPtr + 0x10)
+        stateNamesBase := this.Mem.ReadPtr(statesPtr + PoE2Offsets.StateMachine["StateNamesBaseOffset"])
         if !this.IsProbablyValidPointer(stateNamesBase)
             return ""
 
-        stdStringAddr := stateNamesBase + (stateIndex * 0xC0)
+        stdStringAddr := stateNamesBase + (stateIndex * PoE2Offsets.StateMachine["StateNameStructSize"])
         name := this.ReadStdStringFromAddr(stdStringAddr)
         rawName := name
         return name

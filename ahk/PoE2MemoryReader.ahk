@@ -2074,11 +2074,11 @@ class PoE2GameStateReader extends PoE2InventoryReader
             off := elem["off"]
             ptr := elem["ptr"]
 
-            flags := this.Mem.ReadUInt(ptr + 0x180)
-            sizeX := this.Mem.ReadFloat(ptr + 0x288)
-            sizeY := this.Mem.ReadFloat(ptr + 0x28C)
-            childFirst := this.Mem.ReadPtr(ptr + 0x010)
-            childEnd := this.Mem.ReadPtr(ptr + 0x018)
+            flags := this.Mem.ReadUInt(ptr + PoE2Offsets.UiElementBase["Flags"])
+            sizeX := this.Mem.ReadFloat(ptr + PoE2Offsets.UiElementBase["UnscaledSize"])
+            sizeY := this.Mem.ReadFloat(ptr + PoE2Offsets.UiElementBase["UnscaledSize"] + 0x04)
+            childFirst := this.Mem.ReadPtr(ptr + PoE2Offsets.UiElementBase["ChildrenFirst"])
+            childEnd := this.Mem.ReadPtr(ptr + PoE2Offsets.UiElementBase["ChildrenLast"])
             childCount := (childFirst && childEnd && childEnd > childFirst)
                 ? ((childEnd - childFirst) // 8) : 0
 
@@ -2155,11 +2155,11 @@ class PoE2GameStateReader extends PoE2InventoryReader
                 continue
 
             old := oldElems[off]
-            flags := this.Mem.ReadUInt(ptr + 0x180)
-            sizeX := this.Mem.ReadFloat(ptr + 0x288)
-            sizeY := this.Mem.ReadFloat(ptr + 0x28C)
-            childFirst := this.Mem.ReadPtr(ptr + 0x010)
-            childEnd := this.Mem.ReadPtr(ptr + 0x018)
+            flags := this.Mem.ReadUInt(ptr + PoE2Offsets.UiElementBase["Flags"])
+            sizeX := this.Mem.ReadFloat(ptr + PoE2Offsets.UiElementBase["UnscaledSize"])
+            sizeY := this.Mem.ReadFloat(ptr + PoE2Offsets.UiElementBase["UnscaledSize"] + 0x04)
+            childFirst := this.Mem.ReadPtr(ptr + PoE2Offsets.UiElementBase["ChildrenFirst"])
+            childEnd := this.Mem.ReadPtr(ptr + PoE2Offsets.UiElementBase["ChildrenLast"])
             childCount := (childFirst && childEnd && childEnd > childFirst)
                 ? ((childEnd - childFirst) // 8) : 0
 
