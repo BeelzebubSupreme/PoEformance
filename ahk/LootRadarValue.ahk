@@ -172,6 +172,7 @@ LoadLootRadarValue()
     global g_lrvMapOutline := true          ; black outline around the on-map amount + orb
     global g_lrvMapOutlineWidth := 0        ; outline thickness px (0 = auto from font size)
     global g_lrvMapPulse := true            ; pulse the marker for high-value drops (>= alertEx)
+    global g_lrvMapOnOrb := true            ; on-map: orb sits ON the drop with the value as a badge (replaces the dot)
     global g_lrvConfigFile := _ConfigPath()
 
     ; Runtime (never persisted)
@@ -197,6 +198,7 @@ LoadLootRadarValue()
         g_lrvMapOutline   := (IniRead(f, "LootRadarValue", "mapOutline", g_lrvMapOutline ? "1" : "0") = "1")
         g_lrvMapOutlineWidth := Integer(IniRead(f, "LootRadarValue", "mapOutlineWidth", g_lrvMapOutlineWidth))
         g_lrvMapPulse     := (IniRead(f, "LootRadarValue", "mapPulse", g_lrvMapPulse ? "1" : "0") = "1")
+        g_lrvMapOnOrb     := (IniRead(f, "LootRadarValue", "mapOnOrb", g_lrvMapOnOrb ? "1" : "0") = "1")
     } catch as ex {
         LogError("LoadLootRadarValue", ex)
     }
@@ -208,7 +210,7 @@ SaveLootRadarValue()
 {
     global g_lrvEnabled, g_lrvAlertEnabled, g_lrvMinLabelEx, g_lrvAlertEx, g_lrvConfigFile
     global g_lrvShowList, g_lrvListMax, g_lrvMapIconSize, g_lrvMapFontSize, g_lrvMapColor
-    global g_lrvShowDist, g_lrvShowArrow, g_lrvMapOutline, g_lrvMapOutlineWidth, g_lrvMapPulse
+    global g_lrvShowDist, g_lrvShowArrow, g_lrvMapOutline, g_lrvMapOutlineWidth, g_lrvMapPulse, g_lrvMapOnOrb
     f := g_lrvConfigFile
     try {
         IniWrite(g_lrvEnabled ? "1" : "0", f, "LootRadarValue", "enabled")
@@ -225,6 +227,7 @@ SaveLootRadarValue()
         IniWrite(g_lrvMapOutline ? "1" : "0", f, "LootRadarValue", "mapOutline")
         IniWrite(g_lrvMapOutlineWidth, f, "LootRadarValue", "mapOutlineWidth")
         IniWrite(g_lrvMapPulse ? "1" : "0", f, "LootRadarValue", "mapPulse")
+        IniWrite(g_lrvMapOnOrb ? "1" : "0", f, "LootRadarValue", "mapOnOrb")
     } catch as ex {
         LogError("SaveLootRadarValue", ex)
     }
@@ -273,7 +276,7 @@ _LrvApplySetting(key, val)
 {
     global g_lrvEnabled, g_lrvAlertEnabled, g_lrvMinLabelEx, g_lrvAlertEx
     global g_lrvShowList, g_lrvListMax, g_lrvMapIconSize, g_lrvMapFontSize, g_lrvMapColor
-    global g_lrvShowDist, g_lrvShowArrow, g_lrvMapOutline, g_lrvMapOutlineWidth, g_lrvMapPulse
+    global g_lrvShowDist, g_lrvShowArrow, g_lrvMapOutline, g_lrvMapOutlineWidth, g_lrvMapPulse, g_lrvMapOnOrb
     global g_lrvAnnot, g_lrvNearby, g_lrvAlerted
     switch key
     {
@@ -309,6 +312,8 @@ _LrvApplySetting(key, val)
             g_lrvMapOutlineWidth := Integer(_LrvNum(val))
         case "mapPulse":
             g_lrvMapPulse := _LrvTruthy(val)
+        case "mapOnOrb":
+            g_lrvMapOnOrb := _LrvTruthy(val)
     }
     _LrvClamp()
 }
@@ -318,7 +323,7 @@ BuildLootRadarValueHeaderJson()
 {
     global g_lrvEnabled, g_lrvAlertEnabled, g_lrvMinLabelEx, g_lrvAlertEx
     global g_lrvShowList, g_lrvListMax, g_lrvMapIconSize, g_lrvMapFontSize, g_lrvMapColor
-    global g_lrvShowDist, g_lrvShowArrow, g_lrvMapOutline, g_lrvMapOutlineWidth, g_lrvMapPulse
+    global g_lrvShowDist, g_lrvShowArrow, g_lrvMapOutline, g_lrvMapOutlineWidth, g_lrvMapPulse, g_lrvMapOnOrb
     j := "{"
     j .= '"enabled":'       (g_lrvEnabled ? "true" : "false")
     j .= ',"alertEnabled":' (g_lrvAlertEnabled ? "true" : "false")
@@ -334,6 +339,7 @@ BuildLootRadarValueHeaderJson()
     j .= ',"mapOutline":'   (g_lrvMapOutline ? "true" : "false")
     j .= ',"mapOutlineWidth":' (g_lrvMapOutlineWidth + 0)
     j .= ',"mapPulse":'     (g_lrvMapPulse ? "true" : "false")
+    j .= ',"mapOnOrb":'     (g_lrvMapOnOrb ? "true" : "false")
     j .= "}"
     return j
 }

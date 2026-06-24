@@ -5457,9 +5457,13 @@
               </details>
               <details class="cfg-subsection" open>
                 <summary><div class="cfg-header" style="font-size:13px">🏷️ On-map label</div></summary>
+              <div class="cfg-row"><span class="cfg-label">Value on the orb (replace dot)</span>
+                <label class="toggle"><input type="checkbox" id="lrv-mapOnOrb"
+                    onchange="ahkCall('SetLootRadarValue','mapOnOrb', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
               <div class="cfg-row">
                 <span class="cfg-label">Map label</span>
-                <span id="lrv-map-preview" style="display:flex;align-items:center;gap:4px;min-height:30px" data-tip="Live preview of the on-map label">
+                <span id="lrv-map-preview" style="position:relative;display:inline-flex;align-items:center;gap:4px;min-height:30px" data-tip="Live preview of the on-map label">
                   <span id="lrv-prev-dot" style="display:inline-block;border-radius:50%;width:7px;height:7px;background:#C8A85A;margin-right:3px"></span>
                   <span id="lrv-prev-num" style="color:#C8A85A;font-weight:600;line-height:1;font-size:14px">1</span>
                   <img id="lrv-prev-icon" src="../img/currency/divine.png" alt="" style="width:18px;height:18px" onerror="this.style.visibility='hidden'">
@@ -7157,6 +7161,7 @@
       val('lrv-listMax', s.listMax);
       chk('lrv-showDist', s.showDist);
       chk('lrv-showArrow', s.showArrow);
+      chk('lrv-mapOnOrb', s.mapOnOrb);
       chk('lrv-mapOutline', s.mapOutline);
       val('lrv-mapOutlineWidth', s.mapOutlineWidth);
       chk('lrv-mapPulse', s.mapPulse);
@@ -7165,11 +7170,24 @@
       const mc = s.mapColor || '#C8A85A';
       const sw = document.getElementById('lrv-mapColor-sw');
       if (sw) sw.style.setProperty('--swatch-color', mc);
-      // Live preview of the on-map label (dot stays gold; amount uses the chosen color/size).
-      const pn = document.getElementById('lrv-prev-num');
-      if (pn) { pn.style.color = mc; if (s.mapFontSize) pn.style.fontSize = s.mapFontSize + 'px'; }
+      // Live preview of the on-map label. "On orb": value badge bottom-right over the orb,
+      // dot hidden. "Beside": gold dot + amount + orb in a row.
+      const onOrb = s.mapOnOrb === true || s.mapOnOrb === 1 || s.mapOnOrb === '1' || s.mapOnOrb === 'true';
       const pi = document.getElementById('lrv-prev-icon');
       if (pi && s.mapIconSize) { pi.style.width = s.mapIconSize + 'px'; pi.style.height = s.mapIconSize + 'px'; }
+      const pdot = document.getElementById('lrv-prev-dot');
+      if (pdot) pdot.style.display = onOrb ? 'none' : '';
+      const pn = document.getElementById('lrv-prev-num');
+      if (pn) {
+        pn.style.color = mc;
+        if (s.mapFontSize) pn.style.fontSize = s.mapFontSize + 'px';
+        if (onOrb) {
+          pn.style.position = 'absolute'; pn.style.right = '-2px'; pn.style.bottom = '-3px';
+          pn.style.textShadow = '0 0 2px #000,0 0 2px #000,0 0 1px #000';
+        } else {
+          pn.style.position = 'static'; pn.style.right = ''; pn.style.bottom = ''; pn.style.textShadow = '';
+        }
+      }
     }
 
     // Map loot-value label color → shared GGPK color picker → SetLootRadarValue mapColor.

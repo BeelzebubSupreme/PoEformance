@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.46`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.47`.
 
 ## Language
 
@@ -537,11 +537,14 @@ Fragments/Tablets, Div-Cards (rares stay unpriced, like the LootTracker breakdow
 - **Step 3 (shipped 0.45.13.32) — `RadarOverlay.ahk`:** ground `WorldItem` wrappers (otherwise
   filtered out of the entity draw) are intercepted right after projection; a valued drop
   (`LrvIconPartsFor(addr)`) is collected per frame and drawn in `_FlushLootValues` (value-priority
-  + overlap de-clutter): a gold marker dot, then a dark backing disc + orb image, then the amount
-  drawn AMOUNT-FIRST with a black outline (`_DrawTextOutlined`) so it stays legible over varied
-  terrain. The orb uses `_iconBatch` (flushed in `_FlushBatch` between dots and text); the amount
-  text carries an optional per-entry font (size from `g_lrvMapFontSize`). Text fallback when the
-  orb icons are unavailable.
+  + overlap de-clutter). Two on-map styles (`g_lrvMapOnOrb`, default on): **on-orb** — the orb sits
+  on the drop with the value as a bottom-right badge (replaces the dot); **beside** — a gold marker
+  dot + amount + orb to the right. Both: an 8-way black outline on the amount (`_DrawTextOutlined`)
+  AND the orb (`_OrbOutline`, black silhouettes via `OverlayImage`'s color matrix), togglable via
+  `g_lrvMapOutline` with `g_lrvMapOutlineWidth` (0 = auto); high-value drops (≥ `alertEx`) get a
+  pulsing halo (`g_lrvMapPulse`). The amount/orb size/colour come from `g_lrvMapFontSize`/
+  `g_lrvMapIconSize`/`g_lrvMapColor`; `_LootOverlaps` de-clutters. Text fallback when the orb
+  icons are unavailable.
 - **Verified in-game (2026-06-24, steps 2&3):** orb images render on the radar dots + the
   "valuable nearby" list, scaling/anchor correct, list hides behind big panels. Confirmed on
   Standard with live unique prices via the trade API.

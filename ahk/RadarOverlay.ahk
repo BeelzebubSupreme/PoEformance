@@ -1412,77 +1412,78 @@ class RadarOverlay extends GdiOverlayBase
     _FlushLootValues()
     {
         global g_lrvMapIconSize, g_lrvMapFontSize, g_lrvMapColor
-        global g_lrvMapOutline, g_lrvMapOutlineWidth, g_lrvMapPulse, g_lrvAlertEx
+        global g_lrvMapOutline, g_lrvMapOutlineWidth, g_lrvMapPulse, g_lrvMapOnOrb, g_lrvAlertEx
         drops := this._lrvFrameDrops
         this._lrvFrameDrops := []
         if (drops.Length = 0)
             return
         this._SortByValueExDesc(drops)        ; readable labels go to the most valuable drops
 
-        ; User-configurable look (Config → Overlay → Loot value radar). The MARKER DOT keeps its
-        ; own gold color; only the amount text uses the configured color ("Schriftfarbe").
-        dotCol  := 0x5AA8C8
+        ; User-configurable look (Config → Overlay → Loot value radar).
+        dotCol  := 0x5AA8C8                     ; gold marker dot (beside style only)
         txtCol  := GroupColorToBgr(IsSet(g_lrvMapColor) ? g_lrvMapColor : "#C8A85A")
         iconSz  := (IsSet(g_lrvMapIconSize) ? g_lrvMapIconSize : 18)
         fontPx  := (IsSet(g_lrvMapFontSize) ? g_lrvMapFontSize : 14)
         font    := this._GetFont(-fontPx, 600)
-        gap     := 3                           ; small gap between the amount and the orb
-        outline := (!IsSet(g_lrvMapOutline) || g_lrvMapOutline)   ; outline amount + orb (default on)
+        gap     := 3
+        outline := (!IsSet(g_lrvMapOutline) || g_lrvMapOutline)
         ow      := (IsSet(g_lrvMapOutlineWidth) && g_lrvMapOutlineWidth > 0) ? g_lrvMapOutlineWidth : Max(2, Round(fontPx / 7))
         pulseOn := (!IsSet(g_lrvMapPulse) || g_lrvMapPulse)
+        onOrb   := (!IsSet(g_lrvMapOnOrb) || g_lrvMapOnOrb)   ; orb sits ON the drop, value as a badge
         alertEx := (IsSet(g_lrvAlertEx) ? g_lrvAlertEx : 0)
-        pulse   := 0.5 + 0.5 * Sin(A_TickCount / 220.0)   ; 0..1 wall-clock pulse phase
+        pulse   := 0.5 + 0.5 * Sin(A_TickCount / 220.0)       ; 0..1 wall-clock pulse phase
 
         placed := []                           ; [x1, y1, x2, y2] of labels already drawn this frame
         for _, d in drops
         {
             sx := d[1], sy := d[2], parts := d[3], valueEx := d[4]
+            high   := (pulseOn && alertEx > 0 && valueEx >= alertEx)
+            hasOrb := (parts && IsObject(parts) && OverlayIconReady(parts["icon"]))
+            num    := (parts && IsObject(parts) && parts.Has("num")) ? parts["num"] : ""
+
+            if (onOrb && hasOrb)
+            {
+                ; ── Orb-as-marker: the orb sits ON the drop; the value is a badge bottom-right. ──
+                ix := sx - iconSz // 2, iy := sy - iconSz // 2
+                tm := this._MeasureText(font, num)
+                numW := tm["w"], numH := tm["h"]
+                nx := ix + iconSz - numW + 2, ny := iy + iconSz - numH + 2
+                bx2 := Max(ix + iconSz, nx + numW), by2 := Max(iy + iconSz, ny + numH)
+                if this._LootOverlaps(placed, ix, iy, bx2, by2)
+                    continue
+                placed.Push([ix, iy, bx2, by2])
+                if (high)
+                    this._DrawDot(sx, sy, 0x80E0FF, iconSz // 2 + 2 + Round(5 * pulse))
+                if (outline)
+                    this._OrbOutline(parts["icon"], ix, iy, iconSz, ow)
+                this._DrawIconBatched(parts["icon"], ix, iy, iconSz, iconSz)
+                if (outline)
+                    this._DrawTextOutlined(nx, ny, num, txtCol, font, ow)
+                else
+                    this._DrawText(nx, ny, num, txtCol, font)
+                continue
+            }
+
+            ; ── Beside-marker: gold dot on the drop, amount + orb to the right (or text only). ──
             dotR := d[5] ? 4 : 3
-            ; High-value drops (>= alert threshold) get a pulsing halo so they catch the eye.
-            if (pulseOn && alertEx > 0 && valueEx >= alertEx)
+            if (high)
                 this._DrawDot(sx, sy, 0x80E0FF, dotR + 2 + Round(5 * pulse))
             this._DrawDot(sx, sy, dotCol, dotR)
             if !(parts && IsObject(parts))
                 continue
-            num := parts.Has("num") ? parts["num"] : ""
-            tm   := this._MeasureText(font, num)
+            tm := this._MeasureText(font, num)
             numW := tm["w"], numH := tm["h"]
-            half := Max(numH, iconSz) // 2     ; vertical half-extent of the whole label
-
-            ; Order: amount FIRST, then the orb icon right after the measured text width, both
-            ; vertically centered on the dot so number + orb read as one unit.
-            tx    := sx + 7
-            iconX := tx + numW + gap
-            x1 := tx, y1 := sy - half, x2 := iconX + iconSz, y2 := sy + half
-            overlap := false
-            for _, p in placed
-            {
-                if (x1 < p[3] && x2 > p[1] && y1 < p[4] && y2 > p[2])
-                {
-                    overlap := true
-                    break
-                }
-            }
-            if overlap
-                continue                       ; dot only — keep the cluster readable
-            placed.Push([x1, y1, x2, y2])
-
+            half := Max(numH, iconSz) // 2
+            tx := sx + 7, iconX := tx + numW + gap
+            bx2 := hasOrb ? (iconX + iconSz) : (tx + numW)
+            if this._LootOverlaps(placed, tx, sy - half, bx2, sy + half)
+                continue
+            placed.Push([tx, sy - half, bx2, sy + half])
             iy := sy - iconSz // 2
-            if OverlayIconReady(parts["icon"])
+            if (hasOrb)
             {
-                ; Orb outline: black silhouettes offset by ow (matches the text outline), then the
-                ; orb on top — a cohesive look without an enlarging backing disc.
                 if (outline)
-                {
-                    this._DrawIconBatched(parts["icon"], iconX - ow, iy, iconSz, iconSz, true)
-                    this._DrawIconBatched(parts["icon"], iconX + ow, iy, iconSz, iconSz, true)
-                    this._DrawIconBatched(parts["icon"], iconX, iy - ow, iconSz, iconSz, true)
-                    this._DrawIconBatched(parts["icon"], iconX, iy + ow, iconSz, iconSz, true)
-                    this._DrawIconBatched(parts["icon"], iconX - ow, iy - ow, iconSz, iconSz, true)
-                    this._DrawIconBatched(parts["icon"], iconX + ow, iy - ow, iconSz, iconSz, true)
-                    this._DrawIconBatched(parts["icon"], iconX - ow, iy + ow, iconSz, iconSz, true)
-                    this._DrawIconBatched(parts["icon"], iconX + ow, iy + ow, iconSz, iconSz, true)
-                }
+                    this._OrbOutline(parts["icon"], iconX, iy, iconSz, ow)
                 this._DrawIconBatched(parts["icon"], iconX, iy, iconSz, iconSz)
                 if (outline)
                     this._DrawTextOutlined(tx, sy - numH // 2, num, txtCol, font, ow)
@@ -1492,13 +1493,35 @@ class RadarOverlay extends GdiOverlayBase
             else
             {
                 ; Text fallback so the value still reads when the orb image is unavailable.
-                unit := (parts["icon"] = "divine") ? " div" : " ex"
+                unit := (parts.Has("icon") && parts["icon"] = "divine") ? " div" : " ex"
                 if (outline)
                     this._DrawTextOutlined(tx, sy - numH // 2, num unit, txtCol, font, ow)
                 else
                     this._DrawText(tx, sy - numH // 2, num unit, txtCol, font)
             }
         }
+    }
+
+    ; AABB overlap test against the label boxes already placed this frame.
+    _LootOverlaps(placed, x1, y1, x2, y2)
+    {
+        for _, p in placed
+            if (x1 < p[3] && x2 > p[1] && y1 < p[4] && y2 > p[2])
+                return true
+        return false
+    }
+
+    ; 8-direction black silhouette halo behind an orb (the image equivalent of a text outline).
+    _OrbOutline(iconKey, x, y, sz, ow)
+    {
+        this._DrawIconBatched(iconKey, x - ow, y, sz, sz, true)
+        this._DrawIconBatched(iconKey, x + ow, y, sz, sz, true)
+        this._DrawIconBatched(iconKey, x, y - ow, sz, sz, true)
+        this._DrawIconBatched(iconKey, x, y + ow, sz, sz, true)
+        this._DrawIconBatched(iconKey, x - ow, y - ow, sz, sz, true)
+        this._DrawIconBatched(iconKey, x + ow, y - ow, sz, sz, true)
+        this._DrawIconBatched(iconKey, x - ow, y + ow, sz, sz, true)
+        this._DrawIconBatched(iconKey, x + ow, y + ow, sz, sz, true)
     }
 
     ; Insertion-sorts the frame drops by valueEx (element [4]) descending — tiny list.
