@@ -3458,6 +3458,36 @@
       padding-left: 12px
     }
 
+    /* ── Section-header consistency ──────────────────────────────────────
+       Sub-section headers (a .cfg-header inside a nested details element)
+       are uniformly smaller than the chapter title — so no section needs an
+       inline font-size on its header. Top-level section titles (one details
+       level deep) keep the full 17px from .cfg-header. */
+    details details summary .cfg-header {
+      font-size: 13px
+    }
+
+    /* Non-collapsible sub-heading inside a panel (when a full collapsible
+       group is overkill, e.g. the Loot tab's "Current run"/"This session").
+       Gilded serif with a hairline rule — consistent everywhere. */
+    .cfg-subhead {
+      color: var(--codex-gold-hi);
+      font-family: var(--codex-serif);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      padding: 8px 0 4px;
+      border-bottom: 1px solid var(--codex-rule)
+    }
+
+    /* Small ancillary note text — use instead of inline font-size/colour
+       spans so greyed hints read the same across the GUI. */
+    .cfg-note {
+      font-family: var(--codex-serif);
+      font-size: 11px;
+      color: var(--subtext)
+    }
+
     .cfg-slider-row {
       display: flex;
       align-items: center;
@@ -4689,18 +4719,18 @@
         </div>
 
         <div class="cfg-section">
-          <div class="cfg-header" style="margin-bottom:4px">Current run</div>
+          <div class="cfg-subhead">Current run</div>
           <div id="lt-live" class="lt-live"><div class="al-desc">Waiting for data…</div></div>
         </div>
 
         <div class="cfg-section">
-          <div class="cfg-header" style="margin-bottom:4px">This session</div>
+          <div class="cfg-subhead">This session</div>
           <div id="lt-session-summary" class="al-desc" style="margin:0">—</div>
           <div id="lt-runs"></div>
         </div>
 
         <div class="cfg-section">
-          <div class="cfg-header" style="margin-bottom:4px">Valuable drops (session)</div>
+          <div class="cfg-subhead">Valuable drops (session)</div>
           <div id="lt-items"><div class="al-desc">No priced drops yet.</div></div>
         </div>
 
@@ -4723,7 +4753,7 @@
               <label class="al-field"><span class="al-cap">History size (rows)</span><span class="hk-num"><input type="number" id="lt-historySize" min="5" max="500" onchange="lootNum('historySize',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
               <label class="al-field"><span class="al-cap">Sessions to keep</span><span class="hk-num"><input type="number" id="lt-maxSessions" min="1" max="500" onchange="lootNum('maxSessions',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
             </div>
-            <div class="cfg-header" style="margin:8px 0 2px">On-screen bars</div>
+            <div class="cfg-subhead">On-screen bars</div>
             <div class="al-line">
               <label class="al-field"><span class="al-cap">Compact bar height (px)</span><span class="hk-num"><input type="number" id="lt-compactHeight" min="60" max="400" step="5" onchange="lootNum('compactHeight',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
               <label class="al-field"><span class="al-cap">Bottom offset (px)</span><span class="hk-num"><input type="number" id="lt-barBottomOffset" min="0" max="600" step="5" onchange="lootNum('barBottomOffset',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
@@ -4736,7 +4766,7 @@
         </div>
 
         <div class="cfg-section" id="lt-sec-history" style="display:none">
-          <div class="cfg-header" style="margin-bottom:4px">Session history</div>
+          <div class="cfg-subhead">Session history</div>
           <div id="lt-sessions"><div class="al-desc">Loading…</div></div>
           <div id="lt-detail"></div>
         </div>
@@ -4989,7 +5019,7 @@
                 <!-- ══ LEFT: STASHING (collapsible) ══════════════════════ -->
                 <div class="sm-col">
                   <details class="sm-sub sm-top" open>
-                    <summary><span class="sm-top-title">📥 Auto Stashing</span></summary>
+                    <summary><div class="cfg-header">📥 Auto Stashing</div></summary>
                     <div class="sm-sub-body">
                       <div class="cfg-row"><span class="cfg-label">Enable auto stashing</span>
                         <label class="toggle"><input type="checkbox" id="sm-stashEnabled"
@@ -4997,7 +5027,7 @@
                       </div>
 
                       <details class="sm-sub" ontoggle="if(this.open) ahkCall('StashRequestInventory','stash')">
-                        <summary><div class="cfg-header" style="font-size:12px">🚫 Ignore filter
+                        <summary><div class="cfg-header">🚫 Ignore filter
                           <span id="sm-stash-ignore-meta" class="ent-junk-custom-meta"></span></div></summary>
                         <div class="sm-sub-body">
                           <div class="cfg-help">
@@ -5016,7 +5046,7 @@
                       </details>
 
                       <details class="sm-sub">
-                        <summary><div class="cfg-header" style="font-size:12px">🎲 Randomization</div></summary>
+                        <summary><div class="cfg-header">🎲 Randomization</div></summary>
                         <div class="sm-sub-body">
                           <div class="sm-rnd-row">
                             <div class="sm-rnd-group">
@@ -5041,7 +5071,7 @@
                 <!-- ══ RIGHT: AUTO SELLING (collapsible) ═════════════════ -->
                 <div class="sm-col">
                   <details class="sm-sub sm-top" open>
-                    <summary><span class="sm-top-title">🛒 Auto Selling</span></summary>
+                    <summary><div class="cfg-header">🛒 Auto Selling</div></summary>
                     <div class="sm-sub-body">
                       <div class="cfg-row"><span class="cfg-label">Enable auto selling</span>
                         <label class="toggle"><input type="checkbox" id="sm-sellEnabled"
@@ -5049,7 +5079,7 @@
                       </div>
 
                       <details class="sm-sub" ontoggle="if(this.open) ahkCall('StashRequestInventory','sell')">
-                        <summary><div class="cfg-header" style="font-size:12px">🚫 Ignore filter
+                        <summary><div class="cfg-header">🚫 Ignore filter
                           <span id="sm-sell-ignore-meta" class="ent-junk-custom-meta"></span></div></summary>
                         <div class="sm-sub-body">
                           <div class="cfg-help">
@@ -5070,7 +5100,7 @@
                       </details>
 
                       <details class="sm-sub">
-                        <summary><div class="cfg-header" style="font-size:12px">🎲 Randomization</div></summary>
+                        <summary><div class="cfg-header">🎲 Randomization</div></summary>
                         <div class="sm-sub-body">
                           <div class="sm-rnd-row">
                             <div class="sm-rnd-group">
@@ -5095,7 +5125,7 @@
 
               <!-- ══ SHARED OPTIONS (full-width collapsible) ═══════════════ -->
               <details class="sm-sub sm-top" open style="margin-top:10px">
-                <summary><span class="sm-top-title">⚙️ Shared Options</span></summary>
+                <summary><div class="cfg-header">⚙️ Shared Options</div></summary>
                 <div class="sm-sub-body">
                   <div class="cfg-row"><span class="cfg-label">Show overlay button</span>
                     <label class="toggle"><input type="checkbox" id="sm-showButton"
@@ -5168,7 +5198,7 @@
                    ════════════════════════════════════════════════════ -->
               <details open style="margin-top:8px">
                 <summary style="cursor:pointer;padding:4px 0">
-                  <div class="cfg-header" style="font-size:12px">📊 Live Status</div>
+                  <div class="cfg-header">📊 Live Status</div>
                 </summary>
                 <div style="margin-top:4px;padding:6px 0 4px 4px">
                   <div class="cfg-row"><span class="cfg-label">State</span><span id="cfg-autopilot-state"
@@ -5191,7 +5221,7 @@
                    ════════════════════════════════════════════════════ -->
               <details ontoggle="if(this.open) requestAnimationFrame(_sbInitAll)" style="margin-top:8px">
                 <summary style="cursor:pointer;padding:4px 0">
-                  <div class="cfg-header" style="font-size:12px">⚔ Combat</div>
+                  <div class="cfg-header">⚔ Combat</div>
                 </summary>
                 <div style="margin-top:4px;padding:6px 0 4px 4px">
                   <div class="cfg-slider-pair">
@@ -5241,7 +5271,7 @@
                    ════════════════════════════════════════════════════ -->
               <details ontoggle="if(this.open) requestAnimationFrame(_sbInitAll)" style="margin-top:8px">
                 <summary style="cursor:pointer;padding:4px 0">
-                  <div class="cfg-header" style="font-size:12px">🧭 Exploration</div>
+                  <div class="cfg-header">🧭 Exploration</div>
                 </summary>
                 <div style="margin-top:4px;padding:6px 0 4px 4px">
                   <div class="cfg-slider-row">
@@ -5267,7 +5297,7 @@
                    ════════════════════════════════════════════════════ -->
               <details style="margin-top:8px">
                 <summary style="cursor:pointer;padding:4px 0">
-                  <div class="cfg-header" style="font-size:12px">💎 Loot Pickup</div>
+                  <div class="cfg-header">💎 Loot Pickup</div>
                 </summary>
                 <div style="margin-top:4px;padding:6px 0 4px 4px">
                   <div class="cfg-help">
@@ -5363,7 +5393,7 @@
                    rf-* ids / setRadarFilter handlers so header sync is unchanged. -->
               <details style="margin-top:6px">
                 <summary style="cursor:pointer;padding:4px 0">
-                  <div class="cfg-header" style="font-size:12px">Entity Markers</div>
+                  <div class="cfg-header">Entity Markers</div>
                 </summary>
                 <div style="margin-top:4px;padding:6px 0 4px 4px">
                   <div class="cfg-help">Which monster categories the radar draws on the minimap and on-screen overlay. Off = invisible to the radar, even if the entity is in range.</div>
@@ -5418,7 +5448,7 @@
                 stay untagged there). Enable Loot pricing in the Loot tab first, or values stay 0.
               </div>
               <details class="cfg-subsection" open>
-                <summary><div class="cfg-header" style="font-size:13px">🎯 Detection &amp; alerts</div></summary>
+                <summary><div class="cfg-header">🎯 Detection &amp; alerts</div></summary>
               <div class="cfg-row"><span class="cfg-label">Enable loot value radar</span>
                 <label class="toggle"><input type="checkbox" id="lrv-enabled"
                     onchange="ahkCall('SetLootRadarValue','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
@@ -5437,7 +5467,7 @@
               </div>
               </details>
               <details class="cfg-subsection" open>
-                <summary><div class="cfg-header" style="font-size:13px">📋 Valuable nearby list</div></summary>
+                <summary><div class="cfg-header">📋 Valuable nearby list</div></summary>
               <div class="cfg-row"><span class="cfg-label">Show "valuable nearby" list</span>
                 <label class="toggle"><input type="checkbox" id="lrv-showList"
                     onchange="ahkCall('SetLootRadarValue','showList', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
@@ -5456,7 +5486,7 @@
               </div>
               </details>
               <details class="cfg-subsection" open>
-                <summary><div class="cfg-header" style="font-size:13px">🏷️ On-map label</div></summary>
+                <summary><div class="cfg-header">🏷️ On-map label</div></summary>
               <div class="cfg-row"><span class="cfg-label">Value on the orb (replace dot)</span>
                 <label class="toggle"><input type="checkbox" id="lrv-mapOnOrb"
                     onchange="ahkCall('SetLootRadarValue','mapOnOrb', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
@@ -5507,7 +5537,7 @@
               </details>
 
               <details class="cfg-subsection">
-                <summary><div class="cfg-header" style="font-size:13px">🛡️ Unique pricing via the official Trade API (advanced)</div></summary>
+                <summary><div class="cfg-header">🛡️ Unique pricing via the official Trade API (advanced)</div></summary>
                 <div class="cfg-help" style="border-left:2px solid #b58b46;padding-left:8px">
                   <b>Security note — read first.</b> This fills the unique-price gap poe.ninja leaves on
                   Standard by querying the <b>official PoE2 trade site inside a logged-in browser
@@ -7488,7 +7518,7 @@
       let totalEx = 0, totalSec = 0;
       maps.forEach(m => { totalEx += m.profitEx || 0; totalSec += m.activeSeconds || 0; });
       const rate = d.divRate || 0;
-      let h = '<div class="cfg-header" style="margin:10px 0 4px">Session ' + _ltEsc(d.start) + '</div>';
+      let h = '<div class="cfg-subhead" style="margin-top:10px">Session ' + _ltEsc(d.start) + '</div>';
       h += '<div class="al-desc">Length ' + _ltFmtDurSec(d.durationSec) + ' · Maps ' + maps.length
         + ' · Total ' + (rate > 0 ? (totalEx / rate).toFixed(1) + ' div' : Math.round(totalEx) + ' ex') + '</div>';
       h += '<table class="lt-tbl"><tr><th>Map</th><th>Time</th><th>Profit</th></tr>';
