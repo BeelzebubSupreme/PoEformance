@@ -774,8 +774,8 @@ class PoE2PlayerComponentsReader extends PoE2EntityReader
         if !this.IsProbablyValidPointer(stdStringAddr)
             return ""
 
-        length   := this.Mem.ReadInt(stdStringAddr + 0x10)
-        capacity := this.Mem.ReadInt(stdStringAddr + 0x18)
+        length   := this.Mem.ReadInt(stdStringAddr + PoE2Offsets.StdString["Length"])
+        capacity := this.Mem.ReadInt(stdStringAddr + PoE2Offsets.StdString["Capacity"])
 
         if (length <= 0 || length > 512)
             return ""

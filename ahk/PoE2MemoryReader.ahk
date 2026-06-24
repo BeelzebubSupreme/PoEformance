@@ -1098,9 +1098,9 @@ class PoE2GameStateReader extends PoE2InventoryReader
 
         currentStateAddress := 0
         currentStateName := "GameNotLoaded"
-        if (currentStateVecLast > 0x10)
+        if (currentStateVecLast > PoE2Offsets.GameState["StateEntrySize"])
         {
-            currentStateAddress := this.Mem.ReadPtr(currentStateVecLast - 0x10)
+            currentStateAddress := this.Mem.ReadPtr(currentStateVecLast - PoE2Offsets.GameState["StateEntrySize"])
             if (currentStateAddress && statesByAddress.Has(currentStateAddress))
                 currentStateName := statesByAddress[currentStateAddress]
         }
@@ -1149,9 +1149,9 @@ class PoE2GameStateReader extends PoE2InventoryReader
 
         currentStateAddress := 0
         currentStateName := "GameNotLoaded"
-        if (currentStateVecLast > 0x10)
+        if (currentStateVecLast > PoE2Offsets.GameState["StateEntrySize"])
         {
-            currentStateAddress := this.Mem.ReadPtr(currentStateVecLast - 0x10)
+            currentStateAddress := this.Mem.ReadPtr(currentStateVecLast - PoE2Offsets.GameState["StateEntrySize"])
             if (currentStateAddress && statesByAddress.Has(currentStateAddress))
                 currentStateName := statesByAddress[currentStateAddress]
         }
@@ -2357,7 +2357,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
 
         entityListOffset := PoE2Offsets.AreaInstance["AwakeEntities"]
         awakeMapAddress := areaInstanceAddress + entityListOffset
-        sleepingMapAddress := awakeMapAddress + 0x10
+        sleepingMapAddress := awakeMapAddress + (PoE2Offsets.AreaInstance["SleepingEntities"] - PoE2Offsets.AreaInstance["AwakeEntities"])  ; next std::map in EntityListStruct
         awakeEntities := this.ReadAreaEntityMapSummary(awakeMapAddress, awakeLimit, playerOrigin)
         sleepingEntities := this.ReadAreaEntityMapSummary(sleepingMapAddress, sleepingLimit, playerOrigin)
 
@@ -2944,9 +2944,9 @@ class PoE2GameStateReader extends PoE2InventoryReader
             }
 
             currentStateAddress := 0
-            if (currentStateVecLast > 0x10)
+            if (currentStateVecLast > PoE2Offsets.GameState["StateEntrySize"])
             {
-                currentStateAddress := this.Mem.ReadPtr(currentStateVecLast - 0x10)
+                currentStateAddress := this.Mem.ReadPtr(currentStateVecLast - PoE2Offsets.GameState["StateEntrySize"])
                 if !(currentStateAddress && statesByAddress.Has(currentStateAddress))
                     currentStateAddress := 0
             }
@@ -3504,7 +3504,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
 
         ; Sleeping entities — skip during zone loading to preserve RPM budget for awake decodes.
         ; Once the cache is >90% full (steady state), scan sleeping entities with a small limit.
-        sleepingMapAddress := awakeMapAddress + 0x10
+        sleepingMapAddress := awakeMapAddress + (PoE2Offsets.AreaInstance["SleepingEntities"] - PoE2Offsets.AreaInstance["AwakeEntities"])  ; next std::map in EntityListStruct
         emptyEntitySummary := Map("address", 0, "size", 0, "sample", [], "sampleCount", 0)
         if (isZoneLoading)
         {
