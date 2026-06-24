@@ -1443,20 +1443,23 @@ class RadarOverlay extends GdiOverlayBase
 
             if (onOrb && hasOrb)
             {
-                ; ── Orb-as-marker: the orb sits ON the drop; the value is a badge bottom-right. ──
-                ix := sx - iconSz // 2, iy := sy - iconSz // 2
+                ; ── Orb-as-marker: the orb REPLACES the dot entirely. The value is a badge at the
+                ; lower-right, LEFT-anchored so longer numbers grow rightward (never cover the orb).
+                ; High-value: the ORB ITSELF pulses (no halo/dot behind it). ──
+                isz := high ? iconSz + Round(iconSz * 0.18 * pulse) : iconSz
+                ix := sx - isz // 2, iy := sy - isz // 2
                 tm := this._MeasureText(font, num)
                 numW := tm["w"], numH := tm["h"]
-                nx := ix + iconSz - numW + 2, ny := iy + iconSz - numH + 2
-                bx2 := Max(ix + iconSz, nx + numW), by2 := Max(iy + iconSz, ny + numH)
-                if this._LootOverlaps(placed, ix, iy, bx2, by2)
+                nx := sx + iconSz // 5                          ; left-anchored → grows right
+                ny := sy + iconSz // 2 - Round(numH * 0.72)     ; sit low (lower-right, overhanging)
+                bx1 := Min(ix, nx), by1 := Min(iy, ny)
+                bx2 := Max(ix + isz, nx + numW), by2 := Max(iy + isz, ny + numH)
+                if this._LootOverlaps(placed, bx1, by1, bx2, by2)
                     continue
-                placed.Push([ix, iy, bx2, by2])
-                if (high)
-                    this._DrawDot(sx, sy, 0x80E0FF, iconSz // 2 + 2 + Round(5 * pulse))
+                placed.Push([bx1, by1, bx2, by2])
                 if (outline)
-                    this._OrbOutline(parts["icon"], ix, iy, iconSz, ow)
-                this._DrawIconBatched(parts["icon"], ix, iy, iconSz, iconSz)
+                    this._OrbOutline(parts["icon"], ix, iy, isz, ow)
+                this._DrawIconBatched(parts["icon"], ix, iy, isz, isz)
                 if (outline)
                     this._DrawTextOutlined(nx, ny, num, txtCol, font, ow)
                 else

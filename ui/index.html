@@ -7182,10 +7182,14 @@
         pn.style.color = mc;
         if (s.mapFontSize) pn.style.fontSize = s.mapFontSize + 'px';
         if (onOrb) {
-          pn.style.position = 'absolute'; pn.style.right = '-2px'; pn.style.bottom = '-3px';
+          pn.style.position = 'absolute';
+          pn.style.left = Math.round((s.mapIconSize || 18) * 0.45) + 'px';   // left-anchored → grows right
+          pn.style.right = '';
+          pn.style.bottom = '-2px';
           pn.style.textShadow = '0 0 2px #000,0 0 2px #000,0 0 1px #000';
         } else {
-          pn.style.position = 'static'; pn.style.right = ''; pn.style.bottom = ''; pn.style.textShadow = '';
+          pn.style.position = 'static';
+          pn.style.left = ''; pn.style.right = ''; pn.style.bottom = ''; pn.style.textShadow = '';
         }
       }
     }
