@@ -1382,9 +1382,10 @@ class RadarOverlay extends GdiOverlayBase
     }
 
     ; Queues an icon blit (drawn after dots, before text). iconKey resolves via OverlayImage.
-    _DrawIconBatched(iconKey, x, y, w, h)
+    ; silhouette=true paints the icon's shape solid black (an outline-halo pass for the orb).
+    _DrawIconBatched(iconKey, x, y, w, h, silhouette := false)
     {
-        this._iconBatch.Push([iconKey, x, y, w, h])
+        this._iconBatch.Push([iconKey, x, y, w, h, silhouette])
     }
 
     ; Queues outlined text: a black halo (4 offset copies) then the colored fill on top, all in
@@ -1407,6 +1408,7 @@ class RadarOverlay extends GdiOverlayBase
     _FlushLootValues()
     {
         global g_lrvMapIconSize, g_lrvMapFontSize, g_lrvMapColor
+        global g_lrvMapOutline, g_lrvMapOutlineWidth, g_lrvMapPulse, g_lrvAlertEx
         drops := this._lrvFrameDrops
         this._lrvFrameDrops := []
         if (drops.Length = 0)
@@ -1415,19 +1417,27 @@ class RadarOverlay extends GdiOverlayBase
 
         ; User-configurable look (Config → Overlay → Loot value radar). The MARKER DOT keeps its
         ; own gold color; only the amount text uses the configured color ("Schriftfarbe").
-        dotCol := 0x5AA8C8
-        txtCol := GroupColorToBgr(IsSet(g_lrvMapColor) ? g_lrvMapColor : "#C8A85A")
-        iconSz := (IsSet(g_lrvMapIconSize) ? g_lrvMapIconSize : 18)
-        fontPx := (IsSet(g_lrvMapFontSize) ? g_lrvMapFontSize : 14)
-        font   := this._GetFont(-fontPx, 600)
-        gap    := 3                            ; small gap between the amount and the orb
-        ow     := Max(1, fontPx // 14)         ; amount outline thickness (scales with font size)
+        dotCol  := 0x5AA8C8
+        txtCol  := GroupColorToBgr(IsSet(g_lrvMapColor) ? g_lrvMapColor : "#C8A85A")
+        iconSz  := (IsSet(g_lrvMapIconSize) ? g_lrvMapIconSize : 18)
+        fontPx  := (IsSet(g_lrvMapFontSize) ? g_lrvMapFontSize : 14)
+        font    := this._GetFont(-fontPx, 600)
+        gap     := 3                           ; small gap between the amount and the orb
+        outline := (!IsSet(g_lrvMapOutline) || g_lrvMapOutline)   ; outline amount + orb (default on)
+        ow      := (IsSet(g_lrvMapOutlineWidth) && g_lrvMapOutlineWidth > 0) ? g_lrvMapOutlineWidth : Max(1, fontPx // 14)
+        pulseOn := (!IsSet(g_lrvMapPulse) || g_lrvMapPulse)
+        alertEx := (IsSet(g_lrvAlertEx) ? g_lrvAlertEx : 0)
+        pulse   := 0.5 + 0.5 * Sin(A_TickCount / 220.0)   ; 0..1 wall-clock pulse phase
 
         placed := []                           ; [x1, y1, x2, y2] of labels already drawn this frame
         for _, d in drops
         {
-            sx := d[1], sy := d[2], parts := d[3]
-            this._DrawDot(sx, sy, dotCol, d[5] ? 4 : 3)
+            sx := d[1], sy := d[2], parts := d[3], valueEx := d[4]
+            dotR := d[5] ? 4 : 3
+            ; High-value drops (>= alert threshold) get a pulsing halo so they catch the eye.
+            if (pulseOn && alertEx > 0 && valueEx >= alertEx)
+                this._DrawDot(sx, sy, 0x80E0FF, dotR + 2 + Round(5 * pulse))
+            this._DrawDot(sx, sy, dotCol, dotR)
             if !(parts && IsObject(parts))
                 continue
             num := parts.Has("num") ? parts["num"] : ""
@@ -1453,19 +1463,32 @@ class RadarOverlay extends GdiOverlayBase
                 continue                       ; dot only — keep the cluster readable
             placed.Push([x1, y1, x2, y2])
 
+            iy := sy - iconSz // 2
             if OverlayIconReady(parts["icon"])
             {
-                ; Dark backing disc so the orb pops on a busy map, then the orb, then the outlined
-                ; amount — keeps the label from getting lost over varied terrain (in-game feedback).
-                this._DrawDot(iconX + iconSz // 2, sy, 0x000000, iconSz // 2 + 2)
-                this._DrawIconBatched(parts["icon"], iconX, sy - iconSz // 2, iconSz, iconSz)
-                this._DrawTextOutlined(tx, sy - numH // 2, num, txtCol, font, ow)
+                ; Orb outline: black silhouettes offset by ow (matches the text outline), then the
+                ; orb on top — a cohesive look without an enlarging backing disc.
+                if (outline)
+                {
+                    this._DrawIconBatched(parts["icon"], iconX - ow, iy, iconSz, iconSz, true)
+                    this._DrawIconBatched(parts["icon"], iconX + ow, iy, iconSz, iconSz, true)
+                    this._DrawIconBatched(parts["icon"], iconX, iy - ow, iconSz, iconSz, true)
+                    this._DrawIconBatched(parts["icon"], iconX, iy + ow, iconSz, iconSz, true)
+                }
+                this._DrawIconBatched(parts["icon"], iconX, iy, iconSz, iconSz)
+                if (outline)
+                    this._DrawTextOutlined(tx, sy - numH // 2, num, txtCol, font, ow)
+                else
+                    this._DrawText(tx, sy - numH // 2, num, txtCol, font)
             }
             else
             {
                 ; Text fallback so the value still reads when the orb image is unavailable.
                 unit := (parts["icon"] = "divine") ? " div" : " ex"
-                this._DrawTextOutlined(tx, sy - numH // 2, num unit, txtCol, font, ow)
+                if (outline)
+                    this._DrawTextOutlined(tx, sy - numH // 2, num unit, txtCol, font, ow)
+                else
+                    this._DrawText(tx, sy - numH // 2, num unit, txtCol, font)
             }
         }
     }

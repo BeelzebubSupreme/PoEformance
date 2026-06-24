@@ -169,6 +169,9 @@ LoadLootRadarValue()
     global g_lrvMapColor := "#C8A85A"       ; on-map value marker + amount color (#RRGGBB)
     global g_lrvShowDist := true            ; show distance-to-drop in the "valuable nearby" list
     global g_lrvShowArrow := true           ; show a direction arrow to the drop in that list
+    global g_lrvMapOutline := true          ; black outline around the on-map amount + orb
+    global g_lrvMapOutlineWidth := 0        ; outline thickness px (0 = auto from font size)
+    global g_lrvMapPulse := true            ; pulse the marker for high-value drops (>= alertEx)
     global g_lrvConfigFile := _ConfigPath()
 
     ; Runtime (never persisted)
@@ -191,6 +194,9 @@ LoadLootRadarValue()
         g_lrvMapColor     := IniRead(f, "LootRadarValue", "mapColor", g_lrvMapColor)
         g_lrvShowDist     := (IniRead(f, "LootRadarValue", "showDist", g_lrvShowDist ? "1" : "0") = "1")
         g_lrvShowArrow    := (IniRead(f, "LootRadarValue", "showArrow", g_lrvShowArrow ? "1" : "0") = "1")
+        g_lrvMapOutline   := (IniRead(f, "LootRadarValue", "mapOutline", g_lrvMapOutline ? "1" : "0") = "1")
+        g_lrvMapOutlineWidth := Integer(IniRead(f, "LootRadarValue", "mapOutlineWidth", g_lrvMapOutlineWidth))
+        g_lrvMapPulse     := (IniRead(f, "LootRadarValue", "mapPulse", g_lrvMapPulse ? "1" : "0") = "1")
     } catch as ex {
         LogError("LoadLootRadarValue", ex)
     }
@@ -202,7 +208,7 @@ SaveLootRadarValue()
 {
     global g_lrvEnabled, g_lrvAlertEnabled, g_lrvMinLabelEx, g_lrvAlertEx, g_lrvConfigFile
     global g_lrvShowList, g_lrvListMax, g_lrvMapIconSize, g_lrvMapFontSize, g_lrvMapColor
-    global g_lrvShowDist, g_lrvShowArrow
+    global g_lrvShowDist, g_lrvShowArrow, g_lrvMapOutline, g_lrvMapOutlineWidth, g_lrvMapPulse
     f := g_lrvConfigFile
     try {
         IniWrite(g_lrvEnabled ? "1" : "0", f, "LootRadarValue", "enabled")
@@ -216,6 +222,9 @@ SaveLootRadarValue()
         IniWrite(g_lrvMapColor, f, "LootRadarValue", "mapColor")
         IniWrite(g_lrvShowDist ? "1" : "0", f, "LootRadarValue", "showDist")
         IniWrite(g_lrvShowArrow ? "1" : "0", f, "LootRadarValue", "showArrow")
+        IniWrite(g_lrvMapOutline ? "1" : "0", f, "LootRadarValue", "mapOutline")
+        IniWrite(g_lrvMapOutlineWidth, f, "LootRadarValue", "mapOutlineWidth")
+        IniWrite(g_lrvMapPulse ? "1" : "0", f, "LootRadarValue", "mapPulse")
     } catch as ex {
         LogError("SaveLootRadarValue", ex)
     }
@@ -233,7 +242,7 @@ _LrvNum(v)
 ; Keeps the value thresholds non-negative and the list length sane.
 _LrvClamp()
 {
-    global g_lrvMinLabelEx, g_lrvAlertEx, g_lrvListMax, g_lrvMapIconSize, g_lrvMapFontSize
+    global g_lrvMinLabelEx, g_lrvAlertEx, g_lrvListMax, g_lrvMapIconSize, g_lrvMapFontSize, g_lrvMapOutlineWidth
     g_lrvMinLabelEx := Max(0.0, g_lrvMinLabelEx + 0.0)
     g_lrvAlertEx    := Max(0.0, g_lrvAlertEx + 0.0)
     if !IsSet(g_lrvListMax)
@@ -245,6 +254,9 @@ _LrvClamp()
         g_lrvMapFontSize := 14
     g_lrvMapIconSize := Max(6, Min(48, Integer(g_lrvMapIconSize)))
     g_lrvMapFontSize := Max(6, Min(48, Integer(g_lrvMapFontSize)))
+    if !IsSet(g_lrvMapOutlineWidth)
+        g_lrvMapOutlineWidth := 0
+    g_lrvMapOutlineWidth := Max(0, Min(5, Integer(g_lrvMapOutlineWidth)))
 }
 
 ; Loose boolean coercion (true/1/"1"/"true"/"yes"/"on").
@@ -261,7 +273,7 @@ _LrvApplySetting(key, val)
 {
     global g_lrvEnabled, g_lrvAlertEnabled, g_lrvMinLabelEx, g_lrvAlertEx
     global g_lrvShowList, g_lrvListMax, g_lrvMapIconSize, g_lrvMapFontSize, g_lrvMapColor
-    global g_lrvShowDist, g_lrvShowArrow
+    global g_lrvShowDist, g_lrvShowArrow, g_lrvMapOutline, g_lrvMapOutlineWidth, g_lrvMapPulse
     global g_lrvAnnot, g_lrvNearby, g_lrvAlerted
     switch key
     {
@@ -291,6 +303,12 @@ _LrvApplySetting(key, val)
             g_lrvShowDist := _LrvTruthy(val)
         case "showArrow":
             g_lrvShowArrow := _LrvTruthy(val)
+        case "mapOutline":
+            g_lrvMapOutline := _LrvTruthy(val)
+        case "mapOutlineWidth":
+            g_lrvMapOutlineWidth := Integer(_LrvNum(val))
+        case "mapPulse":
+            g_lrvMapPulse := _LrvTruthy(val)
     }
     _LrvClamp()
 }
@@ -300,7 +318,7 @@ BuildLootRadarValueHeaderJson()
 {
     global g_lrvEnabled, g_lrvAlertEnabled, g_lrvMinLabelEx, g_lrvAlertEx
     global g_lrvShowList, g_lrvListMax, g_lrvMapIconSize, g_lrvMapFontSize, g_lrvMapColor
-    global g_lrvShowDist, g_lrvShowArrow
+    global g_lrvShowDist, g_lrvShowArrow, g_lrvMapOutline, g_lrvMapOutlineWidth, g_lrvMapPulse
     j := "{"
     j .= '"enabled":'       (g_lrvEnabled ? "true" : "false")
     j .= ',"alertEnabled":' (g_lrvAlertEnabled ? "true" : "false")
@@ -313,6 +331,9 @@ BuildLootRadarValueHeaderJson()
     j .= ',"mapColor":"'    g_lrvMapColor '"'
     j .= ',"showDist":'     (g_lrvShowDist ? "true" : "false")
     j .= ',"showArrow":'    (g_lrvShowArrow ? "true" : "false")
+    j .= ',"mapOutline":'   (g_lrvMapOutline ? "true" : "false")
+    j .= ',"mapOutlineWidth":' (g_lrvMapOutlineWidth + 0)
+    j .= ',"mapPulse":'     (g_lrvMapPulse ? "true" : "false")
     j .= "}"
     return j
 }
