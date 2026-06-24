@@ -181,6 +181,9 @@ _DispatchBridgeCall(method, args)
             SetTimer(LtTradeOpenSession, -1)
         case "PoeTradeClose":
             SetTimer(PoeTradeSessionClose, -1)
+        case "PoeTradeHide":
+            ; Hide the trade-session window to the background; its queries keep running.
+            SetTimer(LtTradeHideSession, -1)
         case "LootTradePriceNow":
             ; Manual trigger: drain the pending trade-pricing queue immediately.
             SetTimer(_LtTradeDrain, -1)

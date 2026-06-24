@@ -19,6 +19,7 @@ LoadPoeTradeSession()
     global g_poeTradeWin := 0          ; WebViewGui instance (0 = not open)
     global g_poeTradeReady := false    ; injected helper signalled ready on a PoE page
     global g_poeTradeUserDir := A_ScriptDir "\config\wv2_poe"   ; isolated, gitignored profile
+    global g_poeTradeHidden := false   ; window hidden to background (object alive, queries still run)
 }
 
 ; True when the trade session window exists (created). The page may still be on the Cloudflare
@@ -35,12 +36,32 @@ PoeTradeSessionReady()
     return (IsSet(g_poeTradeReady) && g_poeTradeReady)
 }
 
+; Hides the trade window to the background WITHOUT closing it. The WebView2 object stays alive
+; (we never call TrySuspendAsync), so its same-origin fetch() queries keep running — window
+; visibility only governs rendering, not script execution. Re-shown via PoeTradeSessionShow.
+PoeTradeSessionHide()
+{
+    global g_poeTradeWin, g_poeTradeHidden
+    if !PoeTradeSessionOpen()
+        return
+    try g_poeTradeWin.Hide()
+    g_poeTradeHidden := true
+    try SetTimer(PushHeaderToWebView, -50)
+}
+
+; True when the session window exists but is currently hidden to the background.
+PoeTradeSessionHidden()
+{
+    global g_poeTradeHidden
+    return (PoeTradeSessionOpen() && IsSet(g_poeTradeHidden) && g_poeTradeHidden)
+}
+
 ; Opens (or focuses) the trade session window and navigates it to the PoE2 trade search page
 ; for the league. The user logs in / passes Cloudflare once; the session persists in the
 ; gitignored profile folder. Safe to call repeatedly.
 PoeTradeSessionShow(league)
 {
-    global g_poeTradeWin, g_poeTradeReady, g_poeTradeUserDir
+    global g_poeTradeWin, g_poeTradeReady, g_poeTradeUserDir, g_poeTradeHidden
     league := (league != "") ? league : "Standard"
     url := "https://www.pathofexile.com/trade2/search/poe2/" league
 
@@ -50,6 +71,8 @@ PoeTradeSessionShow(league)
             g_poeTradeWin.Show()
             WinActivate("ahk_id " g_poeTradeWin.Hwnd)
         }
+        g_poeTradeHidden := false
+        try SetTimer(PushHeaderToWebView, -50)
         return
     }
 
@@ -68,6 +91,7 @@ PoeTradeSessionShow(league)
         win.OnEvent("Close", (*) => _PoeTradeOnClose())
         g_poeTradeWin := win
         g_poeTradeReady := false
+        g_poeTradeHidden := false
         win.Show()
         ctrl.Navigate(url)
     } catch as ex {
@@ -97,18 +121,20 @@ PoeTradeSend(id, name, league)
 ; Closes the session window (the login stays cached in the profile folder).
 PoeTradeSessionClose()
 {
-    global g_poeTradeWin, g_poeTradeReady
+    global g_poeTradeWin, g_poeTradeReady, g_poeTradeHidden
     if PoeTradeSessionOpen()
         try g_poeTradeWin.Destroy()
     g_poeTradeWin := 0
     g_poeTradeReady := false
+    g_poeTradeHidden := false
 }
 
 _PoeTradeOnClose()
 {
-    global g_poeTradeWin, g_poeTradeReady
+    global g_poeTradeWin, g_poeTradeReady, g_poeTradeHidden
     g_poeTradeWin := 0
     g_poeTradeReady := false
+    g_poeTradeHidden := false
     try SetTimer(PushHeaderToWebView, -50)
 }
 

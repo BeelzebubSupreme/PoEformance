@@ -5456,13 +5456,20 @@
                   <input type="text" id="lt-trade-league" class="cfg-input" style="width:160px" placeholder="Standard"
                       onchange="ahkCall('SetLootTradePricing','league', this.value)">
                 </div>
+                <div class="cfg-row"><span class="cfg-label">Auto-hide window after sign-in</span>
+                  <label class="toggle"><input type="checkbox" id="lt-trade-autohide"
+                      onchange="ahkCall('SetLootTradePricing','autoHide', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+                </div>
                 <div class="cfg-help" style="margin-top:6px">
                   Click "Open PoE trade session", sign in to pathofexile.com once (and pass any
-                  Cloudflare check). The window can stay minimized; the session is remembered. If the
-                  status later shows "blocked / sign-in needed", open it and sign in again.
+                  Cloudflare check). With auto-hide on, the window disappears to the background after
+                  the first successful lookup and keeps pricing silently — it pops back up only if the
+                  status shows "blocked / sign-in needed", so you can sign in again. Use "Hide window"
+                  to tuck it away manually at any time.
                 </div>
                 <div class="cfg-row" style="gap:8px">
-                  <button type="button" class="cfg-btn" onclick="ahkCall('PoeTradeOpen')">Open PoE trade session</button>
+                  <button type="button" class="cfg-btn" id="lt-trade-openbtn" onclick="ahkCall('PoeTradeOpen')">Open PoE trade session</button>
+                  <button type="button" class="cfg-btn" id="lt-trade-hidebtn" onclick="ahkCall('PoeTradeHide')">Hide window</button>
                   <button type="button" class="cfg-btn" onclick="ahkCall('LootTradePriceNow')">Price queued now</button>
                 </div>
                 <div class="cfg-help" id="lt-trade-status">Session: closed · status: idle</div>
@@ -7090,11 +7097,16 @@
       const chk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = v === true || v === 1 || v === '1' || v === 'true'; };
       const val = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
       chk('lt-trade-enabled', s.enabled);
+      chk('lt-trade-autohide', s.autoHide);
       val('lt-trade-league', s.league || '');
+      const ob = document.getElementById('lt-trade-openbtn');
+      if (ob) ob.textContent = s.sessionHidden ? 'Show window' : 'Open PoE trade session';
+      const hb = document.getElementById('lt-trade-hidebtn');
+      if (hb) hb.disabled = !(s.sessionOpen && !s.sessionHidden);
       const st = document.getElementById('lt-trade-status');
       if (st) {
         const parts = [];
-        parts.push('Session: ' + (s.sessionOpen ? (s.sessionReady ? 'open (ready)' : 'open (sign in)') : 'closed'));
+        parts.push('Session: ' + (s.sessionOpen ? (s.sessionHidden ? 'hidden (running)' : (s.sessionReady ? 'open (ready)' : 'open (sign in)')) : 'closed'));
         parts.push('status: ' + (s.status || 'idle'));
         if (typeof s.cacheCount === 'number') parts.push(s.cacheCount + ' cached');
         if (s.queueCount) parts.push(s.queueCount + ' queued');

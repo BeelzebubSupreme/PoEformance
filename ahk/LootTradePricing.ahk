@@ -30,6 +30,7 @@ LoadLootTradePricing()
     global g_ltTradeLeague := "Standard"
     global g_ltTradeTtlHours := 24        ; positive-result cache lifetime
     global g_ltTradeNegTtlHours := 12     ; negative-result (no listings) cache lifetime
+    global g_ltTradeAutoHide := true      ; hide the trade window after the first successful lookup
     global g_ltTradeConfigFile := _ConfigPath()
     global g_ltTradeCacheFile := A_ScriptDir "\data\trade_prices.tsv"
     ; Runtime
@@ -51,6 +52,7 @@ LoadLootTradePricing()
         g_ltTradeLeague     := IniRead(f, "LootTradePricing", "league", defLeague)
         g_ltTradeTtlHours   := Integer(IniRead(f, "LootTradePricing", "ttlHours", g_ltTradeTtlHours))
         g_ltTradeNegTtlHours := Integer(IniRead(f, "LootTradePricing", "negTtlHours", g_ltTradeNegTtlHours))
+        g_ltTradeAutoHide   := (IniRead(f, "LootTradePricing", "autoHide", g_ltTradeAutoHide ? "1" : "0") = "1")
     } catch as ex {
         LogError("LoadLootTradePricing", ex)
     }
@@ -62,12 +64,14 @@ LoadLootTradePricing()
 SaveLootTradePricing()
 {
     global g_ltTradeEnabled, g_ltTradeLeague, g_ltTradeTtlHours, g_ltTradeNegTtlHours, g_ltTradeConfigFile
+    global g_ltTradeAutoHide
     f := g_ltTradeConfigFile
     try {
         IniWrite(g_ltTradeEnabled ? "1" : "0", f, "LootTradePricing", "enabled")
         IniWrite(g_ltTradeLeague, f, "LootTradePricing", "league")
         IniWrite(g_ltTradeTtlHours, f, "LootTradePricing", "ttlHours")
         IniWrite(g_ltTradeNegTtlHours, f, "LootTradePricing", "negTtlHours")
+        IniWrite(g_ltTradeAutoHide ? "1" : "0", f, "LootTradePricing", "autoHide")
     } catch as ex {
         LogError("SaveLootTradePricing", ex)
     }
@@ -86,7 +90,7 @@ _LtTradeClamp()
 
 _LtTradeApplySetting(key, val)
 {
-    global g_ltTradeEnabled, g_ltTradeLeague, g_ltTradeTtlHours, g_ltTradeNegTtlHours
+    global g_ltTradeEnabled, g_ltTradeLeague, g_ltTradeTtlHours, g_ltTradeNegTtlHours, g_ltTradeAutoHide
     switch key
     {
         case "enabled":
@@ -97,6 +101,8 @@ _LtTradeApplySetting(key, val)
             g_ltTradeTtlHours := Integer(_LtTradeNum(val))
         case "negTtlHours":
             g_ltTradeNegTtlHours := Integer(_LtTradeNum(val))
+        case "autoHide":
+            g_ltTradeAutoHide := _LtTradeTruthy(val)
     }
     _LtTradeClamp()
 }
@@ -119,15 +125,17 @@ _LtTradeNum(v)
 ; Header JSON — status + whether the session window is open. No secrets exist to expose.
 BuildLootTradePricingHeaderJson()
 {
-    global g_ltTradeEnabled, g_ltTradeLeague, g_ltTradeTtlHours, g_ltTradeNegTtlHours
+    global g_ltTradeEnabled, g_ltTradeLeague, g_ltTradeTtlHours, g_ltTradeNegTtlHours, g_ltTradeAutoHide
     global g_ltTradeStatus, g_ltTradeError, g_ltTradePrices, g_ltTradeQueue
     j := "{"
     j .= '"enabled":'  (g_ltTradeEnabled ? "true" : "false")
     j .= ',"league":'  _LtTradeJStr(g_ltTradeLeague)
     j .= ',"ttlHours":' (g_ltTradeTtlHours + 0)
     j .= ',"negTtlHours":' (g_ltTradeNegTtlHours + 0)
+    j .= ',"autoHide":' (g_ltTradeAutoHide ? "true" : "false")
     j .= ',"sessionOpen":' (PoeTradeSessionOpen() ? "true" : "false")
     j .= ',"sessionReady":' (PoeTradeSessionReady() ? "true" : "false")
+    j .= ',"sessionHidden":' (PoeTradeSessionHidden() ? "true" : "false")
     j .= ',"status":'  _LtTradeJStr(g_ltTradeStatus)
     j .= ',"error":'   _LtTradeJStr(g_ltTradeError)
     j .= ',"cacheCount":' (g_ltTradePrices.Count + 0)
@@ -153,6 +161,14 @@ LtTradeOpenSession()
     global g_ltTradeLeague, g_ltTradeCooldownUntil
     g_ltTradeCooldownUntil := 0   ; a manual open clears any block cooldown
     PoeTradeSessionShow(g_ltTradeLeague)
+    try SetTimer(PushHeaderToWebView, -50)
+}
+
+; Manual "hide to background" (bridge "PoeTradeHide"): hides the window now regardless of the
+; auto-hide setting. Queries keep running while hidden; re-show via "Open PoE trade session".
+LtTradeHideSession()
+{
+    PoeTradeSessionHide()
     try SetTimer(PushHeaderToWebView, -50)
 }
 
@@ -340,7 +356,7 @@ _LtTradeOnResult(id, ok, status, listings, err)
 {
     global g_ltTradePendingById, g_ltTradeQueue, g_ltTradePrices, g_ltTradeBusy
     global g_ltTradeStatus, g_ltTradeError, g_ltTradeCooldownUntil, g_ltTradeCooldownMs
-    global g_ltTradeMinIntervalMs, g_ltTradeLeague
+    global g_ltTradeMinIntervalMs, g_ltTradeLeague, g_ltTradeAutoHide
 
     g_ltTradeBusy := false
     if !g_ltTradePendingById.Has(id)
@@ -382,6 +398,10 @@ _LtTradeOnResult(id, ok, status, listings, err)
     g_ltTradeStatus := "ready"
     g_ltTradeError := ""
     _LtTradeSaveCache()
+    ; A successful query proves the login works — tuck the window away to the background. It keeps
+    ; running queries while hidden and re-appears automatically on a later blocked/sign-in result.
+    if (g_ltTradeAutoHide && PoeTradeSessionOpen() && !PoeTradeSessionHidden())
+        PoeTradeSessionHide()
     try SetTimer(PushHeaderToWebView, -50)
     SetTimer(_LtTradeDrain, -(g_ltTradeMinIntervalMs))
 }
