@@ -3458,12 +3458,15 @@
       margin-top: 4px;
       padding: 6px 0 4px 4px
     }
-    /* Loot Value Radar keeps the extra nesting cue (indent + left rule) on the
-       items inside an expanded group. */
-    #det-lootvalue details.cfg-subsection > .cfg-row,
-    #det-lootvalue details.cfg-subsection > .cfg-help {
+    /* Every open nested subcategory gets the same vertical nesting cue (left
+       rule + indent) on its body content — everything except the summary — so
+       all collapsible sub-groups (Loot Value Radar, AutoPilot, Radar, …) share
+       one consistent left line instead of only #det-lootvalue having it.
+       `.cfg-row` has no inter-row margin, so consecutive rows' borders join
+       into one continuous line; single body wrappers draw one line outright. */
+    .cfg-section details.cfg-subsection[open] > :not(summary) {
       margin-left: 14px;
-      border-left: 2px solid rgba(200, 168, 90, 0.30);
+      border-left: 2px solid rgba(200, 168, 90, 0.55);
       padding-left: 12px
     }
 
