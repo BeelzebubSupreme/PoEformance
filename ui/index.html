@@ -5438,7 +5438,12 @@
                     onchange="ahkCall('SetLootRadarValue','showArrow', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
               </div>
               <div class="cfg-row">
-                <span class="cfg-label">Map label (icon / font / color)</span>
+                <span class="cfg-label">Map label</span>
+                <span id="lrv-map-preview" style="display:flex;align-items:center;gap:4px;min-height:30px" data-tip="Live preview of the on-map label">
+                  <span id="lrv-prev-dot" style="display:inline-block;border-radius:50%;width:7px;height:7px;background:#C8A85A;margin-right:3px"></span>
+                  <span id="lrv-prev-num" style="color:#C8A85A;font-weight:600;line-height:1;font-size:14px">1</span>
+                  <img id="lrv-prev-icon" src="../img/currency/divine.png" alt="" style="width:18px;height:18px" onerror="this.style.visibility='hidden'">
+                </span>
                 <span style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
                   <span style="display:flex;gap:5px;align-items:center" data-tip="On-map orb icon size (px)">
                     <span style="font-size:11px;color:var(--subtext)">icon</span>
@@ -5452,14 +5457,6 @@
                     <span style="font-size:11px;color:var(--subtext)">color</span>
                     <span id="lrv-mapColor-sw" class="cp-swatch" onclick="lrvOpenMapColor(this)"></span>
                   </span>
-                </span>
-              </div>
-              <div class="cfg-row">
-                <span class="cfg-label">Preview</span>
-                <span id="lrv-map-preview" style="display:flex;align-items:center;gap:4px;min-height:34px;justify-content:flex-end">
-                  <span id="lrv-prev-dot" style="display:inline-block;border-radius:50%;width:7px;height:7px;background:#C8A85A;margin-right:3px"></span>
-                  <span id="lrv-prev-num" style="color:#C8A85A;font-weight:600;line-height:1;font-size:14px">1</span>
-                  <img id="lrv-prev-icon" src="../img/currency/divine.png" alt="" style="width:18px;height:18px" onerror="this.style.visibility='hidden'">
                 </span>
               </div>
               <div class="cfg-help">

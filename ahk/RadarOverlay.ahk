@@ -1387,6 +1387,18 @@ class RadarOverlay extends GdiOverlayBase
         this._iconBatch.Push([iconKey, x, y, w, h])
     }
 
+    ; Queues outlined text: a black halo (4 offset copies) then the colored fill on top, all in
+    ; the text batch with the given font. Keeps small on-map labels legible over any background.
+    _DrawTextOutlined(x, y, text, fillCol, font, ow := 1)
+    {
+        oc := 0x000000
+        this._DrawText(x - ow, y, text, oc, font)
+        this._DrawText(x + ow, y, text, oc, font)
+        this._DrawText(x, y - ow, text, oc, font)
+        this._DrawText(x, y + ow, text, oc, font)
+        this._DrawText(x, y, text, fillCol, font)
+    }
+
     ; Value-aware loot (step 3): paints the valued ground drops collected this frame. The marker
     ; dot is ALWAYS drawn (so every drop stays visible); the currency orb image + amount label is
     ; drawn highest-value first and SKIPPED when it would overlap an already-placed label — so a
@@ -1409,6 +1421,7 @@ class RadarOverlay extends GdiOverlayBase
         fontPx := (IsSet(g_lrvMapFontSize) ? g_lrvMapFontSize : 14)
         font   := this._GetFont(-fontPx, 600)
         gap    := 3                            ; small gap between the amount and the orb
+        ow     := Max(1, fontPx // 14)         ; amount outline thickness (scales with font size)
 
         placed := []                           ; [x1, y1, x2, y2] of labels already drawn this frame
         for _, d in drops
@@ -1442,14 +1455,17 @@ class RadarOverlay extends GdiOverlayBase
 
             if OverlayIconReady(parts["icon"])
             {
-                this._DrawText(tx, sy - numH // 2, num, txtCol, font)
+                ; Dark backing disc so the orb pops on a busy map, then the orb, then the outlined
+                ; amount — keeps the label from getting lost over varied terrain (in-game feedback).
+                this._DrawDot(iconX + iconSz // 2, sy, 0x000000, iconSz // 2 + 2)
                 this._DrawIconBatched(parts["icon"], iconX, sy - iconSz // 2, iconSz, iconSz)
+                this._DrawTextOutlined(tx, sy - numH // 2, num, txtCol, font, ow)
             }
             else
             {
                 ; Text fallback so the value still reads when the orb image is unavailable.
                 unit := (parts["icon"] = "divine") ? " div" : " ex"
-                this._DrawText(tx, sy - numH // 2, num unit, txtCol, font)
+                this._DrawTextOutlined(tx, sy - numH // 2, num unit, txtCol, font, ow)
             }
         }
     }

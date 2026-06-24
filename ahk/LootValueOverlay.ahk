@@ -79,12 +79,14 @@ class LootValueOverlay extends GdiOverlayBase
         ; Width = widest of (title, every row: icon + num + name).
         tW := this._MeasureText(titleFont, "Valuable nearby")["w"]
         maxW := tW
+        arrowFont := this._GetFont(Round(this._fontH * 1.4), 700)
         for _, r in rows
         {
             numW  := this._MeasureText(font, r["parts"]["num"])["w"]
             nameW := this._MeasureText(font, "  " r["name"])["w"]
-            tailW := this._MeasureText(font, _LrvRowTail(r))["w"]
-            rowW  := this._iconSz + this._gap + numW + nameW + tailW
+            distW := (r["dist"] >= 0) ? this._MeasureText(font, "  " r["dist"] "m")["w"] : 0
+            arrW  := (r["arrow"] != "") ? this._MeasureText(arrowFont, " " r["arrow"])["w"] : 0
+            rowW  := this._iconSz + this._gap + numW + nameW + distW + arrW
             if (rowW > maxW)
                 maxW := rowW
         }
@@ -134,12 +136,20 @@ class LootValueOverlay extends GdiOverlayBase
             unitTag := drewIcon ? "" : (parts["icon"] = "divine" ? "div " : "ex ")
             nameStr := "  " unitTag r["name"]
             this._DrawText(tx + numW, y, nameStr, textCol)
-            ; Distance + direction arrow to the drop, dim, at the row end.
-            tail := _LrvRowTail(r)
-            if (tail != "")
+            ; Distance (dim) then a larger, brighter direction arrow at the row end.
+            tx2 := tx + numW + this._MeasureText(font, nameStr)["w"]
+            if (r["dist"] >= 0)
             {
-                nameW := this._MeasureText(font, nameStr)["w"]
-                this._DrawText(tx + numW + nameW, y, tail, 0x808080)
+                distStr := "  " r["dist"] "m"
+                this._DrawText(tx2, y, distStr, 0x808080)
+                tx2 += this._MeasureText(font, distStr)["w"]
+            }
+            if (r["arrow"] != "")
+            {
+                arrowFont := this._GetFont(Round(this._fontH * 1.4), 700)
+                oldF := DllCall("SelectObject", "Ptr", this.memDC, "Ptr", arrowFont, "Ptr")
+                this._DrawText(tx2 + Round(2 * scale), y - Round((-this._fontH) * 0.2), " " r["arrow"], 0xB8B8B8)
+                DllCall("SelectObject", "Ptr", this.memDC, "Ptr", oldF)
             }
             y += lineH
         }
@@ -161,15 +171,4 @@ _LrvArrowGlyph(sdx, sdy)
     if (sdx > 0)
         return (sdy > 0) ? "↘" : "↗"
     return (sdy > 0) ? "↙" : "↖"
-}
-
-; Builds the dim row tail: "  <dist>m <arrow>" honoring whichever pieces are present.
-_LrvRowTail(r)
-{
-    s := ""
-    if (r.Has("dist") && r["dist"] >= 0)
-        s .= "  " r["dist"] "m"
-    if (r.Has("arrow") && r["arrow"] != "")
-        s .= " " r["arrow"]
-    return s
 }

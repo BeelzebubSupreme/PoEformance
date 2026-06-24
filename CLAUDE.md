@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.42`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.43`.
 
 ## Language
 
@@ -536,9 +536,12 @@ Fragments/Tablets, Div-Cards (rares stay unpriced, like the LootTracker breakdow
   in the header + UI (one combined row + a live preview).
 - **Step 3 (shipped 0.45.13.32) — `RadarOverlay.ahk`:** ground `WorldItem` wrappers (otherwise
   filtered out of the entity draw) are intercepted right after projection; a valued drop
-  (`LrvIconPartsFor(addr)`) gets a gold marker dot + orb image + amount via a new `_iconBatch`
-  (queued by `_DrawIconBatched`, flushed in `_FlushBatch` between dots and text, one shared
-  GDI+ Graphics). Text fallback when the orb icons are unavailable.
+  (`LrvIconPartsFor(addr)`) is collected per frame and drawn in `_FlushLootValues` (value-priority
+  + overlap de-clutter): a gold marker dot, then a dark backing disc + orb image, then the amount
+  drawn AMOUNT-FIRST with a black outline (`_DrawTextOutlined`) so it stays legible over varied
+  terrain. The orb uses `_iconBatch` (flushed in `_FlushBatch` between dots and text); the amount
+  text carries an optional per-entry font (size from `g_lrvMapFontSize`). Text fallback when the
+  orb icons are unavailable.
 - **Verified in-game (2026-06-24, steps 2&3):** orb images render on the radar dots + the
   "valuable nearby" list, scaling/anchor correct, list hides behind big panels. Confirmed on
   Standard with live unique prices via the trade API.
