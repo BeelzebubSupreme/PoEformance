@@ -89,15 +89,23 @@ class PoE2ComponentDecoders
         if !this.IsProbablyValidPointer(stdWStringAddress)
             return ""
 
-        ; Batch-read the entire StdWString header (0x20 bytes) in one RPM call
-        hdr := this.Mem.ReadBytes(stdWStringAddress, 0x20)
+        ; StdWString field offsets, cached once (static) so the hot string-decode path
+        ; pays no per-call PoE2Offsets Map lookup.
+        static offBuf      := PoE2Offsets.StdWString["Buffer"]
+        static offReserved := PoE2Offsets.StdWString["ReservedBytes"]
+        static offLen      := PoE2Offsets.StdWString["Length"]
+        static offCap      := PoE2Offsets.StdWString["Capacity"]
+        static hdrSize     := PoE2Offsets.StdWString["Size"]
+
+        ; Batch-read the entire StdWString header in one RPM call
+        hdr := this.Mem.ReadBytes(stdWStringAddress, hdrSize)
         if !hdr
             return ""
 
-        bufferOrInline := NumGet(hdr.Ptr, 0x00, "Int64")
-        reservedInline := NumGet(hdr.Ptr, 0x08, "Int64")
-        length         := NumGet(hdr.Ptr, 0x10, "Int")
-        capacity       := NumGet(hdr.Ptr, 0x18, "Int")
+        bufferOrInline := NumGet(hdr.Ptr, offBuf, "Int64")
+        reservedInline := NumGet(hdr.Ptr, offReserved, "Int64")
+        length         := NumGet(hdr.Ptr, offLen, "Int")
+        capacity       := NumGet(hdr.Ptr, offCap, "Int")
 
         if (length <= 0 || length > maxChars || capacity <= 0 || capacity > maxChars)
             return ""
@@ -128,13 +136,18 @@ class PoE2ComponentDecoders
         if !this.IsProbablyValidPointer(stdStringAddress)
             return ""
 
-        hdr := this.Mem.ReadBytes(stdStringAddress, 0x20)
+        static offBuf  := PoE2Offsets.StdString["Buffer"]
+        static offLen  := PoE2Offsets.StdString["Length"]
+        static offCap  := PoE2Offsets.StdString["Capacity"]
+        static hdrSize := PoE2Offsets.StdString["Size"]
+
+        hdr := this.Mem.ReadBytes(stdStringAddress, hdrSize)
         if !hdr
             return ""
 
-        bufferOrInline := NumGet(hdr.Ptr, 0x00, "Int64")
-        length         := NumGet(hdr.Ptr, 0x10, "Int")
-        capacity       := NumGet(hdr.Ptr, 0x18, "Int")
+        bufferOrInline := NumGet(hdr.Ptr, offBuf, "Int64")
+        length         := NumGet(hdr.Ptr, offLen, "Int")
+        capacity       := NumGet(hdr.Ptr, offCap, "Int")
 
         if (length <= 0 || length > maxChars || capacity <= 0 || capacity > maxChars)
             return ""
@@ -211,14 +224,22 @@ class PoE2ComponentDecoders
 
     ; Parses a single Vital struct from a pre-read buffer at the given local offset.
     ; Same logic as ReadVitalStructSnapshot but zero RPM calls.
+    ; localOff is the Vital struct base, relative to the buffer start (so the field reads add
+    ; the PoE2Offsets.Vital field offsets directly). Offsets cached statically (hot vital path).
     _ParseVitalFromBuffer(buf, localOff)
     {
-        reservedFlat       := NumGet(buf.Ptr, localOff + 0x00, "Int")   ; Vital.ReservedFlat   0x10
-        reservedFraction   := NumGet(buf.Ptr, localOff + 0x04, "Int")   ; Vital.ReservedFraction 0x14
-        regenPerMinuteStat := NumGet(buf.Ptr, localOff + 0x0C, "Int")   ; Vital.RegenPerMinuteStat 0x1C
-        regen              := NumGet(buf.Ptr, localOff + 0x18, "Float") ; Vital.Regen 0x28
-        maxValue           := NumGet(buf.Ptr, localOff + 0x1C, "Int")   ; Vital.Max 0x2C
-        currentValue       := NumGet(buf.Ptr, localOff + 0x20, "Int")   ; Vital.Current 0x30
+        static dFlat      := PoE2Offsets.Vital["ReservedFlat"]
+        static dFrac      := PoE2Offsets.Vital["ReservedFraction"]
+        static dRegenStat := PoE2Offsets.Vital["RegenPerMinuteStat"]
+        static dRegen     := PoE2Offsets.Vital["Regen"]
+        static dMax       := PoE2Offsets.Vital["Max"]
+        static dCur       := PoE2Offsets.Vital["Current"]
+        reservedFlat       := NumGet(buf.Ptr, localOff + dFlat, "Int")
+        reservedFraction   := NumGet(buf.Ptr, localOff + dFrac, "Int")
+        regenPerMinuteStat := NumGet(buf.Ptr, localOff + dRegenStat, "Int")
+        regen              := NumGet(buf.Ptr, localOff + dRegen, "Float")
+        maxValue           := NumGet(buf.Ptr, localOff + dMax, "Int")
+        currentValue       := NumGet(buf.Ptr, localOff + dCur, "Int")
 
         reservedTotal := 0
         unreserved := maxValue
@@ -841,8 +862,8 @@ class PoE2ComponentDecoders
                     cdListFirst := this.Mem.ReadInt64(entryAddr + PoE2Offsets.ActiveSkillCooldown["CooldownsList"])
                     if this.IsProbablyValidPointer(cdListFirst)
                     {
-                        elapsedSec := this.Mem.ReadFloat(cdListFirst + 0x00)
-                        totalSec   := this.Mem.ReadFloat(cdListFirst + 0x04)
+                        elapsedSec := this.Mem.ReadFloat(cdListFirst + PoE2Offsets.ActiveSkillCooldownEntry["ElapsedSec"])
+                        totalSec   := this.Mem.ReadFloat(cdListFirst + PoE2Offsets.ActiveSkillCooldownEntry["TotalSec"])
                         if (totalSec > 0 && totalSec < 86400)
                         {
                             rem := totalSec - elapsedSec
@@ -1358,16 +1379,18 @@ class PoE2ComponentDecoders
         static healthBase := PoE2Offsets.Life["Health"]
         static manaBase   := PoE2Offsets.Life["Mana"]
         static esBase     := PoE2Offsets.Life["EnergyShield"]
-        static readStart  := healthBase + 0x10  ; start at Health.ReservedFlat
-        static readLen    := (esBase + 0x34) - readStart  ; through ES.Current+4
+        static readStart  := healthBase + PoE2Offsets.Vital["ReservedFlat"]  ; start at Health.ReservedFlat
+        static readLen    := (esBase + PoE2Offsets.Vital["Current"] + 4) - readStart  ; through ES.Current+4
 
         vitalBuf := this.Mem.ReadBytes(componentPtr + readStart, readLen)
         if !vitalBuf
             return 0
 
-        life := this._ParseVitalFromBuffer(vitalBuf, healthBase - readStart + 0x10)
-        mana := this._ParseVitalFromBuffer(vitalBuf, manaBase - readStart + 0x10)
-        es   := this._ParseVitalFromBuffer(vitalBuf, esBase - readStart + 0x10)
+        ; localOff now points at each Vital struct base (buffer-relative); _ParseVitalFromBuffer
+        ; adds the individual Vital field offsets itself.
+        life := this._ParseVitalFromBuffer(vitalBuf, healthBase - readStart)
+        mana := this._ParseVitalFromBuffer(vitalBuf, manaBase - readStart)
+        es   := this._ParseVitalFromBuffer(vitalBuf, esBase - readStart)
 
         healthMax := life["max"]
         healthCurrent := life["current"]

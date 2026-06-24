@@ -936,9 +936,9 @@ class PoE2InventoryReader extends PoE2PlayerReader
         vecIdx := 0
         while (vecIdx < 5)
         {
-            vecAddr := allModsBase + (vecIdx * 0x18)
+            vecAddr := allModsBase + (vecIdx * PoE2Offsets.StdVector["StructSize"])
             first := this.Mem.ReadInt64(vecAddr)
-            last  := this.Mem.ReadInt64(vecAddr + 0x08)
+            last  := this.Mem.ReadInt64(vecAddr + PoE2Offsets.StdVector["Last"])
             if (first = 0 && last = 0)
             {
                 vecIdx += 1
@@ -949,7 +949,7 @@ class PoE2InventoryReader extends PoE2PlayerReader
                 hasInvalidVectors := true
                 break
             }
-            count := Floor((last - first) / 0x40)
+            count := Floor((last - first) / PoE2Offsets.ModArray["EntrySize"])
             if (count < 0 || count > 512)
             {
                 hasInvalidVectors := true
@@ -970,11 +970,11 @@ class PoE2InventoryReader extends PoE2PlayerReader
     ; allModNames, and statsFromMods.
     ReadItemModsDetails(componentPtr, allModsBaseOffset, rarityId, sourceType, statsFromModsOffset := 0)
     {
-        implicitMods := this.ReadModArrayFromVector(componentPtr + allModsBaseOffset + (0x18 * 0))
-        explicitMods := this.ReadModArrayFromVector(componentPtr + allModsBaseOffset + (0x18 * 1))
-        enchantMods := this.ReadModArrayFromVector(componentPtr + allModsBaseOffset + (0x18 * 2))
-        hellscapeMods := this.ReadModArrayFromVector(componentPtr + allModsBaseOffset + (0x18 * 3))
-        crucibleMods := this.ReadModArrayFromVector(componentPtr + allModsBaseOffset + (0x18 * 4))
+        implicitMods := this.ReadModArrayFromVector(componentPtr + allModsBaseOffset + (PoE2Offsets.StdVector["StructSize"] * 0))
+        explicitMods := this.ReadModArrayFromVector(componentPtr + allModsBaseOffset + (PoE2Offsets.StdVector["StructSize"] * 1))
+        enchantMods := this.ReadModArrayFromVector(componentPtr + allModsBaseOffset + (PoE2Offsets.StdVector["StructSize"] * 2))
+        hellscapeMods := this.ReadModArrayFromVector(componentPtr + allModsBaseOffset + (PoE2Offsets.StdVector["StructSize"] * 3))
+        crucibleMods := this.ReadModArrayFromVector(componentPtr + allModsBaseOffset + (PoE2Offsets.StdVector["StructSize"] * 4))
 
         allNames := []
         this.AppendDistinctModNames(allNames, implicitMods)
@@ -1031,12 +1031,13 @@ class PoE2InventoryReader extends PoE2PlayerReader
     {
         if !this.IsProbablyValidPointer(addr)
             return ""
-        buf := this.Mem.ReadBytes(addr, 0x20)
+        ; NativeStringU shares the wide-SSO StdWString layout (size @0x10, capacity @0x18, 0x20 total).
+        buf := this.Mem.ReadBytes(addr, PoE2Offsets.StdWString["Size"])
         if !buf
             return ""
 
-        size     := NumGet(buf.Ptr, 0x10, "UInt")
-        capacity := NumGet(buf.Ptr, 0x18, "UInt")
+        size     := NumGet(buf.Ptr, PoE2Offsets.StdWString["Length"], "UInt")
+        capacity := NumGet(buf.Ptr, PoE2Offsets.StdWString["Capacity"], "UInt")
         if (size = 0 || size > 256 || capacity < size)
             return ""
 
@@ -1049,7 +1050,7 @@ class PoE2InventoryReader extends PoE2PlayerReader
         else
         {
             ; Heap path: dereference buf as a wide-char pointer.
-            heapPtr := NumGet(buf.Ptr, 0x00, "Ptr")
+            heapPtr := NumGet(buf.Ptr, PoE2Offsets.StdWString["Buffer"], "Ptr")
             if !this.IsProbablyValidPointer(heapPtr)
                 return ""
             strBuf := this.Mem.ReadBytes(heapPtr, (size + 1) * 2)
@@ -1128,14 +1129,20 @@ class PoE2InventoryReader extends PoE2PlayerReader
         strides := [0x40, 0x48, 0x50, 0x60]
         best := 0   ; Map("names","off","stride","count","nonEmpty","score") | 0
 
+        ; StdVector header field offsets, hoisted out of the scan loop.
+        offVecFirst   := PoE2Offsets.StdVector["First"]
+        offVecLast    := PoE2Offsets.StdVector["Last"]
+        offVecEnd     := PoE2Offsets.StdVector["End"]
+        vecStructSize := PoE2Offsets.StdVector["StructSize"]
+
         for _, stride in strides
         {
             off := 0
-            while (off <= scanSize - 24)
+            while (off <= scanSize - vecStructSize)
             {
-                first := NumGet(buf.Ptr, off,      "Int64")
-                last  := NumGet(buf.Ptr, off + 8,  "Int64")
-                end   := NumGet(buf.Ptr, off + 16, "Int64")
+                first := NumGet(buf.Ptr, off + offVecFirst, "Int64")
+                last  := NumGet(buf.Ptr, off + offVecLast,  "Int64")
+                end   := NumGet(buf.Ptr, off + offVecEnd,   "Int64")
                 thisOff := off
                 off += 8   ; pointer-aligned step
 
@@ -1160,7 +1167,7 @@ class PoE2InventoryReader extends PoE2PlayerReader
                 probeI := 0
                 while (probeI < Min(3, count))
                 {
-                    if (this._ReadNativeStringU(first + (probeI * stride) + 0x08) != "")
+                    if (this._ReadNativeStringU(first + (probeI * stride) + PoE2Offsets.StashTabEntry["Name"]) != "")
                     {
                         probeOk := true
                         break
@@ -1229,7 +1236,7 @@ class PoE2InventoryReader extends PoE2PlayerReader
         idx := 0
         while (idx < count)
         {
-            names.Push(this._ReadNativeStringU(first + (idx * stride) + 0x08))
+            names.Push(this._ReadNativeStringU(first + (idx * stride) + PoE2Offsets.StashTabEntry["Name"]))
             idx += 1
         }
         return names
@@ -1241,12 +1248,12 @@ class PoE2InventoryReader extends PoE2PlayerReader
     _ReadStashVecAt(vecFieldAddr, stride)
     {
         out := []
-        hdr := this.Mem.ReadBytes(vecFieldAddr, 24)
+        hdr := this.Mem.ReadBytes(vecFieldAddr, PoE2Offsets.StdVector["StructSize"])
         if !hdr
             return out
-        first := NumGet(hdr.Ptr, 0,  "Int64")
-        last  := NumGet(hdr.Ptr, 8,  "Int64")
-        end   := NumGet(hdr.Ptr, 16, "Int64")
+        first := NumGet(hdr.Ptr, PoE2Offsets.StdVector["First"], "Int64")
+        last  := NumGet(hdr.Ptr, PoE2Offsets.StdVector["Last"],  "Int64")
+        end   := NumGet(hdr.Ptr, PoE2Offsets.StdVector["End"],   "Int64")
         if !this.IsProbablyValidPointer(first)
             return out
         if (last <= first || end < last)

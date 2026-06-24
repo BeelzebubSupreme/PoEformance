@@ -592,9 +592,9 @@ class PoE2EntityReader extends PoE2ComponentDecoders
         hdrBuf := this.Mem.ReadBytes(entityPtr + 0x08, 0x88)
         if !hdrBuf
             return 0
-        entityDetailsPtr := NumGet(hdrBuf.Ptr, 0x00, "Ptr")    ; entity 0x08
-        compVecFirst     := NumGet(hdrBuf.Ptr, 0x08, "Int64")  ; entity 0x10
-        compVecLast      := NumGet(hdrBuf.Ptr, 0x10, "Int64")  ; entity 0x18
+        entityDetailsPtr := NumGet(hdrBuf.Ptr, PoE2Offsets.Entity["EntityDetailsPtr"] - 0x08, "Ptr")    ; entity 0x08
+        compVecFirst     := NumGet(hdrBuf.Ptr, PoE2Offsets.Entity["ComponentsVec"] - 0x08, "Int64")     ; entity 0x10
+        compVecLast      := NumGet(hdrBuf.Ptr, PoE2Offsets.Entity["ComponentsVecLast"] - 0x08, "Int64") ; entity 0x18
         ; Id/Flags are read via PoE2Offsets so the buffer offsets can't drift from
         ; the table again: the Id offset moved 0x80->0x88 in a patch but this read
         ; stayed hardcoded at 0x78 (= entity 0x80), which made every entity fail the
@@ -1276,6 +1276,11 @@ class PoE2EntityReader extends PoE2ComponentDecoders
         maxVisit := Min(size * 2 + 100, 10000)
         worldToGridRatio := 250.0 / 0x17
         nodeReadSize := 0x30
+        ; Hoist the StdMapNode field offsets to locals — this BFS visits many nodes, so a
+        ; per-iteration PoE2Offsets Map lookup would add up on the node walk.
+        offNodeLeft  := PoE2Offsets.StdMapNode["Left"]
+        offNodeRight := PoE2Offsets.StdMapNode["Right"]
+        offNodeValue := PoE2Offsets.StdMapNode["ValueEntityPtr"]
 
         while (qi <= queue.Length && visited.Count < maxVisit)
         {
@@ -1289,9 +1294,9 @@ class PoE2EntityReader extends PoE2ComponentDecoders
             if !nodeBuf
                 continue
 
-            left   := NumGet(nodeBuf.Ptr, 0x00, "Ptr")
-            right  := NumGet(nodeBuf.Ptr, 0x10, "Ptr")
-            rawPtr := NumGet(nodeBuf.Ptr, 0x28, "Ptr")
+            left   := NumGet(nodeBuf.Ptr, offNodeLeft, "Ptr")
+            right  := NumGet(nodeBuf.Ptr, offNodeRight, "Ptr")
+            rawPtr := NumGet(nodeBuf.Ptr, offNodeValue, "Ptr")
 
             if (this.IsProbablyValidPointer(left) && left != head)
                 queue.Push(left)

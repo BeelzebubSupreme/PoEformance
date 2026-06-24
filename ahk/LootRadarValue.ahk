@@ -62,7 +62,8 @@ _LrvResolveInnerItem(wrapperAddr, &innerPtr, &innerPath, &off, &compAddr, &compN
     ; Confirmed in-game (2026-06-23): the inner item entity pointer sits at WorldItem
     ; component + 0x28. Try that first (cheap), then fall back to a small sweep in case
     ; a patch shifts it — the inner item is identified by a "Metadata/Items/…" path.
-    known := 0x28
+    ; Offset is maintained centrally in PoE2Offsets.WorldItemComponent.
+    known := PoE2Offsets.WorldItemComponent["InnerItem"]
     cand := 0
     try cand := g_reader.Mem.ReadPtr(compAddr + known)
     if (cand && g_reader.IsProbablyValidPointer(cand))
@@ -163,6 +164,15 @@ LoadLootRadarValue()
     global g_lrvAlertEx := 20.0             ; total value (ex) that triggers the banner
     global g_lrvShowList := true            ; show the on-screen "valuable nearby" list overlay
     global g_lrvListMax := 8                ; max rows in that list
+    global g_lrvMapIconSize := 18           ; on-map value orb-icon size (px)
+    global g_lrvMapFontSize := 14           ; on-map value amount font size (px)
+    global g_lrvMapColor := "#C8A85A"       ; on-map value marker + amount color (#RRGGBB)
+    global g_lrvShowDist := true            ; show distance-to-drop in the "valuable nearby" list
+    global g_lrvShowArrow := true           ; show a direction arrow to the drop in that list
+    global g_lrvMapOutline := true          ; black outline around the on-map amount + orb
+    global g_lrvMapOutlineWidth := 0        ; outline thickness px (0 = auto from font size)
+    global g_lrvMapPulse := true            ; pulse the marker for high-value drops (>= alertEx)
+    global g_lrvMapOnOrb := true            ; on-map: orb sits ON the drop with the value as a badge (replaces the dot)
     global g_lrvConfigFile := _ConfigPath()
 
     ; Runtime (never persisted)
@@ -180,6 +190,15 @@ LoadLootRadarValue()
         g_lrvAlertEx      := _LrvNum(IniRead(f, "LootRadarValue", "alertEx", g_lrvAlertEx))
         g_lrvShowList     := (IniRead(f, "LootRadarValue", "showList", g_lrvShowList ? "1" : "0") = "1")
         g_lrvListMax      := Integer(IniRead(f, "LootRadarValue", "listMax", g_lrvListMax))
+        g_lrvMapIconSize  := Integer(IniRead(f, "LootRadarValue", "mapIconSize", g_lrvMapIconSize))
+        g_lrvMapFontSize  := Integer(IniRead(f, "LootRadarValue", "mapFontSize", g_lrvMapFontSize))
+        g_lrvMapColor     := IniRead(f, "LootRadarValue", "mapColor", g_lrvMapColor)
+        g_lrvShowDist     := (IniRead(f, "LootRadarValue", "showDist", g_lrvShowDist ? "1" : "0") = "1")
+        g_lrvShowArrow    := (IniRead(f, "LootRadarValue", "showArrow", g_lrvShowArrow ? "1" : "0") = "1")
+        g_lrvMapOutline   := (IniRead(f, "LootRadarValue", "mapOutline", g_lrvMapOutline ? "1" : "0") = "1")
+        g_lrvMapOutlineWidth := Integer(IniRead(f, "LootRadarValue", "mapOutlineWidth", g_lrvMapOutlineWidth))
+        g_lrvMapPulse     := (IniRead(f, "LootRadarValue", "mapPulse", g_lrvMapPulse ? "1" : "0") = "1")
+        g_lrvMapOnOrb     := (IniRead(f, "LootRadarValue", "mapOnOrb", g_lrvMapOnOrb ? "1" : "0") = "1")
     } catch as ex {
         LogError("LoadLootRadarValue", ex)
     }
@@ -190,7 +209,8 @@ LoadLootRadarValue()
 SaveLootRadarValue()
 {
     global g_lrvEnabled, g_lrvAlertEnabled, g_lrvMinLabelEx, g_lrvAlertEx, g_lrvConfigFile
-    global g_lrvShowList, g_lrvListMax
+    global g_lrvShowList, g_lrvListMax, g_lrvMapIconSize, g_lrvMapFontSize, g_lrvMapColor
+    global g_lrvShowDist, g_lrvShowArrow, g_lrvMapOutline, g_lrvMapOutlineWidth, g_lrvMapPulse, g_lrvMapOnOrb
     f := g_lrvConfigFile
     try {
         IniWrite(g_lrvEnabled ? "1" : "0", f, "LootRadarValue", "enabled")
@@ -199,6 +219,15 @@ SaveLootRadarValue()
         IniWrite(g_lrvAlertEx, f, "LootRadarValue", "alertEx")
         IniWrite(g_lrvShowList ? "1" : "0", f, "LootRadarValue", "showList")
         IniWrite(g_lrvListMax, f, "LootRadarValue", "listMax")
+        IniWrite(g_lrvMapIconSize, f, "LootRadarValue", "mapIconSize")
+        IniWrite(g_lrvMapFontSize, f, "LootRadarValue", "mapFontSize")
+        IniWrite(g_lrvMapColor, f, "LootRadarValue", "mapColor")
+        IniWrite(g_lrvShowDist ? "1" : "0", f, "LootRadarValue", "showDist")
+        IniWrite(g_lrvShowArrow ? "1" : "0", f, "LootRadarValue", "showArrow")
+        IniWrite(g_lrvMapOutline ? "1" : "0", f, "LootRadarValue", "mapOutline")
+        IniWrite(g_lrvMapOutlineWidth, f, "LootRadarValue", "mapOutlineWidth")
+        IniWrite(g_lrvMapPulse ? "1" : "0", f, "LootRadarValue", "mapPulse")
+        IniWrite(g_lrvMapOnOrb ? "1" : "0", f, "LootRadarValue", "mapOnOrb")
     } catch as ex {
         LogError("SaveLootRadarValue", ex)
     }
@@ -216,12 +245,21 @@ _LrvNum(v)
 ; Keeps the value thresholds non-negative and the list length sane.
 _LrvClamp()
 {
-    global g_lrvMinLabelEx, g_lrvAlertEx, g_lrvListMax
+    global g_lrvMinLabelEx, g_lrvAlertEx, g_lrvListMax, g_lrvMapIconSize, g_lrvMapFontSize, g_lrvMapOutlineWidth
     g_lrvMinLabelEx := Max(0.0, g_lrvMinLabelEx + 0.0)
     g_lrvAlertEx    := Max(0.0, g_lrvAlertEx + 0.0)
     if !IsSet(g_lrvListMax)
         g_lrvListMax := 8
     g_lrvListMax := Max(1, Min(20, Integer(g_lrvListMax)))
+    if !IsSet(g_lrvMapIconSize)
+        g_lrvMapIconSize := 18
+    if !IsSet(g_lrvMapFontSize)
+        g_lrvMapFontSize := 14
+    g_lrvMapIconSize := Max(6, Min(48, Integer(g_lrvMapIconSize)))
+    g_lrvMapFontSize := Max(6, Min(48, Integer(g_lrvMapFontSize)))
+    if !IsSet(g_lrvMapOutlineWidth)
+        g_lrvMapOutlineWidth := 0
+    g_lrvMapOutlineWidth := Max(0, Min(8, Integer(g_lrvMapOutlineWidth)))
 }
 
 ; Loose boolean coercion (true/1/"1"/"true"/"yes"/"on").
@@ -237,7 +275,8 @@ _LrvTruthy(v)
 _LrvApplySetting(key, val)
 {
     global g_lrvEnabled, g_lrvAlertEnabled, g_lrvMinLabelEx, g_lrvAlertEx
-    global g_lrvShowList, g_lrvListMax
+    global g_lrvShowList, g_lrvListMax, g_lrvMapIconSize, g_lrvMapFontSize, g_lrvMapColor
+    global g_lrvShowDist, g_lrvShowArrow, g_lrvMapOutline, g_lrvMapOutlineWidth, g_lrvMapPulse, g_lrvMapOnOrb
     global g_lrvAnnot, g_lrvNearby, g_lrvAlerted
     switch key
     {
@@ -257,6 +296,24 @@ _LrvApplySetting(key, val)
             g_lrvShowList := _LrvTruthy(val)
         case "listMax":
             g_lrvListMax := Integer(_LrvNum(val))
+        case "mapIconSize":
+            g_lrvMapIconSize := Integer(_LrvNum(val))
+        case "mapFontSize":
+            g_lrvMapFontSize := Integer(_LrvNum(val))
+        case "mapColor":
+            g_lrvMapColor := Trim(val "")
+        case "showDist":
+            g_lrvShowDist := _LrvTruthy(val)
+        case "showArrow":
+            g_lrvShowArrow := _LrvTruthy(val)
+        case "mapOutline":
+            g_lrvMapOutline := _LrvTruthy(val)
+        case "mapOutlineWidth":
+            g_lrvMapOutlineWidth := Integer(_LrvNum(val))
+        case "mapPulse":
+            g_lrvMapPulse := _LrvTruthy(val)
+        case "mapOnOrb":
+            g_lrvMapOnOrb := _LrvTruthy(val)
     }
     _LrvClamp()
 }
@@ -265,7 +322,8 @@ _LrvApplySetting(key, val)
 BuildLootRadarValueHeaderJson()
 {
     global g_lrvEnabled, g_lrvAlertEnabled, g_lrvMinLabelEx, g_lrvAlertEx
-    global g_lrvShowList, g_lrvListMax
+    global g_lrvShowList, g_lrvListMax, g_lrvMapIconSize, g_lrvMapFontSize, g_lrvMapColor
+    global g_lrvShowDist, g_lrvShowArrow, g_lrvMapOutline, g_lrvMapOutlineWidth, g_lrvMapPulse, g_lrvMapOnOrb
     j := "{"
     j .= '"enabled":'       (g_lrvEnabled ? "true" : "false")
     j .= ',"alertEnabled":' (g_lrvAlertEnabled ? "true" : "false")
@@ -273,6 +331,15 @@ BuildLootRadarValueHeaderJson()
     j .= ',"alertEx":'      (g_lrvAlertEx + 0.0)
     j .= ',"showList":'     (g_lrvShowList ? "true" : "false")
     j .= ',"listMax":'      (g_lrvListMax + 0)
+    j .= ',"mapIconSize":'  (g_lrvMapIconSize + 0)
+    j .= ',"mapFontSize":'  (g_lrvMapFontSize + 0)
+    j .= ',"mapColor":"'    g_lrvMapColor '"'
+    j .= ',"showDist":'     (g_lrvShowDist ? "true" : "false")
+    j .= ',"showArrow":'    (g_lrvShowArrow ? "true" : "false")
+    j .= ',"mapOutline":'   (g_lrvMapOutline ? "true" : "false")
+    j .= ',"mapOutlineWidth":' (g_lrvMapOutlineWidth + 0)
+    j .= ',"mapPulse":'     (g_lrvMapPulse ? "true" : "false")
+    j .= ',"mapOnOrb":'     (g_lrvMapOnOrb ? "true" : "false")
     j .= "}"
     return j
 }
@@ -362,9 +429,14 @@ TryLootRadarValue(radarSnap)
                 continue
             seen[addr] := true
 
+            ; Live distance to the drop (world units -> grid "m"); ground items are static, but
+            ; the player moves, so refresh it every tick even for already-annotated drops.
+            distM := entry.Has("distance") ? Round(entry["distance"] / RadarOverlay.WORLD_TO_GRID_RATIO) : -1
+
             if g_lrvAnnot.Has(addr)
             {
                 g_lrvAnnot[addr]["tick"] := now
+                g_lrvAnnot[addr]["distM"] := distM
                 continue
             }
 
@@ -373,7 +445,7 @@ TryLootRadarValue(radarSnap)
                 continue
             if (valueEx < g_lrvMinLabelEx)
                 continue
-            g_lrvAnnot[addr] := Map("valueEx", valueEx, "label", label, "rarity", rarity, "tick", now)
+            g_lrvAnnot[addr] := Map("valueEx", valueEx, "label", label, "rarity", rarity, "tick", now, "distM", distM)
 
             if (g_lrvAlertEnabled && valueEx >= g_lrvAlertEx && !g_lrvAlerted.Has(addr))
             {
@@ -419,14 +491,24 @@ _LrvFmtEx(ex)
     return Round(ex, 1) " ex"
 }
 
-; Compact number for an icon label: one decimal below 10, whole numbers above.
+; Compact number for an icon label: one decimal below 10, whole numbers above, trailing
+; ".0" dropped (1.0 -> "1", 1.5 -> "1.5").
 _LrvFmtNum(n)
 {
     if (n >= 1000)
-        return Round(n / 1000, 1) "k"
+        return _LrvTrimDot0(Round(n / 1000, 1)) "k"
     if (n >= 10)
         return Round(n) ""
-    return Round(n, 1) ""
+    return _LrvTrimDot0(Round(n, 1)) ""
+}
+
+; Stringifies a number and drops a trailing ".0".
+_LrvTrimDot0(x)
+{
+    s := x ""
+    if (SubStr(s, -2) = ".0")
+        s := SubStr(s, 1, -2)
+    return s
 }
 
 ; Splits an Exalted value into a currency-icon denomination + a short amount string,
@@ -450,6 +532,29 @@ LrvIconPartsFor(addr)
     if (!g_lrvEnabled || !addr || !g_lrvAnnot.Has(addr))
         return 0
     return LrvValueParts(g_lrvAnnot[addr]["valueEx"])
+}
+
+; Raw Exalted value for a ground wrapper addr (for value-priority de-clutter on the map),
+; or 0.0 when the feature is off / the addr isn't a valued drop.
+LrvValueExFor(addr)
+{
+    global g_lrvEnabled, g_lrvAnnot
+    if (!g_lrvEnabled || !addr || !g_lrvAnnot.Has(addr))
+        return 0.0
+    return g_lrvAnnot[addr]["valueEx"]
+}
+
+; Stores the on-screen direction (player→drop iso screen delta) for a drop. Set by the radar
+; overlay each frame (it already computes the projection) so the "valuable nearby" list can draw
+; a direction arrow without re-projecting. No-op if the addr isn't a tracked valued drop.
+LrvSetDir(addr, sdx, sdy)
+{
+    global g_lrvEnabled, g_lrvAnnot
+    if (g_lrvEnabled && addr && g_lrvAnnot.Has(addr))
+    {
+        g_lrvAnnot[addr]["sdx"] := sdx
+        g_lrvAnnot[addr]["sdy"] := sdy
+    }
 }
 
 ; Insertion-sorts an array of annotation Maps by valueEx descending (tiny list).

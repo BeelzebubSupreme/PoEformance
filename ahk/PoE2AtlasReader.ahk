@@ -985,11 +985,13 @@ _AtlasFieldScan(reader, nodes, loOff, hiOff)
 ; A real node has a valid mapData ptr, a small biome byte and plausible grid ints.
 _AtlasProbeNodeFields(reader, panelPtr, maxN := 8)
 {
+    global g_atlasOff
     ub := PoE2Offsets.UiElementBase
+    ao := g_atlasOff
     if !reader.IsProbablyValidPointer(panelPtr)
         return "  (invalid panel)`n"
     cf := reader.Mem.ReadInt64(panelPtr + ub["ChildrenFirst"])
-    cl := reader.Mem.ReadInt64(panelPtr + ub["ChildrenFirst"] + 8)
+    cl := reader.Mem.ReadInt64(panelPtr + ub["ChildrenLast"])
     n := (cf > 0 && cl > cf) ? (cl - cf) // 8 : 0
     out := Format("  panel 0x{:X}  children={}`n", panelPtr, n)
     i := 0
@@ -998,14 +1000,14 @@ _AtlasProbeNodeFields(reader, panelPtr, maxN := 8)
         c := reader.Mem.ReadPtr(cf + i * 8)
         if reader.IsProbablyValidPointer(c)
         {
-            mapData := reader.Mem.ReadPtr(c + 0x2A0)
-            biome := reader.Mem.ReadUChar(c + 0x2CE)
-            status := reader.Mem.ReadUChar(c + 0x2CF)
-            gp := reader.Mem.ReadBytes(c + 0x320, 8)
+            mapData := reader.Mem.ReadPtr(c + ao["NodeMapDataOffset"])
+            biome := reader.Mem.ReadUChar(c + ao["NodeBiomeOffset"])
+            status := reader.Mem.ReadUChar(c + ao["NodeStatusOffset"])
+            gp := reader.Mem.ReadBytes(c + ao["NodeGridOffset"], 8)
             gx := gp ? NumGet(gp.Ptr, 0, "Int") : 0
             gy := gp ? NumGet(gp.Ptr, 4, "Int") : 0
-            cvf := reader.Mem.ReadInt64(c + 0x5A8)
-            cvl := reader.Mem.ReadInt64(c + 0x5A8 + 8)
+            cvf := reader.Mem.ReadInt64(c + ao["PanelConnVecOffset"])
+            cvl := reader.Mem.ReadInt64(c + ao["PanelConnVecOffset"] + 8)
             connBytes := (cvf > 0 && cvl > cvf && (cvl - cvf) < 0x10000) ? (cvl - cvf) : 0
             w := reader.Mem.ReadFloat(c + ub["UnscaledSize"])
             h := reader.Mem.ReadFloat(c + ub["UnscaledSize"] + 4)

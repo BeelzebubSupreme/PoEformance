@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.35`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.48`.
 
 ## Language
 
@@ -216,14 +216,16 @@ both halves.
   a `ToggleLocalApi` case; `WebViewBridge.ahk` pushes `localApi`/`localApiPort` in
   the header; `ui/index.html` has the toggle in **Config → General → Integrations**
   (section id `integrations`).
-- **Pending (needs the game/Windows):** verify the Winsock listener binds, that
-  `OnMessage` fires for the hidden Gui, request/response round-trips, and that the
-  config toggle starts/stops the server. The listener only starts at app launch,
-  so toggling on requires a restart.
+- **Verified in-game (2026-06-24):** the Winsock listener binds, `OnMessage` fires for the
+  hidden Gui, request/response round-trips work, and the config toggle starts/stops the server.
+  The listener only starts at app launch, so toggling on requires a restart.
 
 ## AutoPilot navigation (v0.45.12.0) — distance-field architecture
 
 Modeled on `myrahz/Radar` (`PathFinder.cs`): never follow a stored path.
+
+**Verified in-game (2026-06-24):** exploration + combat navigation work end-to-end (click
+projection / anchor gating, per-tick distance-field pathing, arrival + stuck handling).
 
 - **`Lib/TerrainPathfinder.ahk` — `DField*` methods:** per target, a
   Dijkstra/A* cost field is flooded FROM the target (time-sliced,
@@ -326,10 +328,10 @@ area-state instead of re-reading memory.
 - `data/meta_art_map.json` (the 1446-entry metaId→art bridge) is committed source data.
 - `sessions/` and `data/loot_prices.tsv*` are user-specific/generated → gitignored.
 
-### Pending (needs the game + Windows)
-- Verify the PowerShell fetch (league slug valid, network reachable, PS present), TSV parse,
-  Divine→Exalted rate; the inventory diff / kill counts; run resume-by-hash; the two bars'
-  placement/auto-hide; session save/load. Prices default OFF (feature `enabled=false`).
+### Verified in-game (2026-06-24)
+- Confirmed: the PowerShell fetch (league slug, network, PS), TSV parse, Divine→Exalted rate;
+  the inventory diff / kill counts; run resume-by-hash; the two bars' placement/auto-hide;
+  session save/load. Prices default OFF (feature `enabled=false`).
 - The on-screen bars anchor to the game-window bottom + offset (no XP-bar fingerprint walk
   yet — a possible later refinement, like the C# original's `TryGetExperienceBarRectByFp`).
 
@@ -468,15 +470,13 @@ rectangle from the UI tree.
   The hotkey uses a capture button (`smCaptureHotkey` → reuses the Hotkeys-tab
   `#hk-capture` overlay + `hkKeyName`; builds an AHK hotkey string), not a text field.
 
-### Pending (needs the game + Windows)
-- Verify the `InventoryPanel` StringId resolves and its rect equals the 12×N grid
-  (no header/padding) — otherwise nudge `offsetX/offsetY`. Confirm the UI→pixel scale
-  on non-16:10 windows (the conversion uses height-scale on both axes, no letterbox
-  cull, matching `UiBrowserHandler`; a horizontal-cull/per-axis-scale refinement may
-  be needed). Verify the NOACTIVATE button receives clicks without stealing focus, the
-  Ctrl-held click sequence actually moves items, and timing (`perItemDelayMs`/
-  `settleDelayMs`) is reliable. Destination detection is lenient (grid-visible + has
-  items); `id==27` is read only as a stash hint.
+### Verified in-game (2026-06-24)
+- Confirmed: the `InventoryPanel` StringId resolves and its rect matches the grid; the NOACTIVATE
+  button receives clicks without stealing focus, the Ctrl-held click sequence moves items, and the
+  timing (`perItemDelayMs`/`settleDelayMs`) is reliable. Remaining tuning notes: the UI→pixel scale
+  on non-16:10 windows (height-scale on both axes, no letterbox cull, matching `UiBrowserHandler`;
+  a horizontal-cull/per-axis-scale refinement may still be wanted); destination detection is lenient
+  (grid-visible + has items); `id==27` is read only as a stash hint.
 
 ## Open / pending (needs the game running)
 
@@ -527,16 +527,27 @@ Fragments/Tablets, Div-Cards (rares stay unpriced, like the LootTracker breakdow
 - **Step 2 (shipped 0.45.13.32) — `ahk/LootValueOverlay.ahk`:** `LootValueOverlay extends
   GdiOverlayBase`, registered in `OverlayManager`. Reads the sorted `g_lrvNearby`, draws a
   ranked "valuable nearby" list (title + up to `g_lrvListMax` rows) anchored left/mid-screen;
-  each row = orb image + amount + item name. Gated on `g_lrvEnabled && g_lrvShowList`,
-  foreground, and hidden while a big panel is open. New config `g_lrvShowList` (default on) +
-  `g_lrvListMax` (default 8), persisted in `[LootRadarValue]`, in the header + UI.
+  each row = orb image + amount + item name, then a dim tail with the live distance ("Nm") and an
+  8-way direction arrow (`_LrvArrowGlyph` from the radar-supplied iso screen delta `LrvSetDir`).
+  Gated on `g_lrvEnabled && g_lrvShowList`, foreground, and hidden while a big panel is open.
+  Config: `g_lrvShowList`/`g_lrvListMax`, `g_lrvShowDist`/`g_lrvShowArrow` (list distance + arrow,
+  both default on), and the on-map label look `g_lrvMapIconSize`/`g_lrvMapFontSize`/`g_lrvMapColor`
+  (icon stays gold; only the amount text takes the color). All persisted in `[LootRadarValue]`,
+  in the header + UI (one combined row + a live preview).
 - **Step 3 (shipped 0.45.13.32) — `RadarOverlay.ahk`:** ground `WorldItem` wrappers (otherwise
   filtered out of the entity draw) are intercepted right after projection; a valued drop
-  (`LrvIconPartsFor(addr)`) gets a gold marker dot + orb image + amount via a new `_iconBatch`
-  (queued by `_DrawIconBatched`, flushed in `_FlushBatch` between dots and text, one shared
-  GDI+ Graphics). Text fallback when the orb icons are unavailable.
-- **Verify in-game (steps 2&3):** orb images render on the radar dots + the "valuable
-  nearby" list, scaling/anchor look right, list hides behind big panels.
+  (`LrvIconPartsFor(addr)`) is collected per frame and drawn in `_FlushLootValues` (value-priority
+  + overlap de-clutter). Two on-map styles (`g_lrvMapOnOrb`, default on): **on-orb** — the orb sits
+  on the drop with the value as a bottom-right badge (replaces the dot); **beside** — a gold marker
+  dot + amount + orb to the right. Both: an 8-way black outline on the amount (`_DrawTextOutlined`)
+  AND the orb (`_OrbOutline`, black silhouettes via `OverlayImage`'s color matrix), togglable via
+  `g_lrvMapOutline` with `g_lrvMapOutlineWidth` (0 = auto); high-value drops (≥ `alertEx`) get a
+  pulsing halo (`g_lrvMapPulse`). The amount/orb size/colour come from `g_lrvMapFontSize`/
+  `g_lrvMapIconSize`/`g_lrvMapColor`; `_LootOverlaps` de-clutters. Text fallback when the orb
+  icons are unavailable.
+- **Verified in-game (2026-06-24, steps 2&3):** orb images render on the radar dots + the
+  "valuable nearby" list, scaling/anchor correct, list hides behind big panels. Confirmed on
+  Standard with live unique prices via the trade API.
 
 ## Trade-API unique pricing — Tier 2, in-browser (shipped 0.45.13.34)
 
@@ -578,11 +589,11 @@ localized client), checks the trade cache, and otherwise enqueues it for backgro
   cacheCount,queueCount` — no secrets exist to expose); UI: advanced `<details>` in `det-lootvalue`
   (security note, enable, league, "Open PoE trade session" + "Price queued now", status). The old
   Tier-1 PowerShell child + secret-file inputs were removed.
-- **Pending (needs the game + a real account; unverifiable from this env — Cloudflare blocks the
-  egress IP):** that a second `WebViewGui` opens with its own profile, the user can sign in, the
-  injected helper's same-origin fetch passes Cloudflare, the `{id,ok,listings}` round-trip works,
-  the response shape (`result` / `listing.price.{amount,currency}`) matches, currency ids convert,
-  and the rate-limit/cooldown behave.
+- **Verified in-game (2026-06-24):** a second `WebViewGui` opens with its own profile, the user
+  signs in once, the injected helper's same-origin fetch passes Cloudflare, the `{id,ok,listings}`
+  round-trip works, the response shape (`result` / `listing.price.{amount,currency}`) matches,
+  currency ids convert, and the rate-limit/cooldown behave. Confirmed pricing uniques on Standard
+  (where poe.ninja has no unique data).
 
 ## Reference
 

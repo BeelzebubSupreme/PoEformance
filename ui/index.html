@@ -3446,6 +3446,18 @@
       padding: 4px 0 0 0
     }
 
+    /* Loot Value Radar: even spacing between the grouped subsections, and a clear
+       nesting cue (indent + left rule) on the items inside an expanded group. */
+    #det-lootvalue details.cfg-subsection {
+      margin-top: 6px
+    }
+    #det-lootvalue details.cfg-subsection > .cfg-row,
+    #det-lootvalue details.cfg-subsection > .cfg-help {
+      margin-left: 14px;
+      border-left: 2px solid rgba(200, 168, 90, 0.30);
+      padding-left: 12px
+    }
+
     .cfg-slider-row {
       display: flex;
       align-items: center;
@@ -5405,6 +5417,8 @@
                 on any league; uniques only where poe.ninja has data (Standard has none, so uniques
                 stay untagged there). Enable Loot pricing in the Loot tab first, or values stay 0.
               </div>
+              <details class="cfg-subsection" open>
+                <summary><div class="cfg-header" style="font-size:13px">🎯 Detection &amp; alerts</div></summary>
               <div class="cfg-row"><span class="cfg-label">Enable loot value radar</span>
                 <label class="toggle"><input type="checkbox" id="lrv-enabled"
                     onchange="ahkCall('SetLootRadarValue','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
@@ -5421,6 +5435,9 @@
                 <span class="cfg-label">Alert threshold (ex)</span>
                 <span class="hk-num"><input type="number" id="lrv-alertEx" min="0" max="100000" step="1" onchange="ahkCall('SetLootRadarValue','alertEx',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
               </div>
+              </details>
+              <details class="cfg-subsection" open>
+                <summary><div class="cfg-header" style="font-size:13px">📋 Valuable nearby list</div></summary>
               <div class="cfg-row"><span class="cfg-label">Show "valuable nearby" list</span>
                 <label class="toggle"><input type="checkbox" id="lrv-showList"
                     onchange="ahkCall('SetLootRadarValue','showList', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
@@ -5429,6 +5446,57 @@
                 <span class="cfg-label">Max rows in the list</span>
                 <span class="hk-num"><input type="number" id="lrv-listMax" min="1" max="20" step="1" onchange="ahkCall('SetLootRadarValue','listMax',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
               </div>
+              <div class="cfg-row"><span class="cfg-label">Show distance in list</span>
+                <label class="toggle"><input type="checkbox" id="lrv-showDist"
+                    onchange="ahkCall('SetLootRadarValue','showDist', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Show direction arrow in list</span>
+                <label class="toggle"><input type="checkbox" id="lrv-showArrow"
+                    onchange="ahkCall('SetLootRadarValue','showArrow', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              </details>
+              <details class="cfg-subsection" open>
+                <summary><div class="cfg-header" style="font-size:13px">🏷️ On-map label</div></summary>
+              <div class="cfg-row"><span class="cfg-label">Value on the orb (replace dot)</span>
+                <label class="toggle"><input type="checkbox" id="lrv-mapOnOrb"
+                    onchange="ahkCall('SetLootRadarValue','mapOnOrb', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-label">Map label</span>
+                <span id="lrv-map-preview" style="position:relative;display:inline-flex;align-items:center;gap:4px;min-height:30px" data-tip="Live preview of the on-map label">
+                  <span id="lrv-prev-dot" style="display:inline-block;border-radius:50%;width:7px;height:7px;background:#C8A85A;margin-right:3px"></span>
+                  <span id="lrv-prev-num" style="color:#C8A85A;font-weight:600;line-height:1;font-size:14px">1</span>
+                  <img id="lrv-prev-icon" src="../img/currency/divine.png" alt="" style="width:18px;height:18px" onerror="this.style.visibility='hidden'">
+                </span>
+                <span style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+                  <span style="display:flex;gap:5px;align-items:center" data-tip="On-map orb icon size (px)">
+                    <span style="font-size:11px;color:var(--subtext)">icon</span>
+                    <span class="hk-num"><input type="number" id="lrv-mapIconSize" min="6" max="48" step="1" onchange="ahkCall('SetLootRadarValue','mapIconSize',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+                  </span>
+                  <span style="display:flex;gap:5px;align-items:center" data-tip="On-map amount font size (px)">
+                    <span style="font-size:11px;color:var(--subtext)">font</span>
+                    <span class="hk-num"><input type="number" id="lrv-mapFontSize" min="6" max="48" step="1" onchange="ahkCall('SetLootRadarValue','mapFontSize',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+                  </span>
+                  <span style="display:flex;gap:5px;align-items:center" data-tip="On-map amount text color">
+                    <span style="font-size:11px;color:var(--subtext)">color</span>
+                    <span id="lrv-mapColor-sw" class="cp-swatch" onclick="lrvOpenMapColor(this)"></span>
+                  </span>
+                </span>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Label outline</span>
+                <span style="display:flex;gap:14px;align-items:center;justify-content:flex-end">
+                  <label class="toggle"><input type="checkbox" id="lrv-mapOutline"
+                      onchange="ahkCall('SetLootRadarValue','mapOutline', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+                  <span style="display:flex;gap:5px;align-items:center" data-tip="Outline thickness in px (0 = auto from font size)">
+                    <span style="font-size:11px;color:var(--subtext)">width</span>
+                    <span class="hk-num"><input type="number" id="lrv-mapOutlineWidth" min="0" max="8" step="1" onchange="ahkCall('SetLootRadarValue','mapOutlineWidth',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+                  </span>
+                </span>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Pulse high-value markers</span>
+                <label class="toggle"><input type="checkbox" id="lrv-mapPulse"
+                    onchange="ahkCall('SetLootRadarValue','mapPulse', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
               <div class="cfg-help">
                 Valued ground drops are labelled on the radar with the matching currency orb
                 (Exalted / Divine) instead of a "1ex / 1div" text, and the "valuable nearby" list
@@ -5436,8 +5504,9 @@
                 (General → Actions) to check what nearby ground loot is being priced. Currency /
                 fragments price on any league; uniques only where poe.ninja has data.
               </div>
+              </details>
 
-              <details class="cfg-subsection" style="margin-top:8px">
+              <details class="cfg-subsection">
                 <summary><div class="cfg-header" style="font-size:13px">🛡️ Unique pricing via the official Trade API (advanced)</div></summary>
                 <div class="cfg-help" style="border-left:2px solid #b58b46;padding-left:8px">
                   <b>Security note — read first.</b> This fills the unique-price gap poe.ninja leaves on
@@ -7090,6 +7159,50 @@
       val('lrv-alertEx', s.alertEx);
       chk('lrv-showList', s.showList);
       val('lrv-listMax', s.listMax);
+      chk('lrv-showDist', s.showDist);
+      chk('lrv-showArrow', s.showArrow);
+      chk('lrv-mapOnOrb', s.mapOnOrb);
+      chk('lrv-mapOutline', s.mapOutline);
+      val('lrv-mapOutlineWidth', s.mapOutlineWidth);
+      chk('lrv-mapPulse', s.mapPulse);
+      val('lrv-mapIconSize', s.mapIconSize);
+      val('lrv-mapFontSize', s.mapFontSize);
+      const mc = s.mapColor || '#C8A85A';
+      const sw = document.getElementById('lrv-mapColor-sw');
+      if (sw) sw.style.setProperty('--swatch-color', mc);
+      // Live preview of the on-map label. "On orb": value badge bottom-right over the orb,
+      // dot hidden. "Beside": gold dot + amount + orb in a row.
+      const onOrb = s.mapOnOrb === true || s.mapOnOrb === 1 || s.mapOnOrb === '1' || s.mapOnOrb === 'true';
+      const pi = document.getElementById('lrv-prev-icon');
+      if (pi && s.mapIconSize) { pi.style.width = s.mapIconSize + 'px'; pi.style.height = s.mapIconSize + 'px'; }
+      const pdot = document.getElementById('lrv-prev-dot');
+      if (pdot) pdot.style.display = onOrb ? 'none' : '';
+      const pn = document.getElementById('lrv-prev-num');
+      if (pn) {
+        pn.style.color = mc;
+        if (s.mapFontSize) pn.style.fontSize = s.mapFontSize + 'px';
+        if (onOrb) {
+          pn.style.position = 'absolute';
+          pn.style.left = Math.round((s.mapIconSize || 18) * 0.45) + 'px';   // left-anchored → grows right
+          pn.style.right = '';
+          pn.style.bottom = '-2px';
+          pn.style.textShadow = '0 0 2px #000,0 0 2px #000,0 0 1px #000';
+        } else {
+          pn.style.position = 'static';
+          pn.style.left = ''; pn.style.right = ''; pn.style.bottom = ''; pn.style.textShadow = '';
+        }
+      }
+    }
+
+    // Map loot-value label color → shared GGPK color picker → SetLootRadarValue mapColor.
+    function lrvOpenMapColor(el) {
+      const cur = (window._lastHeader && window._lastHeader.lootRadarValue && window._lastHeader.lootRadarValue.mapColor) || '#C8A85A';
+      openColorPicker('lrvMap', {
+        title: 'Loot value label color',
+        hex: cur,
+        swatchEl: el,
+        onConfirm: hex => ahkCall('SetLootRadarValue', 'mapColor', '#' + hex.slice(0, 6))
+      });
     }
 
     function lootTradePricingSyncFromHeader(s) {

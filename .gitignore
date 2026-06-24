@@ -58,3 +58,7 @@ data/raw_extracted/
 
 # Local-only dev / test entrypoints (not part of the shipped helper)
 dev/
+
+# Compiled output (built locally, not shipped in the repo)
+PoEformance.exe
+WebView2Loader.dll

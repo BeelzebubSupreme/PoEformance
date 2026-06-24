@@ -17,15 +17,19 @@
 global g_oiToken   := 0       ; GDI+ startup token (0 = not started)
 global g_oiBitmaps := Map()   ; icon key -> GpBitmap*
 global g_oiReady   := false   ; true once GDI+ is up and at least one icon loaded
+global g_oiSize    := Map()   ; icon key -> [w, h] in pixels (for silhouette src rect)
+global g_oiSilAttr := 0       ; cached black-silhouette ImageAttributes (lazy)
 
 ; Starts GDI+ and loads the shipped currency icons from img\currency\. Safe to call
 ; once at startup; on any failure g_oiReady stays false and the draw helpers no-op.
 LoadOverlayIcons()
 {
-    global g_oiToken, g_oiBitmaps, g_oiReady
+    global g_oiToken, g_oiBitmaps, g_oiReady, g_oiSize, g_oiSilAttr
     g_oiToken   := 0
     g_oiBitmaps := Map()
     g_oiReady   := false
+    g_oiSize    := Map()
+    g_oiSilAttr := 0
 
     ; GdiplusStartupInput: UINT version=1, ptr debugCallback, BOOL suppressBgThread,
     ; BOOL suppressExternalCodecs  (24 bytes, 8-byte aligned on x64).
@@ -51,14 +55,48 @@ LoadOverlayIcons()
 ; Loads one PNG into a GpBitmap and caches it under key. Missing/garbled files are skipped.
 _OiLoadIcon(key, path)
 {
-    global g_oiBitmaps
+    global g_oiBitmaps, g_oiSize
     if !FileExist(path)
         return
     pBmp := 0
     try {
         if (DllCall("gdiplus\GdipCreateBitmapFromFile", "WStr", path, "Ptr*", &pBmp) = 0 && pBmp)
+        {
             g_oiBitmaps[key] := pBmp
+            w := 0, h := 0
+            DllCall("gdiplus\GdipGetImageWidth",  "Ptr", pBmp, "UInt*", &w)
+            DllCall("gdiplus\GdipGetImageHeight", "Ptr", pBmp, "UInt*", &h)
+            g_oiSize[key] := [w, h]
+        }
     }
+}
+
+; Lazily builds (and caches) a black-silhouette ImageAttributes: a color matrix that zeroes
+; RGB and keeps alpha, so blitting an icon through it paints its shape solid black. Used to draw
+; an outline halo around the orb (the image equivalent of the text outline). 0 on any failure.
+_OiSilhouetteAttr()
+{
+    global g_oiSilAttr
+    if (g_oiSilAttr)
+        return g_oiSilAttr
+    attr := 0
+    try {
+        if (DllCall("gdiplus\GdipCreateImageAttributes", "Ptr*", &attr) != 0 || !attr)
+            return 0
+        cm := Buffer(100, 0)                 ; 5x5 float color matrix, all zero …
+        NumPut("Float", 1.0, cm, 18 * 4)     ; [3][3] alpha' = alpha
+        NumPut("Float", 1.0, cm, 24 * 4)     ; [4][4] = 1
+        if (DllCall("gdiplus\GdipSetImageAttributesColorMatrix", "Ptr", attr, "Int", 0, "Int", 1
+                , "Ptr", cm, "Ptr", 0, "Int", 0) != 0)
+        {
+            DllCall("gdiplus\GdipDisposeImageAttributes", "Ptr", attr)
+            return 0
+        }
+    } catch {
+        return 0
+    }
+    g_oiSilAttr := attr
+    return attr
 }
 
 ; True when an icon with this key is loaded and GDI+ is ready (so callers can decide
@@ -100,10 +138,26 @@ DrawOverlayIconsBatch(hdc, batch)
         return
     DllCall("gdiplus\GdipSetInterpolationMode", "Ptr", g, "Int", 7)
     DllCall("gdiplus\GdipSetPixelOffsetMode",   "Ptr", g, "Int", 2)
+    global g_oiSize
     for it in batch
     {
         if !(IsObject(it) && it.Length >= 5 && g_oiBitmaps.Has(it[1]))
             continue
+        ; 6th element truthy => draw a black silhouette (outline halo) via the color matrix.
+        if (it.Length >= 6 && it[6])
+        {
+            attr := _OiSilhouetteAttr()
+            if (attr)
+            {
+                sz := g_oiSize.Has(it[1]) ? g_oiSize[it[1]] : [it[4], it[5]]
+                DllCall("gdiplus\GdipDrawImageRectRectI", "Ptr", g, "Ptr", g_oiBitmaps[it[1]]
+                    , "Int", it[2], "Int", it[3], "Int", it[4], "Int", it[5]
+                    , "Int", 0, "Int", 0, "Int", sz[1], "Int", sz[2]
+                    , "Int", 2, "Ptr", attr, "Ptr", 0, "Ptr", 0)
+                continue
+            }
+            ; attr failed — fall through to a normal blit so the orb still shows.
+        }
         DllCall("gdiplus\GdipDrawImageRectI", "Ptr", g, "Ptr", g_oiBitmaps[it[1]]
             , "Int", it[2], "Int", it[3], "Int", it[4], "Int", it[5])
     }
@@ -113,11 +167,16 @@ DrawOverlayIconsBatch(hdc, batch)
 ; Frees the cached bitmaps and shuts GDI+ down. Wired to OnExit by the main script.
 StopOverlayIcons()
 {
-    global g_oiToken, g_oiBitmaps, g_oiReady
+    global g_oiToken, g_oiBitmaps, g_oiReady, g_oiSilAttr
     for _, b in g_oiBitmaps
         try DllCall("gdiplus\GdipDisposeImage", "Ptr", b)
     g_oiBitmaps := Map()
     g_oiReady := false
+    if g_oiSilAttr
+    {
+        try DllCall("gdiplus\GdipDisposeImageAttributes", "Ptr", g_oiSilAttr)
+        g_oiSilAttr := 0
+    }
     if g_oiToken
         try DllCall("gdiplus\GdiplusShutdown", "Ptr", g_oiToken)
     g_oiToken := 0

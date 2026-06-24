@@ -43,12 +43,14 @@ class LootValueOverlay extends GdiOverlayBase
     ; Builds the row model + measures the panel size from the longest row.
     Layout(ctx)
     {
-        global g_lrvNearby, g_lrvListMax, g_ltUiScale, g_ltBarOpacity
+        global g_lrvNearby, g_lrvListMax, g_ltUiScale, g_ltBarOpacity, g_lrvShowDist, g_lrvShowArrow
         scale := _LtBarScale(ctx.gwH, IsSet(g_ltUiScale) ? g_ltUiScale : 1.0)
         this._scale := scale
         this._fontH := -Round(16 * scale)
 
         maxRows := (IsSet(g_lrvListMax) && g_lrvListMax > 0) ? g_lrvListMax : 8
+        showDist  := (IsSet(g_lrvShowDist) && g_lrvShowDist)
+        showArrow := (IsSet(g_lrvShowArrow) && g_lrvShowArrow)
         rows := []
         for _, info in g_lrvNearby
         {
@@ -60,7 +62,9 @@ class LootValueOverlay extends GdiOverlayBase
             nm := info.Has("label") ? info["label"] : ""
             if (StrLen(nm) > 24)
                 nm := SubStr(nm, 1, 23) "…"
-            rows.Push(Map("parts", LrvValueParts(ex), "name", nm))
+            dM  := (showDist && info.Has("distM")) ? info["distM"] : -1
+            arr := (showArrow && info.Has("sdx") && info.Has("sdy")) ? _LrvArrowGlyph(info["sdx"], info["sdy"]) : ""
+            rows.Push(Map("parts", LrvValueParts(ex), "name", nm, "dist", dM, "arrow", arr))
         }
         this._rows := rows
 
@@ -75,11 +79,14 @@ class LootValueOverlay extends GdiOverlayBase
         ; Width = widest of (title, every row: icon + num + name).
         tW := this._MeasureText(titleFont, "Valuable nearby")["w"]
         maxW := tW
+        arrowFont := this._GetFont(Round(this._fontH * 1.4), 700)
         for _, r in rows
         {
             numW  := this._MeasureText(font, r["parts"]["num"])["w"]
             nameW := this._MeasureText(font, "  " r["name"])["w"]
-            rowW  := this._iconSz + this._gap + numW + nameW
+            distW := (r["dist"] >= 0) ? this._MeasureText(font, "  " r["dist"] "m")["w"] : 0
+            arrW  := (r["arrow"] != "") ? this._MeasureText(arrowFont, " " r["arrow"])["w"] : 0
+            rowW  := this._iconSz + this._gap + numW + nameW + distW + arrW
             if (rowW > maxW)
                 maxW := rowW
         }
@@ -127,9 +134,41 @@ class LootValueOverlay extends GdiOverlayBase
             numW := this._MeasureText(font, parts["num"])["w"]
             ; If the orb image is unavailable, append a tiny unit tag so the value still reads.
             unitTag := drewIcon ? "" : (parts["icon"] = "divine" ? "div " : "ex ")
-            this._DrawText(tx + numW, y, "  " unitTag r["name"], textCol)
+            nameStr := "  " unitTag r["name"]
+            this._DrawText(tx + numW, y, nameStr, textCol)
+            ; Distance (dim) then a larger, brighter direction arrow at the row end.
+            tx2 := tx + numW + this._MeasureText(font, nameStr)["w"]
+            if (r["dist"] >= 0)
+            {
+                distStr := "  " r["dist"] "m"
+                this._DrawText(tx2, y, distStr, 0x808080)
+                tx2 += this._MeasureText(font, distStr)["w"]
+            }
+            if (r["arrow"] != "")
+            {
+                arrowFont := this._GetFont(Round(this._fontH * 1.4), 700)
+                oldF := DllCall("SelectObject", "Ptr", this.memDC, "Ptr", arrowFont, "Ptr")
+                this._DrawText(tx2 + Round(2 * scale), y - Round((-this._fontH) * 0.2), " " r["arrow"], 0xB8B8B8)
+                DllCall("SelectObject", "Ptr", this.memDC, "Ptr", oldF)
+            }
             y += lineH
         }
         DllCall("SelectObject", "Ptr", this.memDC, "Ptr", oldFont)
     }
+}
+
+; 8-way arrow glyph for an on-screen direction vector (player→drop; screen Y points down).
+; Returns "" when there is no usable direction. 2.414 = tan(67.5°) splits the 8 sectors.
+_LrvArrowGlyph(sdx, sdy)
+{
+    if (sdx = "" || sdy = "" || (sdx = 0 && sdy = 0))
+        return ""
+    adx := Abs(sdx), ady := Abs(sdy)
+    if (adx > 2.414 * ady)
+        return (sdx > 0) ? "→" : "←"
+    if (ady > 2.414 * adx)
+        return (sdy > 0) ? "↓" : "↑"
+    if (sdx > 0)
+        return (sdy > 0) ? "↘" : "↗"
+    return (sdy > 0) ? "↙" : "↖"
 }

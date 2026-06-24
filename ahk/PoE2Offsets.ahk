@@ -136,7 +136,9 @@ class PoE2Offsets
 
     static StdVector := Map(
         "First", 0x00,
-        "Last", 0x08
+        "Last", 0x08,
+        "End", 0x10,         ; cap_end pointer (MSVC std::vector third member)
+        "StructSize", 0x18   ; full MSVC std::vector = {begin, end, cap_end} = 3 pointers (stride for consecutive vectors)
     )
 
     static StatPair := Map(
@@ -281,6 +283,13 @@ class PoE2Offsets
         "UnknownIdAndEquipmentInfo", 0x3C
     )
 
+    ; One CooldownsList element (0x10 bytes): two floats — elapsed and total seconds.
+    ; Remaining = TotalSec - ElapsedSec.
+    static ActiveSkillCooldownEntry := Map(
+        "ElapsedSec", 0x00,
+        "TotalSec", 0x04
+    )
+
     static DeployedEntity := Map(
         "EntityId", 0x00,
         "ActiveSkillsDatId", 0x04,
@@ -375,6 +384,15 @@ class PoE2Offsets
         "ResourcePath", 0x28
     )
 
+    ; "WorldItem" component on a ground-drop WRAPPER entity
+    ; (Metadata/MiscellaneousObjects/WorldItem). The wrapper carries no rarity/art of
+    ; its own; the real ITEM entity (path/rarity/Mods/RenderItem) is pointed to at
+    ; +0x28. Confirmed in-game 2026-06-23 (LootRadarValue _LrvResolveInnerItem, which
+    ; reads this first, then keeps a small 0x08..0xA0 sweep as a patch-shift fallback).
+    static WorldItemComponent := Map(
+        "InnerItem", 0x28
+    )
+
     static ChargesInternal := Map(
         "PerUseCharges", 0x18
     )
@@ -437,6 +455,12 @@ class PoE2Offsets
         "SlotEndY", 0x14
     )
 
+    ; One stash-tab vector entry: the tab name (NativeStringU) sits at +0x08 within the entry.
+    ; The entry stride itself is discovered at runtime (StashTabScan), not fixed here.
+    static StashTabEntry := Map(
+        "Name", 0x08
+    )
+
     static ComponentLookupEntry := Map(
         "NamePtr", 0x00,
         "Index", 0x08,
@@ -446,8 +470,8 @@ class PoE2Offsets
     static ModArray := Map(
         "Values", 0x00,     ; StdVector (0x18 bytes)
         "Value0", 0x18,     ; int (fallback if Values is empty)
-        "ModsPtr", 0x28     ; IntPtr → Mods.dat row → ptr @ 0x00 → unicode name
-        ; struct total size = 0x40 (UselessPtr2 @ 0x38 + 8 bytes)
+        "ModsPtr", 0x28,    ; IntPtr → Mods.dat row → ptr @ 0x00 → unicode name
+        "EntrySize", 0x40   ; one mod entry = 0x40 bytes (UselessPtr2 @ 0x38 + 8); stride within a mod vector
     )
 
     static WorldAreaDat := Map(
@@ -462,7 +486,18 @@ class PoE2Offsets
         "Buffer", 0x00,
         "ReservedBytes", 0x08,
         "Length", 0x10,
-        "Capacity", 0x18
+        "Capacity", 0x18,
+        "Size", 0x20          ; total header size (batch-read length). NativeStringU shares this wide SSO layout.
+    )
+
+    ; MSVC narrow std::string (UTF-8) with short-string optimisation. Same field offsets as
+    ; StdWString (only the inline buffer is interpreted as bytes, not wide chars):
+    ; 0x00-0x0F = union{char buf[16]; char* ptr}, 0x10 = size, 0x18 = capacity.
+    static StdString := Map(
+        "Buffer", 0x00,
+        "Length", 0x10,
+        "Capacity", 0x18,
+        "Size", 0x20
     )
 
     ; All offsets are relative to the KB/M UiRootStructPtr (= ReadPtr(InGameState + 0x2F0)).

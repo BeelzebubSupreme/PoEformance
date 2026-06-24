@@ -207,6 +207,7 @@ class RadarOverlay extends GdiOverlayBase
         this._lineBatch   := Map()   ; line segments: one array per color/width group
         this._textBatch   := []      ; text entries: [x, y, text, colorBGR]
         this._iconBatch   := []      ; icon blits: [iconKey, x, y, w, h] (value-aware loot)
+        this._lrvFrameDrops := []    ; valued ground drops this frame: [sx, sy, parts, valueEx, isLargeMap]
     }
 
     ; Pulls the radar's per-frame config straight from the toggle globals (the
@@ -908,10 +909,13 @@ class RadarOverlay extends GdiOverlayBase
                     _lrvAddr := entity.Has("address") ? entity["address"] : 0
                     if (_lrvAddr)
                     {
+                        ; Stash the on-screen direction (player→drop) for the list's arrow.
+                        LrvSetDir(_lrvAddr, screenDeltaX, screenDeltaY)
                         _lrvParts := LrvIconPartsFor(_lrvAddr)
                         if (_lrvParts)
                         {
-                            this._DrawLootValue(dotScreenX, dotScreenY, _lrvParts, isLargeMap)
+                            ; Collect now; drawn value-priority + de-cluttered in _FlushLootValues().
+                            this._lrvFrameDrops.Push([dotScreenX, dotScreenY, _lrvParts, LrvValueExFor(_lrvAddr), isLargeMap])
                             statDrawn += 1
                         }
                     }
@@ -1267,6 +1271,11 @@ class RadarOverlay extends GdiOverlayBase
                     this._DrawRectOutline(r[1], r[2], r[3], r[4], 0x0000FF, 2)   ; red (BGR)
             }
         }
+
+        ; Draw THIS layer's valued loot labels (value-priority, de-cluttered). Done per layer so
+        ; the overlap suppression never mixes the mini-map and large-map projections (both layers
+        ; can render in one frame). Queued into the shared batches, flushed in _FinishFrame.
+        this._FlushLootValues()
     }
 
     ; Computes the on-screen rectangle for one HUD clip mask: design px scaled uniformly by
@@ -1365,41 +1374,174 @@ class RadarOverlay extends GdiOverlayBase
         this._lineBatch[key].Push([x1, y1, x2, y2])
     }
 
-    ; Queues a text draw into the text batch.
-    _DrawText(screenX, screenY, text, colorBGR)
+    ; Queues a text draw into the text batch. Optional font handle (5th element) lets a few
+    ; entries (the loot value labels) render at a custom size; 0 = the DC's default font.
+    _DrawText(screenX, screenY, text, colorBGR, font := 0)
     {
-        this._textBatch.Push([screenX, screenY, text, colorBGR])
+        this._textBatch.Push([screenX, screenY, text, colorBGR, font])
     }
 
     ; Queues an icon blit (drawn after dots, before text). iconKey resolves via OverlayImage.
-    _DrawIconBatched(iconKey, x, y, w, h)
+    ; silhouette=true paints the icon's shape solid black (an outline-halo pass for the orb).
+    _DrawIconBatched(iconKey, x, y, w, h, silhouette := false)
     {
-        this._iconBatch.Push([iconKey, x, y, w, h])
+        this._iconBatch.Push([iconKey, x, y, w, h, silhouette])
     }
 
-    ; Value-aware loot (step 3): paints a valued ground drop. Draws a small loot marker dot,
-    ; then the matching currency orb image + amount to its right (or a "ex"/"div" text tag if
-    ; the orb icons failed to load). parts = LrvValueParts() Map("icon", "num").
-    _DrawLootValue(screenX, screenY, parts, isLargeMap)
+    ; Queues outlined text: a black halo (8 offset copies) then the colored fill on top, all in
+    ; the text batch with the given font. Keeps small on-map labels legible over any background.
+    _DrawTextOutlined(x, y, text, fillCol, font, ow := 1)
     {
-        if !(parts && IsObject(parts))
+        oc := 0x000000
+        this._DrawText(x - ow, y, text, oc, font)
+        this._DrawText(x + ow, y, text, oc, font)
+        this._DrawText(x, y - ow, text, oc, font)
+        this._DrawText(x, y + ow, text, oc, font)
+        this._DrawText(x - ow, y - ow, text, oc, font)
+        this._DrawText(x + ow, y - ow, text, oc, font)
+        this._DrawText(x - ow, y + ow, text, oc, font)
+        this._DrawText(x + ow, y + ow, text, oc, font)
+        this._DrawText(x, y, text, fillCol, font)
+    }
+
+    ; Value-aware loot (step 3): paints the valued ground drops collected this frame. The marker
+    ; dot is ALWAYS drawn (so every drop stays visible); the currency orb image + amount label is
+    ; drawn highest-value first and SKIPPED when it would overlap an already-placed label — so a
+    ; dense cluster no longer turns the amounts into an unreadable mush. Queued into the shared
+    ; batches, so it must run just before _FlushBatch().
+    _FlushLootValues()
+    {
+        global g_lrvMapIconSize, g_lrvMapFontSize, g_lrvMapColor
+        global g_lrvMapOutline, g_lrvMapOutlineWidth, g_lrvMapPulse, g_lrvMapOnOrb, g_lrvAlertEx
+        drops := this._lrvFrameDrops
+        this._lrvFrameDrops := []
+        if (drops.Length = 0)
             return
-        col := 0x5AA8C8                       ; gold (BGR of #C8A85A) — value marker + amount
-        this._DrawDot(screenX, screenY, col, isLargeMap ? 4 : 3)
-        iconSz := isLargeMap ? 18 : 15
-        ix := screenX + (isLargeMap ? 6 : 5)
-        iy := screenY - iconSz // 2
-        num := parts.Has("num") ? parts["num"] : ""
-        if OverlayIconReady(parts["icon"])
+        this._SortByValueExDesc(drops)        ; readable labels go to the most valuable drops
+
+        ; User-configurable look (Config → Overlay → Loot value radar).
+        dotCol  := 0x5AA8C8                     ; gold marker dot (beside style only)
+        txtCol  := GroupColorToBgr(IsSet(g_lrvMapColor) ? g_lrvMapColor : "#C8A85A")
+        iconSz  := (IsSet(g_lrvMapIconSize) ? g_lrvMapIconSize : 18)
+        fontPx  := (IsSet(g_lrvMapFontSize) ? g_lrvMapFontSize : 14)
+        font    := this._GetFont(-fontPx, 600)
+        gap     := 3
+        outline := (!IsSet(g_lrvMapOutline) || g_lrvMapOutline)
+        ow      := (IsSet(g_lrvMapOutlineWidth) && g_lrvMapOutlineWidth > 0) ? g_lrvMapOutlineWidth : Max(2, Round(fontPx / 7))
+        pulseOn := (!IsSet(g_lrvMapPulse) || g_lrvMapPulse)
+        onOrb   := (!IsSet(g_lrvMapOnOrb) || g_lrvMapOnOrb)   ; orb sits ON the drop, value as a badge
+        alertEx := (IsSet(g_lrvAlertEx) ? g_lrvAlertEx : 0)
+        pulse   := 0.5 + 0.5 * Sin(A_TickCount / 220.0)       ; 0..1 wall-clock pulse phase
+
+        placed := []                           ; [x1, y1, x2, y2] of labels already drawn this frame
+        for _, d in drops
         {
-            this._DrawIconBatched(parts["icon"], ix, iy, iconSz, iconSz)
-            this._DrawText(ix + iconSz + 2, screenY - 7, num, col)
+            sx := d[1], sy := d[2], parts := d[3], valueEx := d[4]
+            high   := (pulseOn && alertEx > 0 && valueEx >= alertEx)
+            hasOrb := (parts && IsObject(parts) && OverlayIconReady(parts["icon"]))
+            num    := (parts && IsObject(parts) && parts.Has("num")) ? parts["num"] : ""
+
+            if (onOrb && hasOrb)
+            {
+                ; ── Orb-as-marker: the orb REPLACES the dot entirely. The value is a badge at the
+                ; lower-right, LEFT-anchored so longer numbers grow rightward (never cover the orb).
+                ; High-value: the ORB ITSELF pulses (no halo/dot behind it). ──
+                isz := high ? iconSz + Round(iconSz * 0.18 * pulse) : iconSz
+                ix := sx - isz // 2, iy := sy - isz // 2
+                tm := this._MeasureText(font, num)
+                numW := tm["w"], numH := tm["h"]
+                nx := sx + iconSz // 5                          ; left-anchored → grows right
+                ny := sy + iconSz // 2 - Round(numH * 0.72)     ; sit low (lower-right, overhanging)
+                bx1 := Min(ix, nx), by1 := Min(iy, ny)
+                bx2 := Max(ix + isz, nx + numW), by2 := Max(iy + isz, ny + numH)
+                if this._LootOverlaps(placed, bx1, by1, bx2, by2)
+                    continue
+                placed.Push([bx1, by1, bx2, by2])
+                if (outline)
+                    this._OrbOutline(parts["icon"], ix, iy, isz, ow)
+                this._DrawIconBatched(parts["icon"], ix, iy, isz, isz)
+                if (outline)
+                    this._DrawTextOutlined(nx, ny, num, txtCol, font, ow)
+                else
+                    this._DrawText(nx, ny, num, txtCol, font)
+                continue
+            }
+
+            ; ── Beside-marker: gold dot on the drop, amount + orb to the right (or text only). ──
+            dotR := d[5] ? 4 : 3
+            if (high)
+                this._DrawDot(sx, sy, 0x80E0FF, dotR + 2 + Round(5 * pulse))
+            this._DrawDot(sx, sy, dotCol, dotR)
+            if !(parts && IsObject(parts))
+                continue
+            tm := this._MeasureText(font, num)
+            numW := tm["w"], numH := tm["h"]
+            half := Max(numH, iconSz) // 2
+            tx := sx + 7, iconX := tx + numW + gap
+            bx2 := hasOrb ? (iconX + iconSz) : (tx + numW)
+            if this._LootOverlaps(placed, tx, sy - half, bx2, sy + half)
+                continue
+            placed.Push([tx, sy - half, bx2, sy + half])
+            iy := sy - iconSz // 2
+            if (hasOrb)
+            {
+                if (outline)
+                    this._OrbOutline(parts["icon"], iconX, iy, iconSz, ow)
+                this._DrawIconBatched(parts["icon"], iconX, iy, iconSz, iconSz)
+                if (outline)
+                    this._DrawTextOutlined(tx, sy - numH // 2, num, txtCol, font, ow)
+                else
+                    this._DrawText(tx, sy - numH // 2, num, txtCol, font)
+            }
+            else
+            {
+                ; Text fallback so the value still reads when the orb image is unavailable.
+                unit := (parts.Has("icon") && parts["icon"] = "divine") ? " div" : " ex"
+                if (outline)
+                    this._DrawTextOutlined(tx, sy - numH // 2, num unit, txtCol, font, ow)
+                else
+                    this._DrawText(tx, sy - numH // 2, num unit, txtCol, font)
+            }
         }
-        else
+    }
+
+    ; AABB overlap test against the label boxes already placed this frame.
+    _LootOverlaps(placed, x1, y1, x2, y2)
+    {
+        for _, p in placed
+            if (x1 < p[3] && x2 > p[1] && y1 < p[4] && y2 > p[2])
+                return true
+        return false
+    }
+
+    ; 8-direction black silhouette halo behind an orb (the image equivalent of a text outline).
+    _OrbOutline(iconKey, x, y, sz, ow)
+    {
+        this._DrawIconBatched(iconKey, x - ow, y, sz, sz, true)
+        this._DrawIconBatched(iconKey, x + ow, y, sz, sz, true)
+        this._DrawIconBatched(iconKey, x, y - ow, sz, sz, true)
+        this._DrawIconBatched(iconKey, x, y + ow, sz, sz, true)
+        this._DrawIconBatched(iconKey, x - ow, y - ow, sz, sz, true)
+        this._DrawIconBatched(iconKey, x + ow, y - ow, sz, sz, true)
+        this._DrawIconBatched(iconKey, x - ow, y + ow, sz, sz, true)
+        this._DrawIconBatched(iconKey, x + ow, y + ow, sz, sz, true)
+    }
+
+    ; Insertion-sorts the frame drops by valueEx (element [4]) descending — tiny list.
+    _SortByValueExDesc(arr)
+    {
+        i := 2
+        while (i <= arr.Length)
         {
-            ; Text fallback so the value still reads when the orb image is unavailable.
-            unit := (parts["icon"] = "divine") ? " div" : " ex"
-            this._DrawText(ix, screenY - 7, num unit, col)
+            cur := arr[i]
+            j := i - 1
+            while (j >= 1 && arr[j][4] < cur[4])
+            {
+                arr[j + 1] := arr[j]
+                j -= 1
+            }
+            arr[j + 1] := cur
+            i += 1
         }
     }
 
@@ -1467,11 +1609,29 @@ class RadarOverlay extends GdiOverlayBase
         ; ── 4. Text ──────────────────────────────────────────────────────────────────────
         ; SetBkMode once per frame — all TextOut calls benefit from it
         DllCall("SetBkMode", "Ptr", dc, "Int", 1)   ; TRANSPARENT
+        ; Optional per-entry font (5th element) — used by the loot value labels. Select on change
+        ; and restore the DC's original font at the end.
+        curFont := 0, savedFont := 0
         for t in this._textBatch
         {
+            f := (t.Length >= 5) ? t[5] : 0
+            if (f != curFont)
+            {
+                if (f)
+                {
+                    sel := DllCall("SelectObject", "Ptr", dc, "Ptr", f, "Ptr")
+                    if (!savedFont)
+                        savedFont := sel
+                }
+                else if (savedFont)
+                    DllCall("SelectObject", "Ptr", dc, "Ptr", savedFont)
+                curFont := f
+            }
             DllCall("SetTextColor", "Ptr", dc, "UInt", t[4])
             DllCall("TextOutW", "Ptr", dc, "Int", t[1], "Int", t[2], "Str", t[3], "Int", StrLen(t[3]))
         }
+        if (savedFont && curFont)
+            DllCall("SelectObject", "Ptr", dc, "Ptr", savedFont)
         this._textBatch := []
     }
 
