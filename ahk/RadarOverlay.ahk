@@ -1388,7 +1388,7 @@ class RadarOverlay extends GdiOverlayBase
         this._iconBatch.Push([iconKey, x, y, w, h, silhouette])
     }
 
-    ; Queues outlined text: a black halo (4 offset copies) then the colored fill on top, all in
+    ; Queues outlined text: a black halo (8 offset copies) then the colored fill on top, all in
     ; the text batch with the given font. Keeps small on-map labels legible over any background.
     _DrawTextOutlined(x, y, text, fillCol, font, ow := 1)
     {
@@ -1397,6 +1397,10 @@ class RadarOverlay extends GdiOverlayBase
         this._DrawText(x + ow, y, text, oc, font)
         this._DrawText(x, y - ow, text, oc, font)
         this._DrawText(x, y + ow, text, oc, font)
+        this._DrawText(x - ow, y - ow, text, oc, font)
+        this._DrawText(x + ow, y - ow, text, oc, font)
+        this._DrawText(x - ow, y + ow, text, oc, font)
+        this._DrawText(x + ow, y + ow, text, oc, font)
         this._DrawText(x, y, text, fillCol, font)
     }
 
@@ -1424,7 +1428,7 @@ class RadarOverlay extends GdiOverlayBase
         font    := this._GetFont(-fontPx, 600)
         gap     := 3                           ; small gap between the amount and the orb
         outline := (!IsSet(g_lrvMapOutline) || g_lrvMapOutline)   ; outline amount + orb (default on)
-        ow      := (IsSet(g_lrvMapOutlineWidth) && g_lrvMapOutlineWidth > 0) ? g_lrvMapOutlineWidth : Max(1, fontPx // 14)
+        ow      := (IsSet(g_lrvMapOutlineWidth) && g_lrvMapOutlineWidth > 0) ? g_lrvMapOutlineWidth : Max(2, Round(fontPx / 7))
         pulseOn := (!IsSet(g_lrvMapPulse) || g_lrvMapPulse)
         alertEx := (IsSet(g_lrvAlertEx) ? g_lrvAlertEx : 0)
         pulse   := 0.5 + 0.5 * Sin(A_TickCount / 220.0)   ; 0..1 wall-clock pulse phase
@@ -1474,6 +1478,10 @@ class RadarOverlay extends GdiOverlayBase
                     this._DrawIconBatched(parts["icon"], iconX + ow, iy, iconSz, iconSz, true)
                     this._DrawIconBatched(parts["icon"], iconX, iy - ow, iconSz, iconSz, true)
                     this._DrawIconBatched(parts["icon"], iconX, iy + ow, iconSz, iconSz, true)
+                    this._DrawIconBatched(parts["icon"], iconX - ow, iy - ow, iconSz, iconSz, true)
+                    this._DrawIconBatched(parts["icon"], iconX + ow, iy - ow, iconSz, iconSz, true)
+                    this._DrawIconBatched(parts["icon"], iconX - ow, iy + ow, iconSz, iconSz, true)
+                    this._DrawIconBatched(parts["icon"], iconX + ow, iy + ow, iconSz, iconSz, true)
                 }
                 this._DrawIconBatched(parts["icon"], iconX, iy, iconSz, iconSz)
                 if (outline)

@@ -3446,6 +3446,18 @@
       padding: 4px 0 0 0
     }
 
+    /* Loot Value Radar: even spacing between the grouped subsections, and a clear
+       nesting cue (indent + left rule) on the items inside an expanded group. */
+    #det-lootvalue details.cfg-subsection {
+      margin-top: 6px
+    }
+    #det-lootvalue details.cfg-subsection > .cfg-row,
+    #det-lootvalue details.cfg-subsection > .cfg-help {
+      margin-left: 14px;
+      border-left: 2px solid rgba(200, 168, 90, 0.30);
+      padding-left: 12px
+    }
+
     .cfg-slider-row {
       display: flex;
       align-items: center;
@@ -5473,7 +5485,7 @@
                       onchange="ahkCall('SetLootRadarValue','mapOutline', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
                   <span style="display:flex;gap:5px;align-items:center" data-tip="Outline thickness in px (0 = auto from font size)">
                     <span style="font-size:11px;color:var(--subtext)">width</span>
-                    <span class="hk-num"><input type="number" id="lrv-mapOutlineWidth" min="0" max="5" step="1" onchange="ahkCall('SetLootRadarValue','mapOutlineWidth',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+                    <span class="hk-num"><input type="number" id="lrv-mapOutlineWidth" min="0" max="8" step="1" onchange="ahkCall('SetLootRadarValue','mapOutlineWidth',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
                   </span>
                 </span>
               </div>
@@ -5490,7 +5502,7 @@
               </div>
               </details>
 
-              <details class="cfg-subsection" style="margin-top:8px">
+              <details class="cfg-subsection">
                 <summary><div class="cfg-header" style="font-size:13px">🛡️ Unique pricing via the official Trade API (advanced)</div></summary>
                 <div class="cfg-help" style="border-left:2px solid #b58b46;padding-left:8px">
                   <b>Security note — read first.</b> This fills the unique-price gap poe.ninja leaves on

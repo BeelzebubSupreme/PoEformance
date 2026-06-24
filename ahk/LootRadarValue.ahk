@@ -256,7 +256,7 @@ _LrvClamp()
     g_lrvMapFontSize := Max(6, Min(48, Integer(g_lrvMapFontSize)))
     if !IsSet(g_lrvMapOutlineWidth)
         g_lrvMapOutlineWidth := 0
-    g_lrvMapOutlineWidth := Max(0, Min(5, Integer(g_lrvMapOutlineWidth)))
+    g_lrvMapOutlineWidth := Max(0, Min(8, Integer(g_lrvMapOutlineWidth)))
 }
 
 ; Loose boolean coercion (true/1/"1"/"true"/"yes"/"on").
