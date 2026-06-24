@@ -5405,6 +5405,8 @@
                 on any league; uniques only where poe.ninja has data (Standard has none, so uniques
                 stay untagged there). Enable Loot pricing in the Loot tab first, or values stay 0.
               </div>
+              <details class="cfg-subsection" open>
+                <summary><div class="cfg-header" style="font-size:13px">🎯 Detection &amp; alerts</div></summary>
               <div class="cfg-row"><span class="cfg-label">Enable loot value radar</span>
                 <label class="toggle"><input type="checkbox" id="lrv-enabled"
                     onchange="ahkCall('SetLootRadarValue','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
@@ -5421,6 +5423,9 @@
                 <span class="cfg-label">Alert threshold (ex)</span>
                 <span class="hk-num"><input type="number" id="lrv-alertEx" min="0" max="100000" step="1" onchange="ahkCall('SetLootRadarValue','alertEx',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
               </div>
+              </details>
+              <details class="cfg-subsection" open>
+                <summary><div class="cfg-header" style="font-size:13px">📋 Valuable nearby list</div></summary>
               <div class="cfg-row"><span class="cfg-label">Show "valuable nearby" list</span>
                 <label class="toggle"><input type="checkbox" id="lrv-showList"
                     onchange="ahkCall('SetLootRadarValue','showList', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
@@ -5437,6 +5442,9 @@
                 <label class="toggle"><input type="checkbox" id="lrv-showArrow"
                     onchange="ahkCall('SetLootRadarValue','showArrow', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
               </div>
+              </details>
+              <details class="cfg-subsection" open>
+                <summary><div class="cfg-header" style="font-size:13px">🏷️ On-map label</div></summary>
               <div class="cfg-row">
                 <span class="cfg-label">Map label</span>
                 <span id="lrv-map-preview" style="display:flex;align-items:center;gap:4px;min-height:30px" data-tip="Live preview of the on-map label">
@@ -5480,6 +5488,7 @@
                 (General → Actions) to check what nearby ground loot is being priced. Currency /
                 fragments price on any league; uniques only where poe.ninja has data.
               </div>
+              </details>
 
               <details class="cfg-subsection" style="margin-top:8px">
                 <summary><div class="cfg-header" style="font-size:13px">🛡️ Unique pricing via the official Trade API (advanced)</div></summary>
