@@ -124,6 +124,8 @@ LoadLootRadarValue()
     global g_lrvAlertEnabled := true        ; banner when a drop crosses the alert value
     global g_lrvMinLabelEx := 1.0           ; min total value (ex) for a drop to count as valuable
     global g_lrvAlertEx := 20.0             ; total value (ex) that triggers the banner
+    global g_lrvShowList := true            ; show the on-screen "valuable nearby" list overlay
+    global g_lrvListMax := 8                ; max rows in that list
     global g_lrvConfigFile := _ConfigPath()
 
     ; Runtime (never persisted)
@@ -139,6 +141,8 @@ LoadLootRadarValue()
         g_lrvAlertEnabled := (IniRead(f, "LootRadarValue", "alertEnabled", g_lrvAlertEnabled ? "1" : "0") = "1")
         g_lrvMinLabelEx   := _LrvNum(IniRead(f, "LootRadarValue", "minLabelEx", g_lrvMinLabelEx))
         g_lrvAlertEx      := _LrvNum(IniRead(f, "LootRadarValue", "alertEx", g_lrvAlertEx))
+        g_lrvShowList     := (IniRead(f, "LootRadarValue", "showList", g_lrvShowList ? "1" : "0") = "1")
+        g_lrvListMax      := Integer(IniRead(f, "LootRadarValue", "listMax", g_lrvListMax))
     } catch as ex {
         LogError("LoadLootRadarValue", ex)
     }
@@ -149,12 +153,15 @@ LoadLootRadarValue()
 SaveLootRadarValue()
 {
     global g_lrvEnabled, g_lrvAlertEnabled, g_lrvMinLabelEx, g_lrvAlertEx, g_lrvConfigFile
+    global g_lrvShowList, g_lrvListMax
     f := g_lrvConfigFile
     try {
         IniWrite(g_lrvEnabled ? "1" : "0", f, "LootRadarValue", "enabled")
         IniWrite(g_lrvAlertEnabled ? "1" : "0", f, "LootRadarValue", "alertEnabled")
         IniWrite(g_lrvMinLabelEx, f, "LootRadarValue", "minLabelEx")
         IniWrite(g_lrvAlertEx, f, "LootRadarValue", "alertEx")
+        IniWrite(g_lrvShowList ? "1" : "0", f, "LootRadarValue", "showList")
+        IniWrite(g_lrvListMax, f, "LootRadarValue", "listMax")
     } catch as ex {
         LogError("SaveLootRadarValue", ex)
     }
@@ -169,12 +176,15 @@ _LrvNum(v)
     return 0.0
 }
 
-; Keeps the value thresholds non-negative.
+; Keeps the value thresholds non-negative and the list length sane.
 _LrvClamp()
 {
-    global g_lrvMinLabelEx, g_lrvAlertEx
+    global g_lrvMinLabelEx, g_lrvAlertEx, g_lrvListMax
     g_lrvMinLabelEx := Max(0.0, g_lrvMinLabelEx + 0.0)
     g_lrvAlertEx    := Max(0.0, g_lrvAlertEx + 0.0)
+    if !IsSet(g_lrvListMax)
+        g_lrvListMax := 8
+    g_lrvListMax := Max(1, Min(20, Integer(g_lrvListMax)))
 }
 
 ; Loose boolean coercion (true/1/"1"/"true"/"yes"/"on").
@@ -190,6 +200,7 @@ _LrvTruthy(v)
 _LrvApplySetting(key, val)
 {
     global g_lrvEnabled, g_lrvAlertEnabled, g_lrvMinLabelEx, g_lrvAlertEx
+    global g_lrvShowList, g_lrvListMax
     global g_lrvAnnot, g_lrvNearby, g_lrvAlerted
     switch key
     {
@@ -205,6 +216,10 @@ _LrvApplySetting(key, val)
             g_lrvMinLabelEx := _LrvNum(val)
         case "alertEx":
             g_lrvAlertEx := _LrvNum(val)
+        case "showList":
+            g_lrvShowList := _LrvTruthy(val)
+        case "listMax":
+            g_lrvListMax := Integer(_LrvNum(val))
     }
     _LrvClamp()
 }
@@ -213,11 +228,14 @@ _LrvApplySetting(key, val)
 BuildLootRadarValueHeaderJson()
 {
     global g_lrvEnabled, g_lrvAlertEnabled, g_lrvMinLabelEx, g_lrvAlertEx
+    global g_lrvShowList, g_lrvListMax
     j := "{"
     j .= '"enabled":'       (g_lrvEnabled ? "true" : "false")
     j .= ',"alertEnabled":' (g_lrvAlertEnabled ? "true" : "false")
     j .= ',"minLabelEx":'   (g_lrvMinLabelEx + 0.0)
     j .= ',"alertEx":'      (g_lrvAlertEx + 0.0)
+    j .= ',"showList":'     (g_lrvShowList ? "true" : "false")
+    j .= ',"listMax":'      (g_lrvListMax + 0)
     j .= "}"
     return j
 }
@@ -362,6 +380,39 @@ _LrvFmtEx(ex)
     if (ex >= 10)
         return Round(ex) " ex"
     return Round(ex, 1) " ex"
+}
+
+; Compact number for an icon label: one decimal below 10, whole numbers above.
+_LrvFmtNum(n)
+{
+    if (n >= 1000)
+        return Round(n / 1000, 1) "k"
+    if (n >= 10)
+        return Round(n) ""
+    return Round(n, 1) ""
+}
+
+; Splits an Exalted value into a currency-icon denomination + a short amount string,
+; so the overlays can paint the orb image instead of a "1ex / 1div" text label. Above
+; one Divine (when the poe.ninja Divine->Exalted rate is known) the value is shown in
+; Divine; otherwise in Exalted. Returns Map("icon","exalted"|"divine","num","12").
+LrvValueParts(ex)
+{
+    global g_ltDivToEx
+    rate := (IsSet(g_ltDivToEx) && g_ltDivToEx > 0) ? g_ltDivToEx : 0.0
+    if (rate > 0 && ex >= rate)
+        return Map("icon", "divine", "num", _LrvFmtNum(ex / rate))
+    return Map("icon", "exalted", "num", _LrvFmtNum(ex))
+}
+
+; Icon-label parts for a ground wrapper addr (radar dot, step 3), or 0 when the feature
+; is off / the addr isn't a valued drop. Same gating as LrvLabelFor.
+LrvIconPartsFor(addr)
+{
+    global g_lrvEnabled, g_lrvAnnot
+    if (!g_lrvEnabled || !addr || !g_lrvAnnot.Has(addr))
+        return 0
+    return LrvValueParts(g_lrvAnnot[addr]["valueEx"])
 }
 
 ; Insertion-sorts an array of annotation Maps by valueEx descending (tiny list).

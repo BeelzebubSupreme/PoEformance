@@ -206,6 +206,7 @@ class RadarOverlay extends GdiOverlayBase
         this._dotTopBatch := Map()   ; highlight dot — rendered after _dotBatch (on top)
         this._lineBatch   := Map()   ; line segments: one array per color/width group
         this._textBatch   := []      ; text entries: [x, y, text, colorBGR]
+        this._iconBatch   := []      ; icon blits: [iconKey, x, y, w, h] (value-aware loot)
     }
 
     ; Pulls the radar's per-frame config straight from the toggle globals (the
@@ -899,6 +900,24 @@ class RadarOverlay extends GdiOverlayBase
                 dotScreenX := Round(mapCenterX + screenDeltaX)
                 dotScreenY := Round(mapCenterY + screenDeltaY)
 
+                ; ── Value-aware loot (step 3): valued ground drops get a currency-orb label.
+                ; WorldItem wrappers are otherwise filtered out of the entity draw below, so
+                ; handle them here with the same projection, then skip the rest per entity.
+                if (pathFlags["isWorldItem"])
+                {
+                    _lrvAddr := entity.Has("address") ? entity["address"] : 0
+                    if (_lrvAddr)
+                    {
+                        _lrvParts := LrvIconPartsFor(_lrvAddr)
+                        if (_lrvParts)
+                        {
+                            this._DrawLootValue(dotScreenX, dotScreenY, _lrvParts, isLargeMap)
+                            statDrawn += 1
+                        }
+                    }
+                    continue
+                }
+
                 ; Capture highlighted entity screen position early — bypass all visibility filters
                 if (this.highlightedEntityPath != "" && entity.Has("path") && entity["path"] = this.highlightedEntityPath)
                 {
@@ -1275,7 +1294,7 @@ class RadarOverlay extends GdiOverlayBase
             return Map(
                 "isMonster", false, "isCharacter", false, "isNpcPath", false, "isChestPath", false,
                 "isAreaTransition", false, "isWaypoint", false, "isCheckpoint", false, "isBossPath", false,
-                "isImportantSleep", false
+                "isImportantSleep", false, "isWorldItem", false
             )
 
         if this._pathTypeCache.Has(entityPath)
@@ -1291,6 +1310,9 @@ class RadarOverlay extends GdiOverlayBase
         isCheckpoint     := InStr(entityPathLower, "checkpoint")
         isBossPath       := isMonster && (InStr(entityPathLower, "boss") || InStr(entityPathLower, "unique"))
         isImportantSleep := isAreaTransition || isWaypoint || isCheckpoint || isBossPath || isNpcPath
+        ; Ground loot wrapper (value-aware loot radar, step 3). Cached here so the per-frame
+        ; entity loop avoids a StrLower+InStr per entity.
+        isWorldItem      := InStr(entityPathLower, "worlditem") || InStr(entityPathLower, "metadata/items/")
 
         flags := Map(
             "isMonster", isMonster,
@@ -1301,7 +1323,8 @@ class RadarOverlay extends GdiOverlayBase
             "isWaypoint", isWaypoint,
             "isCheckpoint", isCheckpoint,
             "isBossPath", isBossPath,
-            "isImportantSleep", isImportantSleep
+            "isImportantSleep", isImportantSleep,
+            "isWorldItem", !!isWorldItem
         )
         this._pathTypeCache[entityPath] := flags
         return flags
@@ -1346,6 +1369,38 @@ class RadarOverlay extends GdiOverlayBase
     _DrawText(screenX, screenY, text, colorBGR)
     {
         this._textBatch.Push([screenX, screenY, text, colorBGR])
+    }
+
+    ; Queues an icon blit (drawn after dots, before text). iconKey resolves via OverlayImage.
+    _DrawIconBatched(iconKey, x, y, w, h)
+    {
+        this._iconBatch.Push([iconKey, x, y, w, h])
+    }
+
+    ; Value-aware loot (step 3): paints a valued ground drop. Draws a small loot marker dot,
+    ; then the matching currency orb image + amount to its right (or a "ex"/"div" text tag if
+    ; the orb icons failed to load). parts = LrvValueParts() Map("icon", "num").
+    _DrawLootValue(screenX, screenY, parts, isLargeMap)
+    {
+        if !(parts && IsObject(parts))
+            return
+        col := 0x5AA8C8                       ; gold (BGR of #C8A85A) — value marker + amount
+        this._DrawDot(screenX, screenY, col, isLargeMap ? 4 : 3)
+        iconSz := isLargeMap ? 18 : 15
+        ix := screenX + (isLargeMap ? 6 : 5)
+        iy := screenY - iconSz // 2
+        num := parts.Has("num") ? parts["num"] : ""
+        if OverlayIconReady(parts["icon"])
+        {
+            this._DrawIconBatched(parts["icon"], ix, iy, iconSz, iconSz)
+            this._DrawText(ix + iconSz + 2, screenY - 7, num, col)
+        }
+        else
+        {
+            ; Text fallback so the value still reads when the orb image is unavailable.
+            unit := (parts["icon"] = "divine") ? " div" : " ex"
+            this._DrawText(ix, screenY - 7, num unit, col)
+        }
     }
 
     ; ── Batch flush ──────────────────────────────────────────────────────────────────────
@@ -1401,6 +1456,13 @@ class RadarOverlay extends GdiOverlayBase
         this._dotBatch.Clear()
         this._FlushDotLayer(this._dotTopBatch)
         this._dotTopBatch.Clear()
+
+        ; ── 3b. Icons (value-aware loot orbs) — above dots, below text ─────────────────────
+        if (this._iconBatch.Length > 0)
+        {
+            DrawOverlayIconsBatch(dc, this._iconBatch)
+            this._iconBatch := []
+        }
 
         ; ── 4. Text ──────────────────────────────────────────────────────────────────────
         ; SetBkMode once per frame — all TextOut calls benefit from it

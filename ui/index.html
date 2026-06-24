@@ -5421,10 +5421,20 @@
                 <span class="cfg-label">Alert threshold (ex)</span>
                 <span class="hk-num"><input type="number" id="lrv-alertEx" min="0" max="100000" step="1" onchange="ahkCall('SetLootRadarValue','alertEx',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
               </div>
+              <div class="cfg-row"><span class="cfg-label">Show "valuable nearby" list</span>
+                <label class="toggle"><input type="checkbox" id="lrv-showList"
+                    onchange="ahkCall('SetLootRadarValue','showList', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-label">Max rows in the list</span>
+                <span class="hk-num"><input type="number" id="lrv-listMax" min="1" max="20" step="1" onchange="ahkCall('SetLootRadarValue','listMax',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+              </div>
               <div class="cfg-help">
-                Use the "🔍 Loot value diagnose" button (General → Actions) to check what nearby
-                ground loot is being priced. The on-radar value labels &amp; the "valuable nearby"
-                list come next.
+                Valued ground drops are labelled on the radar with the matching currency orb
+                (Exalted / Divine) instead of a "1ex / 1div" text, and the "valuable nearby" list
+                shows the top drops in range on the left of the screen. Use "🔍 Loot value diagnose"
+                (General → Actions) to check what nearby ground loot is being priced. Currency /
+                fragments price on any league; uniques only where poe.ninja has data.
               </div>
             </div>
           </details>
@@ -7040,6 +7050,8 @@
       chk('lrv-alertEnabled', s.alertEnabled);
       val('lrv-minLabelEx', s.minLabelEx);
       val('lrv-alertEx', s.alertEx);
+      chk('lrv-showList', s.showList);
+      val('lrv-listMax', s.listMax);
     }
 
     // Per-side ignore sets (mirrors the AHK maps). Each is an array of {path,name}.

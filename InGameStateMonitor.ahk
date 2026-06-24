@@ -22,6 +22,7 @@ SetWorkingDir(A_ScriptDir)
 #Include ahk/PoE2MemoryReader.ahk
 #Include ahk/PatchChecker.ahk
 #Include Lib/TerrainPathfinder.ahk
+#Include ahk/OverlayImage.ahk
 #Include ahk/GdiOverlayBase.ahk
 #Include ahk/RadarOverlay.ahk
 #Include ahk/VitalsOverlay.ahk
@@ -29,6 +30,7 @@ SetWorkingDir(A_ScriptDir)
 #Include ahk/DebugOverlay.ahk
 #Include ahk/FocusOverlay.ahk
 #Include ahk/LootTrackerOverlay.ahk
+#Include ahk/LootValueOverlay.ahk
 #Include ahk/OverlayContext.ahk
 #Include ahk/PlayOverlayPolicy.ahk
 #Include ahk/OverlayManager.ahk
@@ -47,7 +49,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.31"
+POEFORMANCE_VERSION := "0.45.13.32"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -328,6 +330,7 @@ LoadLootTracker()         ; map-run / session loot tracker state + [LootTracker]
 LoadLootPricing()         ; poe.ninja price layer (loads cache, kicks refresh if stale)
 LoadLootRadarValue()      ; value-aware loot radar (price ground drops) + [LootRadarValue] config
 LoadStashMover()          ; "dump backpack to open stash" feature + [StashMover] config
+LoadOverlayIcons()        ; GDI+ currency orb icons for the value-aware loot radar
 LoadOverlaySystem()       ; build the OverlayManager + all overlays; wire legacy globals
 InitProfiler()            ; QPC profiler singleton (disabled until Shift+F3 enables it)
 ItemSizeRegistry.Load()   ; ~4000-entry path→(w,h) map used by loot fit-check
@@ -410,6 +413,9 @@ if g_winMaximized
 ; a not-yet-shown window is a silent no-op, which left the WS_EX_TOPMOST
 ; from the +AlwaysOnTop creation flag in place regardless of preference.
 try WinSetAlwaysOnTop(g_alwaysOnTop ? 1 : 0, "ahk_id " g_webGui.Hwnd)
+
+; Free the GDI+ overlay icons on exit.
+OnExit((*) => StopOverlayIcons())
 
 ; Save window geometry on exit and after move/resize
 OnExit((*) => (_CaptureWindowGeometry(), SaveConfig(), SaveCombatAutoConfig()))

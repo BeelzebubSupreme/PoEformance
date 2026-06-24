@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.31`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.32`.
 
 ## Language
 
@@ -509,8 +509,36 @@ Fragments/Tablets, Div-Cards (rares stay unpriced, like the LootTracker breakdow
   `alertEx`. `LrvLabelFor(addr)` exposes the value label for the radar dot. Bridge
   `SetLootRadarValue`; header `lootRadarValue`; UI section Config → Overlay (`det-lootvalue`).
   `LootValueDiagnose()` (Actions button) stays as the verification aid.
-- **Next:** Step 2 — ranked "valuable nearby" `GdiOverlayBase` list (reads `g_lrvNearby`).
-  Step 3 — value label on the radar dot via `RadarOverlay._DrawText` calling `LrvLabelFor(addr)`.
+- **Currency-image value labels (shipped 0.45.13.32):** the value is NEVER shown as a
+  "1ex / 1div" text — it is the matching currency ORB image. `LrvValueParts(ex)` splits a
+  value into `Map("icon","exalted"|"divine","num","12")` (Divine once `g_ltDivToEx`>0 and
+  `ex≥rate`, else Exalted; `_LrvFmtNum` keeps it short). `LrvIconPartsFor(addr)` is the
+  per-dot accessor (same gating as `LrvLabelFor`). Orb PNGs ship in `img/currency/`
+  (`exalted.png`, `divine.png`, `chaos.png`; 64×64 RGBA, fetched from poecdn) and are
+  committed source data.
+  - **`ahk/OverlayImage.ahk` (new):** tiny persistent GDI+ image layer — `LoadOverlayIcons()`
+    starts GDI+ once + loads the PNGs into `g_oiBitmaps`; `DrawOverlayIcon(hdc,key,x,y,w,h)`
+    + `DrawOverlayIconsBatch(hdc,batch)` blit (source-over alpha) onto any GDI memDC;
+    `OverlayIconReady(key)` gates the image-vs-text choice; `StopOverlayIcons()` on exit.
+    Degrades to no-op (text fallback) if GDI+/an asset is missing. Wired in
+    `InGameStateMonitor.ahk` (`#Include` first in the overlay block, `LoadOverlayIcons()`
+    before `LoadOverlaySystem()`, `OnExit StopOverlayIcons`).
+  - **`GdiOverlayBase.ahk`:** new `_DrawIcon(key,x,y,w,h)` → `DrawOverlayIcon(this.memDC,…)`.
+- **Step 2 (shipped 0.45.13.32) — `ahk/LootValueOverlay.ahk`:** `LootValueOverlay extends
+  GdiOverlayBase`, registered in `OverlayManager`. Reads the sorted `g_lrvNearby`, draws a
+  ranked "valuable nearby" list (title + up to `g_lrvListMax` rows) anchored left/mid-screen;
+  each row = orb image + amount + item name. Gated on `g_lrvEnabled && g_lrvShowList`,
+  foreground, and hidden while a big panel is open. New config `g_lrvShowList` (default on) +
+  `g_lrvListMax` (default 8), persisted in `[LootRadarValue]`, in the header + UI.
+- **Step 3 (shipped 0.45.13.32) — `RadarOverlay.ahk`:** ground `WorldItem` wrappers (otherwise
+  filtered out of the entity draw) are intercepted right after projection; a valued drop
+  (`LrvIconPartsFor(addr)`) gets a gold marker dot + orb image + amount via a new `_iconBatch`
+  (queued by `_DrawIconBatched`, flushed in `_FlushBatch` between dots and text, one shared
+  GDI+ Graphics). Text fallback when the orb icons are unavailable.
+- **Next:** official PoE2 Trade-API unique pricing (security-first, POESESSID in a gitignored
+  file, on-demand + heavily cached, strict rate-limit handling, PowerShell child) to fill the
+  Standard-league unique gap — to be planned before coding (outward-facing, hits GGG with the
+  user's session). Verify in-game: orb images render on the radar/list, scaling, anchor.
 
 ## Reference
 
