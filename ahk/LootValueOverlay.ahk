@@ -60,7 +60,7 @@ class LootValueOverlay extends GdiOverlayBase
             nm := info.Has("label") ? info["label"] : ""
             if (StrLen(nm) > 24)
                 nm := SubStr(nm, 1, 23) "…"
-            rows.Push(Map("parts", LrvValueParts(ex), "name", nm))
+            rows.Push(Map("parts", LrvValueParts(ex), "name", nm, "dist", (info.Has("distM") ? info["distM"] : -1)))
         }
         this._rows := rows
 
@@ -79,7 +79,8 @@ class LootValueOverlay extends GdiOverlayBase
         {
             numW  := this._MeasureText(font, r["parts"]["num"])["w"]
             nameW := this._MeasureText(font, "  " r["name"])["w"]
-            rowW  := this._iconSz + this._gap + numW + nameW
+            distW := (r["dist"] >= 0) ? this._MeasureText(font, "  " r["dist"] "m")["w"] : 0
+            rowW  := this._iconSz + this._gap + numW + nameW + distW
             if (rowW > maxW)
                 maxW := rowW
         }
@@ -127,7 +128,14 @@ class LootValueOverlay extends GdiOverlayBase
             numW := this._MeasureText(font, parts["num"])["w"]
             ; If the orb image is unavailable, append a tiny unit tag so the value still reads.
             unitTag := drewIcon ? "" : (parts["icon"] = "divine" ? "div " : "ex ")
-            this._DrawText(tx + numW, y, "  " unitTag r["name"], textCol)
+            nameStr := "  " unitTag r["name"]
+            this._DrawText(tx + numW, y, nameStr, textCol)
+            ; Distance to the drop, dim, at the row end.
+            if (r["dist"] >= 0)
+            {
+                nameW := this._MeasureText(font, nameStr)["w"]
+                this._DrawText(tx + numW + nameW, y, "  " r["dist"] "m", 0x808080)
+            }
             y += lineH
         }
         DllCall("SelectObject", "Ptr", this.memDC, "Ptr", oldFont)

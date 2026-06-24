@@ -207,6 +207,7 @@ class RadarOverlay extends GdiOverlayBase
         this._lineBatch   := Map()   ; line segments: one array per color/width group
         this._textBatch   := []      ; text entries: [x, y, text, colorBGR]
         this._iconBatch   := []      ; icon blits: [iconKey, x, y, w, h] (value-aware loot)
+        this._lrvFrameDrops := []    ; valued ground drops this frame: [sx, sy, parts, valueEx, isLargeMap]
     }
 
     ; Pulls the radar's per-frame config straight from the toggle globals (the
@@ -911,7 +912,8 @@ class RadarOverlay extends GdiOverlayBase
                         _lrvParts := LrvIconPartsFor(_lrvAddr)
                         if (_lrvParts)
                         {
-                            this._DrawLootValue(dotScreenX, dotScreenY, _lrvParts, isLargeMap)
+                            ; Collect now; drawn value-priority + de-cluttered in _FlushLootValues().
+                            this._lrvFrameDrops.Push([dotScreenX, dotScreenY, _lrvParts, LrvValueExFor(_lrvAddr), isLargeMap])
                             statDrawn += 1
                         }
                     }
@@ -1267,6 +1269,11 @@ class RadarOverlay extends GdiOverlayBase
                     this._DrawRectOutline(r[1], r[2], r[3], r[4], 0x0000FF, 2)   ; red (BGR)
             }
         }
+
+        ; Draw THIS layer's valued loot labels (value-priority, de-cluttered). Done per layer so
+        ; the overlap suppression never mixes the mini-map and large-map projections (both layers
+        ; can render in one frame). Queued into the shared batches, flushed in _FinishFrame.
+        this._FlushLootValues()
     }
 
     ; Computes the on-screen rectangle for one HUD clip mask: design px scaled uniformly by
@@ -1377,29 +1384,78 @@ class RadarOverlay extends GdiOverlayBase
         this._iconBatch.Push([iconKey, x, y, w, h])
     }
 
-    ; Value-aware loot (step 3): paints a valued ground drop. Draws a small loot marker dot,
-    ; then the matching currency orb image + amount to its right (or a "ex"/"div" text tag if
-    ; the orb icons failed to load). parts = LrvValueParts() Map("icon", "num").
-    _DrawLootValue(screenX, screenY, parts, isLargeMap)
+    ; Value-aware loot (step 3): paints the valued ground drops collected this frame. The marker
+    ; dot is ALWAYS drawn (so every drop stays visible); the currency orb image + amount label is
+    ; drawn highest-value first and SKIPPED when it would overlap an already-placed label — so a
+    ; dense cluster no longer turns the amounts into an unreadable mush. Queued into the shared
+    ; batches, so it must run just before _FlushBatch().
+    _FlushLootValues()
     {
-        if !(parts && IsObject(parts))
+        drops := this._lrvFrameDrops
+        this._lrvFrameDrops := []
+        if (drops.Length = 0)
             return
+        this._SortByValueExDesc(drops)        ; readable labels go to the most valuable drops
+
         col := 0x5AA8C8                       ; gold (BGR of #C8A85A) — value marker + amount
-        this._DrawDot(screenX, screenY, col, isLargeMap ? 4 : 3)
-        iconSz := isLargeMap ? 18 : 15
-        ix := screenX + (isLargeMap ? 6 : 5)
-        iy := screenY - iconSz // 2
-        num := parts.Has("num") ? parts["num"] : ""
-        if OverlayIconReady(parts["icon"])
+        placed := []                          ; [x1, y1, x2, y2] of labels already drawn this frame
+        for _, d in drops
         {
-            this._DrawIconBatched(parts["icon"], ix, iy, iconSz, iconSz)
-            this._DrawText(ix + iconSz + 2, screenY - 7, num, col)
+            sx := d[1], sy := d[2], parts := d[3], isLargeMap := d[5]
+            this._DrawDot(sx, sy, col, isLargeMap ? 4 : 3)
+            if !(parts && IsObject(parts))
+                continue
+            num := parts.Has("num") ? parts["num"] : ""
+            iconSz := isLargeMap ? 18 : 15
+            ix := sx + (isLargeMap ? 6 : 5)
+
+            ; Approximate label box (icon + amount) for the overlap test — cheap, no GDI measure.
+            charW := isLargeMap ? 9 : 8
+            labelW := iconSz + 2 + (StrLen(num) + 2) * charW
+            x1 := ix, y1 := sy - iconSz // 2, x2 := ix + labelW, y2 := sy + iconSz // 2
+            overlap := false
+            for _, p in placed
+            {
+                if (x1 < p[3] && x2 > p[1] && y1 < p[4] && y2 > p[2])
+                {
+                    overlap := true
+                    break
+                }
+            }
+            if overlap
+                continue                       ; dot only — keep the cluster readable
+            placed.Push([x1, y1, x2, y2])
+
+            iy := sy - iconSz // 2
+            if OverlayIconReady(parts["icon"])
+            {
+                this._DrawIconBatched(parts["icon"], ix, iy, iconSz, iconSz)
+                this._DrawText(ix + iconSz + 2, sy - 7, num, col)
+            }
+            else
+            {
+                ; Text fallback so the value still reads when the orb image is unavailable.
+                unit := (parts["icon"] = "divine") ? " div" : " ex"
+                this._DrawText(ix, sy - 7, num unit, col)
+            }
         }
-        else
+    }
+
+    ; Insertion-sorts the frame drops by valueEx (element [4]) descending — tiny list.
+    _SortByValueExDesc(arr)
+    {
+        i := 2
+        while (i <= arr.Length)
         {
-            ; Text fallback so the value still reads when the orb image is unavailable.
-            unit := (parts["icon"] = "divine") ? " div" : " ex"
-            this._DrawText(ix, screenY - 7, num unit, col)
+            cur := arr[i]
+            j := i - 1
+            while (j >= 1 && arr[j][4] < cur[4])
+            {
+                arr[j + 1] := arr[j]
+                j -= 1
+            }
+            arr[j + 1] := cur
+            i += 1
         }
     }
 

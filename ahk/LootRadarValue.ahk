@@ -363,9 +363,14 @@ TryLootRadarValue(radarSnap)
                 continue
             seen[addr] := true
 
+            ; Live distance to the drop (world units -> grid "m"); ground items are static, but
+            ; the player moves, so refresh it every tick even for already-annotated drops.
+            distM := entry.Has("distance") ? Round(entry["distance"] / RadarOverlay.WORLD_TO_GRID_RATIO) : -1
+
             if g_lrvAnnot.Has(addr)
             {
                 g_lrvAnnot[addr]["tick"] := now
+                g_lrvAnnot[addr]["distM"] := distM
                 continue
             }
 
@@ -374,7 +379,7 @@ TryLootRadarValue(radarSnap)
                 continue
             if (valueEx < g_lrvMinLabelEx)
                 continue
-            g_lrvAnnot[addr] := Map("valueEx", valueEx, "label", label, "rarity", rarity, "tick", now)
+            g_lrvAnnot[addr] := Map("valueEx", valueEx, "label", label, "rarity", rarity, "tick", now, "distM", distM)
 
             if (g_lrvAlertEnabled && valueEx >= g_lrvAlertEx && !g_lrvAlerted.Has(addr))
             {
@@ -420,14 +425,24 @@ _LrvFmtEx(ex)
     return Round(ex, 1) " ex"
 }
 
-; Compact number for an icon label: one decimal below 10, whole numbers above.
+; Compact number for an icon label: one decimal below 10, whole numbers above, trailing
+; ".0" dropped (1.0 -> "1", 1.5 -> "1.5").
 _LrvFmtNum(n)
 {
     if (n >= 1000)
-        return Round(n / 1000, 1) "k"
+        return _LrvTrimDot0(Round(n / 1000, 1)) "k"
     if (n >= 10)
         return Round(n) ""
-    return Round(n, 1) ""
+    return _LrvTrimDot0(Round(n, 1)) ""
+}
+
+; Stringifies a number and drops a trailing ".0".
+_LrvTrimDot0(x)
+{
+    s := x ""
+    if (SubStr(s, -2) = ".0")
+        s := SubStr(s, 1, -2)
+    return s
 }
 
 ; Splits an Exalted value into a currency-icon denomination + a short amount string,
@@ -451,6 +466,16 @@ LrvIconPartsFor(addr)
     if (!g_lrvEnabled || !addr || !g_lrvAnnot.Has(addr))
         return 0
     return LrvValueParts(g_lrvAnnot[addr]["valueEx"])
+}
+
+; Raw Exalted value for a ground wrapper addr (for value-priority de-clutter on the map),
+; or 0.0 when the feature is off / the addr isn't a valued drop.
+LrvValueExFor(addr)
+{
+    global g_lrvEnabled, g_lrvAnnot
+    if (!g_lrvEnabled || !addr || !g_lrvAnnot.Has(addr))
+        return 0.0
+    return g_lrvAnnot[addr]["valueEx"]
 }
 
 ; Insertion-sorts an array of annotation Maps by valueEx descending (tiny list).

@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.39`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.40`.
 
 ## Language
 
@@ -535,8 +535,9 @@ Fragments/Tablets, Div-Cards (rares stay unpriced, like the LootTracker breakdow
   (`LrvIconPartsFor(addr)`) gets a gold marker dot + orb image + amount via a new `_iconBatch`
   (queued by `_DrawIconBatched`, flushed in `_FlushBatch` between dots and text, one shared
   GDI+ Graphics). Text fallback when the orb icons are unavailable.
-- **Verify in-game (steps 2&3):** orb images render on the radar dots + the "valuable
-  nearby" list, scaling/anchor look right, list hides behind big panels.
+- **Verified in-game (2026-06-24, steps 2&3):** orb images render on the radar dots + the
+  "valuable nearby" list, scaling/anchor correct, list hides behind big panels. Confirmed on
+  Standard with live unique prices via the trade API.
 
 ## Trade-API unique pricing — Tier 2, in-browser (shipped 0.45.13.34)
 
@@ -578,11 +579,11 @@ localized client), checks the trade cache, and otherwise enqueues it for backgro
   cacheCount,queueCount` — no secrets exist to expose); UI: advanced `<details>` in `det-lootvalue`
   (security note, enable, league, "Open PoE trade session" + "Price queued now", status). The old
   Tier-1 PowerShell child + secret-file inputs were removed.
-- **Pending (needs the game + a real account; unverifiable from this env — Cloudflare blocks the
-  egress IP):** that a second `WebViewGui` opens with its own profile, the user can sign in, the
-  injected helper's same-origin fetch passes Cloudflare, the `{id,ok,listings}` round-trip works,
-  the response shape (`result` / `listing.price.{amount,currency}`) matches, currency ids convert,
-  and the rate-limit/cooldown behave.
+- **Verified in-game (2026-06-24):** a second `WebViewGui` opens with its own profile, the user
+  signs in once, the injected helper's same-origin fetch passes Cloudflare, the `{id,ok,listings}`
+  round-trip works, the response shape (`result` / `listing.price.{amount,currency}`) matches,
+  currency ids convert, and the rate-limit/cooldown behave. Confirmed pricing uniques on Standard
+  (where poe.ninja has no unique data).
 
 ## Reference
 
