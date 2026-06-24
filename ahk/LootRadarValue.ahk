@@ -62,7 +62,8 @@ _LrvResolveInnerItem(wrapperAddr, &innerPtr, &innerPath, &off, &compAddr, &compN
     ; Confirmed in-game (2026-06-23): the inner item entity pointer sits at WorldItem
     ; component + 0x28. Try that first (cheap), then fall back to a small sweep in case
     ; a patch shifts it — the inner item is identified by a "Metadata/Items/…" path.
-    known := 0x28
+    ; Offset is maintained centrally in PoE2Offsets.WorldItemComponent.
+    known := PoE2Offsets.WorldItemComponent["InnerItem"]
     cand := 0
     try cand := g_reader.Mem.ReadPtr(compAddr + known)
     if (cand && g_reader.IsProbablyValidPointer(cand))

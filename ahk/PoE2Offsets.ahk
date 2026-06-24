@@ -375,6 +375,15 @@ class PoE2Offsets
         "ResourcePath", 0x28
     )
 
+    ; "WorldItem" component on a ground-drop WRAPPER entity
+    ; (Metadata/MiscellaneousObjects/WorldItem). The wrapper carries no rarity/art of
+    ; its own; the real ITEM entity (path/rarity/Mods/RenderItem) is pointed to at
+    ; +0x28. Confirmed in-game 2026-06-23 (LootRadarValue _LrvResolveInnerItem, which
+    ; reads this first, then keeps a small 0x08..0xA0 sweep as a patch-shift fallback).
+    static WorldItemComponent := Map(
+        "InnerItem", 0x28
+    )
+
     static ChargesInternal := Map(
         "PerUseCharges", 0x18
     )
