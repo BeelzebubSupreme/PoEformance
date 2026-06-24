@@ -163,6 +163,12 @@ _DispatchBridgeCall(method, args)
         case "LootValueDiag":
             ; RE aid (value-aware loot radar step 0): can we price ground items/uniques?
             SetTimer(LootValueDiagnose, -1)
+        case "SetLootRadarValue":
+            ; args[1] = setting key, args[2] = value. Apply -> persist -> refresh header.
+            if (args.Length >= 2)
+                _LrvApplySetting(args[1], args[2])
+            SaveLootRadarValue()
+            SetTimer(PushHeaderToWebView, -50)
         case "StashRequestInventory":
             ; Push the live backpack (deduped by base type) so the user can build
             ; the ignore filter from what they currently carry. args[1] = side.

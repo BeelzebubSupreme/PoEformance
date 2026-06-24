@@ -97,6 +97,9 @@ UpdateRadarFast()
         TryLootTrackerTick(radarSnap)
         Profiler.End("tick.loot")
 
+        ; ── Value-aware loot radar — price ground drops + threshold banner (self-throttled) ──
+        TryLootRadarValue(radarSnap)
+
         ; ── Stash Mover overlay button — position/show next to the inventory grid ──
         StashMoverTick(radarSnap)
 

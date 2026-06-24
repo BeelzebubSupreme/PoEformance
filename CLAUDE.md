@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.30`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.31`.
 
 ## Language
 
@@ -491,20 +491,26 @@ on each ground-item radar dot, a "valuable nearby" ranked overlay list, and a
 banner/sound alert above a threshold. Scope: Currency, Uniques, Waystones,
 Fragments/Tablets, Div-Cards (rares stay unpriced, like the LootTracker breakdown).
 
-- **Key RE finding:** ground items in PoE2 are full item-bearing entities — `PoE2EntityReader`
-  reads their rarity straight off `Mods`/`ObjectMagicProperties` (`PoE2EntityReader.ahk:1076`),
-  so `entity["address"]` IS the item entity ptr. `ReadItemArtPath()` resolves `RenderItem`
-  BY NAME (offset-agnostic), so `g_reader.ReadItemArtPath(groundAddr)` should yield the
-  unique's render art — i.e. **uniques are likely priceable with NO new memory offset.**
-- **Step 0 (shipped, this module):** `_LrvPriceGround(addr,path,rarityId,&dds,&renderArt,&unit,&label)`
-  reuses `_LtArtIdFromDds` + `_LtBuildItemKey` + `_LtTryPriceItem`. `LootValueDiagnose()`
-  (bridge `LootValueDiag`, Config → General → Actions button "🔍 Loot value diagnose")
-  walks the radar snapshot's ground items and reports path/rarity/addr/art/price + a
-  verdict on whether ground uniques resolve an art id. Run it in-game over a unique drop
-  to confirm before building the full feature. Needs Loot pricing data loaded for prices.
-- **Next (after verify):** per-tick (~4 Hz, cached by addr) annotation pass; radar dot
-  label via `RadarOverlay._DrawText`; ranked nearby-loot `GdiOverlayBase` overlay; value
-  threshold in `EntityAlerts._AlertSeverityFor`; config section + min-label/alert thresholds.
+- **RE: SOLVED (in-game 2026-06-23).** A ground drop is a `Metadata/MiscellaneousObjects/WorldItem`
+  WRAPPER entity (rarity 0, no art) whose `WorldItem` component points at **+0x28** to the inner
+  ITEM entity (path/rarity/Mods/RenderItem). Chain: wrapper → WorldItem comp → +0x28 → inner.
+  `_LrvResolveInnerItem()` finds the comp via `ReadEntityComponentLookupBasic` and tries 0x28
+  first (then a 0x08..0xA0 sweep fallback). The inner item then prices via the existing reads
+  (`ReadItemRarity` + `ReadItemArtPath` → `_LtArtIdFromDds` → `_LtBuildItemKey` → `_LtTryPriceItem`).
+- **poe.ninja coverage caveat:** unique prices only exist on a live temp league. On **Standard**
+  poe.ninja returns empty `lines` for unique item types (valid types, no 404 — just no data), so
+  uniques stay untagged on Standard; currency/fragments/runes/essences DO price. The fetch
+  (`tools/poe_ninja_prices.ps1`) now also requests UniqueWeapons/Armours/Accessories/Flasks.
+- **Step 1 (shipped):** the engine + config + alert. `LoadLootRadarValue()` / `[LootRadarValue]`
+  (`enabled`, `alertEnabled`, `minLabelEx`, `alertEx`). `TryLootRadarValue(radarSnap)` (in
+  `UpdateRadarFast` after `TryLootTrackerTick`, throttled ~4 Hz, per-area reset via
+  `currentAreaHash`) prices ground drops × stack count, caches `g_lrvAnnot[wrapperAddr]` and a
+  sorted `g_lrvNearby`, and fires a one-shot `NotifyOverlay.SetBanner` per area when a drop ≥
+  `alertEx`. `LrvLabelFor(addr)` exposes the value label for the radar dot. Bridge
+  `SetLootRadarValue`; header `lootRadarValue`; UI section Config → Overlay (`det-lootvalue`).
+  `LootValueDiagnose()` (Actions button) stays as the verification aid.
+- **Next:** Step 2 — ranked "valuable nearby" `GdiOverlayBase` list (reads `g_lrvNearby`).
+  Step 3 — value label on the radar dot via `RadarOverlay._DrawText` calling `LrvLabelFor(addr)`.
 
 ## Reference
 

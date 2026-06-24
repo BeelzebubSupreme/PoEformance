@@ -5393,6 +5393,43 @@
           </details>
         </div>
 
+        <div class="cfg-section">
+          <details id="det-lootvalue" ontoggle="syncCfgSections()">
+            <summary>
+              <div class="cfg-header">💰 Loot Value Radar</div>
+            </summary>
+            <div class="cfg-subsection">
+              <div class="cfg-help">
+                Prices ground drops live via poe.ninja (the same data the Loot Tracker uses) and
+                warns when something valuable lands. Currency / fragments / runes / essences price
+                on any league; uniques only where poe.ninja has data (Standard has none, so uniques
+                stay untagged there). Enable Loot pricing in the Loot tab first, or values stay 0.
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Enable loot value radar</span>
+                <label class="toggle"><input type="checkbox" id="lrv-enabled"
+                    onchange="ahkCall('SetLootRadarValue','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Banner on valuable drop</span>
+                <label class="toggle"><input type="checkbox" id="lrv-alertEnabled"
+                    onchange="ahkCall('SetLootRadarValue','alertEnabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-label">Min. value to track (ex)</span>
+                <span class="hk-num"><input type="number" id="lrv-minLabelEx" min="0" max="100000" step="0.5" onchange="ahkCall('SetLootRadarValue','minLabelEx',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-label">Alert threshold (ex)</span>
+                <span class="hk-num"><input type="number" id="lrv-alertEx" min="0" max="100000" step="1" onchange="ahkCall('SetLootRadarValue','alertEx',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+              </div>
+              <div class="cfg-help">
+                Use the "🔍 Loot value diagnose" button (General → Actions) to check what nearby
+                ground loot is being priced. The on-radar value labels &amp; the "valuable nearby"
+                list come next.
+              </div>
+            </div>
+          </details>
+        </div>
+
         </div><!-- /cfg-subpanel overlay -->
 
         <!-- ════════════════════════════════════════════════════════════
@@ -6994,6 +7031,17 @@
     }
 
     // Stash Mover header settings -> form widgets (skips a field being edited).
+    // Loot Value Radar header settings -> form widgets (skips a field being edited).
+    function lootRadarValueSyncFromHeader(s) {
+      if (!s) return;
+      const chk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = v === true || v === 1 || v === '1' || v === 'true'; };
+      const val = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
+      chk('lrv-enabled', s.enabled);
+      chk('lrv-alertEnabled', s.alertEnabled);
+      val('lrv-minLabelEx', s.minLabelEx);
+      val('lrv-alertEx', s.alertEx);
+    }
+
     // Per-side ignore sets (mirrors the AHK maps). Each is an array of {path,name}.
     let _smIgnore = { stash: [], sell: [] };
     function stashMoverSyncFromHeader(s) {
@@ -9007,6 +9055,7 @@
       if (d.alerts !== undefined) applyAlertsFromHeader(d.alerts);
       if (d.loot !== undefined) lootSyncFromHeader(d.loot);
       if (d.stashMover !== undefined) stashMoverSyncFromHeader(d.stashMover);
+      if (d.lootRadarValue !== undefined) lootRadarValueSyncFromHeader(d.lootRadarValue);
 
       // Version tags
       const verApp = document.getElementById('ver-app');
@@ -11096,7 +11145,7 @@
     // ═══════════════════════════════════════════════════════════════════
     //  CONFIG HELPERS
     // ═══════════════════════════════════════════════════════════════════
-    const _cfgSectionIds = ['status', 'overview', 'toggles', 'integrations', 'autoflask', 'autopilot', 'stashmover', 'rangecircles', 'radar', 'maphack', 'blacklist', 'actions', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
+    const _cfgSectionIds = ['status', 'overview', 'toggles', 'integrations', 'autoflask', 'autopilot', 'stashmover', 'rangecircles', 'radar', 'lootvalue', 'maphack', 'blacklist', 'actions', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
     let _cfgSectionsGuard = 0;
     let _cfgSectionsLoaded = false;
 

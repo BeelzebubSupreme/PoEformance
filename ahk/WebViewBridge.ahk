@@ -148,6 +148,7 @@ PushHeaderToWebView()
         . ',"vitals":' BuildVitalsHeaderJson()
         . ',"loot":' BuildLootHeaderJson()
         . ',"stashMover":' BuildStashMoverHeaderJson()
+        . ',"lootRadarValue":' BuildLootRadarValueHeaderJson()
         . "}"
     WebViewExec("updateHeader(" json ")")
 }

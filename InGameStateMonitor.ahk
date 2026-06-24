@@ -47,7 +47,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.30"
+POEFORMANCE_VERSION := "0.45.13.31"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -326,6 +326,7 @@ LoadEntityJunkFilter()    ; global path-based junk entity suppressor + [JunkFilt
 LoadLocalApiConfig()      ; local HTTP API (MCP backend) settings + Winsock constants
 LoadLootTracker()         ; map-run / session loot tracker state + [LootTracker] config
 LoadLootPricing()         ; poe.ninja price layer (loads cache, kicks refresh if stale)
+LoadLootRadarValue()      ; value-aware loot radar (price ground drops) + [LootRadarValue] config
 LoadStashMover()          ; "dump backpack to open stash" feature + [StashMover] config
 LoadOverlaySystem()       ; build the OverlayManager + all overlays; wire legacy globals
 InitProfiler()            ; QPC profiler singleton (disabled until Shift+F3 enables it)
