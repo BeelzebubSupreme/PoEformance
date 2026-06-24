@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.40`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.41`.
 
 ## Language
 
@@ -216,14 +216,16 @@ both halves.
   a `ToggleLocalApi` case; `WebViewBridge.ahk` pushes `localApi`/`localApiPort` in
   the header; `ui/index.html` has the toggle in **Config → General → Integrations**
   (section id `integrations`).
-- **Pending (needs the game/Windows):** verify the Winsock listener binds, that
-  `OnMessage` fires for the hidden Gui, request/response round-trips, and that the
-  config toggle starts/stops the server. The listener only starts at app launch,
-  so toggling on requires a restart.
+- **Verified in-game (2026-06-24):** the Winsock listener binds, `OnMessage` fires for the
+  hidden Gui, request/response round-trips work, and the config toggle starts/stops the server.
+  The listener only starts at app launch, so toggling on requires a restart.
 
 ## AutoPilot navigation (v0.45.12.0) — distance-field architecture
 
 Modeled on `myrahz/Radar` (`PathFinder.cs`): never follow a stored path.
+
+**Verified in-game (2026-06-24):** exploration + combat navigation work end-to-end (click
+projection / anchor gating, per-tick distance-field pathing, arrival + stuck handling).
 
 - **`Lib/TerrainPathfinder.ahk` — `DField*` methods:** per target, a
   Dijkstra/A* cost field is flooded FROM the target (time-sliced,
@@ -326,10 +328,10 @@ area-state instead of re-reading memory.
 - `data/meta_art_map.json` (the 1446-entry metaId→art bridge) is committed source data.
 - `sessions/` and `data/loot_prices.tsv*` are user-specific/generated → gitignored.
 
-### Pending (needs the game + Windows)
-- Verify the PowerShell fetch (league slug valid, network reachable, PS present), TSV parse,
-  Divine→Exalted rate; the inventory diff / kill counts; run resume-by-hash; the two bars'
-  placement/auto-hide; session save/load. Prices default OFF (feature `enabled=false`).
+### Verified in-game (2026-06-24)
+- Confirmed: the PowerShell fetch (league slug, network, PS), TSV parse, Divine→Exalted rate;
+  the inventory diff / kill counts; run resume-by-hash; the two bars' placement/auto-hide;
+  session save/load. Prices default OFF (feature `enabled=false`).
 - The on-screen bars anchor to the game-window bottom + offset (no XP-bar fingerprint walk
   yet — a possible later refinement, like the C# original's `TryGetExperienceBarRectByFp`).
 
@@ -468,15 +470,13 @@ rectangle from the UI tree.
   The hotkey uses a capture button (`smCaptureHotkey` → reuses the Hotkeys-tab
   `#hk-capture` overlay + `hkKeyName`; builds an AHK hotkey string), not a text field.
 
-### Pending (needs the game + Windows)
-- Verify the `InventoryPanel` StringId resolves and its rect equals the 12×N grid
-  (no header/padding) — otherwise nudge `offsetX/offsetY`. Confirm the UI→pixel scale
-  on non-16:10 windows (the conversion uses height-scale on both axes, no letterbox
-  cull, matching `UiBrowserHandler`; a horizontal-cull/per-axis-scale refinement may
-  be needed). Verify the NOACTIVATE button receives clicks without stealing focus, the
-  Ctrl-held click sequence actually moves items, and timing (`perItemDelayMs`/
-  `settleDelayMs`) is reliable. Destination detection is lenient (grid-visible + has
-  items); `id==27` is read only as a stash hint.
+### Verified in-game (2026-06-24)
+- Confirmed: the `InventoryPanel` StringId resolves and its rect matches the grid; the NOACTIVATE
+  button receives clicks without stealing focus, the Ctrl-held click sequence moves items, and the
+  timing (`perItemDelayMs`/`settleDelayMs`) is reliable. Remaining tuning notes: the UI→pixel scale
+  on non-16:10 windows (height-scale on both axes, no letterbox cull, matching `UiBrowserHandler`;
+  a horizontal-cull/per-axis-scale refinement may still be wanted); destination detection is lenient
+  (grid-visible + has items); `id==27` is read only as a stash hint.
 
 ## Open / pending (needs the game running)
 

@@ -1372,10 +1372,11 @@ class RadarOverlay extends GdiOverlayBase
         this._lineBatch[key].Push([x1, y1, x2, y2])
     }
 
-    ; Queues a text draw into the text batch.
-    _DrawText(screenX, screenY, text, colorBGR)
+    ; Queues a text draw into the text batch. Optional font handle (5th element) lets a few
+    ; entries (the loot value labels) render at a custom size; 0 = the DC's default font.
+    _DrawText(screenX, screenY, text, colorBGR, font := 0)
     {
-        this._textBatch.Push([screenX, screenY, text, colorBGR])
+        this._textBatch.Push([screenX, screenY, text, colorBGR, font])
     }
 
     ; Queues an icon blit (drawn after dots, before text). iconKey resolves via OverlayImage.
@@ -1391,28 +1392,34 @@ class RadarOverlay extends GdiOverlayBase
     ; batches, so it must run just before _FlushBatch().
     _FlushLootValues()
     {
+        global g_lrvMapIconSize, g_lrvMapFontSize, g_lrvMapColor
         drops := this._lrvFrameDrops
         this._lrvFrameDrops := []
         if (drops.Length = 0)
             return
         this._SortByValueExDesc(drops)        ; readable labels go to the most valuable drops
 
-        col := 0x5AA8C8                       ; gold (BGR of #C8A85A) — value marker + amount
+        ; User-configurable look (Config → Overlay → Loot value radar).
+        col    := GroupColorToBgr(IsSet(g_lrvMapColor) ? g_lrvMapColor : "#C8A85A")
+        iconSz := (IsSet(g_lrvMapIconSize) ? g_lrvMapIconSize : 18)
+        fontPx := (IsSet(g_lrvMapFontSize) ? g_lrvMapFontSize : 14)
+        font   := this._GetFont(-fontPx, 600)
+        charW  := Max(5, fontPx * 0.6)        ; approx glyph width for the overlap box (no GDI measure)
+        textY  := -(fontPx // 2)              ; top-left of text vs the dot center (vertical centering)
+
         placed := []                          ; [x1, y1, x2, y2] of labels already drawn this frame
         for _, d in drops
         {
-            sx := d[1], sy := d[2], parts := d[3], isLargeMap := d[5]
-            this._DrawDot(sx, sy, col, isLargeMap ? 4 : 3)
+            sx := d[1], sy := d[2], parts := d[3]
+            this._DrawDot(sx, sy, col, d[5] ? 4 : 3)
             if !(parts && IsObject(parts))
                 continue
             num := parts.Has("num") ? parts["num"] : ""
-            iconSz := isLargeMap ? 18 : 15
-            ix := sx + (isLargeMap ? 6 : 5)
 
-            ; Approximate label box (icon + amount) for the overlap test — cheap, no GDI measure.
-            charW := isLargeMap ? 9 : 8
-            labelW := iconSz + 2 + (StrLen(num) + 2) * charW
-            x1 := ix, y1 := sy - iconSz // 2, x2 := ix + labelW, y2 := sy + iconSz // 2
+            ; Order: amount FIRST, then the orb icon to its right (e.g. "1 [div]" not "[div] 1").
+            tx   := sx + 5
+            numW := Round((StrLen(num) + 0.5) * charW)
+            x1 := tx, y1 := sy - iconSz // 2, x2 := tx + numW + 2 + iconSz, y2 := sy + iconSz // 2
             overlap := false
             for _, p in placed
             {
@@ -1426,17 +1433,16 @@ class RadarOverlay extends GdiOverlayBase
                 continue                       ; dot only — keep the cluster readable
             placed.Push([x1, y1, x2, y2])
 
-            iy := sy - iconSz // 2
             if OverlayIconReady(parts["icon"])
             {
-                this._DrawIconBatched(parts["icon"], ix, iy, iconSz, iconSz)
-                this._DrawText(ix + iconSz + 2, sy - 7, num, col)
+                this._DrawText(tx, sy + textY, num, col, font)
+                this._DrawIconBatched(parts["icon"], tx + numW + 2, sy - iconSz // 2, iconSz, iconSz)
             }
             else
             {
                 ; Text fallback so the value still reads when the orb image is unavailable.
                 unit := (parts["icon"] = "divine") ? " div" : " ex"
-                this._DrawText(ix, sy - 7, num unit, col)
+                this._DrawText(tx, sy + textY, num unit, col, font)
             }
         }
     }
@@ -1523,11 +1529,29 @@ class RadarOverlay extends GdiOverlayBase
         ; ── 4. Text ──────────────────────────────────────────────────────────────────────
         ; SetBkMode once per frame — all TextOut calls benefit from it
         DllCall("SetBkMode", "Ptr", dc, "Int", 1)   ; TRANSPARENT
+        ; Optional per-entry font (5th element) — used by the loot value labels. Select on change
+        ; and restore the DC's original font at the end.
+        curFont := 0, savedFont := 0
         for t in this._textBatch
         {
+            f := (t.Length >= 5) ? t[5] : 0
+            if (f != curFont)
+            {
+                if (f)
+                {
+                    sel := DllCall("SelectObject", "Ptr", dc, "Ptr", f, "Ptr")
+                    if (!savedFont)
+                        savedFont := sel
+                }
+                else if (savedFont)
+                    DllCall("SelectObject", "Ptr", dc, "Ptr", savedFont)
+                curFont := f
+            }
             DllCall("SetTextColor", "Ptr", dc, "UInt", t[4])
             DllCall("TextOutW", "Ptr", dc, "Int", t[1], "Int", t[2], "Str", t[3], "Int", StrLen(t[3]))
         }
+        if (savedFont && curFont)
+            DllCall("SelectObject", "Ptr", dc, "Ptr", savedFont)
         this._textBatch := []
     }
 

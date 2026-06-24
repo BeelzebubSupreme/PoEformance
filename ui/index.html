@@ -5429,6 +5429,20 @@
                 <span class="cfg-label">Max rows in the list</span>
                 <span class="hk-num"><input type="number" id="lrv-listMax" min="1" max="20" step="1" onchange="ahkCall('SetLootRadarValue','listMax',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
               </div>
+              <div class="cfg-row">
+                <span class="cfg-label">Map label icon size (px)</span>
+                <span class="hk-num"><input type="number" id="lrv-mapIconSize" min="6" max="48" step="1" onchange="ahkCall('SetLootRadarValue','mapIconSize',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-label">Map label font size (px)</span>
+                <span class="hk-num"><input type="number" id="lrv-mapFontSize" min="6" max="48" step="1" onchange="ahkCall('SetLootRadarValue','mapFontSize',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Map label color</span>
+                <span style="display:flex;gap:8px;align-items:center">
+                  <span id="lrv-mapColor-sw" class="cp-swatch" onclick="lrvOpenMapColor(this)"></span>
+                  <span id="lrv-mapColor-hex" style="font-family:monospace;font-size:11px;color:var(--subtext)">—</span>
+                </span>
+              </div>
               <div class="cfg-help">
                 Valued ground drops are labelled on the radar with the matching currency orb
                 (Exalted / Divine) instead of a "1ex / 1div" text, and the "valuable nearby" list
@@ -7090,6 +7104,24 @@
       val('lrv-alertEx', s.alertEx);
       chk('lrv-showList', s.showList);
       val('lrv-listMax', s.listMax);
+      val('lrv-mapIconSize', s.mapIconSize);
+      val('lrv-mapFontSize', s.mapFontSize);
+      const mc = s.mapColor || '#C8A85A';
+      const sw = document.getElementById('lrv-mapColor-sw');
+      if (sw) sw.style.setProperty('--swatch-color', mc);
+      const mh = document.getElementById('lrv-mapColor-hex');
+      if (mh) mh.textContent = mc;
+    }
+
+    // Map loot-value label color → shared GGPK color picker → SetLootRadarValue mapColor.
+    function lrvOpenMapColor(el) {
+      const cur = (window._lastHeader && window._lastHeader.lootRadarValue && window._lastHeader.lootRadarValue.mapColor) || '#C8A85A';
+      openColorPicker('lrvMap', {
+        title: 'Loot value label color',
+        hex: cur,
+        swatchEl: el,
+        onConfirm: hex => ahkCall('SetLootRadarValue', 'mapColor', '#' + hex.slice(0, 6))
+      });
     }
 
     function lootTradePricingSyncFromHeader(s) {
