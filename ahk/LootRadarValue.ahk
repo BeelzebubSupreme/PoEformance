@@ -167,6 +167,8 @@ LoadLootRadarValue()
     global g_lrvMapIconSize := 18           ; on-map value orb-icon size (px)
     global g_lrvMapFontSize := 14           ; on-map value amount font size (px)
     global g_lrvMapColor := "#C8A85A"       ; on-map value marker + amount color (#RRGGBB)
+    global g_lrvShowDist := true            ; show distance-to-drop in the "valuable nearby" list
+    global g_lrvShowArrow := true           ; show a direction arrow to the drop in that list
     global g_lrvConfigFile := _ConfigPath()
 
     ; Runtime (never persisted)
@@ -187,6 +189,8 @@ LoadLootRadarValue()
         g_lrvMapIconSize  := Integer(IniRead(f, "LootRadarValue", "mapIconSize", g_lrvMapIconSize))
         g_lrvMapFontSize  := Integer(IniRead(f, "LootRadarValue", "mapFontSize", g_lrvMapFontSize))
         g_lrvMapColor     := IniRead(f, "LootRadarValue", "mapColor", g_lrvMapColor)
+        g_lrvShowDist     := (IniRead(f, "LootRadarValue", "showDist", g_lrvShowDist ? "1" : "0") = "1")
+        g_lrvShowArrow    := (IniRead(f, "LootRadarValue", "showArrow", g_lrvShowArrow ? "1" : "0") = "1")
     } catch as ex {
         LogError("LoadLootRadarValue", ex)
     }
@@ -198,6 +202,7 @@ SaveLootRadarValue()
 {
     global g_lrvEnabled, g_lrvAlertEnabled, g_lrvMinLabelEx, g_lrvAlertEx, g_lrvConfigFile
     global g_lrvShowList, g_lrvListMax, g_lrvMapIconSize, g_lrvMapFontSize, g_lrvMapColor
+    global g_lrvShowDist, g_lrvShowArrow
     f := g_lrvConfigFile
     try {
         IniWrite(g_lrvEnabled ? "1" : "0", f, "LootRadarValue", "enabled")
@@ -209,6 +214,8 @@ SaveLootRadarValue()
         IniWrite(g_lrvMapIconSize, f, "LootRadarValue", "mapIconSize")
         IniWrite(g_lrvMapFontSize, f, "LootRadarValue", "mapFontSize")
         IniWrite(g_lrvMapColor, f, "LootRadarValue", "mapColor")
+        IniWrite(g_lrvShowDist ? "1" : "0", f, "LootRadarValue", "showDist")
+        IniWrite(g_lrvShowArrow ? "1" : "0", f, "LootRadarValue", "showArrow")
     } catch as ex {
         LogError("SaveLootRadarValue", ex)
     }
@@ -254,6 +261,7 @@ _LrvApplySetting(key, val)
 {
     global g_lrvEnabled, g_lrvAlertEnabled, g_lrvMinLabelEx, g_lrvAlertEx
     global g_lrvShowList, g_lrvListMax, g_lrvMapIconSize, g_lrvMapFontSize, g_lrvMapColor
+    global g_lrvShowDist, g_lrvShowArrow
     global g_lrvAnnot, g_lrvNearby, g_lrvAlerted
     switch key
     {
@@ -279,6 +287,10 @@ _LrvApplySetting(key, val)
             g_lrvMapFontSize := Integer(_LrvNum(val))
         case "mapColor":
             g_lrvMapColor := Trim(val "")
+        case "showDist":
+            g_lrvShowDist := _LrvTruthy(val)
+        case "showArrow":
+            g_lrvShowArrow := _LrvTruthy(val)
     }
     _LrvClamp()
 }
@@ -288,6 +300,7 @@ BuildLootRadarValueHeaderJson()
 {
     global g_lrvEnabled, g_lrvAlertEnabled, g_lrvMinLabelEx, g_lrvAlertEx
     global g_lrvShowList, g_lrvListMax, g_lrvMapIconSize, g_lrvMapFontSize, g_lrvMapColor
+    global g_lrvShowDist, g_lrvShowArrow
     j := "{"
     j .= '"enabled":'       (g_lrvEnabled ? "true" : "false")
     j .= ',"alertEnabled":' (g_lrvAlertEnabled ? "true" : "false")
@@ -298,6 +311,8 @@ BuildLootRadarValueHeaderJson()
     j .= ',"mapIconSize":'  (g_lrvMapIconSize + 0)
     j .= ',"mapFontSize":'  (g_lrvMapFontSize + 0)
     j .= ',"mapColor":"'    g_lrvMapColor '"'
+    j .= ',"showDist":'     (g_lrvShowDist ? "true" : "false")
+    j .= ',"showArrow":'    (g_lrvShowArrow ? "true" : "false")
     j .= "}"
     return j
 }
@@ -500,6 +515,19 @@ LrvValueExFor(addr)
     if (!g_lrvEnabled || !addr || !g_lrvAnnot.Has(addr))
         return 0.0
     return g_lrvAnnot[addr]["valueEx"]
+}
+
+; Stores the on-screen direction (player→drop iso screen delta) for a drop. Set by the radar
+; overlay each frame (it already computes the projection) so the "valuable nearby" list can draw
+; a direction arrow without re-projecting. No-op if the addr isn't a tracked valued drop.
+LrvSetDir(addr, sdx, sdy)
+{
+    global g_lrvEnabled, g_lrvAnnot
+    if (g_lrvEnabled && addr && g_lrvAnnot.Has(addr))
+    {
+        g_lrvAnnot[addr]["sdx"] := sdx
+        g_lrvAnnot[addr]["sdy"] := sdy
+    }
 }
 
 ; Insertion-sorts an array of annotation Maps by valueEx descending (tiny list).

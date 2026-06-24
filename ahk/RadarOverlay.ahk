@@ -909,6 +909,8 @@ class RadarOverlay extends GdiOverlayBase
                     _lrvAddr := entity.Has("address") ? entity["address"] : 0
                     if (_lrvAddr)
                     {
+                        ; Stash the on-screen direction (player→drop) for the list's arrow.
+                        LrvSetDir(_lrvAddr, screenDeltaX, screenDeltaY)
                         _lrvParts := LrvIconPartsFor(_lrvAddr)
                         if (_lrvParts)
                         {
@@ -1399,27 +1401,32 @@ class RadarOverlay extends GdiOverlayBase
             return
         this._SortByValueExDesc(drops)        ; readable labels go to the most valuable drops
 
-        ; User-configurable look (Config → Overlay → Loot value radar).
-        col    := GroupColorToBgr(IsSet(g_lrvMapColor) ? g_lrvMapColor : "#C8A85A")
+        ; User-configurable look (Config → Overlay → Loot value radar). The MARKER DOT keeps its
+        ; own gold color; only the amount text uses the configured color ("Schriftfarbe").
+        dotCol := 0x5AA8C8
+        txtCol := GroupColorToBgr(IsSet(g_lrvMapColor) ? g_lrvMapColor : "#C8A85A")
         iconSz := (IsSet(g_lrvMapIconSize) ? g_lrvMapIconSize : 18)
         fontPx := (IsSet(g_lrvMapFontSize) ? g_lrvMapFontSize : 14)
         font   := this._GetFont(-fontPx, 600)
-        charW  := Max(5, fontPx * 0.6)        ; approx glyph width for the overlap box (no GDI measure)
-        textY  := -(fontPx // 2)              ; top-left of text vs the dot center (vertical centering)
+        gap    := 3                            ; small gap between the amount and the orb
 
-        placed := []                          ; [x1, y1, x2, y2] of labels already drawn this frame
+        placed := []                           ; [x1, y1, x2, y2] of labels already drawn this frame
         for _, d in drops
         {
             sx := d[1], sy := d[2], parts := d[3]
-            this._DrawDot(sx, sy, col, d[5] ? 4 : 3)
+            this._DrawDot(sx, sy, dotCol, d[5] ? 4 : 3)
             if !(parts && IsObject(parts))
                 continue
             num := parts.Has("num") ? parts["num"] : ""
+            tm   := this._MeasureText(font, num)
+            numW := tm["w"], numH := tm["h"]
+            half := Max(numH, iconSz) // 2     ; vertical half-extent of the whole label
 
-            ; Order: amount FIRST, then the orb icon to its right (e.g. "1 [div]" not "[div] 1").
-            tx   := sx + 5
-            numW := Round((StrLen(num) + 0.5) * charW)
-            x1 := tx, y1 := sy - iconSz // 2, x2 := tx + numW + 2 + iconSz, y2 := sy + iconSz // 2
+            ; Order: amount FIRST, then the orb icon right after the measured text width, both
+            ; vertically centered on the dot so number + orb read as one unit.
+            tx    := sx + 7
+            iconX := tx + numW + gap
+            x1 := tx, y1 := sy - half, x2 := iconX + iconSz, y2 := sy + half
             overlap := false
             for _, p in placed
             {
@@ -1435,14 +1442,14 @@ class RadarOverlay extends GdiOverlayBase
 
             if OverlayIconReady(parts["icon"])
             {
-                this._DrawText(tx, sy + textY, num, col, font)
-                this._DrawIconBatched(parts["icon"], tx + numW + 2, sy - iconSz // 2, iconSz, iconSz)
+                this._DrawText(tx, sy - numH // 2, num, txtCol, font)
+                this._DrawIconBatched(parts["icon"], iconX, sy - iconSz // 2, iconSz, iconSz)
             }
             else
             {
                 ; Text fallback so the value still reads when the orb image is unavailable.
                 unit := (parts["icon"] = "divine") ? " div" : " ex"
-                this._DrawText(tx, sy + textY, num unit, col, font)
+                this._DrawText(tx, sy - numH // 2, num unit, txtCol, font)
             }
         }
     }

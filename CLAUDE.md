@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.41`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.42`.
 
 ## Language
 
@@ -527,9 +527,13 @@ Fragments/Tablets, Div-Cards (rares stay unpriced, like the LootTracker breakdow
 - **Step 2 (shipped 0.45.13.32) — `ahk/LootValueOverlay.ahk`:** `LootValueOverlay extends
   GdiOverlayBase`, registered in `OverlayManager`. Reads the sorted `g_lrvNearby`, draws a
   ranked "valuable nearby" list (title + up to `g_lrvListMax` rows) anchored left/mid-screen;
-  each row = orb image + amount + item name. Gated on `g_lrvEnabled && g_lrvShowList`,
-  foreground, and hidden while a big panel is open. New config `g_lrvShowList` (default on) +
-  `g_lrvListMax` (default 8), persisted in `[LootRadarValue]`, in the header + UI.
+  each row = orb image + amount + item name, then a dim tail with the live distance ("Nm") and an
+  8-way direction arrow (`_LrvArrowGlyph` from the radar-supplied iso screen delta `LrvSetDir`).
+  Gated on `g_lrvEnabled && g_lrvShowList`, foreground, and hidden while a big panel is open.
+  Config: `g_lrvShowList`/`g_lrvListMax`, `g_lrvShowDist`/`g_lrvShowArrow` (list distance + arrow,
+  both default on), and the on-map label look `g_lrvMapIconSize`/`g_lrvMapFontSize`/`g_lrvMapColor`
+  (icon stays gold; only the amount text takes the color). All persisted in `[LootRadarValue]`,
+  in the header + UI (one combined row + a live preview).
 - **Step 3 (shipped 0.45.13.32) — `RadarOverlay.ahk`:** ground `WorldItem` wrappers (otherwise
   filtered out of the entity draw) are intercepted right after projection; a valued drop
   (`LrvIconPartsFor(addr)`) gets a gold marker dot + orb image + amount via a new `_iconBatch`

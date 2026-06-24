@@ -43,12 +43,14 @@ class LootValueOverlay extends GdiOverlayBase
     ; Builds the row model + measures the panel size from the longest row.
     Layout(ctx)
     {
-        global g_lrvNearby, g_lrvListMax, g_ltUiScale, g_ltBarOpacity
+        global g_lrvNearby, g_lrvListMax, g_ltUiScale, g_ltBarOpacity, g_lrvShowDist, g_lrvShowArrow
         scale := _LtBarScale(ctx.gwH, IsSet(g_ltUiScale) ? g_ltUiScale : 1.0)
         this._scale := scale
         this._fontH := -Round(16 * scale)
 
         maxRows := (IsSet(g_lrvListMax) && g_lrvListMax > 0) ? g_lrvListMax : 8
+        showDist  := (IsSet(g_lrvShowDist) && g_lrvShowDist)
+        showArrow := (IsSet(g_lrvShowArrow) && g_lrvShowArrow)
         rows := []
         for _, info in g_lrvNearby
         {
@@ -60,7 +62,9 @@ class LootValueOverlay extends GdiOverlayBase
             nm := info.Has("label") ? info["label"] : ""
             if (StrLen(nm) > 24)
                 nm := SubStr(nm, 1, 23) "…"
-            rows.Push(Map("parts", LrvValueParts(ex), "name", nm, "dist", (info.Has("distM") ? info["distM"] : -1)))
+            dM  := (showDist && info.Has("distM")) ? info["distM"] : -1
+            arr := (showArrow && info.Has("sdx") && info.Has("sdy")) ? _LrvArrowGlyph(info["sdx"], info["sdy"]) : ""
+            rows.Push(Map("parts", LrvValueParts(ex), "name", nm, "dist", dM, "arrow", arr))
         }
         this._rows := rows
 
@@ -79,8 +83,8 @@ class LootValueOverlay extends GdiOverlayBase
         {
             numW  := this._MeasureText(font, r["parts"]["num"])["w"]
             nameW := this._MeasureText(font, "  " r["name"])["w"]
-            distW := (r["dist"] >= 0) ? this._MeasureText(font, "  " r["dist"] "m")["w"] : 0
-            rowW  := this._iconSz + this._gap + numW + nameW + distW
+            tailW := this._MeasureText(font, _LrvRowTail(r))["w"]
+            rowW  := this._iconSz + this._gap + numW + nameW + tailW
             if (rowW > maxW)
                 maxW := rowW
         }
@@ -130,14 +134,42 @@ class LootValueOverlay extends GdiOverlayBase
             unitTag := drewIcon ? "" : (parts["icon"] = "divine" ? "div " : "ex ")
             nameStr := "  " unitTag r["name"]
             this._DrawText(tx + numW, y, nameStr, textCol)
-            ; Distance to the drop, dim, at the row end.
-            if (r["dist"] >= 0)
+            ; Distance + direction arrow to the drop, dim, at the row end.
+            tail := _LrvRowTail(r)
+            if (tail != "")
             {
                 nameW := this._MeasureText(font, nameStr)["w"]
-                this._DrawText(tx + numW + nameW, y, "  " r["dist"] "m", 0x808080)
+                this._DrawText(tx + numW + nameW, y, tail, 0x808080)
             }
             y += lineH
         }
         DllCall("SelectObject", "Ptr", this.memDC, "Ptr", oldFont)
     }
+}
+
+; 8-way arrow glyph for an on-screen direction vector (player→drop; screen Y points down).
+; Returns "" when there is no usable direction. 2.414 = tan(67.5°) splits the 8 sectors.
+_LrvArrowGlyph(sdx, sdy)
+{
+    if (sdx = "" || sdy = "" || (sdx = 0 && sdy = 0))
+        return ""
+    adx := Abs(sdx), ady := Abs(sdy)
+    if (adx > 2.414 * ady)
+        return (sdx > 0) ? "→" : "←"
+    if (ady > 2.414 * adx)
+        return (sdy > 0) ? "↓" : "↑"
+    if (sdx > 0)
+        return (sdy > 0) ? "↘" : "↗"
+    return (sdy > 0) ? "↙" : "↖"
+}
+
+; Builds the dim row tail: "  <dist>m <arrow>" honoring whichever pieces are present.
+_LrvRowTail(r)
+{
+    s := ""
+    if (r.Has("dist") && r["dist"] >= 0)
+        s .= "  " r["dist"] "m"
+    if (r.Has("arrow") && r["arrow"] != "")
+        s .= " " r["arrow"]
+    return s
 }

@@ -5429,18 +5429,37 @@
                 <span class="cfg-label">Max rows in the list</span>
                 <span class="hk-num"><input type="number" id="lrv-listMax" min="1" max="20" step="1" onchange="ahkCall('SetLootRadarValue','listMax',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
               </div>
-              <div class="cfg-row">
-                <span class="cfg-label">Map label icon size (px)</span>
-                <span class="hk-num"><input type="number" id="lrv-mapIconSize" min="6" max="48" step="1" onchange="ahkCall('SetLootRadarValue','mapIconSize',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+              <div class="cfg-row"><span class="cfg-label">Show distance in list</span>
+                <label class="toggle"><input type="checkbox" id="lrv-showDist"
+                    onchange="ahkCall('SetLootRadarValue','showDist', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Show direction arrow in list</span>
+                <label class="toggle"><input type="checkbox" id="lrv-showArrow"
+                    onchange="ahkCall('SetLootRadarValue','showArrow', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
               </div>
               <div class="cfg-row">
-                <span class="cfg-label">Map label font size (px)</span>
-                <span class="hk-num"><input type="number" id="lrv-mapFontSize" min="6" max="48" step="1" onchange="ahkCall('SetLootRadarValue','mapFontSize',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+                <span class="cfg-label">Map label (icon / font / color)</span>
+                <span style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+                  <span style="display:flex;gap:5px;align-items:center" data-tip="On-map orb icon size (px)">
+                    <span style="font-size:11px;color:var(--subtext)">icon</span>
+                    <span class="hk-num"><input type="number" id="lrv-mapIconSize" min="6" max="48" step="1" onchange="ahkCall('SetLootRadarValue','mapIconSize',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+                  </span>
+                  <span style="display:flex;gap:5px;align-items:center" data-tip="On-map amount font size (px)">
+                    <span style="font-size:11px;color:var(--subtext)">font</span>
+                    <span class="hk-num"><input type="number" id="lrv-mapFontSize" min="6" max="48" step="1" onchange="ahkCall('SetLootRadarValue','mapFontSize',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+                  </span>
+                  <span style="display:flex;gap:5px;align-items:center" data-tip="On-map amount text color">
+                    <span style="font-size:11px;color:var(--subtext)">color</span>
+                    <span id="lrv-mapColor-sw" class="cp-swatch" onclick="lrvOpenMapColor(this)"></span>
+                  </span>
+                </span>
               </div>
-              <div class="cfg-row"><span class="cfg-label">Map label color</span>
-                <span style="display:flex;gap:8px;align-items:center">
-                  <span id="lrv-mapColor-sw" class="cp-swatch" onclick="lrvOpenMapColor(this)"></span>
-                  <span id="lrv-mapColor-hex" style="font-family:monospace;font-size:11px;color:var(--subtext)">—</span>
+              <div class="cfg-row">
+                <span class="cfg-label">Preview</span>
+                <span id="lrv-map-preview" style="display:flex;align-items:center;gap:4px;min-height:34px;justify-content:flex-end">
+                  <span id="lrv-prev-dot" style="display:inline-block;border-radius:50%;width:7px;height:7px;background:#C8A85A;margin-right:3px"></span>
+                  <span id="lrv-prev-num" style="color:#C8A85A;font-weight:600;line-height:1;font-size:14px">1</span>
+                  <img id="lrv-prev-icon" src="../img/currency/divine.png" alt="" style="width:18px;height:18px" onerror="this.style.visibility='hidden'">
                 </span>
               </div>
               <div class="cfg-help">
@@ -7104,13 +7123,18 @@
       val('lrv-alertEx', s.alertEx);
       chk('lrv-showList', s.showList);
       val('lrv-listMax', s.listMax);
+      chk('lrv-showDist', s.showDist);
+      chk('lrv-showArrow', s.showArrow);
       val('lrv-mapIconSize', s.mapIconSize);
       val('lrv-mapFontSize', s.mapFontSize);
       const mc = s.mapColor || '#C8A85A';
       const sw = document.getElementById('lrv-mapColor-sw');
       if (sw) sw.style.setProperty('--swatch-color', mc);
-      const mh = document.getElementById('lrv-mapColor-hex');
-      if (mh) mh.textContent = mc;
+      // Live preview of the on-map label (dot stays gold; amount uses the chosen color/size).
+      const pn = document.getElementById('lrv-prev-num');
+      if (pn) { pn.style.color = mc; if (s.mapFontSize) pn.style.fontSize = s.mapFontSize + 'px'; }
+      const pi = document.getElementById('lrv-prev-icon');
+      if (pi && s.mapIconSize) { pi.style.width = s.mapIconSize + 'px'; pi.style.height = s.mapIconSize + 'px'; }
     }
 
     // Map loot-value label color → shared GGPK color picker → SetLootRadarValue mapColor.
