@@ -4495,7 +4495,7 @@
     </div>
 
     <!-- CONFIG — sub-tabs, mirrors the Game/RE category structure.
-         General      — status + overview + master toggles + actions
+         General      — status + integrations + actions
          Automation   — Stash Mover + AutoPilot
          Overlay      — Map Hack + Radar + Range Circles + Loot Value Radar
          Vitals       — Vitals bars editor
@@ -4890,7 +4890,7 @@
       <div class="cfg-scroll">
 
         <!-- ════════════════════════════════════════════════════════════
-             GENERAL — status, overview, master toggles, action buttons
+             GENERAL — status, integrations, action buttons
              ════════════════════════════════════════════════════════════ -->
         <div class="cfg-subpanel active" data-cfgtab="general">
 
@@ -4908,24 +4908,6 @@
                 <span style="display:flex;align-items:center;gap:6px">
                   <span id="cfg-conn-status" class="cfg-status">—</span>
                 </span>
-              </div>
-            </div>
-          </details>
-        </div>
-
-        <div class="cfg-section">
-          <details id="det-toggles" open ontoggle="syncCfgSections()">
-            <summary>
-              <div class="cfg-header">Toggles</div>
-            </summary>
-            <div class="cfg-subsection">
-              <div class="cfg-row"><span class="cfg-label">Debug Mode</span>
-                <label class="toggle"><input type="checkbox" id="tog-debug" onchange="ahkCall('ToggleDebug')"><span
-                    class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-row"><span class="cfg-label">Pause Updates</span>
-                <label class="toggle"><input type="checkbox" id="tog-pause" onchange="ahkCall('TogglePause')"><span
-                    class="toggle-slider"></span></label>
               </div>
             </div>
           </details>
@@ -4955,30 +4937,7 @@
               <div class="cfg-header">Actions</div>
             </summary>
             <div class="cfg-subsection">
-              <button class="cfg-btn" id="btn-pause" onclick="ahkCall('TogglePause')">⏸ Pause</button>
               <button class="cfg-btn" onclick="ahkCall('WatchNpc')">👁 Add NPC Watch</button>
-              <button class="cfg-btn" onclick="ahkCall('ToggleTreePane')">🌲 Toggle Tree Pane</button>
-            </div>
-          </details>
-        </div>
-
-        <!-- Overview lives at the bottom of General — it's a tall live
-             tree, putting it first pushed everything else off-screen on
-             the default window height. -->
-        <div class="cfg-section">
-          <details id="det-overview" open ontoggle="syncCfgSections()">
-            <summary>
-              <div class="cfg-header">Overview</div>
-            </summary>
-            <div class="cfg-subsection" style="padding:0">
-              <div class="tree-toolbar" id="tree-toolbar">
-                <input class="tree-filter" id="tree-filter" placeholder="Filter…" oninput="applyTreeFilter()">
-                <button class="tree-tbtn" onclick="ahkCall('PinSelected')">📌 Pin</button>
-                <button class="tree-tbtn" onclick="ahkCall('DumpEntities')">💾 Dump</button>
-              </div>
-              <div id="tab-overview-content" style="max-height:300px;overflow-y:auto;padding:8px">
-                <div class="tree-empty">Loading…</div>
-              </div>
             </div>
           </details>
         </div>
@@ -9424,8 +9383,6 @@
       }
 
       // Header buttons active state
-      const setBtnActive = (id, val) => { const b = document.getElementById(id); if (b) b.classList.toggle('active', val === true || val === 'true'); };
-      setBtnActive('btn-pause', d.paused);
 
       // Show ▶ PoE2 only when game not running
       // Snap-or-Start dual button — text + intent track whether PoE2 is up
@@ -9451,8 +9408,6 @@
 
       // Config tab sync
       const setChk = (id, val) => { const el = document.getElementById(id); if (el) el.checked = val === true || val === 'true'; };
-      setChk('tog-debug', d.debug);
-      setChk('tog-pause', d.paused);
       setChk('tog-flask', d.autoFlask);
       setChk('tog-afperf', d.afPerf);
       setChk('tog-npcsync', d.npcSync);
@@ -11394,7 +11349,7 @@
     // ═══════════════════════════════════════════════════════════════════
     //  CONFIG HELPERS
     // ═══════════════════════════════════════════════════════════════════
-    const _cfgSectionIds = ['status', 'overview', 'toggles', 'integrations', 'autoflask', 'autopilot', 'stashmover', 'rangecircles', 'radar', 'lootvalue', 'maphack', 'blacklist', 'actions', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
+    const _cfgSectionIds = ['status', 'integrations', 'autoflask', 'autopilot', 'stashmover', 'rangecircles', 'radar', 'lootvalue', 'maphack', 'blacklist', 'actions', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
     let _cfgSectionsGuard = 0;
     let _cfgSectionsLoaded = false;
 
