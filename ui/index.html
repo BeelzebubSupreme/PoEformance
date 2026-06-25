@@ -3666,6 +3666,18 @@
       align-items: center;
       padding: 6px 0
     }
+    /* NPC Watch Auto-Sync toggle in the watchlist toolbar (moved here from
+       Config > General; NPC watch is a watchlist feature). Pushed to the
+       right so it doesn't crowd the pin/remove/clear buttons. */
+    .wl-autosync {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--codex-serif);
+      font-size: 12px;
+      color: var(--subtext)
+    }
 
     .wl-filter {
       background: var(--surface2);
@@ -4892,10 +4904,6 @@
                 <label class="toggle"><input type="checkbox" id="tog-pause" onchange="ahkCall('TogglePause')"><span
                     class="toggle-slider"></span></label>
               </div>
-              <div class="cfg-row"><span class="cfg-label">NPC Watch Auto-Sync</span>
-                <label class="toggle"><input type="checkbox" id="tog-npcsync" onchange="ahkCall('ToggleNpcSync')"><span
-                    class="toggle-slider"></span></label>
-              </div>
             </div>
           </details>
         </div>
@@ -4925,11 +4933,8 @@
             </summary>
             <div class="cfg-subsection">
               <button class="cfg-btn" id="btn-pause" onclick="ahkCall('TogglePause')">⏸ Pause</button>
-              <button class="cfg-btn" onclick="ahkCall('F3Dump')">📷 F3 Dump</button>
               <button class="cfg-btn" onclick="ahkCall('WatchNpc')">👁 Add NPC Watch</button>
               <button class="cfg-btn" onclick="ahkCall('ToggleTreePane')">🌲 Toggle Tree Pane</button>
-              <button class="cfg-btn" onclick="ahkCall('DumpEntities')">💾 Dump Entities</button>
-              <button class="cfg-btn" onclick="ahkCall('LootValueDiag')" title="RE test for the value-aware loot radar: open over ground loot (ideally a unique) to check if drops can be priced">🔍 Loot value diagnose</button>
             </div>
           </details>
         </div>
@@ -5745,6 +5750,21 @@
              ════════════════════════════════════════════════════════════ -->
         <div class="cfg-subpanel" data-cfgtab="debug">
 
+        <!-- Diagnostic one-shot actions (moved here from Config > General >
+             Actions — they're RE/dev diagnostics, not everyday actions). -->
+        <div class="cfg-section">
+          <details id="det-debug-actions" open ontoggle="syncCfgSections()">
+            <summary>
+              <div class="cfg-header">🔧 Diagnostic Actions</div>
+            </summary>
+            <div class="cfg-subsection">
+              <button class="cfg-btn" onclick="ahkCall('F3Dump')">📷 F3 Dump</button>
+              <button class="cfg-btn" onclick="ahkCall('DumpEntities')">💾 Dump Entities</button>
+              <button class="cfg-btn" onclick="ahkCall('LootValueDiag')" title="RE test for the value-aware loot radar: open over ground loot (ideally a unique) to check if drops can be priced">🔍 Loot value diagnose</button>
+            </div>
+          </details>
+        </div>
+
         <div class="cfg-section">
           <details id="det-radar-debug" open ontoggle="syncCfgSections()">
             <summary>
@@ -6037,6 +6057,9 @@
           <button class="tree-tbtn" onclick="ahkCall('PinSelected')">📌 Pin</button>
           <button class="tree-tbtn" onclick="ahkCall('RemovePinnedSelected')">✕ Remove</button>
           <button class="tree-tbtn" onclick="ahkCall('ClearPins')">🗑 Clear</button>
+          <span class="wl-autosync">NPC Watch Auto-Sync
+            <label class="toggle"><input type="checkbox" id="tog-npcsync" onchange="ahkCall('ToggleNpcSync')"><span class="toggle-slider"></span></label>
+          </span>
         </div>
         <div class="wl-table-wrap">
           <table class="wl-table" id="wl-table">
