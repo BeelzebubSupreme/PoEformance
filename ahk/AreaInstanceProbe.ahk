@@ -125,9 +125,9 @@ AreaInstanceProbeRun()
         return
     }
 
-    oldEnt  := PoE2Offsets.AreaInstance["AwakeEntities"]      ; 0x6C0
-    oldTerr := PoE2Offsets.AreaInstance["TerrainMetadata"]    ; 0x8A0
-    piOff   := PoE2Offsets.AreaInstance["PlayerInfo"]         ; 0x580
+    oldEnt  := PoE2Offsets.AreaInstance["AwakeEntities"]      ; 0x6D8
+    oldTerr := PoE2Offsets.AreaInstance["TerrainMetadata"]    ; 0x8B8
+    piOff   := PoE2Offsets.AreaInstance["PlayerInfo"]         ; 0x598
     oldLp   := PoE2Offsets.LocalPlayerStruct["LocalPlayerPtr"] ; 0x20
     nl := "`r`n"
 
