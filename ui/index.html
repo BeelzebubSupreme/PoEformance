@@ -1363,7 +1363,7 @@
       box-shadow: 0 2px 6px -2px rgba(200,168,90,0.45)
     }
 
-    /* Toggleable pill — used for Auto-Refresh + Dump Chain.
+    /* Toggleable pill — used for the Skills tab "Internal skills" toggle.
        Inactive: muted brown background, dim ivory text, hairline gold border.
        Active:   gilded fill, near-white text, soft glow underneath.
        Two visual states for the same affordance keep the toolbar quiet
@@ -5698,6 +5698,10 @@
               <button class="cfg-btn" onclick="ahkCall('F3Dump')">📷 F3 Dump</button>
               <button class="cfg-btn" onclick="ahkCall('DumpEntities')">💾 Dump Entities</button>
               <button class="cfg-btn" onclick="ahkCall('LootValueDiag')" title="RE test for the value-aware loot radar: open over ground loot (ideally a unique) to check if drops can be priced">🔍 Loot value diagnose</button>
+              <div class="cfg-row"><span class="cfg-label">🔗 Log inventory pointer chain</span>
+                <label class="toggle"><input type="checkbox" id="inv-chain-dump" onchange="ahkCall('ToggleInventoryChainDump')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Writes the full ServerData → PlayerInventories → items pointer chain to <code>InGameStateMonitor.inventory_chain.log</code> on every inventory refresh. Diagnostic / RE only — leave off in normal use.</div>
             </div>
           </details>
         </div>
@@ -5962,25 +5966,12 @@
 
     <!-- INVENTORY TAB — player inventories (Backpack/Flasks/Trinkets) + best-effort stash scan -->
     <div class="tab-panel" id="panel-inventory">
+      <!-- Auto-refresh is always on now (the incremental renderer only touches
+           changed slots, so it's free and flicker-free) — the old Refresh /
+           Auto-Refresh buttons are gone. The "Dump Chain" diagnostic toggle
+           moved to Config > Debug > Diagnostic Actions. -->
       <div class="inv-toolbar">
-        <button class="tree-tbtn" onclick="ahkCall('RequestInventory')">↻ Refresh</button>
-        <!-- Auto-refresh as a togglable pill (was a label-wrapped checkbox).
-             Hidden checkbox preserves the existing JS state that reads
-             `inv-autorefresh`.checked. -->
-        <button id="inv-autorefresh-pill" class="inv-tog-pill active" type="button"
-                onclick="(function(b){var c=document.getElementById('inv-autorefresh');c.checked=!c.checked;b.classList.toggle('active',c.checked);})(this)">
-          Auto-Refresh
-        </button>
-        <input type="checkbox" id="inv-autorefresh" checked style="display:none">
-        <!-- Dump chain as a stateful button (was a checkbox). Mirrors checkbox
-             state for setChk('inv-chain-dump', …) from the header sync. -->
-        <button id="inv-chain-dump-btn" class="inv-tog-pill" type="button"
-                data-tip="Write the full ServerData → PlayerInventories → items pointer chain to InGameStateMonitor.inventory_chain.log on every refresh. Diagnostic only."
-                onclick="(function(b){var c=document.getElementById('inv-chain-dump');c.checked=!c.checked;b.classList.toggle('active',c.checked);ahkCall('ToggleInventoryChainDump');})(this)">
-          Dump Chain
-        </button>
-        <input type="checkbox" id="inv-chain-dump" style="display:none">
-        <span id="inv-status">— click Refresh —</span>
+        <span id="inv-status">Loading…</span>
       </div>
       <div id="inv-content" class="inv-content">
         <div class="no-data-msg">Open this tab to load inventory data.</div>
@@ -8891,10 +8882,10 @@
     function _invTabActivated() {
       ahkCall('RequestInventory');
       if (_invPollTimer) clearInterval(_invPollTimer);
-      _invPollTimer = setInterval(() => {
-        const cb = document.getElementById('inv-autorefresh');
-        if (cb && cb.checked) ahkCall('RequestInventory');
-      }, 800);
+      // Always-on auto-refresh while the tab is open — the incremental renderer
+      // makes this cheap (identical payloads are skipped, only changed slots
+      // re-render), so there's no longer a reason to gate it behind a toggle.
+      _invPollTimer = setInterval(() => ahkCall('RequestInventory'), 800);
     }
     function _invTabDeactivated() {
       if (_invPollTimer) { clearInterval(_invPollTimer); _invPollTimer = null; }
@@ -9749,12 +9740,8 @@
       const apReasonSum = document.getElementById('cfg-autopilot-reason-summary');
       if (apReasonSum && d.autoPilotReason !== undefined) apReasonSum.textContent = d.autoPilotReason || '—';
 
-      // Inventory diagnostics — chain dump toggle in the Inventory tab toolbar.
-      if (d.invChainDump !== undefined) {
-        setChk('inv-chain-dump', d.invChainDump);
-        const cdBtn = document.getElementById('inv-chain-dump-btn');
-        if (cdBtn) cdBtn.classList.toggle('active', !!d.invChainDump);
-      }
+      // Inventory diagnostics — pointer-chain logging toggle (Config > Debug).
+      if (d.invChainDump !== undefined) setChk('inv-chain-dump', d.invChainDump);
 
       // Combat Automation config sync
       const prevCombatEnabled = document.getElementById('tog-combat')?.checked || false;
