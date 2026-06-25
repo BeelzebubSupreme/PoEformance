@@ -4384,12 +4384,6 @@
           <line x1="11" y1="8" x2="11" y2="14" />
           <line x1="8" y1="11" x2="14" y2="11" />
         </svg><span class="nav-label">RE</span></div>
-      <div class="cat" data-cat="data" onclick="switchCategory('data')"><svg viewBox="0 0 24 24">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-          <line x1="16" y1="13" x2="8" y2="13" />
-          <line x1="16" y1="17" x2="8" y2="17" />
-        </svg><span class="nav-label">Data</span></div>
       <div class="cat" data-cat="hotkeys" onclick="switchCategory('hotkeys')"><svg viewBox="0 0 24 24">
           <rect x="2" y="6" width="20" height="12" rx="2" />
           <line x1="6" y1="10" x2="6" y2="10.5" />
@@ -4484,13 +4478,7 @@
       <div class="bar-marker tab-marker"></div>
     </div>
 
-    <!-- DATA — single page, sub-tab row hidden via CSS. -->
-    <div class="subtab-row single-tab" data-cat="data">
-      <div class="tab" data-tab="tsvs" onclick="switchTab('tsvs')">TSVs</div>
-      <div class="bar-marker tab-marker"></div>
-    </div>
-
-    <!-- CONFIG — six sub-tabs, mirrors the Game/RE category structure.
+    <!-- CONFIG — sub-tabs, mirrors the Game/RE category structure.
          General      — status + overview + master toggles + actions
          Automation   — Auto-Flask + AutoPilot + Range Circles + Opacity
          Overlay      — Radar visualisation toggles + entity-type filters
@@ -4531,6 +4519,12 @@
           <line x1="3" y1="9" x2="8" y2="11" /><line x1="3" y1="15" x2="8" y2="14" />
           <line x1="21" y1="9" x2="16" y2="11" /><line x1="21" y1="15" x2="16" y2="14" />
         </svg><span class="nav-label">Debug</span></div>
+      <div class="tab" data-cfgtab="data"       onclick="switchConfigSubTab('data')"><svg viewBox="0 0 24 24">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="16" y1="13" x2="8" y2="13" />
+          <line x1="16" y1="17" x2="8" y2="17" />
+        </svg><span class="nav-label">Data</span></div>
       <div class="bar-marker tab-marker"></div>
     </div>
 
@@ -4848,46 +4842,10 @@
       </div>
     </div>
 
-    <!-- TSVs TAB -->
-    <div class="tab-panel" id="panel-tsvs">
-      <div class="tsv-gen-bar">
-        <button class="cfg-btn tsv-gen-btn" id="tsv-gen-btn" onclick="startTsvGeneration()">⚙ Generate TSVs from Game
-          Data</button>
-        <span id="tsv-gen-status" class="tsv-gen-status"></span>
-        <button class="cfg-btn tsv-log-toggle" id="tsv-log-toggle" onclick="toggleTsvLog()" style="display:none">▾
-          Log</button>
-      </div>
-      <!--
-        Standalone "Refresh base_item_sizes.tsv from local GGPK" button —
-        bypasses the external download pipeline above by reading the
-        user's installed PoE2 (Bundles2/_.index.bin) via the AGPL-fenced
-        ggpk-tools/PoeDataExtract.exe. Runs in ~half a second once the
-        tool has been published; useful when GGG patches and the
-        externally hosted JSON dumps haven't caught up yet.
-      -->
-      <div class="tsv-gen-bar" style="margin-top:6px">
-        <button class="cfg-btn" id="ggpk-refresh-btn" onclick="ggpkRefreshItemSizes()" data-tip="Re-extract all GGPK-derived TSVs (base item sizes + names, monster names, stat names, mod ids) directly from your local PoE2 install via ggpk-tools/PoeDataExtract.exe. Requires the tool to be built (see ggpk-tools/README.md).">⟳ Refresh all TSVs from local GGPK</button>
-        <span id="ggpk-refresh-status" class="tsv-gen-status"></span>
-      </div>
-      <div id="tsv-gen-log" class="tsv-gen-log" style="display:none"></div>
-      <div class="tsv-toolbar">
-        <select id="tsv-file-select" onchange="onTsvFileSelected(this.value)">
-          <option value="">— Select a TSV file —</option>
-        </select>
-        <input id="tsv-search" type="text" placeholder="Filter rows…" oninput="filterTsvRows(this.value)" disabled>
-        <div id="tsv-pager" class="tsv-pager" style="display:none">
-          <button class="tsv-pg-btn" onclick="tsvPageNav(-1)" id="tsv-prev" data-tip="Previous page">◀</button>
-          <span id="tsv-page-info" class="tsv-page-info"></span>
-          <button class="tsv-pg-btn" onclick="tsvPageNav(1)" id="tsv-next" data-tip="Next page">▶</button>
-        </div>
-        <span id="tsv-info" class="tsv-info"></span>
-      </div>
-      <div id="tsv-table-wrap" class="tsv-table-wrap">
-        <div class="no-data-msg">Select a TSV file above to view its contents.</div>
-      </div>
-    </div>
+    <!-- TSVs content moved into Config > Data sub-panel (see #panel-config
+         below). It used to be a standalone top-level "Data" tab. -->
 
-    <!-- CONFIG TAB — split into 6 sub-panels via the cfg-subpanel
+    <!-- CONFIG TAB — split into sub-panels via the cfg-subpanel
          wrappers below. switchConfigSubTab() toggles which one carries
          the .active class; only one is visible at a time. The outer
          #panel-config tab-panel remains a single top-level entry in the
@@ -5334,33 +5292,8 @@
           </details>
         </div>
 
-        <!-- Range Circles + radar overlay opacity — moved into
-             Automation per the user's grouping (they sit visually with
-             the autopilot range tuning, even though SetRadarAlpha
-             technically controls the whole radar's opacity). -->
-        <div class="cfg-section">
-          <details id="det-rangecircles" open ontoggle="syncCfgSections(); if(this.open) requestAnimationFrame(_sbInitAll)">
-            <summary>
-              <div class="cfg-header">Range Circles</div>
-            </summary>
-            <div class="cfg-subsection">
-              <div class="cfg-row"><span class="cfg-label">Show Range Circles</span>
-                <label class="toggle"><input type="checkbox" id="tog-rangecircles" onchange="ahkCall('ToggleRangeCircles')"
-                    checked><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-slider-row">
-                <span class="cfg-label">Opacity</span>
-                <div class="slider-wrap">
-                  <span class="slider-val" id="radar-alpha-bub">100%</span>
-                  <input type="range" id="radar-alpha" min="20" max="255" value="255"
-                    oninput="_sb(this,'radar-alpha-bub',Math.round(this.value/255*100)+'%'); ahkCall('SetRadarAlpha', parseInt(this.value))">
-                </div>
-              </div>
-            </div>
-          </details>
-        </div>
-
         </div><!-- /cfg-subpanel automation -->
+
 
         <!-- ════════════════════════════════════════════════════════════
              OVERLAY — radar visualisation (entity-type filters, zone
@@ -5443,6 +5376,31 @@
                     onchange="ahkCall('TogglePanelDetection')" checked><span class="toggle-slider"></span></label>
               </div>
               <div class="cfg-help">Pauses click-to-walk / skill firing while a game UI panel is open (inventory, stash, vendor). Turn off only if you're debugging panel discovery.</div>
+            </div>
+          </details>
+        </div>
+
+        <!-- Range Circles + radar overlay opacity — visualisation, so it lives
+             in Overlay next to the Radar section (SetRadarAlpha controls the
+             whole radar overlay's opacity, not just the circles). -->
+        <div class="cfg-section">
+          <details id="det-rangecircles" open ontoggle="syncCfgSections(); if(this.open) requestAnimationFrame(_sbInitAll)">
+            <summary>
+              <div class="cfg-header">Range Circles</div>
+            </summary>
+            <div class="cfg-subsection">
+              <div class="cfg-row"><span class="cfg-label">Show Range Circles</span>
+                <label class="toggle"><input type="checkbox" id="tog-rangecircles" onchange="ahkCall('ToggleRangeCircles')"
+                    checked><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-slider-row">
+                <span class="cfg-label">Opacity</span>
+                <div class="slider-wrap">
+                  <span class="slider-val" id="radar-alpha-bub">100%</span>
+                  <input type="range" id="radar-alpha" min="20" max="255" value="255"
+                    oninput="_sb(this,'radar-alpha-bub',Math.round(this.value/255*100)+'%'); ahkCall('SetRadarAlpha', parseInt(this.value))">
+                </div>
+              </div>
             </div>
           </details>
         </div>
@@ -5906,6 +5864,52 @@
         </div>
 
         </div><!-- /cfg-subpanel debug -->
+
+        <!-- ════════════════════════════════════════════════════════════
+             DATA — TSV dictionary maintenance (generate / refresh from the
+             local GGPK) + a TSV browser. Moved here from the old top-level
+             "Data" category; it's maintenance/config, not a live game view.
+             Keeps the panel-tsvs id so the existing JS + bridge calls are
+             untouched; the cfg-subpanel class wires it into the Config
+             sub-tab switcher via its data-cfgtab of data.
+             ════════════════════════════════════════════════════════════ -->
+        <div id="panel-tsvs" class="cfg-subpanel" data-cfgtab="data">
+          <div class="tsv-gen-bar">
+            <button class="cfg-btn tsv-gen-btn" id="tsv-gen-btn" onclick="startTsvGeneration()">⚙ Generate TSVs from Game
+              Data</button>
+            <span id="tsv-gen-status" class="tsv-gen-status"></span>
+            <button class="cfg-btn tsv-log-toggle" id="tsv-log-toggle" onclick="toggleTsvLog()" style="display:none">▾
+              Log</button>
+          </div>
+          <!--
+            Standalone "Refresh base_item_sizes.tsv from local GGPK" button —
+            bypasses the external download pipeline above by reading the
+            user's installed PoE2 (Bundles2/_.index.bin) via the AGPL-fenced
+            ggpk-tools/PoeDataExtract.exe. Runs in ~half a second once the
+            tool has been published; useful when GGG patches and the
+            externally hosted JSON dumps haven't caught up yet.
+          -->
+          <div class="tsv-gen-bar" style="margin-top:6px">
+            <button class="cfg-btn" id="ggpk-refresh-btn" onclick="ggpkRefreshItemSizes()" data-tip="Re-extract all GGPK-derived TSVs (base item sizes + names, monster names, stat names, mod ids) directly from your local PoE2 install via ggpk-tools/PoeDataExtract.exe. Requires the tool to be built (see ggpk-tools/README.md).">⟳ Refresh all TSVs from local GGPK</button>
+            <span id="ggpk-refresh-status" class="tsv-gen-status"></span>
+          </div>
+          <div id="tsv-gen-log" class="tsv-gen-log" style="display:none"></div>
+          <div class="tsv-toolbar">
+            <select id="tsv-file-select" onchange="onTsvFileSelected(this.value)">
+              <option value="">— Select a TSV file —</option>
+            </select>
+            <input id="tsv-search" type="text" placeholder="Filter rows…" oninput="filterTsvRows(this.value)" disabled>
+            <div id="tsv-pager" class="tsv-pager" style="display:none">
+              <button class="tsv-pg-btn" onclick="tsvPageNav(-1)" id="tsv-prev" data-tip="Previous page">◀</button>
+              <span id="tsv-page-info" class="tsv-page-info"></span>
+              <button class="tsv-pg-btn" onclick="tsvPageNav(1)" id="tsv-next" data-tip="Next page">▶</button>
+            </div>
+            <span id="tsv-info" class="tsv-info"></span>
+          </div>
+          <div id="tsv-table-wrap" class="tsv-table-wrap">
+            <div class="no-data-msg">Select a TSV file above to view its contents.</div>
+          </div>
+        </div><!-- /cfg-subpanel data -->
 
       </div>
     </div>
@@ -6748,7 +6752,6 @@
       gamestate: 're',
       memdiff:   're',
       dissect:   're',
-      tsvs:      'data',
       config:    'config',
       hotkeys:   'hotkeys',
     };
@@ -6770,6 +6773,10 @@
       document.querySelectorAll('.cfg-subpanel').forEach(p =>
         p.classList.toggle('active', p.dataset.cfgtab === name));
       scheduleMarkerUpdate();
+      // Data sub-tab: lazy-load the TSV file list the first time it's shown
+      // (was a switchTab side-effect back when Data was its own top-level tab).
+      if (name === 'data' && !_tsvFilesLoaded)
+        ahkCall('ListTsvFiles');
       // Tell AHK so the choice survives a restart. Bridge is a no-op if
       // the handler doesn't exist yet (graceful degradation during dev).
       try { ahkCall('SetConfigSubTab', name); } catch (e) {}
@@ -6780,7 +6787,6 @@
     const lastTabPerCategory = {
       game:    'entities',
       re:      'ui',
-      data:    'tsvs',
       config:  'config',
       hotkeys: 'hotkeys',
     };
@@ -7122,8 +7128,6 @@
         ahkCall('UiBrowserClearHighlight');
       if (treeTabs.has(key))
         ahkCall('SwitchTab', key.charAt(0).toUpperCase() + key.slice(1));
-      if (key === 'tsvs' && !_tsvFilesLoaded)
-        ahkCall('ListTsvFiles');
       if (key === 'ui')
         ahkCall('UiBrowseRoot');
       if (key === 'inventory')
@@ -12152,7 +12156,7 @@
       // the new file size + mtime show up.
       if (r.ok) {
         _tsvFilesLoaded = false;
-        if (activeTab === 'tsvs') ahkCall('ListTsvFiles');
+        if (activeTab === 'config' && activeConfigSubTab === 'data') ahkCall('ListTsvFiles');
       }
     }
 
