@@ -540,7 +540,8 @@ class PoE2Offsets
         "Flags", 0x180,  ; uint — bit 10 = SHOULD_MODIFY_POS, bit 11 = IS_VISIBLE
         "ScaleIndex", 0x18A,  ; byte — 1/2/3 for GameWindowScale lookup
         "BackgroundColor", 0x25C,  ; float4 RGBA — .W (alpha, +12) is used for chat-active check
-        "UnscaledSize", 0x288   ; StdTuple2D<float> — element size in UI coords
+        "UnscaledSize", 0x288,   ; StdTuple2D<float> — element size in UI coords
+        "ItemPtr", 0x4F8   ; ptr → the inventory/stash ITEM entity held by an item-slot UiElement (0 for non-slot elements). From coussiraty/CoreExile2 GameHelper/Sdk/InventoryAdapters.cs (ItemPointerOffset); their Self/Children/Flags offsets match ours exactly, so this should too. NEEDS in-game verification.
     )
 
     ; Skill-bar slot element. The per-slot icon container under skills_bar holds a

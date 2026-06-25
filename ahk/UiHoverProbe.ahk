@@ -68,6 +68,30 @@ UiHoverProbeRun()
     }
 
     leaf := path.Length ? path[path.Length] : 0
+
+    ; Item-pointer bridge: an item-slot UiElement holds a pointer to the item ENTITY at
+    ; +0x4F8 (UiElementBase.ItemPtr — from coussiraty/CoreExile2 InventoryAdapters.cs).
+    ; Try it on every chain element (leaf -> root, the slot may be an ancestor of the leaf)
+    ; and report the first that resolves to a real "Metadata/Items/..." entity — that is
+    ; the deterministic descent -> item-data link we want for the hover readout.
+    rpt .= nl "--- ITEM POINTER (+0x4F8) per chain element (leaf -> root) ---" nl
+    foundItem := ""
+    idx := path.Length
+    while (idx >= 1)
+    {
+        itemLine := _UiHoverItemAt(reader, path[idx])
+        if (itemLine != "")
+        {
+            rpt .= "  [" (idx - 1) "] " itemLine nl
+            if (foundItem = "")
+                foundItem := itemLine
+        }
+        idx -= 1
+    }
+    if (foundItem = "")
+        rpt .= "  (no chain element holds a Metadata/Items pointer at +0x4F8 — the offset"
+            . " may differ this build, or the hovered element isn't an item slot)" nl
+
     path_log := A_ScriptDir "\logs\InGameStateMonitor.uihover_probe.log"
     writeMsg := "written"
     try
@@ -88,6 +112,8 @@ UiHoverProbeRun()
     if (leaf)
     {
         summary .= "Hovered (leaf) element:" nl "  " _UiHoverChainLine(reader, leaf) nl nl
+        summary .= (foundItem != "" ? ("Resolved item (+0x4F8):" nl "  " foundItem nl nl)
+            : ("No item at +0x4F8 on the chain (see log)." nl nl))
         if (path.Length > 1)
         {
             summary .= "Descent chain (" path.Length " levels):" nl
@@ -98,6 +124,31 @@ UiHoverProbeRun()
     else
         summary .= "No element under the cursor — see the log for details." nl
     try MsgBox(summary, "UIHover Probe — result", "Iconi")
+}
+
+; Tries to resolve an inventory/stash item from a UI item-slot element: reads the item-
+; entity pointer at <addr>+UiElementBase.ItemPtr (0x4F8) and, if it points at a real
+; "Metadata/Items/..." entity, returns a short "itemPtr / rarity / path" line. Returns ""
+; when the element holds no item (the normal case for non-slot elements). Params: reader, addr.
+_UiHoverItemAt(reader, addr)
+{
+    itemPtr := 0
+    try itemPtr := reader.Mem.ReadPtr(addr + PoE2Offsets.UiElementBase["ItemPtr"])
+    if !(itemPtr && reader.IsProbablyValidPointer(itemPtr))
+        return ""
+    detPtr := 0
+    try detPtr := reader.Mem.ReadPtr(itemPtr + PoE2Offsets.Entity["EntityDetailsPtr"])
+    if !(detPtr && reader.IsProbablyValidPointer(detPtr))
+        return ""
+    path := ""
+    try path := reader.ReadStdWStringAt(detPtr + PoE2Offsets.EntityDetails["Path"])
+    if (SubStr(path, 1, 14) != "Metadata/Items")
+        return ""
+    rarId := -1
+    try rarId := reader.ReadItemRarity(itemPtr)
+    rar := ""
+    try rar := reader.RarityNameFromId(rarId)
+    return "itemPtr=0x" Format("{:X}", itemPtr) "  rarity=" (rar != "" ? rar : rarId) "  path=" path
 }
 
 ; Formats one descent-chain element line (full UiTree read for stringId/text/size + the
