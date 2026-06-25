@@ -1901,6 +1901,13 @@
     .inv-tooltip .inv-tt-mod.cat-explicit { color: #c8d8ff }
 
     /* BUFFS */
+    /* Skills & Buffs tab: padded wrapper for the blacklist config section
+       (moved here from the retired Config > Filters sub-tab) so it lines up
+       with the 12px inset of the buff/skill lists below it. */
+    .skills-cfg {
+      padding: 12px 12px 0
+    }
+
     #tab-buffs-content {
       padding: 12px
     }
@@ -4492,15 +4499,16 @@
 
     <!-- CONFIG — sub-tabs, mirrors the Game/RE category structure.
          General      — status + overview + master toggles + actions
-         Automation   — Auto-Flask + AutoPilot + Range Circles + Opacity
-         Overlay      — Radar visualisation toggles + entity-type filters
+         Automation   — Stash Mover + AutoPilot
+         Overlay      — Radar + Range Circles + Loot Value Radar
+         Vitals       — Vitals bars editor
          GGPK         — Maphack source + apply/revert + shader colors
-         Filters      — Entity filters + Skill/Buff blacklist
-         Debug        — Diagnostic / RE-style live panels moved here from the
-                        old RE > Panel Diff tab (which is now retired —
-                        its content is purely diagnostic config). -->
+         Debug        — Diagnostic / RE-style live panels (incl. the retired
+                        RE > Panel Diff content + the General diagnostics)
+         Data         — TSV dictionary maintenance + browser (was its own
+                        top-level Data category). -->
     <div class="subtab-row" data-cat="config">
-      <!-- The 6 buttons all map to the same top-level `config` tab-panel
+      <!-- The buttons all map to the same top-level `config` tab-panel
            and just toggle which inner .cfg-subpanel is visible — hence
            switchConfigSubTab() instead of switchTab(). This keeps the
            existing category machinery (tabCategory, lastTabPerCategory,
@@ -4523,9 +4531,6 @@
           <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
           <polyline points="3.3 7 12 12 20.7 7" /><line x1="12" y1="22" x2="12" y2="12" />
         </svg><span class="nav-label">GGPK</span></div>
-      <div class="tab" data-cfgtab="filters"    onclick="switchConfigSubTab('filters')"><svg viewBox="0 0 24 24">
-          <polygon points="22 3 2 3 10 12.5 10 19 14 21 14 12.5" />
-        </svg><span class="nav-label">Filters</span></div>
       <div class="tab" data-cfgtab="debug"      onclick="switchConfigSubTab('debug')"><svg viewBox="0 0 24 24">
           <rect x="8" y="6" width="8" height="12" rx="4" /><line x1="12" y1="6" x2="12" y2="3" />
           <line x1="3" y1="9" x2="8" y2="11" /><line x1="3" y1="15" x2="8" y2="14" />
@@ -4793,6 +4798,31 @@
 
     <!-- SKILLS & BUFFS TAB (merged) -->
     <div class="tab-panel" id="panel-skills">
+      <!-- Skills & Buffs blacklist (moved here from the retired Config >
+           Filters sub-tab — the filter only ever affected this tab). The
+           cfg-blacklist id + bridge calls are unchanged, so the ➕/✕
+           add/remove flow and header rendering still work. -->
+      <div class="skills-cfg">
+        <div class="cfg-section">
+          <details id="det-blacklist" ontoggle="syncCfgSections()">
+            <summary>
+              <div class="cfg-header">Skills &amp; Buffs Blacklist</div>
+            </summary>
+            <div class="cfg-subsection">
+              <div class="cfg-help">
+                Skill / buff IDs added here are suppressed from the Skills &amp; Buffs tree
+                and from the overlay's status text — useful for hiding constant-up
+                clutter like aura icons, infinite-duration debuffs, or self-applied
+                cosmetic effects. Add an entry via the ➕ button next to a buff on the
+                Skills tab; remove with the ✕ button next to its name below.
+              </div>
+              <div id="cfg-blacklist">
+                <div class="no-data-msg">No blacklisted items</div>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
       <div id="tab-buffs-content">
         <div class="buff-empty">Waiting for data…</div>
       </div>
@@ -5714,33 +5744,9 @@
 
         </div><!-- /cfg-subpanel ggpk -->
 
-        <!-- ════════════════════════════════════════════════════════════
-             FILTERS — entity-type filters (which entity classes the
-             trees / radar consider at all) and skill/buff blacklist.
-             ════════════════════════════════════════════════════════════ -->
-        <div class="cfg-subpanel" data-cfgtab="filters">
-
-        <div class="cfg-section">
-          <details id="det-blacklist" ontoggle="syncCfgSections()">
-            <summary>
-              <div class="cfg-header">Skills &amp; Buffs Blacklist</div>
-            </summary>
-            <div class="cfg-subsection">
-              <div class="cfg-help">
-                Skill / buff IDs added here are suppressed from the Skills &amp; Buffs tree
-                and from the overlay's status text — useful for hiding constant-up
-                clutter like aura icons, infinite-duration debuffs, or self-applied
-                cosmetic effects. Add an entry via the ➕ button next to a buff on the
-                Skills tab; remove with the ✕ button next to its name below.
-              </div>
-              <div id="cfg-blacklist">
-                <div class="no-data-msg">No blacklisted items</div>
-              </div>
-            </div>
-          </details>
-        </div>
-
-        </div><!-- /cfg-subpanel filters -->
+        <!-- FILTERS sub-tab retired — its only content (the Skills & Buffs
+             blacklist) moved into the Game > Skills & Buffs tab, since the
+             filter only ever affected that tab. -->
 
         <!-- ════════════════════════════════════════════════════════════
              DEBUG — diagnostic / RE-style live panels. Content moved
@@ -6778,8 +6784,8 @@
       config:    'config',
       hotkeys:   'hotkeys',
     };
-    // The Config tab is one top-level panel split into 6 inner sub-panels
-    // (general/automation/overlay/ggpk/filters/debug); switchConfigSubTab
+    // The Config tab is one top-level panel split into inner sub-panels
+    // (general/automation/overlay/vitals/ggpk/debug/data); switchConfigSubTab
     // toggles which inner div carries .active. The currently-active sub-
     // tab is held here so navigating away to e.g. Game and back to Config
     // returns to the same sub-tab. Persisted via AHK on every change.
