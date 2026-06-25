@@ -4495,7 +4495,7 @@
     </div>
 
     <!-- CONFIG — sub-tabs, mirrors the Game/RE category structure.
-         General      — status + integrations + actions
+         General      — status + integrations
          Automation   — Stash Mover + AutoPilot
          Overlay      — Map Hack + Radar + Range Circles + Loot Value Radar
          Vitals       — Vitals bars editor
@@ -4890,7 +4890,7 @@
       <div class="cfg-scroll">
 
         <!-- ════════════════════════════════════════════════════════════
-             GENERAL — status, integrations, action buttons
+             GENERAL — status, integrations
              ════════════════════════════════════════════════════════════ -->
         <div class="cfg-subpanel active" data-cfgtab="general">
 
@@ -4924,20 +4924,6 @@
                     class="toggle-slider"></span></label>
               </div>
               <div class="cfg-help">Exposes a small HTTP API on <code>127.0.0.1:<span id="localapi-port">7777</span></code> so the bundled MCP server (<code>mcp-server/</code>) can let an AI assistant read live game state and change settings. Loopback only; off by default — restart the app after enabling.</div>
-            </div>
-          </details>
-        </div>
-
-        <!-- Actions section — moved from the bottom of the old Config
-             tab to live inside General so the panel order matches the
-             sub-tab order. -->
-        <div class="cfg-section">
-          <details id="det-actions" open ontoggle="syncCfgSections()">
-            <summary>
-              <div class="cfg-header">Actions</div>
-            </summary>
-            <div class="cfg-subsection">
-              <button class="cfg-btn" onclick="ahkCall('WatchNpc')">👁 Add NPC Watch</button>
             </div>
           </details>
         </div>
@@ -11349,7 +11335,7 @@
     // ═══════════════════════════════════════════════════════════════════
     //  CONFIG HELPERS
     // ═══════════════════════════════════════════════════════════════════
-    const _cfgSectionIds = ['status', 'integrations', 'autoflask', 'autopilot', 'stashmover', 'rangecircles', 'radar', 'lootvalue', 'maphack', 'blacklist', 'actions', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
+    const _cfgSectionIds = ['status', 'integrations', 'autoflask', 'autopilot', 'stashmover', 'rangecircles', 'radar', 'lootvalue', 'maphack', 'blacklist', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
     let _cfgSectionsGuard = 0;
     let _cfgSectionsLoaded = false;
 
