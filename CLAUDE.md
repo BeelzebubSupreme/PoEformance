@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.71`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.72`.
 
 ## Language
 
@@ -631,8 +631,11 @@ leaf). Solved with a **deterministic UI tree-descent** + the item-slot's own ite
   like the rest of the value layer. Self-persists `[UiHoverPrice]` (`enabled`, `minEx`).
   Bridge `SetUiHoverPrice`; header `uiHoverPrice`; UI section Config → Overlay (`det-uihoverprice`,
   below the Loot Value Radar). Default OFF.
-- **Pending in-game verification:** badge placement/scale on big stash vs small inventory cells;
-  divine/exalted orb selection; behaviour while the game's own item tooltip is open.
+- **Verified in-game (2026-06-25):** hovering a priced item (currency / unique / waystone /
+  fragment) in the inventory or a stash tab shows the orb + value badge on its slot; the
+  descent + +0x4F8 resolve and the value layer round-trip work end-to-end. Remaining tuning
+  notes (optional): badge placement/scale on very large stash vs tiny inventory cells, and
+  overlap with the game's own item tooltip.
 
 ## Reference
 
