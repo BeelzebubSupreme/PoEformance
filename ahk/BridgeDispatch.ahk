@@ -799,6 +799,9 @@ _DispatchBridgeCall(method, args)
         case "TargetedByPlayerProbeRun":
             ; TEMP post-patch diagnostic: IsTargetedByPlayer hover diff.
             SetTimer(() => TargetedByPlayerProbeRun(), -1)
+        case "UiHoverProbeRun":
+            ; RE diagnostic: find the UIHover pointer (hovered UI/inventory element).
+            SetTimer(() => UiHoverProbeRun(), -1)
         case "SkillProbeRun":
             ; TEMP post-patch diagnostic: trace the skill-name DAT chain.
             SetTimer(() => SkillProbeRun(), -1)
