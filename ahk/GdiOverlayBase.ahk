@@ -4,9 +4,9 @@
 ; (pens / brushes / fonts) and basic draw / blit / show / hide plumbing. Subclasses add
 ; their own state + render logic and call _EnsureShown()/_Blit() once per frame.
 ;
-; NOTE: RadarOverlay and PlayerHUD predate this base and remain standalone for now;
+; NOTE: RadarOverlay and VitalsOverlay predate this base and remain standalone for now;
 ; migrating them onto GdiOverlayBase is a separate, in-game-testable step. New overlays
-; (e.g. NotificationOverlay) should extend this class. Member naming mirrors PlayerHUD
+; (e.g. NotificationOverlay) should extend this class. Member naming mirrors VitalsOverlay
 ; (memDC / hwnd / bufW / bufH) as the canonical contract.
 ; Included by InGameStateMonitor.ahk (before any subclass).
 

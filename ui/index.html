@@ -5704,7 +5704,7 @@
               <div class="cfg-subsection">
                 <div class="cfg-row"><span class="cfg-label">Show vitals</span>
                   <label class="toggle"><input type="checkbox" id="tog-vitals"
-                      onchange="ahkCall('TogglePlayerHud')"><span class="toggle-slider"></span></label>
+                      onchange="ahkCall('ToggleVitals')"><span class="toggle-slider"></span></label>
                 </div>
                 <div class="cfg-help">Each bar has its own <b>Visibility state</b> rules (in its
                   section below): a priority list of show/hide rules for In&nbsp;Combat /
@@ -9457,7 +9457,7 @@
       setChk('tog-afperf', d.afPerf);
       setChk('tog-npcsync', d.npcSync);
       setChk('tog-radar', d.radarEnabled !== undefined ? d.radarEnabled : true);
-      setChk('tog-vitals', d.playerHud !== undefined ? d.playerHud : true);
+      setChk('tog-vitals', d.vitalsEnabled !== undefined ? d.vitalsEnabled : true);
       if (d.vitals) vitalsSyncFromHeader(d.vitals);
       setChk('tog-overlay-status', d.overlayStatusText !== undefined ? d.overlayStatusText : true);
       setChk('tog-localapi', d.localApi !== undefined ? d.localApi : false);

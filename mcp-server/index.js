@@ -175,7 +175,7 @@ server.tool(
 
 server.tool(
   "update_config",
-  "Update settings. Pass any subset. Booleans: radarEnabled, playerHud, mapHack, zoneNav, rangeCircles, autoFlask, autoPilot, debug, paused, overlayStatusText, panelDetection. Numbers: lifeThreshold (0-100), manaThreshold (0-100), radarAlpha (0-255).",
+  "Update settings. Pass any subset. Booleans: radarEnabled, vitalsEnabled, mapHack, zoneNav, rangeCircles, autoFlask, autoPilot, debug, paused, overlayStatusText. Numbers: lifeThreshold (0-100), manaThreshold (0-100), radarAlpha (0-255).",
   { settings: z.record(z.any()).describe("Key-value pairs to change, e.g. {radarEnabled: true, lifeThreshold: 60}") },
   async ({ settings }) => jsonText(await api("/api/config", "POST", settings))
 );

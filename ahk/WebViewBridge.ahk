@@ -40,7 +40,7 @@ PushHeaderToWebView()
     global g_radarShowEnemyNormal, g_radarShowEnemyRare, g_radarShowEnemyBoss
     global g_radarShowMinions, g_radarShowNpcs, g_radarShowChests
     global g_autoFlaskLastReason, g_flaskKeyBySlot, g_reader, g_radarEnabled, g_webGui
-    global g_playerHudEnabled, g_atlasOverlayEnabled
+    global g_vitalsEnabled, g_atlasOverlayEnabled
     global POEFORMANCE_VERSION
     global g_entityShowPlayer, g_entityShowMinion, g_entityShowEnemy
     global g_entityShowNPC, g_entityShowChest, g_entityShowWorldItem, g_entityShowOther
@@ -84,7 +84,7 @@ PushHeaderToWebView()
         . '"appVersion":' _JsStr(POEFORMANCE_VERSION) ","
         . '"gameVersion":' _JsStr(gameVer) ","
         . '"radarEnabled":' (g_radarEnabled ? "true" : "false") ","
-        . '"playerHud":' (g_playerHudEnabled ? "true" : "false") ","
+        . '"vitalsEnabled":' (g_vitalsEnabled ? "true" : "false") ","
         . '"radarAlpha":' g_radarAlpha ","
         . '"isMaximized":' isMaximized ","
         . '"alwaysOnTop":' (g_alwaysOnTop ? "true" : "false") ","

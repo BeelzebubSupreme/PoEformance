@@ -20,8 +20,8 @@ _DispatchBridgeCall(method, args)
             ; No-op: NavigationCompleted already handles initial push
         case "ToggleRadar":
             SetTimer(ToggleRadar, -1)
-        case "TogglePlayerHud":
-            SetTimer(TogglePlayerHud, -1)
+        case "ToggleVitals":
+            SetTimer(ToggleVitals, -1)
         case "ToggleOverlayPoeOnly":
             SetTimer(ToggleOverlayPoeOnly, -1)
         case "ToggleDebug":

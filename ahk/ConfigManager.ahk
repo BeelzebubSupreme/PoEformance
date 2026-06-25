@@ -36,7 +36,7 @@ SaveConfig()
 {
     global g_debugMode, g_autoFlaskEnabled, g_autoFlaskPerformanceMode
     global g_lifeThresholdPercent, g_manaThresholdPercent, g_radarEnabled, g_radarAlpha
-    global g_playerHudEnabled
+    global g_vitalsEnabled
     global g_updatesPaused, g_npcWatchAutoSync
     global g_radarShowEnemyNormal, g_radarShowEnemyRare, g_radarShowEnemyBoss
     global g_radarShowMinions, g_radarShowNpcs, g_radarShowChests
@@ -62,7 +62,7 @@ SaveConfig()
     IniWrite(g_autoFlaskEnabled      ? "1" : "0",  f, "AutoFlask",     "enabled")
     IniWrite(g_autoFlaskPerformanceMode ? "1":"0", f, "AutoFlask",     "performanceMode")
     IniWrite(g_radarEnabled          ? "1" : "0",  f, "Radar",         "enabled")
-    IniWrite(g_playerHudEnabled     ? "1" : "0",  f, "Radar",         "playerHud")
+    IniWrite(g_vitalsEnabled     ? "1" : "0",  f, "Radar",         "vitalsEnabled")
     IniWrite(g_radarAlpha,                         f, "Radar",         "alpha")
     IniWrite(g_radarShowEnemyNormal  ? "1" : "0",  f, "Radar",         "showNormal")
     IniWrite(g_radarShowEnemyRare    ? "1" : "0",  f, "Radar",         "showRare")
@@ -125,7 +125,7 @@ LoadConfig()
 {
     global g_debugMode, g_autoFlaskEnabled, g_autoFlaskPerformanceMode
     global g_lifeThresholdPercent, g_manaThresholdPercent, g_radarEnabled, g_radarAlpha
-    global g_playerHudEnabled
+    global g_vitalsEnabled
     global g_updatesPaused, g_npcWatchAutoSync
     global g_radarShowEnemyNormal, g_radarShowEnemyRare, g_radarShowEnemyBoss
     global g_radarShowMinions, g_radarShowNpcs, g_radarShowChests
@@ -158,7 +158,9 @@ LoadConfig()
     g_autoFlaskEnabled         := _B("AutoFlask",     "enabled",         false)
     g_autoFlaskPerformanceMode := _B("AutoFlask",     "performanceMode", false)
     g_radarEnabled             := _B("Radar",         "enabled",         true)
-    g_playerHudEnabled         := _B("Radar",         "playerHud",       true)
+    ; Migration: prefer the new "vitalsEnabled" key; fall back to the legacy
+    ; "playerHud" key so an existing install keeps its setting on first run.
+    g_vitalsEnabled         := _B("Radar",         "vitalsEnabled",   _B("Radar", "playerHud", true))
     g_radarAlpha               := Max(0, Min(255, Integer(_Ini("Radar", "alpha", 255))))
     g_radarShowEnemyNormal     := _B("Radar",         "showNormal",      true)
     g_radarShowEnemyRare       := _B("Radar",         "showRare",        true)

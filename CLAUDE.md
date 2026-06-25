@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.58`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.59`.
 
 ## Language
 
@@ -152,7 +152,7 @@ Alerts → `alerts.ini [Alerts]`.
   junk filter is ALSO applied there at the awake-sample build. Default ON, all categories on.
 - **GdiOverlayBase.ahk** — reusable transparent, click-through, always-on-top GDI layer
   (cached pens/brushes/fonts, double-buffered blit). Used only by NotificationOverlay so far;
-  PlayerHUD / RadarOverlay are NOT yet migrated to it.
+  VitalsOverlay / RadarOverlay are NOT yet migrated to it.
 - **NotificationOverlay.ahk** — `extends GdiOverlayBase`; map-independent banner layer.
   `SetBanner(text, ms, colorBGR)`; `Tick()` self-resolves the PoE window, foreground-gated,
   hides when idle.
@@ -482,7 +482,7 @@ rectangle from the UI tree.
 
 - Verify real alert matches; banner position/size; WAV playback; `FlashWindowEx` struct; the
   `currentAreaHash` zone-change signal; group colors on radar dots.
-- Optional deferred refactor: migrate **PlayerHUD**, then **RadarOverlay**, onto `GdiOverlayBase`.
+- Optional deferred refactor: migrate **VitalsOverlay**, then **RadarOverlay**, onto `GdiOverlayBase`.
 
 ## Value-aware loot radar (WIP) — `ahk/LootRadarValue.ahk`
 

@@ -4,7 +4,7 @@
 
 **A modern AutoHotkey v2 toolset for *Path of Exile 2* — overlays, automation, reverse-engineering workbench, and GGPK-level map reveal in one place.**
 
-![Version](https://img.shields.io/badge/version-v0.45.13.58-blue)
+![Version](https://img.shields.io/badge/version-v0.45.13.59-blue)
 ![Build](https://img.shields.io/badge/build-stable-green)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Language](https://img.shields.io/badge/language-AutoHotkey%20v2-orange)
@@ -479,7 +479,7 @@ InGameStateMonitor.ahk          ─ main entry / WebView host (the only .ahk in 
 │   ├── PlayOverlayPolicy.ahk   ─ single play-overlay visibility gate
 │   ├── GdiOverlayBase.ahk      ─ reusable transparent, click-through GDI layer
 │   ├── RadarOverlay.ahk        ─ GDI overlay + zone reveal + A* drawing
-│   ├── VitalsOverlay.ahk       ─ configurable Life/Mana/ES bars (replaces PlayerHUD)
+│   ├── VitalsOverlay.ahk       ─ configurable Life/Mana/ES bars (replaces the old fixed HUD)
 │   ├── NotificationOverlay.ahk ─ map-independent banner layer
 │   └── Lib/TerrainPathfinder.ahk ─ A* with adaptive step sizing
 │

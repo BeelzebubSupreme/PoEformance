@@ -49,7 +49,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.58"
+POEFORMANCE_VERSION := "0.45.13.59"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -116,8 +116,7 @@ g_overlayPoeOnly := false   ; restrict play overlays to the PoE2 window only (hi
 g_cfgOpenSections := "status,overview,toggles,autoflask,radar,entities,actions,al-conditions,al-timing,al-output"  ; comma-separated open detail sections
 g_overlayManager := 0   ; OverlayManager — owns all overlays; built in LoadOverlaySystem()
 g_radarOverlay := 0   ; reference to the manager-owned RadarOverlay (set in LoadOverlaySystem)
-g_playerHudEnabled := true   ; master toggle for the vitals overlay (formerly the player HUD)
-g_playerHud := 0   ; legacy alias -> the manager-owned VitalsOverlay (set in LoadOverlaySystem)
+g_vitalsEnabled := true   ; master toggle for the vitals overlay
 g_vitalsOverlay := 0   ; reference to the manager-owned VitalsOverlay (set in LoadOverlaySystem)
 g_vitalsBars := 0      ; Map(barId -> config Map); seeded by LoadVitalsConfig()
 g_vitalsEditMode := false   ; drag-to-place layout edit mode for the vitals bars
