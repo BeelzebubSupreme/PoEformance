@@ -4410,7 +4410,7 @@
           <line x1="14" y1="10" x2="14" y2="10.5" />
           <line x1="18" y1="10" x2="18" y2="10.5" />
           <line x1="8" y1="14" x2="16" y2="14" />
-        </svg><span class="nav-label">Hotkeys</span></div>
+        </svg><span class="nav-label">Macro Engine</span></div>
     </div>
     <div id="cat-bar-right">
       <div class="cat" data-cat="config" onclick="switchCategory('config')"><svg viewBox="0 0 24 24">
@@ -4500,9 +4500,8 @@
     <!-- CONFIG — sub-tabs, mirrors the Game/RE category structure.
          General      — status + overview + master toggles + actions
          Automation   — Stash Mover + AutoPilot
-         Overlay      — Radar + Range Circles + Loot Value Radar
+         Overlay      — Map Hack + Radar + Range Circles + Loot Value Radar
          Vitals       — Vitals bars editor
-         GGPK         — Maphack source + apply/revert + shader colors
          Debug        — Diagnostic / RE-style live panels (incl. the retired
                         RE > Panel Diff content + the General diagnostics)
          Data         — TSV dictionary maintenance + browser (was its own
@@ -4527,10 +4526,6 @@
       <div class="tab" data-cfgtab="vitals"     onclick="switchConfigSubTab('vitals')"><svg viewBox="0 0 24 24">
           <path d="M20.8 6.6a5 5 0 0 0-8.8-3 5 5 0 0 0-8.8 3c0 4.5 8.8 10 8.8 10s8.8-5.5 8.8-10z" />
         </svg><span class="nav-label">Vitals</span></div>
-      <div class="tab" data-cfgtab="ggpk"       onclick="switchConfigSubTab('ggpk')"><svg viewBox="0 0 24 24">
-          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-          <polyline points="3.3 7 12 12 20.7 7" /><line x1="12" y1="22" x2="12" y2="12" />
-        </svg><span class="nav-label">GGPK</span></div>
       <div class="tab" data-cfgtab="debug"      onclick="switchConfigSubTab('debug')"><svg viewBox="0 0 24 24">
           <rect x="8" y="6" width="8" height="12" rx="4" /><line x1="12" y1="6" x2="12" y2="3" />
           <line x1="3" y1="9" x2="8" y2="11" /><line x1="3" y1="15" x2="8" y2="14" />
@@ -4547,7 +4542,7 @@
 
     <!-- HOTKEYS — single page, sub-tab row hidden via CSS. -->
     <div class="subtab-row single-tab" data-cat="hotkeys">
-      <div class="tab" data-tab="hotkeys" onclick="switchTab('hotkeys')">Custom Hotkeys</div>
+      <div class="tab" data-tab="hotkeys" onclick="switchTab('hotkeys')">Macro Engine</div>
       <div class="bar-marker tab-marker"></div>
     </div>
 
@@ -5337,6 +5332,117 @@
              ════════════════════════════════════════════════════════════ -->
         <div class="cfg-subpanel" data-cfgtab="overlay">
 
+        <!-- Map Hack — minimap reveal. Moved here from the retired GGPK
+             sub-tab: it's a map visualisation, so it belongs with the other
+             overlay features (and users never found it under "GGPK"). The
+             Memory/GGPK source picker + apply/revert stay inside as the
+             advanced backend choice. -->
+        <div class="cfg-section">
+          <details id="det-maphack" open ontoggle="syncCfgSections()">
+            <summary>
+              <div class="cfg-header">Map Hack</div>
+            </summary>
+            <div class="cfg-subsection">
+              <!-- Layout order requested by user:
+                     1) Enable + Source
+                     2) Status / info area (path entry hint, success/fail messages)
+                     3) Outline + Background color swatches, side-by-side
+                     4) Apply / Revert buttons at the bottom
+                   The color swatches + Apply/Revert all remain hidden
+                   when maphack source is "memory" — same visibility
+                   rule as before; switchConfigSubTab() leaves them be. -->
+              <div class="cfg-row"><span class="cfg-label">Map Hack</span>
+                <label class="toggle"><input type="checkbox" id="tog-maphack" onchange="ahkCall('ToggleMapHack')"
+                    checked><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Reveals the entire minimap. Two implementations — pick whichever fits your workflow.</div>
+
+              <div class="cfg-row"><span class="cfg-label">Walkable Grid (debug)</span>
+                <label class="toggle"><input type="checkbox" id="tog-walkgrid" onchange="ahkCall('ToggleWalkGrid')"
+                    ><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Diagnostic: shades every walkable cell of the memory terrain grid on the large map (blue, 50% stippled so the map shows through). Use it to compare the grid the bot pathfinds on against what the game actually allows — mismatches explain a stuck AutoPilot. Large map only.</div>
+
+              <div class="cfg-row"><span class="cfg-label">Mask Outlines (debug)</span>
+                <label class="toggle"><input type="checkbox" id="tog-maskdebug" onchange="ahkCall('ToggleMaskDebug')"
+                    ><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Diagnostic: draws red rectangles where the large-map overlay is clipped away from the game HUD (orbs, skill/flask/XP bars, area & quest panel). Shows the current mask boundaries so you can see exactly what's hidden while tuning them. Large map only.</div>
+
+              <!-- Source picker. "Memory" = legacy on-the-fly overlay,
+                   "GGPK" = persistent shader patch (apply/revert below). -->
+              <div class="cfg-row cfg-sub-row" id="row-maphack-source" style="padding-left:18px">
+                <span class="cfg-label" style="color:var(--subtext)">↳ Source</span>
+                <div style="display:flex;gap:8px;font-size:12px">
+                  <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer">
+                    <input type="radio" name="maphack-source" value="memory"
+                      onchange="ahkCall('SetMaphackSource','memory')" checked>
+                    Memory (overlay)
+                  </label>
+                  <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer">
+                    <input type="radio" name="maphack-source" value="ggpk"
+                      onchange="ahkCall('SetMaphackSource','ggpk')">
+                    GGPK (shader patch)
+                  </label>
+                </div>
+              </div>
+
+              <!-- ── GGPK status / info area ──────────────────────────
+                   Path entry hint (when install location unknown) and
+                   the last-action status line (e.g. "Patch applied",
+                   "Backup restored", "PoE2 still running — close first").
+                   All hidden until source=ggpk. -->
+              <div id="row-maphack-status" style="display:none;padding:6px 8px 0 18px">
+                <div id="ggpk-path-entry" style="display:none;font-size:11px;color:var(--subtext)">
+                  <div style="margin-bottom:6px;line-height:1.4">
+                    The helper hasn't recorded your PoE2 install path yet. Either start PoE2 once
+                    and click <em>Refresh all TSVs from local GGPK</em> in the Data tab, or enter
+                    the path to <code>Bundles2\_.index.bin</code> manually below.
+                  </div>
+                  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+                    <input type="text" id="ggpk-path-input" placeholder="C:\Path of Exile 2\Bundles2\_.index.bin"
+                      style="flex:1;min-width:280px;padding:4px 8px;font-family:monospace;font-size:11px"
+                      onkeydown="if (event.key === 'Enter') document.getElementById('ggpk-path-save').click()">
+                    <button class="cfg-btn" id="ggpk-path-save" onclick="ggpkSavePathManually()">Save Path</button>
+                  </div>
+                </div>
+                <div id="ggpk-maphack-status" style="color:var(--subtext);font-size:11px;min-height:14px"></div>
+              </div>
+
+              <!-- ── Colors row (Outline + Background side-by-side) ─── -->
+              <div id="row-maphack-colors" class="cfg-sub-row"
+                   style="display:none;padding:6px 8px 6px 18px;gap:18px;align-items:flex-start;flex-wrap:wrap">
+                <div data-tip="Color for walkable-area outlines / wall edges drawn by the GGPK maphack. Takes effect on next Apply.">
+                  <div style="color:var(--subtext);font-size:11px;margin-bottom:4px">↳ Outline</div>
+                  <div style="display:flex;gap:8px;align-items:center">
+                    <span id="cp-swatch-outline" class="cp-swatch"
+                          onclick="openColorPicker('outline')"></span>
+                    <span id="cp-hex-outline" style="font-family:monospace;font-size:11px;color:var(--subtext)">—</span>
+                  </div>
+                </div>
+                <div data-tip="Fill color for revealed-but-unexplored areas. Low alpha = subtle tint, high alpha = obvious overlay. Takes effect on next Apply.">
+                  <div style="color:var(--subtext);font-size:11px;margin-bottom:4px">↳ Background</div>
+                  <div style="display:flex;gap:8px;align-items:center">
+                    <span id="cp-swatch-background" class="cp-swatch"
+                          onclick="openColorPicker('background')"></span>
+                    <span id="cp-hex-background" style="font-family:monospace;font-size:11px;color:var(--subtext)">—</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- ── Apply / Revert buttons, last so the action lives at
+                   the bottom of the flow (Source → tweak → commit). ─── -->
+              <div id="row-maphack-actions" class="cfg-sub-row"
+                   style="display:none;padding:6px 8px 0 18px;gap:8px;align-items:center;flex-wrap:wrap">
+                <button class="cfg-btn" id="ggpk-maphack-apply" onclick="ggpkMaphackRun('apply')"
+                  style="display:none">Apply</button>
+                <button class="cfg-btn" id="ggpk-maphack-revert" onclick="ggpkMaphackRun('revert')"
+                  style="display:none">Revert</button>
+              </div>
+            </div>
+          </details>
+        </div>
+
         <div class="cfg-section">
           <details id="det-radar" open ontoggle="syncCfgSections(); if(this.open) requestAnimationFrame(_sbInitAll)">
             <summary>
@@ -5618,131 +5724,11 @@
 
         </div><!-- /cfg-subpanel vitals -->
 
-        <!-- ════════════════════════════════════════════════════════════
-             GGPK — bundle/shader modifications. Currently just Map Hack
-             (with source picker + apply/revert + custom shader colors);
-             reserved as its own sub-tab so future GGPK tweaks have a
-             natural home.
-             ════════════════════════════════════════════════════════════ -->
-        <div class="cfg-subpanel" data-cfgtab="ggpk">
-
-        <div class="cfg-section">
-          <details id="det-maphack" open ontoggle="syncCfgSections()">
-            <summary>
-              <div class="cfg-header">Map Hack</div>
-            </summary>
-            <div class="cfg-subsection">
-              <!-- Layout order requested by user:
-                     1) Enable + Source
-                     2) Status / info area (path entry hint, success/fail messages)
-                     3) Outline + Background color swatches, side-by-side
-                     4) Apply / Revert buttons at the bottom
-                   The color swatches + Apply/Revert all remain hidden
-                   when maphack source is "memory" — same visibility
-                   rule as before; switchConfigSubTab() leaves them be. -->
-              <div class="cfg-row"><span class="cfg-label">Map Hack</span>
-                <label class="toggle"><input type="checkbox" id="tog-maphack" onchange="ahkCall('ToggleMapHack')"
-                    checked><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-help">Reveals the entire minimap. Two implementations — pick whichever fits your workflow.</div>
-
-              <div class="cfg-row"><span class="cfg-label">Walkable Grid (debug)</span>
-                <label class="toggle"><input type="checkbox" id="tog-walkgrid" onchange="ahkCall('ToggleWalkGrid')"
-                    ><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-help">Diagnostic: shades every walkable cell of the memory terrain grid on the large map (blue, 50% stippled so the map shows through). Use it to compare the grid the bot pathfinds on against what the game actually allows — mismatches explain a stuck AutoPilot. Large map only.</div>
-
-              <div class="cfg-row"><span class="cfg-label">Mask Outlines (debug)</span>
-                <label class="toggle"><input type="checkbox" id="tog-maskdebug" onchange="ahkCall('ToggleMaskDebug')"
-                    ><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-help">Diagnostic: draws red rectangles where the large-map overlay is clipped away from the game HUD (orbs, skill/flask/XP bars, area & quest panel). Shows the current mask boundaries so you can see exactly what's hidden while tuning them. Large map only.</div>
-
-              <!-- Source picker. "Memory" = legacy on-the-fly overlay,
-                   "GGPK" = persistent shader patch (apply/revert below). -->
-              <div class="cfg-row cfg-sub-row" id="row-maphack-source" style="padding-left:18px">
-                <span class="cfg-label" style="color:var(--subtext)">↳ Source</span>
-                <div style="display:flex;gap:8px;font-size:12px">
-                  <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer">
-                    <input type="radio" name="maphack-source" value="memory"
-                      onchange="ahkCall('SetMaphackSource','memory')" checked>
-                    Memory (overlay)
-                  </label>
-                  <label style="display:inline-flex;align-items:center;gap:4px;cursor:pointer">
-                    <input type="radio" name="maphack-source" value="ggpk"
-                      onchange="ahkCall('SetMaphackSource','ggpk')">
-                    GGPK (shader patch)
-                  </label>
-                </div>
-              </div>
-
-              <!-- ── GGPK status / info area ──────────────────────────
-                   Path entry hint (when install location unknown) and
-                   the last-action status line (e.g. "Patch applied",
-                   "Backup restored", "PoE2 still running — close first").
-                   All hidden until source=ggpk. -->
-              <div id="row-maphack-status" style="display:none;padding:6px 8px 0 18px">
-                <div id="ggpk-path-entry" style="display:none;font-size:11px;color:var(--subtext)">
-                  <div style="margin-bottom:6px;line-height:1.4">
-                    The helper hasn't recorded your PoE2 install path yet. Either start PoE2 once
-                    and click <em>Refresh all TSVs from local GGPK</em> in the Data tab, or enter
-                    the path to <code>Bundles2\_.index.bin</code> manually below.
-                  </div>
-                  <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-                    <input type="text" id="ggpk-path-input" placeholder="C:\Path of Exile 2\Bundles2\_.index.bin"
-                      style="flex:1;min-width:280px;padding:4px 8px;font-family:monospace;font-size:11px"
-                      onkeydown="if (event.key === 'Enter') document.getElementById('ggpk-path-save').click()">
-                    <button class="cfg-btn" id="ggpk-path-save" onclick="ggpkSavePathManually()">Save Path</button>
-                  </div>
-                </div>
-                <div id="ggpk-maphack-status" style="color:var(--subtext);font-size:11px;min-height:14px"></div>
-              </div>
-
-              <!-- ── Colors row (Outline + Background side-by-side) ─── -->
-              <div id="row-maphack-colors" class="cfg-sub-row"
-                   style="display:none;padding:6px 8px 6px 18px;gap:18px;align-items:flex-start;flex-wrap:wrap">
-                <div data-tip="Color for walkable-area outlines / wall edges drawn by the GGPK maphack. Takes effect on next Apply.">
-                  <div style="color:var(--subtext);font-size:11px;margin-bottom:4px">↳ Outline</div>
-                  <div style="display:flex;gap:8px;align-items:center">
-                    <span id="cp-swatch-outline" class="cp-swatch"
-                          onclick="openColorPicker('outline')"></span>
-                    <span id="cp-hex-outline" style="font-family:monospace;font-size:11px;color:var(--subtext)">—</span>
-                  </div>
-                </div>
-                <div data-tip="Fill color for revealed-but-unexplored areas. Low alpha = subtle tint, high alpha = obvious overlay. Takes effect on next Apply.">
-                  <div style="color:var(--subtext);font-size:11px;margin-bottom:4px">↳ Background</div>
-                  <div style="display:flex;gap:8px;align-items:center">
-                    <span id="cp-swatch-background" class="cp-swatch"
-                          onclick="openColorPicker('background')"></span>
-                    <span id="cp-hex-background" style="font-family:monospace;font-size:11px;color:var(--subtext)">—</span>
-                  </div>
-                </div>
-              </div>
-
-              <!-- ── Apply / Revert buttons, last so the action lives at
-                   the bottom of the flow (Source → tweak → commit). ─── -->
-              <div id="row-maphack-actions" class="cfg-sub-row"
-                   style="display:none;padding:6px 8px 0 18px;gap:8px;align-items:center;flex-wrap:wrap">
-                <button class="cfg-btn" id="ggpk-maphack-apply" onclick="ggpkMaphackRun('apply')"
-                  style="display:none">Apply</button>
-                <button class="cfg-btn" id="ggpk-maphack-revert" onclick="ggpkMaphackRun('revert')"
-                  style="display:none">Revert</button>
-              </div>
-            </div>
-          </details>
-        </div>
-
-        <!-- Placeholder so the sub-tab feels alive when only Map Hack
-             is implemented. Replace with real sections as more GGPK
-             modifications land. -->
-        <div class="cfg-section" style="opacity:.55">
-          <div style="padding:10px 8px;font-size:11px;color:var(--subtext);line-height:1.5">
-            More GGPK modifications coming soon — additional shader patches and
-            bundle tweaks will land here as separate sections.
-          </div>
-        </div>
-
-        </div><!-- /cfg-subpanel ggpk -->
+        <!-- GGPK sub-tab retired — its only feature (Map Hack) moved to the
+             Overlay sub-tab (it's a map visualisation, and users never found
+             it under "GGPK"). The Memory/GGPK source picker + apply/revert
+             live inside the Map Hack section there. Reintroduce a GGPK sub-tab
+             when there's a real GGPK-only feature to host. -->
 
         <!-- FILTERS sub-tab retired — its only content (the Skills & Buffs
              blacklist) moved into the Game > Skills & Buffs tab, since the
@@ -6785,7 +6771,7 @@
       hotkeys:   'hotkeys',
     };
     // The Config tab is one top-level panel split into inner sub-panels
-    // (general/automation/overlay/vitals/ggpk/debug/data); switchConfigSubTab
+    // (general/automation/overlay/vitals/debug/data); switchConfigSubTab
     // toggles which inner div carries .active. The currently-active sub-
     // tab is held here so navigating away to e.g. Game and back to Config
     // returns to the same sub-tab. Persisted via AHK on every change.
