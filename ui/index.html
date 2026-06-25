@@ -10071,64 +10071,10 @@
     function showSkillRangeCircle(slotNum) { _rcFocusedSlot = slotNum; updateRangeCircleVisibility(); }
     function clearSkillRangeCircleFocus() { _rcFocusedSlot = 0; updateRangeCircleVisibility(); }
 
-    // ═══════════════════════════════════════════════════════════════════
-    //  OVERVIEW TREE
-    // ═══════════════════════════════════════════════════════════════════
-    let _treeData = {};
-    let _selectedNodePath = '';
-    let _treeFilter = '';
-
-    function updateTree(tabKey, nodesJson) {
-      let nodes; try { nodes = typeof nodesJson === 'string' ? JSON.parse(nodesJson) : nodesJson; } catch (e) { return; }
-      _treeData[tabKey] = nodes;
-      if (activeTab === 'config') _renderTree(nodes);
-    }
-
-    function _renderTree(nodes) {
-      const el = document.getElementById('tab-overview-content');
-      if (!el) return;
-      if (!Array.isArray(nodes) || nodes.length === 0) { el.innerHTML = '<div class="tree-empty">No data</div>'; return; }
-      el.innerHTML = _renderNodes(nodes, _treeFilter.toLowerCase());
-    }
-
-    function _renderNodes(nodes, filter) {
-      let html = '';
-      for (const n of nodes) {
-        const label = n.text || '';
-        const path = n.path || '';
-        const kids = Array.isArray(n.children) ? n.children : [];
-        const hasKids = kids.length > 0;
-        if (filter) {
-          const matchSelf = label.toLowerCase().includes(filter);
-          const kidHtml = hasKids ? _renderNodes(kids, filter) : '';
-          if (!matchSelf && !kidHtml) continue;
-          const row = `<div class="tree-node-row${path === _selectedNodePath ? ' selected' : ''}" onclick="selectNode('${escHtml(path)}')">
-        <span class="tree-toggle">${hasKids ? '▸' : ' '}</span>
-        <span class="tree-label">${escHtml(label)}</span></div>`;
-          html += `<div class="tree-node">${row}${kidHtml ? `<div class="tree-children">${kidHtml}</div>` : ''}</div>`;
-        } else {
-          const row = `<div class="tree-node-row${path === _selectedNodePath ? ' selected' : ''}" onclick="selectNode('${escHtml(path)}')">
-        <span class="tree-toggle">${hasKids ? '▸' : ' '}</span>
-        <span class="tree-label">${escHtml(label)}</span></div>`;
-          const childHtml = hasKids ? `<div class="tree-children">${_renderNodes(kids, '')}</div>` : '';
-          html += `<div class="tree-node">${row}${childHtml}</div>`;
-        }
-      }
-      return html;
-    }
-
-    function selectNode(path) {
-      _selectedNodePath = path;
-      ahkCall('SelectNode', path);
-      document.querySelectorAll('.tree-node-row').forEach(r => r.classList.remove('selected'));
-      event.currentTarget.classList.add('selected');
-    }
-
-    function applyTreeFilter() {
-      _treeFilter = document.getElementById('tree-filter').value;
-      const tab = activeTab;
-      if (_treeData[tab]) _renderTree(_treeData[tab]);
-    }
+    // The Overview value-tree (updateTree / _renderTree / selectNode /
+    // applyTreeFilter) was retired together with the Config > General >
+    // Overview section. Entities / Skills / Buffs / UI / gameState each have
+    // their own renderers (updateEntities, updateSkills, …) and are unaffected.
 
     // ═══════════════════════════════════════════════════════════════════
     //  BLACKLIST (Skills & Buffs)

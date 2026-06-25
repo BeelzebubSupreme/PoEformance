@@ -339,62 +339,6 @@ _SerializeZoneScanStatus()
         . "}"
 }
 
-; Serialises the active TreeView tab and pushes it to updateTree() in the WebView.
-PushActiveTreeToWebView()
-{
-    global g_activeTreeTabKey, g_treeControlsByTab, g_treeNodePathsByTab
-
-    if !g_treeControlsByTab.Has(g_activeTreeTabKey)
-        return
-
-    ctrl := g_treeControlsByTab[g_activeTreeTabKey]
-    hwnd := ctrl.Hwnd
-    root := TV_GetRoot(hwnd)
-    nodePathsMap := g_treeNodePathsByTab.Has(g_activeTreeTabKey) ? g_treeNodePathsByTab[g_activeTreeTabKey] : Map()
-    nodesJson := root ? _DumpTreeNodeRecursiveJsonEx(ctrl, hwnd, root, nodePathsMap) : "[]"
-
-    WebViewExec("updateTree(" _JsStr(g_activeTreeTabKey) "," nodesJson ")")
-}
-
-; Recursive tree serialiser that also embeds the node path when available.
-_DumpTreeNodeRecursiveJsonEx(ctrl, hwnd, nodeId, nodePathsMap)
-{
-    items := []
-    while (nodeId != 0)
-    {
-        label := ctrl.GetText(nodeId)
-        escaped := StrReplace(label, "\", "\\")
-        escaped := StrReplace(escaped, '"', '\"')
-        escaped := StrReplace(escaped, "`n", "\n")
-        escaped := StrReplace(escaped, "`r", "\r")
-        escaped := StrReplace(escaped, "`t", "\t")
-
-        pathPart := ""
-        if nodePathsMap.Has(nodeId)
-        {
-            p := nodePathsMap[nodeId]
-            ep := StrReplace(p, "\", "\\")
-            ep := StrReplace(ep, '"', '\"')
-            pathPart := ',"path":"' ep '"'
-        }
-
-        child := TV_GetChild(hwnd, nodeId)
-        if child
-        {
-            childJson := _DumpTreeNodeRecursiveJsonEx(ctrl, hwnd, child, nodePathsMap)
-            items.Push('{"text":"' escaped '"' pathPart ',"children":' childJson '}')
-        }
-        else
-            items.Push('{"text":"' escaped '"' pathPart '}')
-
-        nodeId := TV_GetNext(hwnd, nodeId)
-    }
-    joined := ""
-    for i, item in items
-        joined .= (i > 1 ? "," : "") item
-    return "[" joined "]"
-}
-
 ; Pushes the current watchlist (pinned node paths) to updateWatchlist() in the WebView.
 PushWatchlistToWebView()
 {
@@ -440,7 +384,6 @@ _ResolveSnapshotPath(snapshot, path)
 PushAllDataToWebView()
 {
     PushHeaderToWebView()
-    PushActiveTreeToWebView()
     PushWatchlistToWebView()
     _PushBlacklistToWebView()
     PushHotkeysToWebView()

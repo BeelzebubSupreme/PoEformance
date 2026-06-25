@@ -49,7 +49,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.61"
+POEFORMANCE_VERSION := "0.45.13.62"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -760,8 +760,10 @@ ReadAndShow(forceTreeRefresh := false)
         }
         _totalLastMs := A_TickCount - totalStart
         UpdateOffsetTable(snapshot)
-        ; Push the active (tree) tab plus all special-tab data to the WebView UI.
-        PushActiveTreeToWebView()
+        ; Push the special-tab data (entities / skills / buffs / UI / gameState)
+        ; to the WebView UI. The value-tree push was retired with the Overview
+        ; section; RenderActiveTreeTab still populates the hidden TreeView for
+        ; the on-demand F3 debug dump.
         PushSpecialTabsToWebView(snapshot)
         PushHeaderToWebView()
         PushWatchlistToWebView()
