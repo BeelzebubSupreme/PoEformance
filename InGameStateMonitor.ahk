@@ -49,7 +49,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.56"
+POEFORMANCE_VERSION := "0.45.13.57"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -277,10 +277,14 @@ g_maphackSource := "memory"
 g_maphackOutlineHex := "8080FFCC"
 g_maphackBackgroundHex := "66FF6619"
 ; Config tab sub-tab persistence. One of: general / automation /
-; overlay / ggpk / filters / debug. Defaults to General on first run.
+; overlay / vitals / debug / data. Defaults to General on first run.
 g_configSubTab := "general"
 g_rangeCirclesEnabled := true
-g_panelDetectionEnabled := true
+; Panel-respect toggles (per-feature). Panel detection itself always runs;
+; each consumer decides whether to react to an open game panel.
+g_panelHideOverlays := true
+g_panelPauseAutoPilot := true
+g_panelHideLootBars := true
 
 ; Window geometry (restored from INI by LoadConfig)
 g_winX := 20

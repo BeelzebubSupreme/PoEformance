@@ -95,15 +95,16 @@ class LootCompactBarOverlay extends GdiOverlayBase
 
     ShouldShow(ctx)
     {
-        global g_ltEnabled, g_ltOnMap
+        global g_ltEnabled, g_ltOnMap, g_panelHideLootBars
         if !g_ltEnabled
             return false
         if !ctx.gameActive
             return false
         if g_ltOnMap
             return false
-        ; Hide while a large blocking panel is open (Atlas / inventory / passive tree).
-        if (ctx.snapshot && Type(ctx.snapshot) = "Map")
+        ; Hide while a large blocking panel is open (Atlas / inventory / passive
+        ; tree) — gated by g_panelHideLootBars.
+        if (IsSet(g_panelHideLootBars) && g_panelHideLootBars && ctx.snapshot && Type(ctx.snapshot) = "Map")
         {
             pv := ctx.snapshot.Has("panelVisibility") ? ctx.snapshot["panelVisibility"] : 0
             if (pv && IsObject(pv) && pv.Has("anyPanelOpen") && pv["anyPanelOpen"])

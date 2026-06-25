@@ -44,7 +44,7 @@ SaveConfig()
     global g_entityShowNPC, g_entityShowChest, g_entityShowWorldItem, g_entityShowOther
     global g_skillBuffBlacklist, g_zoneNavEnabled, g_mapHackEnabled, g_maphackSource, g_rangeCirclesEnabled
     global g_walkGridEnabled, g_maphackMaskDebug
-    global g_panelDetectionEnabled, g_autoPilotEnabled, g_inventoryChainDumpEnabled
+    global g_panelHideOverlays, g_panelPauseAutoPilot, g_panelHideLootBars, g_autoPilotEnabled, g_inventoryChainDumpEnabled
     global g_overlayStatusTextEnabled, g_overlayPoeOnly
     global g_maphackOutlineHex, g_maphackBackgroundHex
     global g_configSubTab
@@ -81,7 +81,9 @@ SaveConfig()
     IniWrite(g_maphackOutlineHex,                  f, "Radar",         "maphackOutlineHex")
     IniWrite(g_maphackBackgroundHex,               f, "Radar",         "maphackBackgroundHex")
     IniWrite(g_rangeCirclesEnabled   ? "1" : "0",  f, "Radar",         "rangeCircles")
-    IniWrite(g_panelDetectionEnabled ? "1" : "0",  f, "PanelDetection", "enabled")
+    IniWrite(g_panelHideOverlays     ? "1" : "0",  f, "PanelDetection", "hideOverlays")
+    IniWrite(g_panelPauseAutoPilot   ? "1" : "0",  f, "PanelDetection", "pauseAutoPilot")
+    IniWrite(g_panelHideLootBars     ? "1" : "0",  f, "PanelDetection", "hideLootBars")
     IniWrite(g_autoPilotEnabled      ? "1" : "0",  f, "AutoPilot",      "enabled")
     IniWrite(g_inventoryChainDumpEnabled ? "1" : "0", f, "Diagnostics", "inventoryChainDump")
     IniWrite(g_overlayStatusTextEnabled  ? "1" : "0", f, "Radar",       "statusText")
@@ -131,7 +133,7 @@ LoadConfig()
     global g_entityShowNPC, g_entityShowChest, g_entityShowWorldItem, g_entityShowOther
     global g_skillBuffBlacklist, g_zoneNavEnabled, g_mapHackEnabled, g_maphackSource, g_rangeCirclesEnabled
     global g_walkGridEnabled, g_maphackMaskDebug
-    global g_panelDetectionEnabled, g_autoPilotEnabled, g_inventoryChainDumpEnabled
+    global g_panelHideOverlays, g_panelPauseAutoPilot, g_panelHideLootBars, g_autoPilotEnabled, g_inventoryChainDumpEnabled
     global g_overlayStatusTextEnabled, g_overlayPoeOnly
     global g_maphackOutlineHex, g_maphackBackgroundHex
     global g_configSubTab
@@ -189,7 +191,9 @@ LoadConfig()
     else
         g_configSubTab := "general"
     g_rangeCirclesEnabled      := _B("Radar",         "rangeCircles",    true)
-    g_panelDetectionEnabled    := _B("PanelDetection","enabled",         true)
+    g_panelHideOverlays        := _B("PanelDetection","hideOverlays",    true)
+    g_panelPauseAutoPilot      := _B("PanelDetection","pauseAutoPilot",  true)
+    g_panelHideLootBars        := _B("PanelDetection","hideLootBars",    true)
     g_autoPilotEnabled         := _B("AutoPilot",     "enabled",         false)
     g_inventoryChainDumpEnabled := _B("Diagnostics",  "inventoryChainDump", false)
     g_overlayStatusTextEnabled  := _B("Radar",        "statusText",         true)

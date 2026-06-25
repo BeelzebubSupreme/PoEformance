@@ -45,7 +45,8 @@ PushHeaderToWebView()
     global g_entityShowPlayer, g_entityShowMinion, g_entityShowEnemy
     global g_entityShowNPC, g_entityShowChest, g_entityShowWorldItem, g_entityShowOther
     global g_zoneNavEnabled
-    global g_radarAlpha, g_mapHackEnabled, g_maphackSource, g_isConnected, g_rangeCirclesEnabled, g_panelDetectionEnabled
+    global g_radarAlpha, g_mapHackEnabled, g_maphackSource, g_isConnected, g_rangeCirclesEnabled
+    global g_panelHideOverlays, g_panelPauseAutoPilot, g_panelHideLootBars
     global g_walkGridEnabled, g_maphackMaskDebug
     global g_autoPilotEnabled, g_autoPilotState, g_autoPilotReason
     global g_inventoryChainDumpEnabled, g_overlayStatusTextEnabled, g_alwaysOnTop, g_localApiEnabled, g_localApiPort
@@ -116,7 +117,9 @@ PushHeaderToWebView()
         . '"ggpkMaphackApplied":' (GgpkToolBridge.IsMaphackApplied() ? "true" : "false") ","
         . '"isConnected":' (IsSet(g_isConnected) && g_isConnected ? "true" : "false") ","
         . '"rangeCircles":' (g_rangeCirclesEnabled ? "true" : "false") ","
-        . '"panelDetection":' (g_panelDetectionEnabled ? "true" : "false") ","
+        . '"panelHideOverlays":' (g_panelHideOverlays ? "true" : "false") ","
+        . '"panelPauseAutoPilot":' (g_panelPauseAutoPilot ? "true" : "false") ","
+        . '"panelHideLootBars":' (g_panelHideLootBars ? "true" : "false") ","
         . '"cfgSections":' _JsStr(g_cfgOpenSections) ","
         . '"autoPilot":' (g_autoPilotEnabled ? "true" : "false") ","
         . '"autoPilotState":' _JsStr(g_autoPilotState) ","

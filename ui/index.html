@@ -4762,6 +4762,7 @@
             <div class="al-line">
               <span class="al-item"><span class="al-cap">Show kill counts</span><label class="toggle"><input type="checkbox" id="lt-showKills" onchange="lootChk('showKills',this)"><span class="toggle-slider"></span></label></span>
               <span class="al-item"><span class="al-cap">Anchor bars to right</span><label class="toggle"><input type="checkbox" id="lt-barOnRight" onchange="lootChk('barOnRight',this)"><span class="toggle-slider"></span></label></span>
+              <span class="al-item"><span class="al-cap">Hide while a UI panel is open</span><label class="toggle"><input type="checkbox" id="tog-panel-hidelootbars" onchange="ahkCall('SetPanelRespect','loot', this.checked?1:0)"><span class="toggle-slider"></span></label></span>
             </div>
             <div class="al-line">
               <label class="al-field"><span class="al-cap">poe.ninja league</span><input type="text" class="cfg-input" id="lt-league" placeholder="e.g. Standard" style="width:200px" onchange="lootStr('league',this)"></label>
@@ -5186,6 +5187,12 @@
                 avoids transitions / portals / UI).
               </div>
 
+              <div class="cfg-row"><span class="cfg-label">Pause while a UI panel is open</span>
+                <label class="toggle"><input type="checkbox" id="tog-panel-pauseautopilot"
+                    onchange="ahkCall('SetPanelRespect','autopilot', this.checked?1:0)" checked><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Stops sending clicks / skills while a game UI panel is open (inventory, stash, passive tree), so inputs don't land on the panel instead of the world.</div>
+
               <!-- Hidden legacy toggles — kept in DOM so the existing
                    setChk() helpers in updateHeader don't blow up. -->
               <input type="checkbox" id="tog-combat"  style="display:none">
@@ -5512,11 +5519,11 @@
               </div>
               <div class="cfg-help">Draws a hint arrow toward the next unexplored area / zone transition based on the maphack data — handy when you can't immediately see the way forward.</div>
 
-              <div class="cfg-row"><span class="cfg-label">Panel Detection</span>
-                <label class="toggle"><input type="checkbox" id="tog-paneldetection"
-                    onchange="ahkCall('TogglePanelDetection')" checked><span class="toggle-slider"></span></label>
+              <div class="cfg-row"><span class="cfg-label">Hide overlays while a UI panel is open</span>
+                <label class="toggle"><input type="checkbox" id="tog-panel-hideoverlays"
+                    onchange="ahkCall('SetPanelRespect','overlays', this.checked?1:0)" checked><span class="toggle-slider"></span></label>
               </div>
-              <div class="cfg-help">Pauses click-to-walk / skill firing while a game UI panel is open (inventory, stash, vendor). Turn off only if you're debugging panel discovery.</div>
+              <div class="cfg-help">Hides the map overlays (radar, map hack, vitals, player HUD, range circles) while a game UI panel is open (inventory, stash, passive tree). Panel detection itself always runs; AutoPilot and the loot overlays have their own respect toggles.</div>
             </div>
           </details>
         </div>
@@ -9605,7 +9612,9 @@
         // Don't auto-clear ggpkStatus here — see note above.
       }
       setChk('tog-rangecircles', d.rangeCircles !== undefined ? d.rangeCircles : true);
-      setChk('tog-paneldetection', d.panelDetection !== undefined ? d.panelDetection : true);
+      setChk('tog-panel-hideoverlays', d.panelHideOverlays !== undefined ? d.panelHideOverlays : true);
+      setChk('tog-panel-pauseautopilot', d.panelPauseAutoPilot !== undefined ? d.panelPauseAutoPilot : true);
+      setChk('tog-panel-hidelootbars', d.panelHideLootBars !== undefined ? d.panelHideLootBars : true);
 
       if (d.radarAlpha !== undefined) {
         const sl = document.getElementById('radar-alpha');

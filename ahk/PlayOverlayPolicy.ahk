@@ -73,10 +73,14 @@ class PlayOverlayPolicy
         }
 
         ; ── Condition 5: no game panel open + chat not active (panel debounced) ──
+        ; The panel-open part is gated by g_panelHideOverlays — when off, the
+        ; play-gated overlays (radar / map hack / vitals / HUD / range circles)
+        ; stay visible even with a panel open. Panel detection itself still runs.
         if core
         {
+            global g_panelHideOverlays
             panelVis      := snap.Has("panelVisibility") ? snap["panelVisibility"] : 0
-            panelDetected := (panelVis && IsObject(panelVis) && panelVis.Has("anyPanelOpen") && panelVis["anyPanelOpen"])
+            panelDetected := (g_panelHideOverlays && panelVis && IsObject(panelVis) && panelVis.Has("anyPanelOpen") && panelVis["anyPanelOpen"])
             if panelDetected
             {
                 if (this._panelOpenSinceTick = 0)
