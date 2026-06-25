@@ -4351,9 +4351,6 @@
     <div class="pill inactive clickable" id="pill-radar" onclick="ahkCall('ToggleRadar')" data-tip="Toggle Radar" data-icon="◎">
       <div class="dot"></div><span id="pill-radar-text">Radar ON</span>
     </div>
-    <div class="pill inactive clickable" id="pill-hud" onclick="ahkCall('TogglePlayerHud')" data-tip="Toggle Player HUD" data-icon="♥">
-      <div class="dot"></div><span id="pill-hud-text">HUD ON</span>
-    </div>
     <!-- Atlas map overlay — draws the endgame-atlas node graph (names, biomes,
          state, connections, content, hop pills) while the Atlas is open. State /
          label set from the header push (d.atlasOverlay). -->
@@ -5466,10 +5463,6 @@
               </div>
               <div class="cfg-help">Master switch — when off, nothing in this section paints anything on screen.</div>
 
-              <div class="cfg-row"><span class="cfg-label">Player HUD</span>
-                <label class="toggle"><input type="checkbox" id="tog-player-hud" onchange="ahkCall('TogglePlayerHud')"
-                    checked><span class="toggle-slider"></span></label>
-              </div>
               <div class="cfg-help">Renders a compact life / mana / energy-shield readout near your character so you can see numbers without squinting at the corner bars.</div>
 
               <div class="cfg-row"><span class="cfg-label">Debug Overlay</span>
@@ -9376,12 +9369,6 @@
         pillRadar.className = 'pill clickable ' + (on ? 'active' : 'inactive');
         document.getElementById('pill-radar-text').textContent = 'Radar ' + (on ? 'ON' : 'OFF');
       }
-      const pillHud = document.getElementById('pill-hud');
-      if (pillHud) {
-        const on = d.playerHud !== false && d.playerHud !== 'false';
-        pillHud.className = 'pill clickable ' + (on ? 'active' : 'inactive');
-        document.getElementById('pill-hud-text').textContent = 'HUD ' + (on ? 'ON' : 'OFF');
-      }
       const pillAtlas = document.getElementById('pill-atlas');
       if (pillAtlas) {
         const on = d.atlasOverlay === true || d.atlasOverlay === 'true';
@@ -9470,7 +9457,6 @@
       setChk('tog-afperf', d.afPerf);
       setChk('tog-npcsync', d.npcSync);
       setChk('tog-radar', d.radarEnabled !== undefined ? d.radarEnabled : true);
-      setChk('tog-player-hud', d.playerHud !== undefined ? d.playerHud : true);
       setChk('tog-vitals', d.playerHud !== undefined ? d.playerHud : true);
       if (d.vitals) vitalsSyncFromHeader(d.vitals);
       setChk('tog-overlay-status', d.overlayStatusText !== undefined ? d.overlayStatusText : true);
