@@ -8903,14 +8903,193 @@
     // Pushed from AHK PushInventoryToWebView. Payload shape:
     //   { player: [<inv>...], stash: [<inv>...], hasStash: bool, error?: "..." }
     //   <inv> = { id, type, bx, by, src, tn?, items: [{sx,sy,ex,ey,n,b,r,m:[...]}, ...] }
+    // Incremental inventory rendering. The 800ms poll used to rebuild the whole
+    // grid via innerHTML every tick, which reloaded every <img> and flickered
+    // even when nothing changed. Now: (1) skip identical payloads outright, and
+    // (2) reconcile section-by-section + cell-by-cell so only the item slots that
+    // actually changed are touched (unchanged cells keep their DOM + images).
+    let _invLastJson = '';
+    let _invHtmlCache = new Map();   // section key -> last innerHTML (non-grid sections)
+
+    function _invResetCache() { _invLastJson = ''; _invHtmlCache.clear(); }
+
+    // Per-item change signature: any field that affects the rendered cell.
+    function _invSig(it) {
+      return [it.sx | 0, it.sy | 0, it.ex | 0, it.ey | 0,
+        (typeof it.r === 'number' ? it.r : 0), it.n || '', it.b || '',
+        it.s | 0, it.a || '', it.idf].join('|');
+    }
+
     function updateInventory(jsonStr) {
       const el = document.getElementById('inv-content');
       const status = document.getElementById('inv-status');
       if (!el) return;
+      // Idle fast-path: an identical payload means nothing in any inventory
+      // changed — leave the DOM (and its images) completely untouched.
+      if (jsonStr === _invLastJson) return;
       let data;
       try { data = JSON.parse(jsonStr); }
-      catch (e) { el.innerHTML = '<div class="no-data-msg">⚠ Parse error</div>'; return; }
+      catch (e) { el.innerHTML = '<div class="no-data-msg">⚠ Parse error</div>'; _invResetCache(); return; }
+      try {
+        _invIncrementalRender(data, el, status);
+        _invLastJson = jsonStr;
+      } catch (e) {
+        // Defensive fallback: if the diff path ever throws, fall back to the
+        // old whole-panel rebuild so the inventory can't end up half-rendered.
+        try { _invFullRender(data, el, status); _invLastJson = jsonStr; _invHtmlCache.clear(); }
+        catch (e2) { _invResetCache(); }
+      }
+    }
 
+    // Builds the ordered list of section descriptors (same grouping the full
+    // render uses) and reconciles them against the live DOM in place.
+    function _invIncrementalRender(data, el, status) {
+      if (data.error) {
+        const msg = data.error === 'not-connected' ? 'Not connected to PoE2.'
+                  : data.error === 'no-server-data' ? 'No server data — log in first.'
+                  : ('Error: ' + data.error);
+        el.innerHTML = `<div class="no-data-msg">${escHtml(msg)}</div>`;
+        _invHtmlCache.clear();
+        if (status) status.textContent = msg;
+        return;
+      }
+      const player = Array.isArray(data.player) ? data.player : [];
+      const totalItems = player.reduce((n, inv) => n + (inv.items ? inv.items.length : 0), 0);
+
+      const equipped = [], stash = [], others = [];
+      for (const inv of player) {
+        const id = inv.id;
+        if      (id >= 2 && id <= 11) equipped.push(inv);
+        else if (_isStashTabId(id))   stash.push(inv);
+        else                          others.push(inv);
+      }
+      equipped.sort((a, b) => a.id - b.id);
+      stash.sort((a, b) => a.id - b.id);
+      others.sort((a, b) => (a.id === 1 ? -1 : b.id === 1 ? 1 : a.id - b.id));
+
+      const descs = [];
+      let equippedPlaced = false;
+      for (const inv of others) {
+        descs.push({ key: 'inv:' + inv.id, kind: 'grid', inv });
+        if (inv.id === 1 && equipped.length) { descs.push({ key: 'equipped', kind: 'html', html: _renderEquippedGroup(equipped) }); equippedPlaced = true; }
+      }
+      if (equipped.length && !equippedPlaced) descs.unshift({ key: 'equipped', kind: 'html', html: _renderEquippedGroup(equipped) });
+
+      const stashFull  = stash.filter(i => (i.items || []).length > 0);
+      const stashEmpty = stash.filter(i => (i.items || []).length === 0);
+      if (stashFull.length || stashEmpty.length) {
+        descs.push({ key: 'stash-header', kind: 'html', html: `<div class="inv-section-header" style="margin-top:14px">Stash <span class="inv-section-meta">${stashFull.length} populated · ${stashEmpty.length} empty · ${stash.length} total</span></div>` });
+        for (const inv of stashFull) descs.push({ key: 'inv:' + inv.id, kind: 'grid', inv });
+        if (stashEmpty.length) {
+          const labels = stashEmpty.map(i => i.tn ? i.tn : ('#' + i.id)).join(', ');
+          descs.push({ key: 'stash-empty', kind: 'html', html: `<div class="inv-section" style="opacity:.55;font-size:11px;color:var(--subtext);padding:6px 8px;border:1px dashed var(--border);border-radius:4px">Empty stash tabs: ${escHtml(labels)}</div>` });
+        }
+      }
+
+      if (!descs.length) {
+        el.innerHTML = '<div class="no-data-msg">No inventories found.</div>';
+        _invHtmlCache.clear();
+      } else {
+        _invReconcileSections(el, descs);
+      }
+
+      if (status) {
+        const t = new Date();
+        const stashTag = stashFull.length ? ` · ${stashFull.length} stash tab${stashFull.length === 1 ? '' : 's'} with items` : '';
+        status.textContent = `${totalItems} items · ${player.length} inventories${stashTag} · ${t.toLocaleTimeString()}`;
+      }
+    }
+
+    // Reconciles #inv-content's children against the desired descriptor list,
+    // keyed by data-invkey: reuse+patch existing section nodes, create missing
+    // ones, drop removed ones, and reorder without recreating unchanged nodes.
+    // Builds a detached DOM node from an HTML string (its root element).
+    function _invMakeNode(html) {
+      const t = document.createElement('template');
+      t.innerHTML = html.trim();
+      return t.content.firstElementChild;
+    }
+
+    // Reconciles #inv-content's children against the desired descriptor list,
+    // keyed by data-invkey placed directly on each section's OWN root element (no
+    // wrapper — so existing CSS like .inv-section:nth-child(...) keeps working):
+    // reuse + cell-diff grid sections, recreate html sections only when their
+    // cached HTML changed, drop removed ones, reorder without recreating nodes.
+    function _invReconcileSections(el, descs) {
+      const existing = new Map();
+      for (const ch of Array.from(el.children)) {
+        const k = ch.getAttribute('data-invkey');
+        if (k && !existing.has(k)) existing.set(k, ch);
+        else el.removeChild(ch);   // stray / un-keyed (e.g. after a full-render fallback)
+      }
+      const desiredKeys = new Set(descs.map(d => d.key));
+      for (const [k, node] of existing) {
+        if (!desiredKeys.has(k)) { el.removeChild(node); existing.delete(k); _invHtmlCache.delete(k); }
+      }
+      let prev = null;
+      for (const d of descs) {
+        let node = existing.get(d.key);
+        if (d.kind === 'grid') {
+          const grid = node && node.querySelector('.inv-grid');
+          const bx = Math.max(1, d.inv.bx || 12), by = Math.max(1, d.inv.by || 5);
+          // Reuse + cell-diff when the grid exists at the same dimensions;
+          // otherwise (new, or bx/by changed) build the section fresh.
+          if (grid && (+grid.getAttribute('data-bx')) === bx && (+grid.getAttribute('data-by')) === by) {
+            _invPatchGrid(node, d.inv);
+          } else {
+            node = _invMakeNode(_renderInvSection(d.inv));
+            node.setAttribute('data-invkey', d.key);
+          }
+        } else {   // 'html' — recreate only when the cached HTML changed
+          if (!node || _invHtmlCache.get(d.key) !== d.html) {
+            node = _invMakeNode(d.html);
+            node.setAttribute('data-invkey', d.key);
+            _invHtmlCache.set(d.key, d.html);
+          }
+        }
+        existing.set(d.key, node);
+        const ref = prev ? prev.nextSibling : el.firstChild;
+        if (ref !== node) el.insertBefore(node, ref);
+        prev = node;
+      }
+    }
+
+    // Cell-level diff of one inventory grid (node IS the .inv-section; caller
+    // guarantees same bx/by): only changed/added/removed item cells are touched,
+    // so unchanged cells keep their DOM + already-loaded images (no flicker).
+    function _invPatchGrid(node, inv) {
+      const bx = Math.max(1, inv.bx || 12);
+      const by = Math.max(1, inv.by || 5);
+      const grid = node.querySelector('.inv-grid');
+      if (!grid) return;
+      const header = node.querySelector('.inv-section-header');
+      const desiredHeader = _invSectionHeaderHtml(inv, bx, by);
+      if (header && header.innerHTML !== desiredHeader) header.innerHTML = desiredHeader;
+
+      const items = Array.isArray(inv.items) ? inv.items : [];
+      const desired = new Map();
+      for (const it of items) {
+        const sx = (it.sx | 0), sy = (it.sy | 0);
+        if (sx < 0 || sy < 0 || sx >= bx || sy >= by) continue;
+        desired.set(sx + ',' + sy, it);
+      }
+      const seen = new Set();
+      for (const cell of Array.from(grid.querySelectorAll('.inv-item[data-slot]'))) {
+        const slot = cell.getAttribute('data-slot');
+        if (!desired.has(slot)) { grid.removeChild(cell); continue; }
+        seen.add(slot);
+        const it = desired.get(slot);
+        if (cell.getAttribute('data-sig') !== _invSig(it)) cell.outerHTML = _invItemCellHtml(it, bx, by);
+      }
+      for (const [slot, it] of desired) {
+        if (seen.has(slot)) continue;
+        const html = _invItemCellHtml(it, bx, by);
+        if (html) grid.insertAdjacentHTML('beforeend', html);
+      }
+    }
+
+    // The original whole-panel rebuild — kept as the defensive fallback path.
+    function _invFullRender(data, el, status) {
       if (data.error) {
         const msg = data.error === 'not-connected' ? 'Not connected to PoE2.'
                   : data.error === 'no-server-data' ? 'No server data — log in first.'
@@ -8924,10 +9103,6 @@
       const totalItems = player.reduce((n, inv) => n + (inv.items ? inv.items.length : 0), 0);
 
       let html = '';
-      // Partition player inventories into render groups:
-      //   - equipped (id 2–11)        → one combined "Equipped Items" section
-      //   - stash    (id 13+, !=12)   → individual stash tabs, sorted by id
-      //   - others                    → Backpack (1), Flasks (12)
       const equipped = [];
       const stash    = [];
       const others   = [];
@@ -8939,28 +9114,20 @@
       }
       equipped.sort((a, b) => a.id - b.id);
       stash.sort((a, b) => a.id - b.id);
-      // Render order: Backpack first, then Equipped right after it, then any
-      // remaining player inventories (Flasks, etc.) — matches the mental model.
       others.sort((a, b) => (a.id === 1 ? -1 : b.id === 1 ? 1 : a.id - b.id));
       for (const inv of others) {
         html += _renderInvSection(inv);
         if (inv.id === 1 && equipped.length) html += _renderEquippedGroup(equipped);
       }
-      // Backpack not present (rare — paused or pre-load) → put equipped at the top.
       if (equipped.length && !others.some(i => i.id === 1)) {
         html = _renderEquippedGroup(equipped) + html;
       }
-      // Stash tabs — split into populated (rendered as full grids) and empty
-      // (collapsed into a single line at the bottom). Empty stash tabs are very
-      // common (player may own 50+ tabs, only a few hold items at any time) and
-      // rendering 50 empty 12×12 grids tanks the UI.
       const stashFull  = stash.filter(i => (i.items || []).length > 0);
       const stashEmpty = stash.filter(i => (i.items || []).length === 0);
       if (stashFull.length || stashEmpty.length) {
         html += `<div class="inv-section-header" style="margin-top:14px">Stash <span class="inv-section-meta">${stashFull.length} populated · ${stashEmpty.length} empty · ${stash.length} total</span></div>`;
         for (const inv of stashFull) html += _renderInvSection(inv);
         if (stashEmpty.length) {
-          // Prefer user-given names where the heuristic found them; fall back to id.
           const labels = stashEmpty.map(i => i.tn ? i.tn : ('#' + i.id)).join(', ');
           html += `<div class="inv-section" style="opacity:.55;font-size:11px;color:var(--subtext);padding:6px 8px;border:1px dashed var(--border);border-radius:4px">Empty stash tabs: ${escHtml(labels)}</div>`;
         }
@@ -9017,12 +9184,11 @@
       </div>`;
     }
 
-    function _renderInvSection(inv) {
+    // Header line ("#id name · meta") for one inventory section — shared by the
+    // full render and the in-place patcher so they stay byte-identical.
+    function _invSectionHeaderHtml(inv, bx, by) {
       const id = inv.id;
-      const bx = Math.max(1, inv.bx || 12);
-      const by = Math.max(1, inv.by || 5);
       const items = Array.isArray(inv.items) ? inv.items : [];
-
       // Top row: "#<id> <name>". Prefer the translated inventory type (from
       // Inventories.datc64 via the AHK bridge); fall back to the user-given stash
       // tab name, then the heuristic id-range label.
@@ -9033,48 +9199,57 @@
       // Keep the raw internal type (e.g. "LakeTabletInventory1") in the meta line.
       const metaType = rawType ? `${escHtml(rawType)} · ` : '';
       const meta = `${metaType}${bx}×${by} · ${items.length} items` + (inv.src ? ' · ' + escHtml(inv.src) : '');
+      return `${escHtml(labelBase)}<span class="inv-section-meta">${meta}</span>`;
+    }
 
-      // Background empty cells for the full grid
+    // HTML for one placed item cell. Carries data-slot (its grid position — the
+    // reconcile key) and data-sig (its change signature) so the patcher can tell
+    // at a glance whether the cell needs replacing. Returns '' if the item
+    // projects outside the grid (defensive — some non-grid inventories do this,
+    // e.g. trinket holsters where slotEnd > totalBoxes).
+    function _invItemCellHtml(it, bx, by) {
+      const sx = (it.sx | 0), sy = (it.sy | 0);
+      const ex = Math.max(sx + 1, (it.ex | 0));
+      const ey = Math.max(sy + 1, (it.ey | 0));
+      if (sx < 0 || sy < 0 || sx >= bx || sy >= by) return '';
+      const w = Math.max(1, ex - sx);
+      const h = Math.max(1, ey - sy);
+      const rarity = (typeof it.r === 'number' && it.r >= 0 && it.r <= 3) ? it.r : 0;
+      const name = it.n || it.b || '?';
+      const stack = (typeof it.s === 'number' && it.s > 1) ? it.s : 0;
+      const stackBadge = stack ? `<span class="inv-stack">${stack}</span>` : '';
+      const tip = _buildItemTooltipPayload(it);
+      // Real item art (RenderItem ResourcePath via poe2db). The icon fills the
+      // cell; the name label sits behind it and is revealed again if the CDN
+      // has no art for this path. idf===0 → unidentified corner glyph.
+      const icon = _iconUrl(it.a);
+      const imgLayer = icon ? `<img class="inv-item-img" src="${escAttr(icon)}" loading="lazy" onerror="this.style.display='none';var l=this.parentElement.querySelector('.inv-item-label');if(l)l.style.display=''">` : '';
+      const label = `<span class="inv-item-label"${icon ? ' style="display:none"' : ''}>${escHtml(_truncateForCell(name, w * h))}</span>`;
+      const unidBadge = (it.idf === 0) ? '<span class="inv-unid-badge" title="Unidentified">?</span>' : '';
+      return `<div class="inv-item rarity-${rarity}" data-slot="${sx},${sy}" data-sig="${escAttr(_invSig(it))}" `
+            + `style="grid-column:${sx + 1} / span ${w};grid-row:${sy + 1} / span ${h}" `
+            + `onmouseenter="_invShowTip(event,'${tip}')" onmouseleave="_invHideTip()" onmousemove="_invMoveTip(event)">`
+            + imgLayer + label + unidBadge + stackBadge + `</div>`;
+    }
+
+    function _renderInvSection(inv) {
+      const bx = Math.max(1, inv.bx || 12);
+      const by = Math.max(1, inv.by || 5);
+      const items = Array.isArray(inv.items) ? inv.items : [];
+
+      // Background empty cells for the full grid.
+      let bg = '';
+      for (let y = 0; y < by; y++)
+        for (let x = 0; x < bx; x++)
+          bg += `<div class="inv-cell" style="grid-column:${x + 1};grid-row:${y + 1}"></div>`;
+      // Placed items on top.
       let cells = '';
-      for (let y = 0; y < by; y++) {
-        for (let x = 0; x < bx; x++) {
-          cells += `<div class="inv-cell" style="grid-column:${x + 1};grid-row:${y + 1}"></div>`;
-        }
-      }
-      // Items on top, spanning their slot region
-      for (const it of items) {
-        const sx = (it.sx | 0), sy = (it.sy | 0);
-        const ex = Math.max(sx + 1, (it.ex | 0));
-        const ey = Math.max(sy + 1, (it.ey | 0));
-        // Skip items projecting outside the declared grid (defensive — happens for
-        // some non-grid inventories like trinket holsters where slotEnd > totalBoxes).
-        if (sx < 0 || sy < 0 || sx >= bx || sy >= by) continue;
-        const w = Math.max(1, ex - sx);
-        const h = Math.max(1, ey - sy);
-        const rarity = (typeof it.r === 'number' && it.r >= 0 && it.r <= 3) ? it.r : 0;
-        const name = it.n || it.b || '?';
-        const stack = (typeof it.s === 'number' && it.s > 1) ? it.s : 0;
-        const stackBadge = stack ? `<span class="inv-stack">${stack}</span>` : '';
-        const tip = _buildItemTooltipPayload(it);
-        // Real item art (RenderItem ResourcePath via poe2db). The icon fills the
-        // cell; the name label sits behind it and is revealed again if the CDN
-        // has no art for this path. idf===0 → unidentified corner glyph.
-        const icon = _iconUrl(it.a);
-        const imgLayer = icon ? `<img class="inv-item-img" src="${escAttr(icon)}" loading="lazy" onerror="this.style.display='none';var l=this.parentElement.querySelector('.inv-item-label');if(l)l.style.display=''">` : '';
-        const label = `<span class="inv-item-label"${icon ? ' style="display:none"' : ''}>${escHtml(_truncateForCell(name, w * h))}</span>`;
-        const unidBadge = (it.idf === 0) ? '<span class="inv-unid-badge" title="Unidentified">?</span>' : '';
-        cells += `<div class="inv-item rarity-${rarity}" `
-              + `style="grid-column:${sx + 1} / span ${w};grid-row:${sy + 1} / span ${h}" `
-              + `onmouseenter="_invShowTip(event,'${tip}')" onmouseleave="_invHideTip()" onmousemove="_invMoveTip(event)">`
-              + imgLayer
-              + label
-              + unidBadge
-              + stackBadge
-              + `</div>`;
-      }
+      for (const it of items) cells += _invItemCellHtml(it, bx, by);
+
+      // data-bx/data-by on the grid let the patcher detect a dimension change.
       return `<div class="inv-section">
-        <div class="inv-section-header">${escHtml(labelBase)}<span class="inv-section-meta">${meta}</span></div>
-        <div class="inv-grid" style="grid-template-columns:repeat(${bx},36px);grid-template-rows:repeat(${by},36px)">${cells}</div>
+        <div class="inv-section-header">${_invSectionHeaderHtml(inv, bx, by)}</div>
+        <div class="inv-grid" data-bx="${bx}" data-by="${by}" style="grid-template-columns:repeat(${bx},36px);grid-template-rows:repeat(${by},36px)">${bg}${cells}</div>
       </div>`;
     }
 
