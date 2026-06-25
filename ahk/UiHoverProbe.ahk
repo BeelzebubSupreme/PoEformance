@@ -94,8 +94,9 @@ UiHoverProbeRun()
     {
         g_uiHoverBaseline := cur
         try MsgBox("Baseline captured: " cur.Count " UiElement-pointer slots while NOTHING is hovered."
-            . "`n`nNow move the cursor OVER an inventory / stash item (so the game's item tooltip shows),"
-            . " then click this button again.",
+            . "`n`nNow move the cursor OVER an inventory / stash item (so the game's item tooltip shows)"
+            . " and press Ctrl+Alt+Shift+H — do NOT click the tool button for step 2, that would move the"
+            . " cursor off the item and drop the hover.",
             "UIHover Probe — step 1/2", "Iconi")
         return
     }

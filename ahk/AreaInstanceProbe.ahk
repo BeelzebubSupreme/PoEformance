@@ -1180,4 +1180,7 @@ _AIP_RegisterProbeHotkeys()
     try Hotkey("^!+t", (*) => TargetableProbeRun(), "On")
     try Hotkey("^b", (*) => TargetedByPlayerProbeRun(), "On")
     try Hotkey("^!+d", (*) => ComponentDumpProbeRun(), "On")
+    ; Ctrl+Alt+Shift+H = UIHover hover-diff — fire it via the keyboard so the
+    ; cursor stays on the hovered item (a button click would drop the hover).
+    try Hotkey("^!+h", (*) => UiHoverProbeRun(), "On")
 }
