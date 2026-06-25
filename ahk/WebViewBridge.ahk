@@ -152,6 +152,7 @@ PushHeaderToWebView()
         . ',"loot":' BuildLootHeaderJson()
         . ',"stashMover":' BuildStashMoverHeaderJson()
         . ',"lootRadarValue":' BuildLootRadarValueHeaderJson()
+        . ',"uiHoverPrice":' BuildUiHoverPriceHeaderJson()
         . ',"lootTradePricing":' BuildLootTradePricingHeaderJson()
         . "}"
     WebViewExec("updateHeader(" json ")")
