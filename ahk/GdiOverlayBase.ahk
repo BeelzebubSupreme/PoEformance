@@ -41,6 +41,13 @@ class GdiOverlayBase
         this.Enabled     := true       ; master on/off toggle (manager hides when false)
         this._hideSince  := 0          ; A_TickCount when ShouldShow first went false (hide debounce)
         this._lastTopmostTick := 0     ; A_TickCount of the last periodic topmost re-assert
+        ; Reusable scratch objects so the per-frame draw path allocates nothing:
+        ; one RECT buffer (fill/outline), one SIZE buffer (text measure), and the
+        ; process-wide NULL_BRUSH handle (stock object — never freed). Cuts a
+        ; Buffer()/GetStockObject churn on every overlay blit.
+        this._rectBuf     := Buffer(16, 0)
+        this._textSizeBuf := Buffer(8, 0)
+        this._nullBrush   := DllCall("GetStockObject", "Int", 5, "Ptr")   ; NULL_BRUSH (hollow)
     }
 
     ; ── Overlay contract ─────────────────────────────────────────────────────
@@ -125,7 +132,9 @@ class GdiOverlayBase
     ; FillRect helper that takes a ready HBRUSH (used by _ClearBackBuffer).
     _FillRectBrush(x, y, w, h, hBrush)
     {
-        r := Buffer(16, 0)
+        if (w <= 0 || h <= 0)
+            return
+        r := this._rectBuf
         NumPut("Int", x, r, 0), NumPut("Int", y, r, 4)
         NumPut("Int", x + w, r, 8), NumPut("Int", y + h, r, 12)
         DllCall("FillRect", "Ptr", this.memDC, "Ptr", r, "Ptr", hBrush)
@@ -273,19 +282,15 @@ class GdiOverlayBase
     ; Fills a rectangle on the back-buffer with colorBGR.
     _FillRect(x, y, w, h, colorBGR)
     {
-        r := Buffer(16, 0)
-        NumPut("Int", x, r, 0), NumPut("Int", y, r, 4)
-        NumPut("Int", x + w, r, 8), NumPut("Int", y + h, r, 12)
-        DllCall("FillRect", "Ptr", this.memDC, "Ptr", r, "Ptr", this._GetBrush(colorBGR))
+        this._FillRectBrush(x, y, w, h, this._GetBrush(colorBGR))
     }
 
     ; Draws a rectangular outline (no fill) on the back-buffer with colorBGR/penWidth.
     _DrawRectOutline(x, y, w, h, colorBGR, penWidth := 1)
     {
         pen := this._GetPen(colorBGR, penWidth)
-        nullBrush := DllCall("GetStockObject", "Int", 5, "Ptr")   ; NULL_BRUSH (hollow)
         op := DllCall("SelectObject", "Ptr", this.memDC, "Ptr", pen, "Ptr")
-        ob := DllCall("SelectObject", "Ptr", this.memDC, "Ptr", nullBrush, "Ptr")
+        ob := DllCall("SelectObject", "Ptr", this.memDC, "Ptr", this._nullBrush, "Ptr")
         DllCall("Rectangle", "Ptr", this.memDC, "Int", x, "Int", y, "Int", x + w, "Int", y + h)
         DllCall("SelectObject", "Ptr", this.memDC, "Ptr", op)
         DllCall("SelectObject", "Ptr", this.memDC, "Ptr", ob)
@@ -314,7 +319,7 @@ class GdiOverlayBase
     {
         scrDC := DllCall("GetDC", "Ptr", 0, "Ptr")
         oldFont := DllCall("SelectObject", "Ptr", scrDC, "Ptr", font, "Ptr")
-        sz := Buffer(8, 0)
+        sz := this._textSizeBuf
         DllCall("GetTextExtentPoint32W", "Ptr", scrDC, "Str", text, "Int", StrLen(text), "Ptr", sz)
         DllCall("SelectObject", "Ptr", scrDC, "Ptr", oldFont)
         DllCall("ReleaseDC", "Ptr", 0, "Ptr", scrDC)

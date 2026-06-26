@@ -4300,6 +4300,36 @@
     }
     .cp-btn:hover { background: var(--surface2); border-color: var(--accent) }
     .cp-btn-primary { background: var(--codex-edge, var(--border)) }
+
+    /* ═══ Skill-node icons (PoE2 passive-tree nodes; replace the old emojis +
+       nav SVGs). Each .snode gets its allocated/unallocated art via the --on /
+       --off custom props (set by snodeInit from SNODE_MAP). A section shows the
+       allocated (bright) art when OPEN and the unallocated (dim) art when CLOSED;
+       a nav chip shows allocated when ACTIVE. Placed last so the standardization
+       overrides below win over the per-component summary rules. ═══ */
+    .snode {
+      display: inline-block; flex: none;
+      width: 20px; height: 20px; margin-right: 8px;
+      background: var(--off) center / contain no-repeat;
+      vertical-align: middle;
+    }
+    /* Collapsible sections: allocated art while open (works for flat AND boxed
+       variants — StashMover, junk cats — since they are all details elements). */
+    details[open] > summary > .snode { background-image: var(--on) }
+    /* Nav chips (category / tab / config sub-tab): allocated art while active. */
+    .cat > .snode, .tab > .snode { width: 18px; height: 18px; margin-right: 7px; background-image: var(--off) }
+    .cat.active > .snode, .tab.active > .snode { background-image: var(--on) }
+
+    /* ── One uniform collapsible-section rhythm ──────────────────────────────
+       Every section header — flat (Radar, Loot Value, …) or boxed (Stash Mover,
+       junk categories) — shares the same left-icon inset and right-caret inset.
+       Fixes the Stash Mover boxes that felt "imported from another tool" (icon
+       jammed left, caret jammed right). Last in the cascade so it wins. */
+    .cfg-section details summary::after { right: 9px }
+    .cfg-summary-status { padding-right: 24px }
+    .sm-sub > summary, .sm-top > summary { padding: 6px 28px 6px 10px }
+    .sm-sub-body { padding: 6px 10px 9px 10px }
+    .ent-junkbox-sum, .junk-cat > summary { padding-right: 26px }
   </style>
 </head>
 
@@ -4962,7 +4992,7 @@
                 <!-- ══ LEFT: STASHING (collapsible) ══════════════════════ -->
                 <div class="sm-col">
                   <details class="sm-sub sm-top" open>
-                    <summary><div class="cfg-header">📥 Auto Stashing</div></summary>
+                    <summary><div class="cfg-header" data-snodekey="sm-stash">📥 Auto Stashing</div></summary>
                     <div class="sm-sub-body">
                       <div class="cfg-row"><span class="cfg-label">Enable auto stashing</span>
                         <label class="toggle"><input type="checkbox" id="sm-stashEnabled"
@@ -5014,7 +5044,7 @@
                 <!-- ══ RIGHT: AUTO SELLING (collapsible) ═════════════════ -->
                 <div class="sm-col">
                   <details class="sm-sub sm-top" open>
-                    <summary><div class="cfg-header">🛒 Auto Selling</div></summary>
+                    <summary><div class="cfg-header" data-snodekey="sm-sell">🛒 Auto Selling</div></summary>
                     <div class="sm-sub-body">
                       <div class="cfg-row"><span class="cfg-label">Enable auto selling</span>
                         <label class="toggle"><input type="checkbox" id="sm-sellEnabled"
@@ -5068,7 +5098,7 @@
 
               <!-- ══ SHARED OPTIONS (full-width collapsible) ═══════════════ -->
               <details class="sm-sub sm-top" open style="margin-top:10px">
-                <summary><div class="cfg-header">⚙️ Shared Options</div></summary>
+                <summary><div class="cfg-header" data-snodekey="sm-shared">⚙️ Shared Options</div></summary>
                 <div class="sm-sub-body">
                   <div class="cfg-row"><span class="cfg-label">Show overlay button</span>
                     <label class="toggle"><input type="checkbox" id="sm-showButton"
@@ -5147,7 +5177,7 @@
                    ════════════════════════════════════════════════════ -->
               <details class="cfg-subsection" open>
                 <summary>
-                  <div class="cfg-header">📊 Live Status</div>
+                  <div class="cfg-header" data-snodekey="ap-status">📊 Live Status</div>
                 </summary>
                 <div class="cfg-subsection-body">
                   <div class="cfg-row"><span class="cfg-label">State</span><span id="cfg-autopilot-state"
@@ -5170,7 +5200,7 @@
                    ════════════════════════════════════════════════════ -->
               <details class="cfg-subsection" ontoggle="if(this.open) requestAnimationFrame(_sbInitAll)">
                 <summary>
-                  <div class="cfg-header">⚔ Combat</div>
+                  <div class="cfg-header" data-snodekey="ap-combat">⚔ Combat</div>
                 </summary>
                 <div class="cfg-subsection-body">
                   <div class="cfg-slider-pair">
@@ -5220,7 +5250,7 @@
                    ════════════════════════════════════════════════════ -->
               <details class="cfg-subsection" ontoggle="if(this.open) requestAnimationFrame(_sbInitAll)">
                 <summary>
-                  <div class="cfg-header">🧭 Exploration</div>
+                  <div class="cfg-header" data-snodekey="ap-explore">🧭 Exploration</div>
                 </summary>
                 <div class="cfg-subsection-body">
                   <div class="cfg-slider-row">
@@ -5246,7 +5276,7 @@
                    ════════════════════════════════════════════════════ -->
               <details class="cfg-subsection">
                 <summary>
-                  <div class="cfg-header">💎 Loot Pickup</div>
+                  <div class="cfg-header" data-snodekey="ap-loot">💎 Loot Pickup</div>
                 </summary>
                 <div class="cfg-subsection-body">
                   <div class="cfg-help">
@@ -5424,7 +5454,7 @@
                    rf-* ids / setRadarFilter handlers so header sync is unchanged. -->
               <details class="cfg-subsection">
                 <summary>
-                  <div class="cfg-header">Entity Markers</div>
+                  <div class="cfg-header" data-snodekey="det-entitymarkers">Entity Markers</div>
                 </summary>
                 <div class="cfg-subsection-body">
                   <div class="cfg-help">Which monster categories the radar draws on the minimap and on-screen overlay. Off = invisible to the radar, even if the entity is in range.</div>
@@ -5504,7 +5534,7 @@
                 stay untagged there). Enable Loot pricing in the Loot tab first, or values stay 0.
               </div>
               <details class="cfg-subsection" open>
-                <summary><div class="cfg-header">🎯 Detection &amp; alerts</div></summary>
+                <summary><div class="cfg-header" data-snodekey="lrv-detection">🎯 Detection &amp; alerts</div></summary>
               <div class="cfg-row"><span class="cfg-label">Enable loot value radar</span>
                 <label class="toggle"><input type="checkbox" id="lrv-enabled"
                     onchange="ahkCall('SetLootRadarValue','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
@@ -5523,7 +5553,7 @@
               </div>
               </details>
               <details class="cfg-subsection" open>
-                <summary><div class="cfg-header">📋 Valuable nearby list</div></summary>
+                <summary><div class="cfg-header" data-snodekey="lrv-list">📋 Valuable nearby list</div></summary>
               <div class="cfg-row"><span class="cfg-label">Show "valuable nearby" list</span>
                 <label class="toggle"><input type="checkbox" id="lrv-showList"
                     onchange="ahkCall('SetLootRadarValue','showList', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
@@ -5542,7 +5572,7 @@
               </div>
               </details>
               <details class="cfg-subsection" open>
-                <summary><div class="cfg-header">🏷️ On-map label</div></summary>
+                <summary><div class="cfg-header" data-snodekey="lrv-onmap">🏷️ On-map label</div></summary>
               <div class="cfg-row"><span class="cfg-label">Value on the orb (replace dot)</span>
                 <label class="toggle"><input type="checkbox" id="lrv-mapOnOrb"
                     onchange="ahkCall('SetLootRadarValue','mapOnOrb', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
@@ -5593,7 +5623,7 @@
               </details>
 
               <details class="cfg-subsection">
-                <summary><div class="cfg-header">🛡️ Unique pricing via the official Trade API (advanced)</div></summary>
+                <summary><div class="cfg-header" data-snodekey="lrv-trade">🛡️ Unique pricing via the official Trade API (advanced)</div></summary>
                 <div class="cfg-help" style="border-left:2px solid #b58b46;padding-left:8px">
                   <b>Security note — read first.</b> This fills the unique-price gap poe.ninja leaves on
                   Standard by querying the <b>official PoE2 trade site inside a logged-in browser
@@ -6576,6 +6606,7 @@
     }
     window.addEventListener('resize', updateAllBarMarkers);
     window.addEventListener('load', () => {
+      snodeInit();   // inject skill-node icons before measuring (they change tab widths)
       // Fonts can still be loading when 'load' fires; once they settle
       // the active-tab width changes, so re-measure.
       if (document.fonts && document.fonts.ready) {
@@ -6583,6 +6614,65 @@
       }
       updateAllBarMarkers();
     });
+
+    // ═══ Skill-node icons — replace the old emoji / nav-SVG icons with PoE2
+    // passive-tree node icons (img/skillnodes/). Each slot's icon is named in
+    // SNODE_MAP; snodeInit() resolves the slot to its DOM element, drops the old
+    // glyph and injects a .snode span whose --on/--off art the CSS swaps on
+    // open/closed (sections) or active/idle (nav). Icons sourced from GGG's
+    // official poe2-skilltree-export (see tools/build_skillnode_icons.py).
+    const SNODE_MAP = {
+      "cat:game":"GlancingBlows","cat:re":"trapdamage","cat:hotkeys":"BowDamage","cat:config":"EnduranceFrenzyPowerChargeNode",
+      "tab:entities":"SorceressInvocationSpellsKeystone","tab:skills":"SmithofKitavaNode","tab:inventory":"SpearsNode1","tab:watchlist":"ArchonGeneric","tab:groups":"FlaskNotableCritStrikeRecharge","tab:alerts":"MinionElementalResistancesNode","tab:loot":"KeystoneUnwaveringStance",
+      "tab:ui":"ChannellingAttacksNotable2","tab:gamestate":"auraeffect","tab:memdiff":"flaskstr","tab:dissect":"flaskint","tab:hotkeys":"KeystoneResoluteTechnique",
+      "cfgtab:general":"blankStr","cfgtab:automation":"PhysicalDamageOverTimeNode","cfgtab:overlay":"LifeandMana","cfgtab:vitals":"BloodMageNode","cfgtab:debug":"tempint","cfgtab:data":"ChannellingSpeed",
+      "sec:det-status":"HollowPalmTechniqueKeystone","sec:det-integrations":"KeystoneAvatarOfFire","sec:det-stashmover":"KeystonePainAttunement","sec:sm-stash":"AzmeriPrimalMonkey","sec:sm-sell":"AzmeriWildBear","sec:sm-shared":"TemporalistNearbyEnemiesProjectilesSlowed","sec:det-autopilot":"KeystoneAvatarOfFire","sec:ap-status":"WarbringerEncasedInJade","sec:ap-combat":"LightningDamagenode","sec:ap-explore":"MiracleMaker","sec:ap-loot":"energyshield",
+      "sec:det-maphack":"ColdAndFireHybridNotable","sec:det-radar":"PressurePoints","sec:det-entitymarkers":"TacticianNode","sec:det-rangecircles":"TemporalistNode","sec:det-lootvalue":"ShieldNodeOffensive","sec:lrv-detection":"Rage","sec:lrv-list":"SpellSuppresionNode","sec:lrv-onmap":"RangedTotemDamage","sec:lrv-trade":"ClawsOfTheMagpie","sec:det-uihoverprice":"projectilespeed",
+      "sec:det-vitals-general":"CorpseDamage","sec:det-debug-actions":"axedmgspeed","sec:det-radar-debug":"PathfinderPathoftheWarrior","sec:det-debug-panels":"ColdDamagenode","sec:det-debug-discovery":"LightningDamagenode","sec:det-debug-diff":"ManaLeechThemedNode","sec:det-debug-overlay":"ElementalDamagenode","sec:det-offset-compare":"plusstrengthdexterity",
+      "sec:det-al-conditions":"blankDex","sec:det-al-timing":"blankInt","sec:det-al-output":"blankStr","sec:det-lt-settings":"KeystoneWhispersOfDoom","sec:det-blacklist":"ArmourAndEvasionNode"
+    };
+    let _snodeDone = false;
+    function _snodeSpan(name) {
+      const s = document.createElement('span');
+      s.className = 'snode';
+      s.style.setProperty('--on',  `url("../img/skillnodes/${name}.png")`);
+      s.style.setProperty('--off', `url("../img/skillnodes/${name}_off.png")`);
+      return s;
+    }
+    // Strip a leading emoji / pictographic cluster from a header's first text node.
+    function _snodeStripGlyph(scope) {
+      const host = scope.querySelector('.cfg-header, .sm-top-title, .nav-label') || scope;
+      for (const node of host.childNodes) {
+        if (node.nodeType === 3 && node.textContent.trim() !== '') {
+          node.textContent = node.textContent.replace(
+            /^\s*(?:[\u{2190}-\u{2BFF}\u{2600}-\u{27BF}\u{1F000}-\u{1FAFF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}]️?\s*)+/u, '');
+          break;
+        }
+      }
+    }
+    function snodeInit() {
+      if (_snodeDone) return; _snodeDone = true;
+      for (const slot in SNODE_MAP) {
+        const c = slot.indexOf(':'), kind = slot.slice(0, c), id = slot.slice(c + 1), name = SNODE_MAP[slot];
+        if (kind === 'cat' || kind === 'tab' || kind === 'cfgtab') {
+          const sel = kind === 'cat' ? `.cat[data-cat="${id}"]`
+                    : kind === 'cfgtab' ? `.tab[data-cfgtab="${id}"]`
+                    : `.tab[data-tab="${id}"]`;
+          const el = document.querySelector(sel);
+          if (!el) continue;
+          el.querySelector(':scope > svg')?.remove();   // drop the old inline SVG glyph
+          el.insertBefore(_snodeSpan(name), el.firstChild);
+        } else if (kind === 'sec') {
+          let summary = null;
+          const det = document.getElementById(id);
+          if (det && det.tagName === 'DETAILS') summary = det.querySelector(':scope > summary');
+          if (!summary) summary = document.querySelector(`[data-snodekey="${id}"]`)?.closest('summary');
+          if (!summary) continue;
+          _snodeStripGlyph(summary);
+          summary.insertBefore(_snodeSpan(name), summary.firstChild);
+        }
+      }
+    }
 
     function escHtml(s) {
       return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

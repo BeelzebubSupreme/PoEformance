@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.72`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.76`.
 
 ## Language
 
@@ -71,9 +71,11 @@ show only the sections that have content — never pad with empty headings:
 - **UI:** `ui/index.html` — one self-contained file with a single inline `<script>`,
   rendered in a WebView2 control.
 - **Sounds:** alert `.wav` files live in the root **`wav/`** folder.
-- **Logs:** `.log` files live in the root **`Logs/`** folder.
-- **Data:** `.tsv` files needed for translating internal strings by using a dictionary live in the root **`Data/`** folder.
-- **Tools:** `.py` files needed for building the dictionaries live in the root **`Tools/`** folder.
+- **Logs:** `.log` files live in the root **`logs/`** folder.
+- **Data:** `.tsv` files needed for translating internal strings by using a dictionary live in the root **`data/`** folder.
+- **Tools:** `.py` files needed for building the dictionaries live in the root **`tools/`** folder.
+  (All repo folders are lowercase except `Lib/` — keep new paths lowercase, or a
+  `Tools/` vs `tools/` case-collision breaks checkout on case-insensitive Windows/macOS.)
 
 ### Include conventions
 - `InGameStateMonitor.ahk` includes with the `ahk/` prefix, e.g. `#Include ahk/RadarOverlay.ahk`.
@@ -636,6 +638,38 @@ leaf). Solved with a **deterministic UI tree-descent** + the item-slot's own ite
   descent + +0x4F8 resolve and the value layer round-trip work end-to-end. Remaining tuning
   notes (optional): badge placement/scale on very large stash vs tiny inventory cells, and
   overlap with the game's own item tooltip.
+
+## Skill-node UI icons (shipped 0.45.13.73)
+
+Replaces the generic emoji / inline-SVG icons in front of every nav chip + section
+heading with **PoE2 passive-tree node icons** — thousands available (no duplicates) and
+each carries a built-in allocated/unallocated look used as an on/off state.
+
+- **Source:** GGG's official `grindinggear/poe2-skilltree-export` (free, authoritative):
+  `skills.webp` (allocated art) + `skills-disabled.webp` (unallocated) + `frame.webp`
+  (per-type node frames), each with a TexturePacker JSON. 676 icons (222 normal 34×34,
+  421 notable 49×49, 33 keystone 68×69).
+- **`tools/build_skillnode_icons.py`** — composites each chosen icon (art + frame) into a
+  uniform 64×64 PNG pair in `img/skillnodes/`: `<name>.png` (allocated: active art +
+  allocated frame) and `<name>_off.png` (unallocated). Reads the slot→icon map from
+  `tools/skillnode_map.json`. Downloads the source sheets to `tools/.skilltree_cache/`
+  (gitignored) on first run, or `--src DIR` for a local copy. Re-run after editing the map.
+- **Mapping** lives in two synced places: `tools/skillnode_map.json` (build input) and the
+  `SNODE_MAP` object in `ui/index.html` (runtime). Keys: `cat:<id>` / `tab:<id>` /
+  `cfgtab:<id>` (nav) and `sec:<id>` (sections, `<id>` = a `det-*` id or a `data-snodekey`).
+- **UI wiring (`ui/index.html`):** `snodeInit()` (run on `load`) resolves each slot to its
+  DOM element, drops the old SVG/emoji and injects a `<span class="snode">` whose
+  `--on`/`--off` art the CSS swaps: **sections** show allocated art while OPEN
+  (`details[open] > summary > .snode`), **nav chips** while ACTIVE (`.cat.active`/`.tab.active`).
+  Nested sub-sections without a `det-*` id (Stash Mover sides, AutoPilot/LootValue
+  sub-groups) carry a `data-snodekey="<id>"` marker. Section icons load from `../img/skillnodes/`.
+- **Header standardization (same change):** one uniform collapsible-section rhythm — the
+  `.snode` left-icon inset + the gold cube→diamond caret right inset are now consistent for
+  flat AND boxed sections. Fixes the Stash Mover / junk-cat boxes that felt "imported from
+  another tool" (icon jammed left, caret jammed right) via `.sm-sub`/`.sm-top`/`.junk-cat`
+  summary-padding + caret-inset overrides at the end of the main `<style>`.
+- **Pending in-game verification:** icon legibility at the real WebView size; the on/off
+  swap on section open/close + tab switch; that `../img/skillnodes/` resolves in WebView2.
 
 ## Reference
 

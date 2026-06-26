@@ -62,3 +62,6 @@ dev/
 # Compiled output (built locally, not shipped in the repo)
 PoEformance.exe
 WebView2Loader.dll
+
+# Skill-node icon build cache (downloaded GGG sprite sheets)
+tools/.skilltree_cache/

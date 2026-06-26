@@ -1,0 +1,141 @@
+#!/usr/bin/env python3
+"""Build framed PoE2 skill-node UI icons from GGG's official passive-tree export.
+
+For every icon named in tools/skillnode_map.json this slices the matching node out of
+GGG's sprite sheets and composites it with the node frame, producing two PNGs per icon
+in img/skillnodes/:
+  <name>.png      allocated look   (active art  + allocated frame)   -> section OPEN / tab active
+  <name>_off.png  unallocated look (disabled art + unallocated frame)-> section CLOSED / tab idle
+
+Source = grindinggear/poe2-skilltree-export (official, free). The six source files are
+cached under tools/.skilltree_cache/ (gitignored); pass --src DIR to use a local copy.
+
+Run:  python3 tools/build_skillnode_icons.py
+Deps: pillow  (pip install pillow)
+"""
+import json, os, re, sys, urllib.request
+
+ROOT  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CACHE = os.path.join(ROOT, "tools", ".skilltree_cache")
+OUT   = os.path.join(ROOT, "img", "skillnodes")
+MAP   = os.path.join(ROOT, "tools", "skillnode_map.json")
+BASE  = "https://raw.githubusercontent.com/grindinggear/poe2-skilltree-export/main/assets/"
+FILES = ["skills.webp", "skills.json", "skills-disabled.webp",
+         "skills-disabled.json", "frame.webp", "frame.json"]
+CANVAS = 64   # uniform output square (px); icons display ~20px so this stays crisp
+
+# allocated / unallocated frame key per node type
+FRAME_ALLOC  = {"normal": "PSSkillFrameActive", "notable": "NotableFrameAllocated",   "keystone": "KeystoneFrameAllocated"}
+FRAME_UNALLOC= {"normal": "PSSkillFrame",       "notable": "NotableFrameUnallocated", "keystone": "KeystoneFrameUnallocated"}
+PREFIX = {"normalActive": "normal", "notableActive": "notable", "keystoneActive": "keystone"}
+
+
+def src_path(srcdir, name):
+    if srcdir:
+        return os.path.join(srcdir, name)
+    os.makedirs(CACHE, exist_ok=True)
+    p = os.path.join(CACHE, name)
+    if not os.path.exists(p):
+        print("  downloading", name)
+        urllib.request.urlretrieve(BASE + name, p)
+    return p
+
+
+def verify_ui_map(mapping):
+    """Drift guard: the runtime SNODE_MAP in ui/index.html must match this build's
+    slot->icon map (tools/skillnode_map.json), or the UI could reference an icon
+    that was never generated (broken header) or vice-versa. Exits non-zero on a
+    mismatch so the two never drift apart silently. No-op if the UI isn't found."""
+    ui = os.path.join(ROOT, "ui", "index.html")
+    try:
+        html = open(ui, encoding="utf-8").read()
+    except OSError:
+        return
+    m = re.search(r"const\s+SNODE_MAP\s*=\s*\{([^{}]*)\}", html, re.S)
+    if not m:
+        print("warning: SNODE_MAP not found in ui/index.html — skipping drift check")
+        return
+    try:
+        ui_map = json.loads("{" + re.sub(r",\s*$", "", m.group(1).strip()) + "}")
+    except json.JSONDecodeError as e:
+        print("warning: SNODE_MAP block is not valid JSON — skipping drift check:", e)
+        return
+    if ui_map != mapping:
+        only_map = sorted(set(mapping) - set(ui_map))
+        only_ui  = sorted(set(ui_map) - set(mapping))
+        changed  = {k: (mapping[k], ui_map[k]) for k in set(mapping) & set(ui_map) if mapping[k] != ui_map[k]}
+        msg = ["error: ui/index.html SNODE_MAP and tools/skillnode_map.json disagree — keep them in sync:"]
+        if only_map: msg.append("  slots only in skillnode_map.json: " + ", ".join(only_map))
+        if only_ui:  msg.append("  slots only in SNODE_MAP: " + ", ".join(only_ui))
+        if changed:  msg.append("  different icon: " + ", ".join(f"{k} ({a} != {b})" for k, (a, b) in changed.items()))
+        sys.exit("\n".join(msg))
+
+
+def main():
+    from PIL import Image
+    srcdir = None
+    if "--src" in sys.argv:
+        i = sys.argv.index("--src")
+        if i + 1 >= len(sys.argv):
+            sys.exit("error: --src requires a directory argument, e.g. --src ./assets")
+        srcdir = sys.argv[i + 1]
+
+    files = {n: src_path(srcdir, n) for n in FILES}
+    A  = Image.open(files["skills.webp"]).convert("RGBA")
+    D  = Image.open(files["skills-disabled.webp"]).convert("RGBA")
+    F  = Image.open(files["frame.webp"]).convert("RGBA")
+    fa = json.load(open(files["skills.json"]))["frames"]
+    fd = json.load(open(files["skills-disabled.json"]))["frames"]
+    ff = json.load(open(files["frame.json"]))["frames"]
+    mapping = json.load(open(MAP))
+    verify_ui_map(mapping)
+
+    # index active frames by basename, preferring 'normal' on a basename collision
+    # (same source symbol; the simpler ring reads cleaner at header size).
+    by_name = {}
+    order = {"normal": 0, "notable": 1, "keystone": 2}
+    for key in fa:
+        pref = key.split(":", 1)[0]
+        if pref not in PREFIX:
+            continue
+        t = PREFIX[pref]
+        name = key.split("/")[-1][:-4]
+        if name not in by_name or order[t] < order[by_name[name][0]]:
+            by_name[name] = (t, key)
+
+    def cut(sheet, frames, key):
+        f = frames[key]["frame"]
+        return sheet.crop((f["x"], f["y"], f["x"] + f["w"], f["y"] + f["h"])).convert("RGBA")
+
+    def compose(name, allocated):
+        t, akey = by_name[name]
+        framekey = "frame:" + (FRAME_ALLOC[t] if allocated else FRAME_UNALLOC[t])
+        fr = cut(F, ff, framekey)
+        if allocated:
+            ico = cut(A, fa, akey)
+        else:
+            ico = cut(D, fd, akey.replace("Active:", "Inactive:", 1))
+        node = Image.new("RGBA", fr.size, (0, 0, 0, 0))
+        node.alpha_composite(ico, ((fr.width - ico.width) // 2, (fr.height - ico.height) // 2))
+        node.alpha_composite(fr, (0, 0))
+        # fit (contain) onto the uniform square so every node shares one footprint
+        s = CANVAS / max(node.width, node.height)
+        node = node.resize((max(1, round(node.width * s)), max(1, round(node.height * s))), Image.LANCZOS)
+        out = Image.new("RGBA", (CANVAS, CANVAS), (0, 0, 0, 0))
+        out.alpha_composite(node, ((CANVAS - node.width) // 2, (CANVAS - node.height) // 2))
+        return out
+
+    os.makedirs(OUT, exist_ok=True)
+    names = sorted(set(mapping.values()))
+    missing = [n for n in names if n not in by_name]
+    if missing:
+        print("ERROR: unknown icon names:", missing)
+        sys.exit(1)
+    for n in names:
+        compose(n, True).save(os.path.join(OUT, n + ".png"))
+        compose(n, False).save(os.path.join(OUT, n + "_off.png"))
+    print(f"wrote {len(names) * 2} PNGs ({len(names)} icons) to img/skillnodes/")
+
+
+if __name__ == "__main__":
+    main()
