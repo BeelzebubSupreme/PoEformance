@@ -4382,6 +4382,27 @@
       background-position: right bottom;
       background-size: calc(100% - 26px) 1px;
     }
+
+    /* ── Overlay Placement panel (Config → Overlay): one compact row per
+       placeable overlay — name, optional enable, Move drag toggle, X/Y % and
+       Reset. ── */
+    .ovp-list { display: flex; flex-direction: column; gap: 2px }
+    .ovp-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(120,90,50,0.18);
+    }
+    .ovp-row:last-child { border-bottom: none }
+    .ovp-name {
+      flex: 1; min-width: 110px;
+      color: var(--codex-text); font-family: var(--codex-serif); font-size: 13px;
+    }
+    .ovp-on { width: 32px; display: flex; justify-content: center }
+    .ovp-spacer { display: inline-block; width: 32px }
+    .ovp-cap { font-size: 10.5px; color: var(--subtext); width: 30px }
+    .ovp-xy { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--subtext) }
+    .ovp-xy input { width: 52px; text-align: right }
+    .ovp-reset { font-size: 10.5px; padding: 2px 8px }
 </style>
 </head>
 
@@ -4823,8 +4844,6 @@
             <div class="cfg-subsection">
               <div class="cfg-row"><span class="cfg-label">Show kill counts</span>
                 <label class="toggle"><input type="checkbox" id="lt-showKills" onchange="lootChk('showKills',this)"><span class="toggle-slider"></span></label></div>
-              <div class="cfg-row"><span class="cfg-label">Anchor bars to right</span>
-                <label class="toggle"><input type="checkbox" id="lt-barOnRight" onchange="lootChk('barOnRight',this)"><span class="toggle-slider"></span></label></div>
               <div class="cfg-row"><span class="cfg-label">Hide while a UI panel is open</span>
                 <label class="toggle"><input type="checkbox" id="tog-panel-hidelootbars" onchange="ahkCall('SetPanelRespect','loot', this.checked?1:0)"><span class="toggle-slider"></span></label></div>
               <div class="cfg-row"><span class="cfg-label">poe.ninja league</span>
@@ -4836,10 +4855,9 @@
               <div class="cfg-row"><span class="cfg-label">Sessions to keep</span>
                 <span class="hk-num"><input type="number" id="lt-maxSessions" min="1" max="500" onchange="lootNum('maxSessions',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></div>
               <div class="cfg-subhead">On-screen bars</div>
+              <div class="cfg-help" style="padding:0 2px 4px">Position the bars freely via <b>Config → Overlay → Overlay Placement</b> (drag them in-game or set X/Y %).</div>
               <div class="cfg-row"><span class="cfg-label">Compact bar height (px)</span>
                 <span class="hk-num"><input type="number" id="lt-compactHeight" min="60" max="400" step="5" onchange="lootNum('compactHeight',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></div>
-              <div class="cfg-row"><span class="cfg-label">Bottom offset (px)</span>
-                <span class="hk-num"><input type="number" id="lt-barBottomOffset" min="0" max="600" step="5" onchange="lootNum('barBottomOffset',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></div>
               <div class="cfg-slider-row"><span class="cfg-label">Bar opacity</span>
                 <div class="slider-wrap"><span class="slider-val" id="lt-barOpacity-bub">0.55</span><input type="range" id="lt-barOpacity" min="0.05" max="1" step="0.05" value="0.55" oninput="_sb(this,'lt-barOpacity-bub',this.value)" onchange="ahkCall('SetLootConfig','barOpacity',parseFloat(this.value))"></div>
               </div>
@@ -5744,6 +5762,26 @@
                 <span class="cfg-label">Min. value to show (ex)</span>
                 <span class="hk-num"><input type="number" id="uhp-minEx" min="0" max="100000" step="0.5" onchange="ahkCall('SetUiHoverPrice','minEx',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
               </div>
+            </div>
+          </details>
+        </div>
+
+        <!-- Overlay Placement — free positioning for the info overlays (Debug, the
+             Valuable-loot list, the two Loot bars, the Alert banner, the Focus
+             readout). Rows are rendered by overlayPlaceRender() from the header's
+             overlayPlacement data. Drag in-game OR set X/Y %; Reset = default spot. -->
+        <div class="cfg-section">
+          <details id="det-overlay-placement" ontoggle="syncCfgSections()">
+            <summary><div class="cfg-header">Overlay Placement</div></summary>
+            <div class="cfg-subsection">
+              <div class="cfg-help">
+                Position the in-game info overlays freely — just like the Vitals bars. Turn on
+                <b>Move</b> for one, then drag it directly on the game screen (a cyan frame marks the
+                grabbed overlay); turn Move off to lock it. Or type an exact <b>X / Y</b> (percent of the
+                game window). <b>Reset</b> returns an overlay to its built-in default spot. Nothing moves
+                until you change it.
+              </div>
+              <div id="overlay-place-list" class="ovp-list"></div>
             </div>
           </details>
         </div>
@@ -6686,7 +6724,7 @@
       "tab:ui":"ChannellingAttacksNotable2","tab:gamestate":"auraeffect","tab:memdiff":"flaskstr","tab:dissect":"flaskint","tab:hotkeys":"KeystoneResoluteTechnique",
       "cfgtab:general":"blankStr","cfgtab:automation":"PhysicalDamageOverTimeNode","cfgtab:overlay":"LifeandMana","cfgtab:vitals":"BloodMageNode","cfgtab:debug":"tempint","cfgtab:data":"ChannellingSpeed",
       "sec:det-status":"HollowPalmTechniqueKeystone","sec:det-integrations":"KeystoneAvatarOfFire","sec:det-stashmover":"KeystonePainAttunement","sec:sm-stash":"AzmeriPrimalMonkey","sec:sm-stash-ignore":"shieldblock","sec:sm-stash-rnd":"criticalstrikechance","sec:sm-sell":"AzmeriWildBear","sec:sm-sell-ignore":"shieldblock","sec:sm-sell-rnd":"criticalstrikechance","sec:sm-shared":"TemporalistNearbyEnemiesProjectilesSlowed","sec:det-autopilot":"KeystoneAvatarOfFire","sec:ap-status":"WarbringerEncasedInJade","sec:ap-combat":"LightningDamagenode","sec:ap-explore":"MiracleMaker","sec:ap-loot":"energyshield",
-      "sec:det-maphack":"ColdAndFireHybridNotable","sec:det-radar":"PressurePoints","sec:det-entitymarkers":"TacticianNode","sec:det-rangecircles":"TemporalistNode","sec:det-lootvalue":"ShieldNodeOffensive","sec:lrv-detection":"Rage","sec:lrv-list":"SpellSuppresionNode","sec:lrv-onmap":"RangedTotemDamage","sec:lrv-trade":"ClawsOfTheMagpie","sec:det-uihoverprice":"projectilespeed",
+      "sec:det-maphack":"ColdAndFireHybridNotable","sec:det-radar":"PressurePoints","sec:det-entitymarkers":"TacticianNode","sec:det-rangecircles":"TemporalistNode","sec:det-lootvalue":"ShieldNodeOffensive","sec:lrv-detection":"Rage","sec:lrv-list":"SpellSuppresionNode","sec:lrv-onmap":"RangedTotemDamage","sec:lrv-trade":"ClawsOfTheMagpie","sec:det-uihoverprice":"projectilespeed","sec:det-overlay-placement":"MiracleMaker",
       "sec:det-vitals-general":"CorpseDamage","sec:det-debug-actions":"axedmgspeed","sec:det-radar-debug":"PathfinderPathoftheWarrior","sec:det-debug-panels":"ColdDamagenode","sec:det-debug-discovery":"LightningDamagenode","sec:det-debug-diff":"ManaLeechThemedNode","sec:det-debug-overlay":"ElementalDamagenode","sec:det-offset-compare":"plusstrengthdexterity",
       "sec:det-al-conditions":"blankDex","sec:det-al-timing":"blankInt","sec:det-al-output":"blankStr","sec:det-lt-settings":"KeystoneWhispersOfDoom","sec:det-blacklist":"ArmourAndEvasionNode",
       "sec:det-vitals-life":"IncreasedMaximumLifeNotable","sec:det-vitals-mana":"MineManaReservationNotable","sec:det-vitals-es":"EnergyShieldNode",
@@ -7334,18 +7372,70 @@
       const val = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
       chk('lt-enabled', s.enabled);
       chk('lt-showKills', s.showKills);
-      chk('lt-barOnRight', s.barOnRight);
       val('lt-league', s.league);
       val('lt-cacheTtlMin', s.cacheTtlMin);
       val('lt-historySize', s.historySize);
       val('lt-maxSessions', s.maxSessions);
       val('lt-compactHeight', s.compactHeight);
-      val('lt-barBottomOffset', s.barBottomOffset);
       const opa = document.getElementById('lt-barOpacity');
       if (opa && document.activeElement !== opa) { opa.value = s.barOpacity; _sb(opa, 'lt-barOpacity-bub', s.barOpacity); }
       const sc = document.getElementById('lt-uiScale');
       if (sc && document.activeElement !== sc) { sc.value = s.uiScale; _sb(sc, 'lt-uiScale-bub', s.uiScale); }
     }
+
+    // ── Overlay Placement (Config → Overlay): free positioning for the info
+    //    overlays. Names MUST match the AHK OverlayPlaceableList() / overlay .Name.
+    const OV_PLACEABLE = [
+      { name: 'debug',        label: 'Debug overlay' },
+      { name: 'lootvalue',    label: 'Valuable-loot list' },
+      { name: 'lootstrip',    label: 'Loot bar (on map)' },
+      { name: 'lootcompact',  label: 'Loot bar (hideout)' },
+      { name: 'notification', label: 'Alert banner' },
+      { name: 'focus',        label: 'Focus readout' },
+    ];
+    let _ovpBuilt = false;
+    // Builds the per-overlay rows once. The Focus row also carries an enable
+    // toggle (it has no other home); the others are enabled in their own tabs.
+    function overlayPlaceRender() {
+      const host = document.getElementById('overlay-place-list');
+      if (!host) return;
+      host.innerHTML = OV_PLACEABLE.map(o => {
+        const enableCol = o.name === 'focus'
+          ? `<label class="toggle" title="Enable the Focus readout overlay (targeted monster + hovered object)"><input type="checkbox" data-ovenable="${o.name}" onchange="ovFocusEnable(this.checked)"><span class="toggle-slider"></span></label>`
+          : `<span class="ovp-spacer"></span>`;
+        return `<div class="ovp-row">
+          <span class="ovp-name">${o.label}</span>
+          <span class="ovp-on">${enableCol}</span>
+          <label class="toggle ovp-move" title="Drag this overlay on the game screen, then turn off to lock"><input type="checkbox" data-ovedit="${o.name}" onchange="ovMove('${o.name}',this.checked)"><span class="toggle-slider"></span></label>
+          <span class="ovp-cap">Move</span>
+          <span class="ovp-xy">X<input type="number" class="cfg-input" min="0" max="100" step="0.5" data-ovx="${o.name}" onchange="ovPos('${o.name}','x',this.value)" placeholder="auto"></span>
+          <span class="ovp-xy">Y<input type="number" class="cfg-input" min="0" max="100" step="0.5" data-ovy="${o.name}" onchange="ovPos('${o.name}','y',this.value)" placeholder="auto"></span>
+          <button class="hk-btn ovp-reset" title="Return this overlay to its default position" onclick="ovReset('${o.name}')">Reset</button>
+        </div>`;
+      }).join('');
+      _ovpBuilt = true;
+    }
+    // Mirrors header placement state back into the rows (skips a field being typed).
+    function overlayPlaceSync(d) {
+      if (!d) return;
+      if (!_ovpBuilt) overlayPlaceRender();
+      const items = d.items || {};
+      for (const o of OV_PLACEABLE) {
+        const it = items[o.name] || {};
+        const mv = document.querySelector(`[data-ovedit="${o.name}"]`);
+        if (mv) mv.checked = !!it.edit;
+        const x = document.querySelector(`[data-ovx="${o.name}"]`);
+        const y = document.querySelector(`[data-ovy="${o.name}"]`);
+        if (x && document.activeElement !== x) x.value = (it.moved && it.xPct != null) ? it.xPct : '';
+        if (y && document.activeElement !== y) y.value = (it.moved && it.yPct != null) ? it.yPct : '';
+      }
+      const fe = document.querySelector('[data-ovenable="focus"]');
+      if (fe) fe.checked = !!d.focusEnabled;
+    }
+    function ovMove(name, on)      { ahkCall('SetOverlayEdit', name, on ? 1 : 0); }
+    function ovPos(name, axis, v)  { ahkCall('SetOverlayPos', name, axis, v); }
+    function ovReset(name)         { ahkCall('ResetOverlayPos', name); }
+    function ovFocusEnable(on)     { ahkCall('SetFocusOverlay', on ? 1 : 0); }
 
     // Stash Mover header settings -> form widgets (skips a field being edited).
     // Loot Value Radar header settings -> form widgets (skips a field being edited).
@@ -9629,6 +9719,7 @@
       if (d.lootRadarValue !== undefined) lootRadarValueSyncFromHeader(d.lootRadarValue);
       if (d.uiHoverPrice !== undefined) uiHoverPriceSyncFromHeader(d.uiHoverPrice);
       if (d.lootTradePricing !== undefined) lootTradePricingSyncFromHeader(d.lootTradePricing);
+      if (d.overlayPlacement !== undefined) overlayPlaceSync(d.overlayPlacement);
 
       // Version tags
       const verApp = document.getElementById('ver-app');

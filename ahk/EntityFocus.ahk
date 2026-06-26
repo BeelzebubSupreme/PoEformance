@@ -249,6 +249,8 @@ ToggleFocusOverlay()
     g_focusOverlayEnabled := !g_focusOverlayEnabled
     if (!g_focusOverlayEnabled && IsObject(g_focusOverlay))
         g_focusOverlay.Hide()
+    SaveOverlayPlacement()   ; persist the enabled flag (default OFF, survives restart)
+    SetTimer(PushHeaderToWebView, -50)
     try ToolTip("Focus overlay: " (g_focusOverlayEnabled ? "ON" : "OFF"))
     SetTimer(() => ToolTip(), -1500)
 }

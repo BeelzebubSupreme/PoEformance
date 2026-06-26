@@ -239,6 +239,24 @@ _DispatchBridgeCall(method, args)
             ivb := (args.Length >= 1) ? args[1] : ""
             if (ivb != "")
                 SetTimer(() => _ImportVitalsVisibility(ivb), -1)
+        case "SetOverlayEdit":
+            ; Toggle drag "Move" mode for one placeable overlay (args: name, on).
+            ; Called directly (like ToggleVitalsEdit) so the click-through + mouse
+            ; hook flip applies on this same main-thread message.
+            if (args.Length >= 2)
+                SetOverlayEdit(String(args[1]), args[2])
+        case "SetOverlayPos":
+            ; Set one position axis from a UI percent (args: name, "x"|"y", pct).
+            if (args.Length >= 3)
+                SetOverlayPos(String(args[1]), String(args[2]), args[3])
+        case "ResetOverlayPos":
+            ; Clear an overlay's stored position -> back to its built-in default anchor.
+            if (args.Length >= 1)
+                ResetOverlayPos(String(args[1]))
+        case "SetFocusOverlay":
+            ; Enable/disable the Focus readout overlay (persisted); args: on.
+            if (args.Length >= 1)
+                SetFocusOverlayEnabled(args[1])
         case "DecodeComponent":
             ; Lazy-decode a single component for the Entity Inspector. The
             ; radar fast-path skips Stats/Buffs/Actor/Animated/StateMachine

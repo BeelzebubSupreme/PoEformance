@@ -19,6 +19,7 @@ class LootValueOverlay extends GdiOverlayBase
         this._fontH := -16
         this._scale := 1.0
         this._rows  := []          ; cached [{parts, num, name, valueEx}] for the current frame
+        this.Placeable := true     ; free-positionable (OverlayPlacement.ahk)
     }
 
     ShouldShow(ctx)
@@ -99,9 +100,11 @@ class LootValueOverlay extends GdiOverlayBase
         if (a != this._alpha)
             this.SetAlpha(a)
 
-        x := ctx.gwX + Round(16 * scale)
-        y := ctx.gwY + Round(ctx.gwH * 0.30)
-        return Map("x", x, "y", y, "w", barW, "h", barH)
+        ; Built-in default anchor: left edge, ~30% down (usually clear in PoE2).
+        ; _Placed() applies a user override if set.
+        defX := ctx.gwX + Round(16 * scale)
+        defY := ctx.gwY + Round(ctx.gwH * 0.30)
+        return this._Placed(ctx, defX, defY, barW, barH)
     }
 
     Draw(ctx, rect)

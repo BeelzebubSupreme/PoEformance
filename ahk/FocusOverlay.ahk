@@ -26,6 +26,7 @@ class FocusOverlay extends GdiOverlayBase
         super.__New(255)
         this.Name   := "focus"
         this._lines := []
+        this.Placeable := true   ; free-positionable (OverlayPlacement.ahk)
     }
 
     ; ── Overlay contract ────────────────────────────────────────────────────
@@ -61,9 +62,10 @@ class FocusOverlay extends GdiOverlayBase
         padX := FocusOverlay.PAD_X, padY := FocusOverlay.PAD_Y, gap := FocusOverlay.LINE_GAP
         barW := maxW + padX * 2
         barH := this._lines.Length * lineH + (this._lines.Length - 1) * gap + padY * 2
-        return Map("x", ctx.gwX + Round(ctx.gwW * FocusOverlay.LEFT_FRACTION)
-                 , "y", ctx.gwY + Round(ctx.gwH * FocusOverlay.TOP_FRACTION)
-                 , "w", barW, "h", barH)
+        ; Built-in default anchor (top-left); _Placed() applies a user override if set.
+        defX := ctx.gwX + Round(ctx.gwW * FocusOverlay.LEFT_FRACTION)
+        defY := ctx.gwY + Round(ctx.gwH * FocusOverlay.TOP_FRACTION)
+        return this._Placed(ctx, defX, defY, barW, barH)
     }
 
     ; Background + border + each line.
