@@ -239,6 +239,20 @@ _DispatchBridgeCall(method, args)
             ivb := (args.Length >= 1) ? args[1] : ""
             if (ivb != "")
                 SetTimer(() => _ImportVitalsVisibility(ivb), -1)
+        case "SetOverlayEdit":
+            ; Toggle drag "Move" mode for one placeable overlay (args: name, on).
+            ; Called directly (like ToggleVitalsEdit) so the click-through + mouse
+            ; hook flip applies on this same main-thread message.
+            if (args.Length >= 2)
+                SetOverlayEdit(String(args[1]), args[2])
+        case "SetOverlayPos":
+            ; Set one position axis from a UI percent (args: name, "x"|"y", pct).
+            if (args.Length >= 3)
+                SetOverlayPos(String(args[1]), String(args[2]), args[3])
+        case "ResetOverlayPos":
+            ; Clear an overlay's stored position -> back to its built-in default anchor.
+            if (args.Length >= 1)
+                ResetOverlayPos(String(args[1]))
         case "DecodeComponent":
             ; Lazy-decode a single component for the Entity Inspector. The
             ; radar fast-path skips Stats/Buffs/Actor/Animated/StateMachine
@@ -814,9 +828,6 @@ _DispatchBridgeCall(method, args)
         case "PathfindingProbeRun":
             ; TEMP diagnostic: verify Pathfinding Flying/BaseSpeed offsets.
             SetTimer(() => PathfindingProbeRun(), -1)
-        case "ToggleFocusOverlay":
-            ; Toggle the focused-entity test overlay (targeted monster + hovered object).
-            SetTimer(() => ToggleFocusOverlay(), -1)
         case "ComponentDumpProbeRun":
             ; TEMP diagnostic: dump all components + raw fields of the highlighted entity.
             SetTimer(() => ComponentDumpProbeRun(), -1)

@@ -26,6 +26,7 @@ class NotificationOverlay extends GdiOverlayBase
         this._bannerText  := ""
         this._bannerUntil := 0
         this._bannerColor := NotificationOverlay.COLOR_TEXT
+        this.Placeable    := true   ; free-positionable (OverlayPlacement.ahk)
     }
 
     ; Shows a banner with <text> for <durationMs>. colorBGR (non-zero) overrides the text colour.
@@ -56,9 +57,11 @@ class NotificationOverlay extends GdiOverlayBase
         m    := this._MeasureText(font, this._bannerText)
         barW := m["w"] + NotificationOverlay.PAD_X * 2
         barH := m["h"] + NotificationOverlay.PAD_Y * 2
-        return Map("x", ctx.gwX + (ctx.gwW - barW) // 2
-                 , "y", ctx.gwY + Round(ctx.gwH * NotificationOverlay.TOP_FRACTION)
-                 , "w", barW, "h", barH)
+        ; Built-in default anchor: horizontally centred near the top; _Placed()
+        ; applies a user override (stored as the banner's top-left) if set.
+        defX := ctx.gwX + (ctx.gwW - barW) // 2
+        defY := ctx.gwY + Round(ctx.gwH * NotificationOverlay.TOP_FRACTION)
+        return this._Placed(ctx, defX, defY, barW, barH)
     }
 
     ; Background bar + gold border + banner text.

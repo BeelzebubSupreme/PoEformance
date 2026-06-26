@@ -813,14 +813,17 @@
     .subtab-group-label {
       font-family: var(--codex-display);
       font-style: italic;
-      font-size: 9px;
+      font-size: 8.5px;
       font-weight: 600;
-      letter-spacing: 0.20em;
+      letter-spacing: 0.26em;
       text-transform: uppercase;
-      color: var(--codex-gold);
-      opacity: 0.7;
-      padding: 0 10px 0 16px;
+      /* Muted parchment grey — deliberately NOT the tab gold, so it reads as a
+         non-clickable group caption, not an active tab. */
+      color: var(--subtext);
+      opacity: 0.78;
+      padding: 0 12px 0 18px;
       align-self: center;
+      cursor: default;
       user-select: none
     }
     /* Slim brown rule between groups (Live | Tools). */
@@ -3284,13 +3287,23 @@
        is an .ent-junkbox (not a .cfg-section), so we replicate the marker. */
     .junk-cat-head {
       display: flex;
-      flex-direction: column;
-      gap: 3px;
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
       position: relative;
       cursor: pointer;
       list-style: none;
       padding-right: 22px
     }
+    /* Name + one-line description stack vertically beside the (left) icon. */
+    .junk-cat-text {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      flex: 1;
+      min-width: 0
+    }
+    .junk-cat-head > .snode { width: 18px; height: 18px; margin-right: 0 }
     .junk-cat-head::-webkit-details-marker { display: none }
     /* Title row holds the name; the caret is centred over the whole header
        (name + desc) so it stays vertically centred now that the summary is
@@ -4309,7 +4322,7 @@
        overrides below win over the per-component summary rules. ═══ */
     .snode {
       display: inline-block; flex: none;
-      width: 20px; height: 20px; margin-right: 8px;
+      width: 20px; height: 20px; margin-right: 5px;
       background: var(--off) center / contain no-repeat;
       vertical-align: middle;
     }
@@ -4317,20 +4330,78 @@
        variants — StashMover, junk cats — since they are all details elements). */
     details[open] > summary > .snode { background-image: var(--on) }
     /* Nav chips (category / tab / config sub-tab): allocated art while active. */
-    .cat > .snode, .tab > .snode { width: 18px; height: 18px; margin-right: 7px; background-image: var(--off) }
+    .cat > .snode, .tab > .snode { width: 18px; height: 18px; margin-right: 6px; background-image: var(--off) }
     .cat.active > .snode, .tab.active > .snode { background-image: var(--on) }
+    /* Game-state prop-cards (not <details>): smaller icon to match the compact
+       11px header, spacing from the header's own flex gap; allocated while open. */
+    .prop-card-hdr > .snode { width: 16px; height: 16px; margin-right: 0 }
+    .prop-card:not(.collapsed) > .prop-card-hdr > .snode { background-image: var(--on) }
 
     /* ── One uniform collapsible-section rhythm ──────────────────────────────
        Every section header — flat (Radar, Loot Value, …) or boxed (Stash Mover,
        junk categories) — shares the same left-icon inset and right-caret inset.
-       Fixes the Stash Mover boxes that felt "imported from another tool" (icon
-       jammed left, caret jammed right). Last in the cascade so it wins. */
+       Last in the cascade so it wins. */
     .cfg-section details summary::after { right: 9px }
     .cfg-summary-status { padding-right: 24px }
-    .sm-sub > summary, .sm-top > summary { padding: 6px 28px 6px 10px }
-    .sm-sub-body { padding: 6px 10px 9px 10px }
+    /* Higher specificity (.cfg-section prefix) so this beats the generic
+       `.cfg-section details summary { padding: 0 }` rule and the icons actually
+       gain left inset inside the bordered boxes. */
+    .cfg-section .sm-sub > summary, .cfg-section .sm-top > summary { padding: 7px 28px 7px 10px }
+    .sm-sub-body { padding: 6px 13px 9px 35px }
     .ent-junkbox-sum, .junk-cat > summary { padding-right: 26px }
-  </style>
+
+    /* ── Heading underline: ONLY while open, and starting at the TEXT (the icon
+       is never underlined). The summary's own full-row rule is dropped; the
+       .cfg-header (flex:1, after the icon) carries the line so it spans
+       text → right edge. Collapsed = no line. ──────────────────────────────── */
+    .cfg-section > details > summary { border-bottom: none }
+    .cfg-section details > summary > .cfg-header { border-bottom: none }
+    .cfg-section details[open] > summary > .cfg-header {
+      border-bottom: 1px solid var(--codex-rule);
+      padding-bottom: 5px;
+    }
+    /* Box body lines up under the text (icon width + gap ≈ 26px), not the icon. */
+    .cfg-section > details[open] > :not(summary) { padding-left: 26px }
+
+    /* ── Entities tab (#4): the same icon + open-underline rhythm for the boxed
+       Entity Classes / Junk Filter summaries and the junk sub-categories. These
+       are .ent-junkbox / .junk-cat <details>, not .cfg-section, so the underline
+       is drawn as a 1px bottom gradient inset past the icon (so it starts at the
+       text, never under the icon) and only while open. ── */
+    .ent-junkbox-sum > .snode { margin-right: 0 }
+    .ent-junkbox[open] > .ent-junkbox-sum {
+      background-image: linear-gradient(var(--codex-rule), var(--codex-rule));
+      background-repeat: no-repeat;
+      background-position: right bottom;
+      background-size: calc(100% - 40px) 1px;
+    }
+    .junk-cat[open] > .junk-cat-head {
+      padding-bottom: 5px;
+      background-image: linear-gradient(var(--codex-rule), var(--codex-rule));
+      background-repeat: no-repeat;
+      background-position: right bottom;
+      background-size: calc(100% - 26px) 1px;
+    }
+
+    /* ── Overlay Placement panel (Config → Overlay): one compact row per
+       placeable overlay — name, optional enable, Move drag toggle, X/Y % and
+       Reset. ── */
+    .ovp-list { display: flex; flex-direction: column; gap: 2px }
+    .ovp-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 4px 0;
+      border-bottom: 1px solid rgba(120,90,50,0.18);
+    }
+    .ovp-row:last-child { border-bottom: none }
+    .ovp-name {
+      flex: 1; min-width: 110px;
+      color: var(--codex-text); font-family: var(--codex-serif); font-size: 13px;
+    }
+    .ovp-cap { font-size: 10.5px; color: var(--subtext); width: 30px }
+    .ovp-xy { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--subtext) }
+    .ovp-xy input { width: 52px; text-align: right }
+    .ovp-reset { font-size: 10.5px; padding: 2px 8px }
+</style>
 </head>
 
 <body>
@@ -4763,6 +4834,38 @@
           </div>
         </div>
 
+        <!-- Settings — sits directly under the enable toggle. Standard Config rows
+             (.cfg-row / .cfg-label / themed sliders), one option per line. -->
+        <div class="cfg-section" id="lt-sec-settings">
+          <details id="det-lt-settings" ontoggle="syncCfgSections()">
+            <summary><div class="cfg-header">Settings</div></summary>
+            <div class="cfg-subsection">
+              <div class="cfg-row"><span class="cfg-label">Show kill counts</span>
+                <label class="toggle"><input type="checkbox" id="lt-showKills" onchange="lootChk('showKills',this)"><span class="toggle-slider"></span></label></div>
+              <div class="cfg-row"><span class="cfg-label">Hide while a UI panel is open</span>
+                <label class="toggle"><input type="checkbox" id="tog-panel-hidelootbars" onchange="ahkCall('SetPanelRespect','loot', this.checked?1:0)"><span class="toggle-slider"></span></label></div>
+              <div class="cfg-row"><span class="cfg-label">poe.ninja league</span>
+                <input type="text" class="cfg-input" id="lt-league" placeholder="e.g. Standard" style="width:200px" onchange="lootStr('league',this)"></div>
+              <div class="cfg-row"><span class="cfg-label">Price refresh (min)</span>
+                <span class="hk-num"><input type="number" id="lt-cacheTtlMin" min="5" max="1440" onchange="lootNum('cacheTtlMin',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></div>
+              <div class="cfg-row"><span class="cfg-label">History size (rows)</span>
+                <span class="hk-num"><input type="number" id="lt-historySize" min="5" max="500" onchange="lootNum('historySize',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></div>
+              <div class="cfg-row"><span class="cfg-label">Sessions to keep</span>
+                <span class="hk-num"><input type="number" id="lt-maxSessions" min="1" max="500" onchange="lootNum('maxSessions',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></div>
+              <div class="cfg-subhead">On-screen bars</div>
+              <div class="cfg-help" style="margin:5px 0 0;padding:0 2px 4px">Position the bars freely via <b>Config → Overlay → Overlay Placement</b> (drag them in-game or set X/Y %).</div>
+              <div class="cfg-row"><span class="cfg-label">Compact bar height (px)</span>
+                <span class="hk-num"><input type="number" id="lt-compactHeight" min="60" max="400" step="5" onchange="lootNum('compactHeight',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></div>
+              <div class="cfg-slider-row"><span class="cfg-label">Bar opacity</span>
+                <div class="slider-wrap"><span class="slider-val" id="lt-barOpacity-bub">0.55</span><input type="range" id="lt-barOpacity" min="0.05" max="1" step="0.05" value="0.55" oninput="_sb(this,'lt-barOpacity-bub',this.value)" onchange="ahkCall('SetLootConfig','barOpacity',parseFloat(this.value))"></div>
+              </div>
+              <div class="cfg-slider-row"><span class="cfg-label">Bar UI scale</span>
+                <div class="slider-wrap"><span class="slider-val" id="lt-uiScale-bub">1.0</span><input type="range" id="lt-uiScale" min="0.5" max="3" step="0.05" value="1" oninput="_sb(this,'lt-uiScale-bub',this.value)" onchange="ahkCall('SetLootConfig','uiScale',parseFloat(this.value))"></div>
+              </div>
+            </div>
+          </details>
+        </div>
+
         <div class="cfg-section">
           <div class="cfg-subhead">Current run</div>
           <div id="lt-live" class="lt-live"><div class="al-desc">Waiting for data…</div></div>
@@ -4781,34 +4884,6 @@
 
         <div class="cfg-section">
           <div class="cfg-row"><span class="cfg-label">Pricing</span><span id="lt-price-status" class="al-desc" style="margin:0">idle</span></div>
-        </div>
-
-        <div class="cfg-section" id="lt-sec-settings">
-          <details id="det-lt-settings" ontoggle="syncCfgSections()"><summary><div class="cfg-header">Settings</div></summary>
-          <div class="cfg-subsection">
-            <div class="al-line">
-              <span class="al-item"><span class="al-cap">Show kill counts</span><label class="toggle"><input type="checkbox" id="lt-showKills" onchange="lootChk('showKills',this)"><span class="toggle-slider"></span></label></span>
-              <span class="al-item"><span class="al-cap">Anchor bars to right</span><label class="toggle"><input type="checkbox" id="lt-barOnRight" onchange="lootChk('barOnRight',this)"><span class="toggle-slider"></span></label></span>
-              <span class="al-item"><span class="al-cap">Hide while a UI panel is open</span><label class="toggle"><input type="checkbox" id="tog-panel-hidelootbars" onchange="ahkCall('SetPanelRespect','loot', this.checked?1:0)"><span class="toggle-slider"></span></label></span>
-            </div>
-            <div class="al-line">
-              <label class="al-field"><span class="al-cap">poe.ninja league</span><input type="text" class="cfg-input" id="lt-league" placeholder="e.g. Standard" style="width:200px" onchange="lootStr('league',this)"></label>
-              <label class="al-field"><span class="al-cap">Price refresh (min)</span><span class="hk-num"><input type="number" id="lt-cacheTtlMin" min="5" max="1440" onchange="lootNum('cacheTtlMin',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
-            </div>
-            <div class="al-line">
-              <label class="al-field"><span class="al-cap">History size (rows)</span><span class="hk-num"><input type="number" id="lt-historySize" min="5" max="500" onchange="lootNum('historySize',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
-              <label class="al-field"><span class="al-cap">Sessions to keep</span><span class="hk-num"><input type="number" id="lt-maxSessions" min="1" max="500" onchange="lootNum('maxSessions',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
-            </div>
-            <div class="cfg-subhead">On-screen bars</div>
-            <div class="al-line">
-              <label class="al-field"><span class="al-cap">Compact bar height (px)</span><span class="hk-num"><input type="number" id="lt-compactHeight" min="60" max="400" step="5" onchange="lootNum('compactHeight',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
-              <label class="al-field"><span class="al-cap">Bottom offset (px)</span><span class="hk-num"><input type="number" id="lt-barBottomOffset" min="0" max="600" step="5" onchange="lootNum('barBottomOffset',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
-            </div>
-            <div class="al-line">
-              <label class="al-field"><span class="al-cap">Bar opacity</span><span class="slider-wrap"><span class="slider-val" id="lt-barOpacity-bub">0.55</span><input type="range" id="lt-barOpacity" min="0.05" max="1" step="0.05" value="0.55" oninput="_sb(this,'lt-barOpacity-bub',this.value)" onchange="ahkCall('SetLootConfig','barOpacity',parseFloat(this.value))"></span></label>
-              <label class="al-field"><span class="al-cap">Bar UI scale</span><span class="slider-wrap"><span class="slider-val" id="lt-uiScale-bub">1.0</span><input type="range" id="lt-uiScale" min="0.5" max="3" step="0.05" value="1" oninput="_sb(this,'lt-uiScale-bub',this.value)" onchange="ahkCall('SetLootConfig','uiScale',parseFloat(this.value))"></span></label>
-            </div>
-          </div></details>
         </div>
 
         <div class="cfg-section" id="lt-sec-history" style="display:none">
@@ -5000,7 +5075,7 @@
                       </div>
 
                       <details class="sm-sub" ontoggle="if(this.open) ahkCall('StashRequestInventory','stash')">
-                        <summary><div class="cfg-header">🚫 Ignore filter
+                        <summary><div class="cfg-header" data-snodekey="sm-stash-ignore">🚫 Ignore filter
                           <span id="sm-stash-ignore-meta" class="ent-junk-custom-meta"></span></div></summary>
                         <div class="sm-sub-body">
                           <div class="cfg-help">
@@ -5019,7 +5094,7 @@
                       </details>
 
                       <details class="sm-sub">
-                        <summary><div class="cfg-header">🎲 Randomization</div></summary>
+                        <summary><div class="cfg-header" data-snodekey="sm-stash-rnd">🎲 Randomization</div></summary>
                         <div class="sm-sub-body">
                           <div class="sm-rnd-row">
                             <div class="sm-rnd-group">
@@ -5052,7 +5127,7 @@
                       </div>
 
                       <details class="sm-sub" ontoggle="if(this.open) ahkCall('StashRequestInventory','sell')">
-                        <summary><div class="cfg-header">🚫 Ignore filter
+                        <summary><div class="cfg-header" data-snodekey="sm-sell-ignore">🚫 Ignore filter
                           <span id="sm-sell-ignore-meta" class="ent-junk-custom-meta"></span></div></summary>
                         <div class="sm-sub-body">
                           <div class="cfg-help">
@@ -5073,7 +5148,7 @@
                       </details>
 
                       <details class="sm-sub">
-                        <summary><div class="cfg-header">🎲 Randomization</div></summary>
+                        <summary><div class="cfg-header" data-snodekey="sm-sell-rnd">🎲 Randomization</div></summary>
                         <div class="sm-sub-body">
                           <div class="sm-rnd-row">
                             <div class="sm-rnd-group">
@@ -5689,6 +5764,26 @@
           </details>
         </div>
 
+        <!-- Overlay Placement — free positioning for the info overlays (Debug, the
+             Valuable-loot list, the two Loot bars and the Alert banner). Rows are
+             rendered by overlayPlaceRender() from the header's overlayPlacement data.
+             Drag in-game OR set X/Y %; Reset = default spot. -->
+        <div class="cfg-section">
+          <details id="det-overlay-placement" ontoggle="syncCfgSections()">
+            <summary><div class="cfg-header">Overlay Placement</div></summary>
+            <div class="cfg-subsection">
+              <div class="cfg-help">
+                Position the in-game info overlays freely — just like the Vitals bars. Turn on
+                <b>Move</b> for one, then drag it directly on the game screen (a cyan frame marks the
+                grabbed overlay); turn Move off to lock it. Or type an exact <b>X / Y</b> (percent of the
+                game window). <b>Reset</b> returns an overlay to its built-in default spot. Nothing moves
+                until you change it.
+              </div>
+              <div id="overlay-place-list" class="ovp-list"></div>
+            </div>
+          </details>
+        </div>
+
         </div><!-- /cfg-subpanel overlay -->
 
         <!-- ════════════════════════════════════════════════════════════
@@ -5866,7 +5961,6 @@
               <button class="tree-tbtn" onclick="ahkCall('SkillProbeRun')" style="font-size:11px" title="Post-patch diagnostic: trace the player's skill-name DAT chain (Actor->ActiveSkills->GrantedEffectsPerLevel->GrantedEffects->name) to find why skill names fall back to Skill_<hex>. Writes logs\InGameStateMonitor.skill_probe.log">✨ Probe Skills</button>
               <button class="tree-tbtn" onclick="ahkCall('ComponentDumpProbeRun')" style="font-size:11px" title="Diagnostic: dump ALL components + raw field bytes of the currently highlighted entity (highlight one in the tree first). Basis for the systematic component-offset pass. Also Ctrl+Alt+Shift+D. Writes logs\InGameStateMonitor.component_dump.log">🧩 Dump Components</button>
               <button class="tree-tbtn" onclick="ahkCall('PathfindingProbeRun')" style="font-size:11px" title="Diagnostic: enumerate awake monsters, resolve their Pathfinding component and dump the candidate Flying (0xE5) / BaseSpeed (0xEC) fields plus raw hex, to verify the hypothesis offsets cross-referenced from Sikaka/POE2Radar. Stand in a populated area. Writes logs\InGameStateMonitor.pathfinding_probe.log">🏃 Probe Pathfinding</button>
-              <button class="tree-tbtn" onclick="ahkCall('ToggleFocusOverlay')" style="font-size:11px" title="Toggle the focused-entity TEST overlay (top-left in game): shows the currently targeted monster (name/type/rarity/life via IsTargetedByPlayer 0x6B) and the hovered world object (chest/ground-item via HoverTracker tracker+0x648). On by default.">🎯 Focus Overlay</button>
               <button class="tree-tbtn" onclick="ahkCall('OffsetCompareShowHistory')" style="font-size:11px">🕑 History</button>
               <button class="tree-tbtn" onclick="ahkCall('OffsetComparePredict')" style="font-size:11px">🔮 Predict</button>
             </div>
@@ -6626,12 +6720,15 @@
       "tab:entities":"SorceressInvocationSpellsKeystone","tab:skills":"SmithofKitavaNode","tab:inventory":"SpearsNode1","tab:watchlist":"ArchonGeneric","tab:groups":"FlaskNotableCritStrikeRecharge","tab:alerts":"MinionElementalResistancesNode","tab:loot":"KeystoneUnwaveringStance",
       "tab:ui":"ChannellingAttacksNotable2","tab:gamestate":"auraeffect","tab:memdiff":"flaskstr","tab:dissect":"flaskint","tab:hotkeys":"KeystoneResoluteTechnique",
       "cfgtab:general":"blankStr","cfgtab:automation":"PhysicalDamageOverTimeNode","cfgtab:overlay":"LifeandMana","cfgtab:vitals":"BloodMageNode","cfgtab:debug":"tempint","cfgtab:data":"ChannellingSpeed",
-      "sec:det-status":"HollowPalmTechniqueKeystone","sec:det-integrations":"KeystoneAvatarOfFire","sec:det-stashmover":"KeystonePainAttunement","sec:sm-stash":"AzmeriPrimalMonkey","sec:sm-sell":"AzmeriWildBear","sec:sm-shared":"TemporalistNearbyEnemiesProjectilesSlowed","sec:det-autopilot":"KeystoneAvatarOfFire","sec:ap-status":"WarbringerEncasedInJade","sec:ap-combat":"LightningDamagenode","sec:ap-explore":"MiracleMaker","sec:ap-loot":"energyshield",
-      "sec:det-maphack":"ColdAndFireHybridNotable","sec:det-radar":"PressurePoints","sec:det-entitymarkers":"TacticianNode","sec:det-rangecircles":"TemporalistNode","sec:det-lootvalue":"ShieldNodeOffensive","sec:lrv-detection":"Rage","sec:lrv-list":"SpellSuppresionNode","sec:lrv-onmap":"RangedTotemDamage","sec:lrv-trade":"ClawsOfTheMagpie","sec:det-uihoverprice":"projectilespeed",
+      "sec:det-status":"HollowPalmTechniqueKeystone","sec:det-integrations":"KeystoneAvatarOfFire","sec:det-stashmover":"KeystonePainAttunement","sec:sm-stash":"AzmeriPrimalMonkey","sec:sm-stash-ignore":"shieldblock","sec:sm-stash-rnd":"criticalstrikechance","sec:sm-sell":"AzmeriWildBear","sec:sm-sell-ignore":"shieldblock","sec:sm-sell-rnd":"criticalstrikechance","sec:sm-shared":"TemporalistNearbyEnemiesProjectilesSlowed","sec:det-autopilot":"KeystoneAvatarOfFire","sec:ap-status":"WarbringerEncasedInJade","sec:ap-combat":"LightningDamagenode","sec:ap-explore":"MiracleMaker","sec:ap-loot":"energyshield",
+      "sec:det-maphack":"ColdAndFireHybridNotable","sec:det-radar":"PressurePoints","sec:det-entitymarkers":"TacticianNode","sec:det-rangecircles":"TemporalistNode","sec:det-lootvalue":"ShieldNodeOffensive","sec:lrv-detection":"Rage","sec:lrv-list":"SpellSuppresionNode","sec:lrv-onmap":"RangedTotemDamage","sec:lrv-trade":"ClawsOfTheMagpie","sec:det-uihoverprice":"projectilespeed","sec:det-overlay-placement":"MiracleMaker",
       "sec:det-vitals-general":"CorpseDamage","sec:det-debug-actions":"axedmgspeed","sec:det-radar-debug":"PathfinderPathoftheWarrior","sec:det-debug-panels":"ColdDamagenode","sec:det-debug-discovery":"LightningDamagenode","sec:det-debug-diff":"ManaLeechThemedNode","sec:det-debug-overlay":"ElementalDamagenode","sec:det-offset-compare":"plusstrengthdexterity",
-      "sec:det-al-conditions":"blankDex","sec:det-al-timing":"blankInt","sec:det-al-output":"blankStr","sec:det-lt-settings":"KeystoneWhispersOfDoom","sec:det-blacklist":"ArmourAndEvasionNode"
+      "sec:det-al-conditions":"blankDex","sec:det-al-timing":"blankInt","sec:det-al-output":"blankStr","sec:det-lt-settings":"KeystoneWhispersOfDoom","sec:det-blacklist":"ArmourAndEvasionNode",
+      "sec:det-vitals-life":"IncreasedMaximumLifeNotable","sec:det-vitals-mana":"MineManaReservationNotable","sec:det-vitals-es":"EnergyShieldNode",
+      "gs:gs-area":"PathfinderPathoftheWarrior","gs:gs-player":"HollowPalmTechniqueKeystone","gs:gs-server":"ChannellingSpeed",
+      "sec:ent-typebox":"TacticianNode","sec:ent-junkbox":"CorpseDamage",
+      "sec:junk-cosmetic":"auraeffect","sec:junk-engine":"ElementalDamagenode","sec:junk-daemon":"BloodMageNode","sec:junk-pets":"MinionElementalResistancesNode","sec:junk-markers":"PressurePoints","sec:junk-hideout":"MiracleMaker"
     };
-    let _snodeDone = false;
     function _snodeSpan(name) {
       const s = document.createElement('span');
       s.className = 'snode';
@@ -6650,8 +6747,11 @@
         }
       }
     }
+    // Inject skill-node icons. IDEMPOTENT + re-runnable: it skips any slot whose
+    // target already carries a .snode, so it can be called again after a dynamic
+    // render (vitals bars, junk categories, game-state) to icon the freshly-built
+    // sections without duplicating the ones already done.
     function snodeInit() {
-      if (_snodeDone) return; _snodeDone = true;
       for (const slot in SNODE_MAP) {
         const c = slot.indexOf(':'), kind = slot.slice(0, c), id = slot.slice(c + 1), name = SNODE_MAP[slot];
         if (kind === 'cat' || kind === 'tab' || kind === 'cfgtab') {
@@ -6659,7 +6759,7 @@
                     : kind === 'cfgtab' ? `.tab[data-cfgtab="${id}"]`
                     : `.tab[data-tab="${id}"]`;
           const el = document.querySelector(sel);
-          if (!el) continue;
+          if (!el || el.querySelector(':scope > .snode')) continue;
           el.querySelector(':scope > svg')?.remove();   // drop the old inline SVG glyph
           el.insertBefore(_snodeSpan(name), el.firstChild);
         } else if (kind === 'sec') {
@@ -6667,9 +6767,19 @@
           const det = document.getElementById(id);
           if (det && det.tagName === 'DETAILS') summary = det.querySelector(':scope > summary');
           if (!summary) summary = document.querySelector(`[data-snodekey="${id}"]`)?.closest('summary');
-          if (!summary) continue;
+          if (!summary || summary.querySelector(':scope > .snode')) continue;
           _snodeStripGlyph(summary);
           summary.insertBefore(_snodeSpan(name), summary.firstChild);
+        } else if (kind === 'gs') {
+          // Game-state prop-cards are not <details>; the header is a .prop-card-hdr
+          // with a leading collapse arrow. Drop the leading emoji and slot the icon
+          // right after that arrow (allocated art swaps in while the card is open —
+          // see the .prop-card:not(.collapsed) rule).
+          const hdr = document.querySelector(`#pc-${id} > .prop-card-hdr`);
+          if (!hdr || hdr.querySelector(':scope > .snode')) continue;
+          _snodeStripGlyph(hdr);
+          const arrow = hdr.querySelector(':scope > .arrow');
+          hdr.insertBefore(_snodeSpan(name), arrow ? arrow.nextSibling : hdr.firstChild);
         }
       }
     }
@@ -7078,7 +7188,11 @@
       let mainHtml = "";
       for (const c of cats)
         mainHtml += junkCatRow(c, String(c.key || ""));
-      if (host && mainHtml !== _junkLastMain) { host.innerHTML = mainHtml; _junkLastMain = mainHtml; }
+      if (host && mainHtml !== _junkLastMain) {
+        host.innerHTML = mainHtml; _junkLastMain = mainHtml;
+        // Icon the freshly-built junk categories (idempotent — skips done ones).
+        snodeInit();
+      }
     }
 
     // Builds one junk category as a collapsible <details> (cube caret when
@@ -7108,8 +7222,10 @@
              + `<span class="junk-pat">${allOn ? "disable all" : "enable all"}</span></label>`;
       return `<details class="junk-cat"${_junkOpenCats.has(ck) ? " open" : ""} ontoggle="junkCatToggle('${ck}', this.open)">`
            + `<summary class="junk-cat-head">`
+           + `<div class="junk-cat-text" data-snodekey="junk-${escAttr(ck)}">`
            + `<div class="junk-cat-titlerow"><span class="junk-cat-name">${escHtml(ci.short)}</span></div>`
            + `<div class="junk-cat-desc">${escHtml(ci.desc)}</div>`
+           + `</div>`
            + `</summary>`
            + `<div class="junk-pat-row">${pills}${allBtn}</div></details>`;
     }
@@ -7253,18 +7369,62 @@
       const val = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
       chk('lt-enabled', s.enabled);
       chk('lt-showKills', s.showKills);
-      chk('lt-barOnRight', s.barOnRight);
       val('lt-league', s.league);
       val('lt-cacheTtlMin', s.cacheTtlMin);
       val('lt-historySize', s.historySize);
       val('lt-maxSessions', s.maxSessions);
       val('lt-compactHeight', s.compactHeight);
-      val('lt-barBottomOffset', s.barBottomOffset);
       const opa = document.getElementById('lt-barOpacity');
       if (opa && document.activeElement !== opa) { opa.value = s.barOpacity; _sb(opa, 'lt-barOpacity-bub', s.barOpacity); }
       const sc = document.getElementById('lt-uiScale');
       if (sc && document.activeElement !== sc) { sc.value = s.uiScale; _sb(sc, 'lt-uiScale-bub', s.uiScale); }
     }
+
+    // ── Overlay Placement (Config → Overlay): free positioning for the info
+    //    overlays. Names MUST match the AHK OverlayPlaceableList() / overlay .Name.
+    const OV_PLACEABLE = [
+      { name: 'debug',        label: 'Debug overlay' },
+      { name: 'lootvalue',    label: 'Valuable-loot list' },
+      { name: 'lootstrip',    label: 'Loot bar (on map)' },
+      { name: 'lootcompact',  label: 'Loot bar (hideout)' },
+      { name: 'notification', label: 'Alert banner' },
+    ];
+    let _ovpBuilt = false;
+    // Builds the per-overlay rows once (Move drag toggle + X/Y % + Reset). Each
+    // overlay's own enable toggle lives in its respective tab, not here.
+    function overlayPlaceRender() {
+      const host = document.getElementById('overlay-place-list');
+      if (!host) return;
+      host.innerHTML = OV_PLACEABLE.map(o => {
+        return `<div class="ovp-row">
+          <span class="ovp-name">${o.label}</span>
+          <label class="toggle ovp-move" title="Drag this overlay on the game screen, then turn off to lock"><input type="checkbox" data-ovedit="${o.name}" onchange="ovMove('${o.name}',this.checked)"><span class="toggle-slider"></span></label>
+          <span class="ovp-cap">Move</span>
+          <span class="ovp-xy">X<input type="number" class="cfg-input" min="0" max="100" step="0.5" data-ovx="${o.name}" onchange="ovPos('${o.name}','x',this.value)" placeholder="auto"></span>
+          <span class="ovp-xy">Y<input type="number" class="cfg-input" min="0" max="100" step="0.5" data-ovy="${o.name}" onchange="ovPos('${o.name}','y',this.value)" placeholder="auto"></span>
+          <button class="hk-btn ovp-reset" title="Return this overlay to its default position" onclick="ovReset('${o.name}')">Reset</button>
+        </div>`;
+      }).join('');
+      _ovpBuilt = true;
+    }
+    // Mirrors header placement state back into the rows (skips a field being typed).
+    function overlayPlaceSync(d) {
+      if (!d) return;
+      if (!_ovpBuilt) overlayPlaceRender();
+      const items = d.items || {};
+      for (const o of OV_PLACEABLE) {
+        const it = items[o.name] || {};
+        const mv = document.querySelector(`[data-ovedit="${o.name}"]`);
+        if (mv) mv.checked = !!it.edit;
+        const x = document.querySelector(`[data-ovx="${o.name}"]`);
+        const y = document.querySelector(`[data-ovy="${o.name}"]`);
+        if (x && document.activeElement !== x) x.value = (it.moved && it.xPct != null) ? it.xPct : '';
+        if (y && document.activeElement !== y) y.value = (it.moved && it.yPct != null) ? it.yPct : '';
+      }
+    }
+    function ovMove(name, on)      { ahkCall('SetOverlayEdit', name, on ? 1 : 0); }
+    function ovPos(name, axis, v)  { ahkCall('SetOverlayPos', name, axis, v); }
+    function ovReset(name)         { ahkCall('ResetOverlayPos', name); }
 
     // Stash Mover header settings -> form widgets (skips a field being edited).
     // Loot Value Radar header settings -> form widgets (skips a field being edited).
@@ -9548,6 +9708,7 @@
       if (d.lootRadarValue !== undefined) lootRadarValueSyncFromHeader(d.lootRadarValue);
       if (d.uiHoverPrice !== undefined) uiHoverPriceSyncFromHeader(d.uiHoverPrice);
       if (d.lootTradePricing !== undefined) lootTradePricingSyncFromHeader(d.lootTradePricing);
+      if (d.overlayPlacement !== undefined) overlayPlaceSync(d.overlayPlacement);
 
       // Version tags
       const verApp = document.getElementById('ver-app');
@@ -11061,9 +11222,9 @@
       }
 
       const groups = [
-        { id: 'gs-area', title: '🗺 Area Instance', keys: areaKeys },
-        { id: 'gs-player', title: '👤 Player Pointers', keys: playerKeys },
-        { id: 'gs-server', title: '🔗 Server / Memory', keys: [...ptrKeys, ...otherKeys] },
+        { id: 'gs-area', title: 'Area Instance', keys: areaKeys },
+        { id: 'gs-player', title: 'Player Pointers', keys: playerKeys },
+        { id: 'gs-server', title: 'Server / Memory', keys: [...ptrKeys, ...otherKeys] },
       ];
       // Add each nested object as its own card
       for (const k of nestedKeys) {
@@ -11080,6 +11241,9 @@
         if (!rows) return '';
         return _propCard(g.id, g.title, rows);
       }).join('') + '</div>';
+      // The cards are rebuilt on every push; re-run the idempotent icon injector
+      // so the freshly-built .prop-card-hdr rows get their skill-node icons.
+      snodeInit();
     }
 
     // ── Property inspector helpers ──
@@ -11874,10 +12038,10 @@
                     onchange="vitalsPush()"><span class="toggle-slider"></span></label>
               </div>
               <div class="cfg-row"><span class="cfg-label">Size (W × H px)</span>
-                <span style="display:inline-flex;gap:8px;align-items:center">${_vNum(id, 'w', 4, 4000, 1)}<span style="color:var(--subtext)">×</span>${_vNum(id, 'h', 2, 400, 1)}</span>
+                <span style="display:inline-flex;gap:8px;align-items:center">${_vNum(id, 'w', 4, 4000, 1)}<span style="color:var(--subtext);width:12px;text-align:center;flex:none">×</span>${_vNum(id, 'h', 2, 400, 1)}</span>
               </div>
               <div class="cfg-row"><span class="cfg-label">Position (X / Y %)</span>
-                <span style="display:inline-flex;gap:8px;align-items:center">${_vNum(id, 'x', 0, 100, 0.5)}<span style="color:var(--subtext)">/</span>${_vNum(id, 'y', 0, 100, 0.5)}</span>
+                <span style="display:inline-flex;gap:8px;align-items:center">${_vNum(id, 'x', 0, 100, 0.5)}<span style="color:var(--subtext);width:12px;text-align:center;flex:none">/</span>${_vNum(id, 'y', 0, 100, 0.5)}</span>
               </div>
               <div class="cfg-slider-row"><span class="cfg-label">Opacity</span>
                 <div class="slider-wrap"><span class="slider-val" id="v-${id}-opval">100%</span>
@@ -11925,6 +12089,7 @@
       host.innerHTML = VITALS_BARS.map(([id, label]) => _vBarSectionHtml(id, label)).join('');
       _vitalsBuilt = true;
       for (const [id] of VITALS_BARS) renderVitalsConds(id);
+      snodeInit();   // icon the freshly-built det-vitals-* sections (idempotent)
     }
 
     // ── Per-bar visibility condition list (drag&drop, add/remove, import/export) ──

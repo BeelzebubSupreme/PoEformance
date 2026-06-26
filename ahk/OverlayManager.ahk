@@ -22,7 +22,6 @@ class OverlayManager
         this.Register(RadarOverlay())
         this.Register(VitalsOverlay())
         this.Register(NotificationOverlay())
-        this.Register(FocusOverlay())
         this.Register(LootMapStripOverlay())
         this.Register(LootCompactBarOverlay())
         this.Register(LootValueOverlay())
@@ -92,13 +91,12 @@ class OverlayManager
 ; does not apply.
 LoadOverlaySystem()
 {
-    global g_overlayManager, g_radarOverlay, g_vitalsOverlay, g_notifyOverlay, g_focusOverlay, g_radarAlpha
+    global g_overlayManager, g_radarOverlay, g_vitalsOverlay, g_notifyOverlay, g_radarAlpha
     LoadVitalsConfig()   ; seed g_vitalsBars / g_vitalsEditMode before the overlay first draws
     g_overlayManager := OverlayManager()
     g_radarOverlay   := g_overlayManager.Get("radar")
     g_vitalsOverlay  := g_overlayManager.Get("vitals")
     g_notifyOverlay  := g_overlayManager.Get("notification")
-    g_focusOverlay   := g_overlayManager.Get("focus")
     if (IsSet(g_radarAlpha) && g_radarOverlay)
         g_radarOverlay.SetAlpha(g_radarAlpha)
 }
