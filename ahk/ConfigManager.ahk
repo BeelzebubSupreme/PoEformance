@@ -36,7 +36,7 @@ SaveConfig()
 {
     global g_debugMode, g_autoFlaskEnabled, g_autoFlaskPerformanceMode
     global g_lifeThresholdPercent, g_manaThresholdPercent, g_radarEnabled, g_radarAlpha
-    global g_playerHudEnabled
+    global g_vitalsEnabled
     global g_updatesPaused, g_npcWatchAutoSync
     global g_radarShowEnemyNormal, g_radarShowEnemyRare, g_radarShowEnemyBoss
     global g_radarShowMinions, g_radarShowNpcs, g_radarShowChests
@@ -44,7 +44,7 @@ SaveConfig()
     global g_entityShowNPC, g_entityShowChest, g_entityShowWorldItem, g_entityShowOther
     global g_skillBuffBlacklist, g_zoneNavEnabled, g_mapHackEnabled, g_maphackSource, g_rangeCirclesEnabled
     global g_walkGridEnabled, g_maphackMaskDebug
-    global g_panelDetectionEnabled, g_autoPilotEnabled, g_inventoryChainDumpEnabled
+    global g_panelHideOverlays, g_panelPauseAutoPilot, g_panelHideLootBars, g_autoPilotEnabled, g_inventoryChainDumpEnabled
     global g_overlayStatusTextEnabled, g_overlayPoeOnly
     global g_maphackOutlineHex, g_maphackBackgroundHex
     global g_configSubTab
@@ -62,7 +62,7 @@ SaveConfig()
     IniWrite(g_autoFlaskEnabled      ? "1" : "0",  f, "AutoFlask",     "enabled")
     IniWrite(g_autoFlaskPerformanceMode ? "1":"0", f, "AutoFlask",     "performanceMode")
     IniWrite(g_radarEnabled          ? "1" : "0",  f, "Radar",         "enabled")
-    IniWrite(g_playerHudEnabled     ? "1" : "0",  f, "Radar",         "playerHud")
+    IniWrite(g_vitalsEnabled     ? "1" : "0",  f, "Radar",         "vitalsEnabled")
     IniWrite(g_radarAlpha,                         f, "Radar",         "alpha")
     IniWrite(g_radarShowEnemyNormal  ? "1" : "0",  f, "Radar",         "showNormal")
     IniWrite(g_radarShowEnemyRare    ? "1" : "0",  f, "Radar",         "showRare")
@@ -81,7 +81,9 @@ SaveConfig()
     IniWrite(g_maphackOutlineHex,                  f, "Radar",         "maphackOutlineHex")
     IniWrite(g_maphackBackgroundHex,               f, "Radar",         "maphackBackgroundHex")
     IniWrite(g_rangeCirclesEnabled   ? "1" : "0",  f, "Radar",         "rangeCircles")
-    IniWrite(g_panelDetectionEnabled ? "1" : "0",  f, "PanelDetection", "enabled")
+    IniWrite(g_panelHideOverlays     ? "1" : "0",  f, "PanelDetection", "hideOverlays")
+    IniWrite(g_panelPauseAutoPilot   ? "1" : "0",  f, "PanelDetection", "pauseAutoPilot")
+    IniWrite(g_panelHideLootBars     ? "1" : "0",  f, "PanelDetection", "hideLootBars")
     IniWrite(g_autoPilotEnabled      ? "1" : "0",  f, "AutoPilot",      "enabled")
     IniWrite(g_inventoryChainDumpEnabled ? "1" : "0", f, "Diagnostics", "inventoryChainDump")
     IniWrite(g_overlayStatusTextEnabled  ? "1" : "0", f, "Radar",       "statusText")
@@ -123,7 +125,7 @@ LoadConfig()
 {
     global g_debugMode, g_autoFlaskEnabled, g_autoFlaskPerformanceMode
     global g_lifeThresholdPercent, g_manaThresholdPercent, g_radarEnabled, g_radarAlpha
-    global g_playerHudEnabled
+    global g_vitalsEnabled
     global g_updatesPaused, g_npcWatchAutoSync
     global g_radarShowEnemyNormal, g_radarShowEnemyRare, g_radarShowEnemyBoss
     global g_radarShowMinions, g_radarShowNpcs, g_radarShowChests
@@ -131,7 +133,7 @@ LoadConfig()
     global g_entityShowNPC, g_entityShowChest, g_entityShowWorldItem, g_entityShowOther
     global g_skillBuffBlacklist, g_zoneNavEnabled, g_mapHackEnabled, g_maphackSource, g_rangeCirclesEnabled
     global g_walkGridEnabled, g_maphackMaskDebug
-    global g_panelDetectionEnabled, g_autoPilotEnabled, g_inventoryChainDumpEnabled
+    global g_panelHideOverlays, g_panelPauseAutoPilot, g_panelHideLootBars, g_autoPilotEnabled, g_inventoryChainDumpEnabled
     global g_overlayStatusTextEnabled, g_overlayPoeOnly
     global g_maphackOutlineHex, g_maphackBackgroundHex
     global g_configSubTab
@@ -156,7 +158,9 @@ LoadConfig()
     g_autoFlaskEnabled         := _B("AutoFlask",     "enabled",         false)
     g_autoFlaskPerformanceMode := _B("AutoFlask",     "performanceMode", false)
     g_radarEnabled             := _B("Radar",         "enabled",         true)
-    g_playerHudEnabled         := _B("Radar",         "playerHud",       true)
+    ; Migration: prefer the new "vitalsEnabled" key; fall back to the legacy
+    ; "playerHud" key so an existing install keeps its setting on first run.
+    g_vitalsEnabled         := _B("Radar",         "vitalsEnabled",   _B("Radar", "playerHud", true))
     g_radarAlpha               := Max(0, Min(255, Integer(_Ini("Radar", "alpha", 255))))
     g_radarShowEnemyNormal     := _B("Radar",         "showNormal",      true)
     g_radarShowEnemyRare       := _B("Radar",         "showRare",        true)
@@ -183,12 +187,15 @@ LoadConfig()
     ; INI value (typo, leftover from older builds) doesn't break the UI.
     rawSubTab := _Ini("ConfigUI", "activeSubTab", "general")
     if (rawSubTab = "general" || rawSubTab = "automation" || rawSubTab = "overlay"
-        || rawSubTab = "vitals" || rawSubTab = "ggpk" || rawSubTab = "filters" || rawSubTab = "debug")
+        || rawSubTab = "vitals" || rawSubTab = "debug"
+        || rawSubTab = "data")
         g_configSubTab := rawSubTab
     else
         g_configSubTab := "general"
     g_rangeCirclesEnabled      := _B("Radar",         "rangeCircles",    true)
-    g_panelDetectionEnabled    := _B("PanelDetection","enabled",         true)
+    g_panelHideOverlays        := _B("PanelDetection","hideOverlays",    true)
+    g_panelPauseAutoPilot      := _B("PanelDetection","pauseAutoPilot",  true)
+    g_panelHideLootBars        := _B("PanelDetection","hideLootBars",    true)
     g_autoPilotEnabled         := _B("AutoPilot",     "enabled",         false)
     g_inventoryChainDumpEnabled := _B("Diagnostics",  "inventoryChainDump", false)
     g_overlayStatusTextEnabled  := _B("Radar",        "statusText",         true)

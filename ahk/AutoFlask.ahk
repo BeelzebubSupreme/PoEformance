@@ -100,6 +100,9 @@ UpdateRadarFast()
         ; ── Value-aware loot radar — price ground drops + threshold banner (self-throttled) ──
         TryLootRadarValue(radarSnap)
 
+        ; ── Price-on-hover for inventory/stash items (self-throttled, panel+focus gated) ──
+        TryUiHoverPrice(radarSnap)
+
         ; ── Stash Mover overlay button — position/show next to the inventory grid ──
         StashMoverTick(radarSnap)
 

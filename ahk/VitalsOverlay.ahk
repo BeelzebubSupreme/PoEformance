@@ -1,6 +1,6 @@
 ; VitalsOverlay.ahk
 ; Configurable player-vitals bar overlay (Life / Mana / Energy Shield). Replaces the
-; old fixed PlayerHUD bar box. Each bar is independently enabled, positioned (as a
+; old fixed Life/Mana/ES HUD bar box. Each bar is independently enabled, positioned (as a
 ; fraction of the game window, so it survives resolution changes), sized, coloured
 ; (foreground / background / outline), labelled (current / max / percent / off) AND
 ; given its own opacity.
@@ -78,13 +78,13 @@ class VitalsBarWindow extends GdiOverlayBase
     ; ── Overlay contract ────────────────────────────────────────────────────
     ShouldShow(ctx)
     {
-        global g_playerHudEnabled, g_vitalsBars, g_vitalsEditMode
+        global g_vitalsEnabled, g_vitalsBars, g_vitalsEditMode
         if !(IsSet(g_vitalsBars) && IsObject(g_vitalsBars) && g_vitalsBars.Has(this.barId))
             return false
         bar := g_vitalsBars[this.barId]
         if !(bar.Has("enabled") && bar["enabled"])
             return false
-        if !(IsSet(g_playerHudEnabled) ? g_playerHudEnabled : true)
+        if !(IsSet(g_vitalsEnabled) ? g_vitalsEnabled : true)
             return false
         if (IsSet(g_vitalsEditMode) && g_vitalsEditMode)
             return (ctx.gwW > 100 && ctx.gwH > 100)

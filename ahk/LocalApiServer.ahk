@@ -491,17 +491,18 @@ _LocalApiBuildStateJson()
 ; Current values of the settings exposed for read/update via /api/config.
 _LocalApiBuildConfigJson()
 {
-    global g_lifeThresholdPercent, g_manaThresholdPercent, g_radarEnabled, g_playerHudEnabled
+    global g_lifeThresholdPercent, g_manaThresholdPercent, g_radarEnabled, g_vitalsEnabled
     global g_radarAlpha, g_mapHackEnabled, g_zoneNavEnabled, g_rangeCirclesEnabled
     global g_autoFlaskEnabled, g_autoPilotEnabled, g_debugMode, g_updatesPaused
-    global g_overlayStatusTextEnabled, g_panelDetectionEnabled
+    global g_overlayStatusTextEnabled
+    global g_panelHideOverlays, g_panelPauseAutoPilot, g_panelHideLootBars
     global g_localApiEnabled, g_localApiPort
 
     c := Map(
         "lifeThreshold",     g_lifeThresholdPercent,
         "manaThreshold",     g_manaThresholdPercent,
         "radarEnabled",      g_radarEnabled ? 1 : 0,
-        "playerHud",         g_playerHudEnabled ? 1 : 0,
+        "vitalsEnabled",     g_vitalsEnabled ? 1 : 0,
         "radarAlpha",        g_radarAlpha,
         "mapHack",           g_mapHackEnabled ? 1 : 0,
         "zoneNav",           g_zoneNavEnabled ? 1 : 0,
@@ -511,7 +512,9 @@ _LocalApiBuildConfigJson()
         "debug",             g_debugMode ? 1 : 0,
         "paused",            g_updatesPaused ? 1 : 0,
         "overlayStatusText", g_overlayStatusTextEnabled ? 1 : 0,
-        "panelDetection",    g_panelDetectionEnabled ? 1 : 0,
+        "panelHideOverlays",   g_panelHideOverlays ? 1 : 0,
+        "panelPauseAutoPilot", g_panelPauseAutoPilot ? 1 : 0,
+        "panelHideLootBars",   g_panelHideLootBars ? 1 : 0,
         "localApiPort",      g_localApiPort
     )
     return JsonFull_Stringify(c)
@@ -538,16 +541,17 @@ _LocalApiBuildWatchlistJson()
 ; Returns the number of settings applied.
 _LocalApiApplyConfig(obj)
 {
-    global g_radarEnabled, g_playerHudEnabled, g_mapHackEnabled, g_zoneNavEnabled
+    global g_radarEnabled, g_vitalsEnabled, g_mapHackEnabled, g_zoneNavEnabled
     global g_rangeCirclesEnabled, g_autoFlaskEnabled, g_autoPilotEnabled, g_debugMode
-    global g_updatesPaused, g_overlayStatusTextEnabled, g_panelDetectionEnabled
+    global g_updatesPaused, g_overlayStatusTextEnabled
+    global g_panelHideOverlays, g_panelPauseAutoPilot, g_panelHideLootBars
     global g_lifeThresholdPercent, g_manaThresholdPercent, g_radarAlpha
 
     ; key → current value, and key → the existing toggle command that owns the
     ; side effects. Keeping these explicit (no dynamic var refs) avoids surprises.
     curBool := Map(
         "radarEnabled",      g_radarEnabled ? true : false,
-        "playerHud",         g_playerHudEnabled ? true : false,
+        "vitalsEnabled",     g_vitalsEnabled ? true : false,
         "mapHack",           g_mapHackEnabled ? true : false,
         "zoneNav",           g_zoneNavEnabled ? true : false,
         "rangeCircles",      g_rangeCirclesEnabled ? true : false,
@@ -556,11 +560,13 @@ _LocalApiApplyConfig(obj)
         "debug",             g_debugMode ? true : false,
         "paused",            g_updatesPaused ? true : false,
         "overlayStatusText", g_overlayStatusTextEnabled ? true : false,
-        "panelDetection",    g_panelDetectionEnabled ? true : false
+        "panelHideOverlays",   g_panelHideOverlays ? true : false,
+        "panelPauseAutoPilot", g_panelPauseAutoPilot ? true : false,
+        "panelHideLootBars",   g_panelHideLootBars ? true : false
     )
     cmdBool := Map(
         "radarEnabled",      "ToggleRadar",
-        "playerHud",         "TogglePlayerHud",
+        "vitalsEnabled",     "ToggleVitals",
         "mapHack",           "ToggleMapHack",
         "zoneNav",           "ToggleZoneNav",
         "rangeCircles",      "ToggleRangeCircles",
@@ -568,8 +574,7 @@ _LocalApiApplyConfig(obj)
         "autoPilot",         "ToggleAutoPilot",
         "debug",             "ToggleDebug",
         "paused",            "TogglePause",
-        "overlayStatusText", "ToggleOverlayStatusText",
-        "panelDetection",    "TogglePanelDetection"
+        "overlayStatusText", "ToggleOverlayStatusText"
     )
 
     applied := 0
@@ -596,6 +601,13 @@ _LocalApiApplyConfig(obj)
         else if (key = "radarAlpha")
         {
             _DispatchBridgeCall("SetRadarAlpha", [_LocalApiClampInt(val, 0, 255)])
+            applied += 1
+        }
+        else if (key = "panelHideOverlays" || key = "panelPauseAutoPilot" || key = "panelHideLootBars")
+        {
+            which := (key = "panelHideOverlays") ? "overlays"
+                   : (key = "panelPauseAutoPilot") ? "autopilot" : "loot"
+            _DispatchBridgeCall("SetPanelRespect", [which, _LocalApiTruthy(val) ? 1 : 0])
             applied += 1
         }
     }

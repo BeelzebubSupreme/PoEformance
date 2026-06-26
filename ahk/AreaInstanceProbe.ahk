@@ -125,9 +125,9 @@ AreaInstanceProbeRun()
         return
     }
 
-    oldEnt  := PoE2Offsets.AreaInstance["AwakeEntities"]      ; 0x6C0
-    oldTerr := PoE2Offsets.AreaInstance["TerrainMetadata"]    ; 0x8A0
-    piOff   := PoE2Offsets.AreaInstance["PlayerInfo"]         ; 0x580
+    oldEnt  := PoE2Offsets.AreaInstance["AwakeEntities"]      ; 0x6D8
+    oldTerr := PoE2Offsets.AreaInstance["TerrainMetadata"]    ; 0x8B8
+    piOff   := PoE2Offsets.AreaInstance["PlayerInfo"]         ; 0x598
     oldLp   := PoE2Offsets.LocalPlayerStruct["LocalPlayerPtr"] ; 0x20
     nl := "`r`n"
 
@@ -1180,4 +1180,7 @@ _AIP_RegisterProbeHotkeys()
     try Hotkey("^!+t", (*) => TargetableProbeRun(), "On")
     try Hotkey("^b", (*) => TargetedByPlayerProbeRun(), "On")
     try Hotkey("^!+d", (*) => ComponentDumpProbeRun(), "On")
+    ; Ctrl+Alt+Shift+H = UIHover hover-diff — fire it via the keyboard so the
+    ; cursor stays on the hovered item (a button click would drop the hover).
+    try Hotkey("^!+h", (*) => UiHoverProbeRun(), "On")
 }

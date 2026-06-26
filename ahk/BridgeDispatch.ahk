@@ -20,8 +20,8 @@ _DispatchBridgeCall(method, args)
             ; No-op: NavigationCompleted already handles initial push
         case "ToggleRadar":
             SetTimer(ToggleRadar, -1)
-        case "TogglePlayerHud":
-            SetTimer(TogglePlayerHud, -1)
+        case "ToggleVitals":
+            SetTimer(ToggleVitals, -1)
         case "ToggleOverlayPoeOnly":
             SetTimer(ToggleOverlayPoeOnly, -1)
         case "ToggleDebug":
@@ -169,6 +169,12 @@ _DispatchBridgeCall(method, args)
                 _LrvApplySetting(args[1], args[2])
             SaveLootRadarValue()
             SetTimer(PushHeaderToWebView, -50)
+        case "SetUiHoverPrice":
+            ; Price-on-hover for inventory/stash items. args[1]=key, args[2]=value.
+            if (args.Length >= 2)
+                _UhpApplySetting(args[1], args[2])
+            SaveUiHoverPrice()
+            SetTimer(PushHeaderToWebView, -50)
         case "SetLootTradePricing":
             ; Official PoE2 trade-API unique pricing. args[1]=key, args[2]=value.
             if (args.Length >= 2)
@@ -303,15 +309,16 @@ _DispatchBridgeCall(method, args)
                 }
             }
         case "SetConfigSubTab":
-            ; args[1] = one of general / automation / overlay / vitals / ggpk /
-            ; filters / debug. Anything else is silently ignored so a
+            ; args[1] = one of general / automation / overlay / vitals /
+            ; debug / data. Anything else is silently ignored so a
             ; bad WebView call can't corrupt the persisted value.
             global g_configSubTab
             if (args.Length >= 1)
             {
                 v := args[1]
                 if (v = "general" || v = "automation" || v = "overlay"
-                    || v = "vitals" || v = "ggpk" || v = "filters" || v = "debug")
+                    || v = "vitals" || v = "debug"
+                    || v = "data")
                 {
                     g_configSubTab := v
                     SetTimer(SaveConfig, -100)
@@ -427,48 +434,24 @@ _DispatchBridgeCall(method, args)
             SetTimer(PushMemDiffStateToWebView, -1)
         case "MemDiffRequestState":
             SetTimer(PushMemDiffStateToWebView, -1)
-        case "TogglePanelDetection":
-            global g_panelDetectionEnabled, g_reader, g_radarLastSnap
-            g_panelDetectionEnabled := !g_panelDetectionEnabled
-            if (!g_panelDetectionEnabled)
+        case "SetPanelRespect":
+            ; Per-feature "respect an open game panel" toggles. Panel detection
+            ; itself always runs in the reader now; these decide which consumer
+            ; reacts. args[1] = "overlays" | "autopilot" | "loot", args[2] = 0/1.
+            global g_panelHideOverlays, g_panelPauseAutoPilot, g_panelHideLootBars
+            if (args.Length >= 2)
             {
-                ; Clear cached panel visibility so UI/overlay doesn't think panels are open
-                if IsObject(g_reader)
-                {
-                    try
-                    {
-                        g_reader._radarPanelVisCache := Map()
-                        g_reader._radarPanelVisCacheTick := 0
-                        g_reader._panelCleanSince := 0
-                    }
-                    catch
-                    {
-
-                    }
-                }
-                ; Push debug panels immediately to refresh UI
-                SetTimer(() => PushDebugPanelsToWebView(g_radarLastSnap), -50)
+                on := (args[2] = 1 || args[2] = "1" || args[2] = true)
+                which := args[1]
+                if (which = "overlays")
+                    g_panelHideOverlays := on
+                else if (which = "autopilot")
+                    g_panelPauseAutoPilot := on
+                else if (which = "loot")
+                    g_panelHideLootBars := on
+                SetTimer(SaveConfig, -100)
+                SetTimer(PushHeaderToWebView, -50)
             }
-            else
-            {
-                ; When enabling, ensure discovery restarts cleanly
-                if IsObject(g_reader)
-                {
-                    try
-                    {
-                        g_reader._radarPanelDiscoveryDone := false
-                        g_reader._radarPanelDiscoveryResult := 0
-                        g_reader._visBaselineTaken := false
-                        g_reader._diffSnapshotTaken := false
-                    }
-                    catch
-                    {
-
-                    }
-                }
-            }
-            SetTimer(SaveConfig, -100)
-            SetTimer(PushHeaderToWebView, -50)
         case "SetRadarAlpha":
             global g_radarAlpha
             val := (args.Length >= 1) ? args[1] : 255
@@ -822,6 +805,9 @@ _DispatchBridgeCall(method, args)
         case "TargetedByPlayerProbeRun":
             ; TEMP post-patch diagnostic: IsTargetedByPlayer hover diff.
             SetTimer(() => TargetedByPlayerProbeRun(), -1)
+        case "UiHoverProbeRun":
+            ; RE diagnostic: find the UIHover pointer (hovered UI/inventory element).
+            SetTimer(() => UiHoverProbeRun(), -1)
         case "SkillProbeRun":
             ; TEMP post-patch diagnostic: trace the skill-name DAT chain.
             SetTimer(() => SkillProbeRun(), -1)

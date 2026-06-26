@@ -357,3 +357,75 @@ UiTree_GetScreenPos(reader, elemPtr)
     }
     return Map("x", accX, "y", accY)
 }
+
+; Lean header-only geometry read for hit-testing (no string fields, unlike
+; UiTree_ReadElement). Returns Map(relX/relY/sizeW/sizeH/posModX/posModY/visible/
+; shouldModify/childFirst/childLast) or 0 if <ptr> isn't a readable element.
+_UiHitGeom(reader, ptr)
+{
+    if !reader.IsProbablyValidPointer(ptr)
+        return 0
+    h := 0
+    try h := reader.Mem.ReadBytes(ptr, 0x2A0)
+    if !h
+        return 0
+    flags := NumGet(h.Ptr, PoE2Offsets.UiElementBase["Flags"], "UInt")
+    return Map(
+        "relX",        NumGet(h.Ptr, PoE2Offsets.UiElementBase["RelativePosition"], "Float"),
+        "relY",        NumGet(h.Ptr, PoE2Offsets.UiElementBase["RelativePosition"] + 0x04, "Float"),
+        "sizeW",       NumGet(h.Ptr, PoE2Offsets.UiElementBase["UnscaledSize"], "Float"),
+        "sizeH",       NumGet(h.Ptr, PoE2Offsets.UiElementBase["UnscaledSize"] + 0x04, "Float"),
+        "posModX",     NumGet(h.Ptr, PoE2Offsets.UiElementBase["PositionModifier"], "Float"),
+        "posModY",     NumGet(h.Ptr, PoE2Offsets.UiElementBase["PositionModifier"] + 0x04, "Float"),
+        "visible",     ((flags >> 11) & 1) ? 1 : 0,
+        "shouldModify",((flags >> 10) & 1) ? 1 : 0,
+        "childFirst",  NumGet(h.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr"),
+        "childLast",   NumGet(h.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr"))
+}
+
+; Descends the UI tree from <rootPtr>, following the deepest VISIBLE child whose
+; absolute UI-space rect contains (<uiX>,<uiY>). Position accumulation mirrors
+; UiTree_GetScreenPos (add the parent's PositionModifier when a child's
+; shouldModify flag is set, then the child's relative position). When several
+; visible children contain the point the LAST one wins (topmost z-order).
+; Returns an array of element addresses root..leaf (the hovered element is last),
+; or [] on failure. Params: reader, rootPtr, uiX, uiY (UI-space), maxDepth.
+UiTree_HitTest(reader, rootPtr, uiX, uiY, maxDepth := 40)
+{
+    g := _UiHitGeom(reader, rootPtr)
+    if !IsObject(g)
+        return []
+    path := [rootPtr]
+    absX := g["relX"], absY := g["relY"]
+    depth := 0
+    while (depth < maxDepth)
+    {
+        depth += 1
+        cf := g["childFirst"], cl := g["childLast"]
+        if !(reader.IsProbablyValidPointer(cf) && cl > cf)
+            break
+        n := Min((cl - cf) // A_PtrSize, 4096)
+        best := 0, bestG := 0, bestAbsX := 0, bestAbsY := 0
+        i := 0
+        while (i < n)
+        {
+            childPtr := 0
+            try childPtr := reader.Mem.ReadPtr(cf + i * A_PtrSize)
+            i += 1
+            cg := _UiHitGeom(reader, childPtr)
+            if !(IsObject(cg) && cg["visible"] && cg["sizeW"] > 0 && cg["sizeH"] > 0)
+                continue
+            cAbsX := absX + (cg["shouldModify"] ? g["posModX"] : 0) + cg["relX"]
+            cAbsY := absY + (cg["shouldModify"] ? g["posModY"] : 0) + cg["relY"]
+            if (uiX >= cAbsX && uiX <= cAbsX + cg["sizeW"] && uiY >= cAbsY && uiY <= cAbsY + cg["sizeH"])
+            {
+                best := childPtr, bestG := cg, bestAbsX := cAbsX, bestAbsY := cAbsY
+            }
+        }
+        if !best
+            break
+        path.Push(best)
+        g := bestG, absX := bestAbsX, absY := bestAbsY
+    }
+    return path
+}

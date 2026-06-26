@@ -38,16 +38,18 @@ class PoE2Offsets
         "CurrentAreaLevel", 0xC4,
         "CurrentAreaHash", 0x11C,
         "Environments", 0x4C0,
-        "PlayerInfo", 0x580,
-        ; EntityListStruct lives at AreaInstance+0x6C0; AwakeEntities is its first
+        "PlayerInfo", 0x598,   ; latest game patch shifted +0x18 (was 0x580); LocalPlayerStruct base
+        ; -> ServerDataPtr = AreaInstance+0x598 (PlayerInfo+0x00),
+        ;    LocalPlayerPtr = AreaInstance+0x5B8 (PlayerInfo+0x20)
+        ; EntityListStruct lives at AreaInstance+0x6D8; AwakeEntities is its first
         ; StdMap field (+0x00) and SleepingEntities the second (+0x10).
-        "Entities", 0x6C0,
-        "AwakeEntities", 0x6C0,
-        "SleepingEntities", 0x6D0,
-        "TerrainMetadata", 0x8A0   ; Gordin/GameHelper2 reference: TerrainStruct at AreaInstance+0x8A0
+        "Entities", 0x6D8,
+        "AwakeEntities", 0x6D8,
+        "SleepingEntities", 0x6E8,
+        "TerrainMetadata", 0x8B8   ; Gordin/GameHelper2 ref TerrainStruct (was 0x8A0; patch shifted +0x18)
     )
 
-    ; Offsets within TerrainStruct (base = AreaInstance + 0x8A0).
+    ; Offsets within TerrainStruct (base = AreaInstance + 0x8B8).
     ; Source: https://github.com/Gordin/GameHelper2 -- AreaInstanceOffsets.cs
     ; Each byte encodes 2 grid cells: even-x -> lower nibble, odd-x -> upper nibble.
     ; A nibble value != 0 means the cell is walkable.
@@ -55,10 +57,10 @@ class PoE2Offsets
         "TotalTilesX", 0x18,   ; int64 — number of tile columns
         "TotalTilesY", 0x20,   ; int64 — number of tile rows
         "TileDetailsPtr", 0x28,   ; StdVector<TileStructure> (each 0x38 bytes)
-        "GridWalkableData", 0xD0,   ; StdVector<byte> -- absolute: AreaInstance+0x970
-        "GridLandscapeData", 0xE8,   ; StdVector<byte> -- absolute: AreaInstance+0x988
-        "BytesPerRow", 0x130,  ; int32 -- absolute: AreaInstance+0x9D0
-        "TileHeightMultiplier", 0x134   ; int16 -- absolute: AreaInstance+0x9D4
+        "GridWalkableData", 0xD0,   ; StdVector<byte> -- absolute: AreaInstance+0x988
+        "GridLandscapeData", 0xE8,   ; StdVector<byte> -- absolute: AreaInstance+0x9A0
+        "BytesPerRow", 0x130,  ; int32 -- absolute: AreaInstance+0x9E8
+        "TileHeightMultiplier", 0x134   ; int16 -- absolute: AreaInstance+0x9EC
     )
 
     ; TileStructure layout (0x38 bytes each, within TileDetailsPtr vector)
@@ -538,7 +540,8 @@ class PoE2Offsets
         "Flags", 0x180,  ; uint — bit 10 = SHOULD_MODIFY_POS, bit 11 = IS_VISIBLE
         "ScaleIndex", 0x18A,  ; byte — 1/2/3 for GameWindowScale lookup
         "BackgroundColor", 0x25C,  ; float4 RGBA — .W (alpha, +12) is used for chat-active check
-        "UnscaledSize", 0x288   ; StdTuple2D<float> — element size in UI coords
+        "UnscaledSize", 0x288,   ; StdTuple2D<float> — element size in UI coords
+        "ItemPtr", 0x4F8   ; ptr → the inventory/stash ITEM entity held by an item-slot UiElement (0 for non-slot elements). From coussiraty/CoreExile2 GameHelper/Sdk/InventoryAdapters.cs (ItemPointerOffset); their Self/Children/Flags offsets match ours exactly, so this should too. NEEDS in-game verification.
     )
 
     ; Skill-bar slot element. The per-slot icon container under skills_bar holds a

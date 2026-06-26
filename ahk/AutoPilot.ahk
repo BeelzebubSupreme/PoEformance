@@ -142,8 +142,10 @@ _CheckAutoPilotGuards(radarSnap)
 
     ; Block when any game panel (inventory, passive tree, map, etc.) is open —
     ; sending clicks/keys while a panel is up would target the panel, not the world.
+    ; Gated by g_panelPauseAutoPilot.
+    global g_panelPauseAutoPilot
     panelVis := radarSnap.Has("panelVisibility") ? radarSnap["panelVisibility"] : 0
-    if (panelVis && IsObject(panelVis) && panelVis.Has("anyPanelOpen") && panelVis["anyPanelOpen"])
+    if (g_panelPauseAutoPilot && panelVis && IsObject(panelVis) && panelVis.Has("anyPanelOpen") && panelVis["anyPanelOpen"])
     {
         out["reason"] := "panel-open"
         return out

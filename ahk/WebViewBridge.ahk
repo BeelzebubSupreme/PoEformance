@@ -40,12 +40,13 @@ PushHeaderToWebView()
     global g_radarShowEnemyNormal, g_radarShowEnemyRare, g_radarShowEnemyBoss
     global g_radarShowMinions, g_radarShowNpcs, g_radarShowChests
     global g_autoFlaskLastReason, g_flaskKeyBySlot, g_reader, g_radarEnabled, g_webGui
-    global g_playerHudEnabled, g_atlasOverlayEnabled
+    global g_vitalsEnabled, g_atlasOverlayEnabled
     global POEFORMANCE_VERSION
     global g_entityShowPlayer, g_entityShowMinion, g_entityShowEnemy
     global g_entityShowNPC, g_entityShowChest, g_entityShowWorldItem, g_entityShowOther
     global g_zoneNavEnabled
-    global g_radarAlpha, g_mapHackEnabled, g_maphackSource, g_isConnected, g_rangeCirclesEnabled, g_panelDetectionEnabled
+    global g_radarAlpha, g_mapHackEnabled, g_maphackSource, g_isConnected, g_rangeCirclesEnabled
+    global g_panelHideOverlays, g_panelPauseAutoPilot, g_panelHideLootBars
     global g_walkGridEnabled, g_maphackMaskDebug
     global g_autoPilotEnabled, g_autoPilotState, g_autoPilotReason
     global g_inventoryChainDumpEnabled, g_overlayStatusTextEnabled, g_alwaysOnTop, g_localApiEnabled, g_localApiPort
@@ -83,7 +84,7 @@ PushHeaderToWebView()
         . '"appVersion":' _JsStr(POEFORMANCE_VERSION) ","
         . '"gameVersion":' _JsStr(gameVer) ","
         . '"radarEnabled":' (g_radarEnabled ? "true" : "false") ","
-        . '"playerHud":' (g_playerHudEnabled ? "true" : "false") ","
+        . '"vitalsEnabled":' (g_vitalsEnabled ? "true" : "false") ","
         . '"radarAlpha":' g_radarAlpha ","
         . '"isMaximized":' isMaximized ","
         . '"alwaysOnTop":' (g_alwaysOnTop ? "true" : "false") ","
@@ -116,7 +117,9 @@ PushHeaderToWebView()
         . '"ggpkMaphackApplied":' (GgpkToolBridge.IsMaphackApplied() ? "true" : "false") ","
         . '"isConnected":' (IsSet(g_isConnected) && g_isConnected ? "true" : "false") ","
         . '"rangeCircles":' (g_rangeCirclesEnabled ? "true" : "false") ","
-        . '"panelDetection":' (g_panelDetectionEnabled ? "true" : "false") ","
+        . '"panelHideOverlays":' (g_panelHideOverlays ? "true" : "false") ","
+        . '"panelPauseAutoPilot":' (g_panelPauseAutoPilot ? "true" : "false") ","
+        . '"panelHideLootBars":' (g_panelHideLootBars ? "true" : "false") ","
         . '"cfgSections":' _JsStr(g_cfgOpenSections) ","
         . '"autoPilot":' (g_autoPilotEnabled ? "true" : "false") ","
         . '"autoPilotState":' _JsStr(g_autoPilotState) ","
@@ -149,6 +152,7 @@ PushHeaderToWebView()
         . ',"loot":' BuildLootHeaderJson()
         . ',"stashMover":' BuildStashMoverHeaderJson()
         . ',"lootRadarValue":' BuildLootRadarValueHeaderJson()
+        . ',"uiHoverPrice":' BuildUiHoverPriceHeaderJson()
         . ',"lootTradePricing":' BuildLootTradePricingHeaderJson()
         . "}"
     WebViewExec("updateHeader(" json ")")
@@ -336,62 +340,6 @@ _SerializeZoneScanStatus()
         . "}"
 }
 
-; Serialises the active TreeView tab and pushes it to updateTree() in the WebView.
-PushActiveTreeToWebView()
-{
-    global g_activeTreeTabKey, g_treeControlsByTab, g_treeNodePathsByTab
-
-    if !g_treeControlsByTab.Has(g_activeTreeTabKey)
-        return
-
-    ctrl := g_treeControlsByTab[g_activeTreeTabKey]
-    hwnd := ctrl.Hwnd
-    root := TV_GetRoot(hwnd)
-    nodePathsMap := g_treeNodePathsByTab.Has(g_activeTreeTabKey) ? g_treeNodePathsByTab[g_activeTreeTabKey] : Map()
-    nodesJson := root ? _DumpTreeNodeRecursiveJsonEx(ctrl, hwnd, root, nodePathsMap) : "[]"
-
-    WebViewExec("updateTree(" _JsStr(g_activeTreeTabKey) "," nodesJson ")")
-}
-
-; Recursive tree serialiser that also embeds the node path when available.
-_DumpTreeNodeRecursiveJsonEx(ctrl, hwnd, nodeId, nodePathsMap)
-{
-    items := []
-    while (nodeId != 0)
-    {
-        label := ctrl.GetText(nodeId)
-        escaped := StrReplace(label, "\", "\\")
-        escaped := StrReplace(escaped, '"', '\"')
-        escaped := StrReplace(escaped, "`n", "\n")
-        escaped := StrReplace(escaped, "`r", "\r")
-        escaped := StrReplace(escaped, "`t", "\t")
-
-        pathPart := ""
-        if nodePathsMap.Has(nodeId)
-        {
-            p := nodePathsMap[nodeId]
-            ep := StrReplace(p, "\", "\\")
-            ep := StrReplace(ep, '"', '\"')
-            pathPart := ',"path":"' ep '"'
-        }
-
-        child := TV_GetChild(hwnd, nodeId)
-        if child
-        {
-            childJson := _DumpTreeNodeRecursiveJsonEx(ctrl, hwnd, child, nodePathsMap)
-            items.Push('{"text":"' escaped '"' pathPart ',"children":' childJson '}')
-        }
-        else
-            items.Push('{"text":"' escaped '"' pathPart '}')
-
-        nodeId := TV_GetNext(hwnd, nodeId)
-    }
-    joined := ""
-    for i, item in items
-        joined .= (i > 1 ? "," : "") item
-    return "[" joined "]"
-}
-
 ; Pushes the current watchlist (pinned node paths) to updateWatchlist() in the WebView.
 PushWatchlistToWebView()
 {
@@ -437,7 +385,6 @@ _ResolveSnapshotPath(snapshot, path)
 PushAllDataToWebView()
 {
     PushHeaderToWebView()
-    PushActiveTreeToWebView()
     PushWatchlistToWebView()
     _PushBlacklistToWebView()
     PushHotkeysToWebView()

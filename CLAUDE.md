@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.48`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.72`.
 
 ## Language
 
@@ -152,7 +152,7 @@ Alerts → `alerts.ini [Alerts]`.
   junk filter is ALSO applied there at the awake-sample build. Default ON, all categories on.
 - **GdiOverlayBase.ahk** — reusable transparent, click-through, always-on-top GDI layer
   (cached pens/brushes/fonts, double-buffered blit). Used only by NotificationOverlay so far;
-  PlayerHUD / RadarOverlay are NOT yet migrated to it.
+  VitalsOverlay / RadarOverlay are NOT yet migrated to it.
 - **NotificationOverlay.ahk** — `extends GdiOverlayBase`; map-independent banner layer.
   `SetBanner(text, ms, colorBGR)`; `Tick()` self-resolves the PoE window, foreground-gated,
   hides when idle.
@@ -482,7 +482,7 @@ rectangle from the UI tree.
 
 - Verify real alert matches; banner position/size; WAV playback; `FlashWindowEx` struct; the
   `currentAreaHash` zone-change signal; group colors on radar dots.
-- Optional deferred refactor: migrate **PlayerHUD**, then **RadarOverlay**, onto `GdiOverlayBase`.
+- Optional deferred refactor: migrate **VitalsOverlay**, then **RadarOverlay**, onto `GdiOverlayBase`.
 
 ## Value-aware loot radar (WIP) — `ahk/LootRadarValue.ahk`
 
@@ -594,6 +594,48 @@ localized client), checks the trade cache, and otherwise enqueues it for backgro
   round-trip works, the response shape (`result` / `listing.price.{amount,currency}`) matches,
   currency ids convert, and the rate-limit/cooldown behave. Confirmed pricing uniques on Standard
   (where poe.ninja has no unique data).
+
+## UI-item hover RE + Price-on-hover (shipped 0.45.13.71)
+
+The world-entity hover chains (`HoverTracker` tracker+0x648 / `MouseOver`
+inGameState→0x300→0x3F0→0xA8) only resolve AreaInstance entities — they do NOT see UI /
+inventory / stash items. Two flat-scan probes proved PoE2 exposes **no flat "UIHover" slot**
+pointing at the hovered UiElement (only whole panels are flat-referenced, never the item
+leaf). Solved with a **deterministic UI tree-descent** + the item-slot's own item pointer.
+
+- **RE finding (confirmed in-game 2026-06-25):** an item-slot `UiElement` holds a direct
+  pointer to the item ENTITY at **+0x4F8** (`PoE2Offsets.UiElementBase.ItemPtr`). Source:
+  `coussiraty/CoreExile2` `GameHelper/Sdk/InventoryAdapters.cs` (`ItemPointerOffset = 0x4F8`);
+  their `Self`(0x08)/`Children`(0x10)/`Flags`(0x180) UiElement offsets match ours exactly, and
+  the +0x4F8 pointer verified live (a hovered Rare gloves resolved to its real
+  `Metadata/Items/Armours/Gloves/...` entity). The inner item then reads with the existing
+  item reads (`ReadItemRarity`/`ReadItemArtPath`/`ReadItemModsAndMagicProperties`).
+- **`ahk/UiTreeBrowser.ahk`** — `_UiHitGeom` (lean header-only geometry read) +
+  `UiTree_HitTest(reader, rootPtr, uiX, uiY, maxDepth)`: descend from a root, at each level
+  following the deepest VISIBLE child whose absolute UI-space rect contains the cursor.
+  Position accumulation mirrors `UiTree_GetScreenPos` (parent `PositionModifier` when the
+  child's `shouldModify` flag is set, then the child's relative pos); topmost (last) match
+  wins. Returns the element-address chain root→leaf.
+- **`ahk/UiHoverProbe.ahk`** — RE diagnostic (`Ctrl+Alt+Shift+H`): descends from the GameUI
+  root to the hovered element, reports the chain + tries +0x4F8 on each chain element to resolve
+  the item. Kept as the verification aid.
+- **`ahk/UiHoverPrice.ahk` (the feature)** — price-on-hover. `TryUiHoverPrice(radarSnap)`
+  (in `UpdateRadarFast` after `TryLootRadarValue`, throttled ~5 Hz, gated on panel-open +
+  game-foreground) resolves the hovered item (`_UhpResolveHoveredItem`: descent → first chain
+  element with a `Metadata/Items` pointer at +0x4F8 → rarity + stack + the slot's screen rect),
+  prices it via the existing value layer (`_LrvPriceInner` × stack → `LrvValueParts`), and caches
+  the renderable result in `g_uhpHover` (re-price only on item change / while still unpriced).
+  `UiHoverPriceOverlay extends GdiOverlayBase` (registered in `OverlayManager`) draws a small
+  currency-orb + amount badge at the slot's top-right corner (orb via `OverlayImage`, text
+  fallback). Only PRICED items ≥ `minEx` show a badge — unpriceable rares/magics show nothing,
+  like the rest of the value layer. Self-persists `[UiHoverPrice]` (`enabled`, `minEx`).
+  Bridge `SetUiHoverPrice`; header `uiHoverPrice`; UI section Config → Overlay (`det-uihoverprice`,
+  below the Loot Value Radar). Default OFF.
+- **Verified in-game (2026-06-25):** hovering a priced item (currency / unique / waystone /
+  fragment) in the inventory or a stash tab shows the orb + value badge on its slot; the
+  descent + +0x4F8 resolve and the value layer round-trip work end-to-end. Remaining tuning
+  notes (optional): badge placement/scale on very large stash vs tiny inventory cells, and
+  overlap with the game's own item tooltip.
 
 ## Reference
 

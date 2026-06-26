@@ -1,6 +1,6 @@
 ; NotificationOverlay.ahk
 ; Map-independent notification overlay (entity-alert banners, future toasts).
-; Unlike RadarOverlay / PlayerHUD it does NOT follow the play-overlay gate: it shows
+; Unlike RadarOverlay / VitalsOverlay it does NOT follow the play-overlay gate: it shows
 ; whenever the game window is focused and a banner is active, and stays fully hidden
 ; otherwise. Extends GdiOverlayBase and is driven by OverlayManager via the uniform
 ; ShouldShow/Layout/Draw contract. Content is set via SetBanner() (EntityAlerts).

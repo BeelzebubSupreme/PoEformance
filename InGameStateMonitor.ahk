@@ -31,6 +31,7 @@ SetWorkingDir(A_ScriptDir)
 #Include ahk/FocusOverlay.ahk
 #Include ahk/LootTrackerOverlay.ahk
 #Include ahk/LootValueOverlay.ahk
+#Include ahk/UiHoverPrice.ahk
 #Include ahk/OverlayContext.ahk
 #Include ahk/PlayOverlayPolicy.ahk
 #Include ahk/OverlayManager.ahk
@@ -49,7 +50,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.48"
+POEFORMANCE_VERSION := "0.45.13.72"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -113,11 +114,10 @@ g_radarEnabled := true   ; whether radar overlay is active
 g_radarAlpha := 255    ; overlay opacity (0=transparent, 255=opaque)
 g_overlayStatusTextEnabled := true   ; show automation status block on game overlay
 g_overlayPoeOnly := false   ; restrict play overlays to the PoE2 window only (hide while our own tool is focused)
-g_cfgOpenSections := "status,overview,toggles,autoflask,radar,entities,actions,al-conditions,al-timing,al-output"  ; comma-separated open detail sections
+g_cfgOpenSections := "status,autoflask,radar,entities,al-conditions,al-timing,al-output"  ; comma-separated open detail sections
 g_overlayManager := 0   ; OverlayManager — owns all overlays; built in LoadOverlaySystem()
 g_radarOverlay := 0   ; reference to the manager-owned RadarOverlay (set in LoadOverlaySystem)
-g_playerHudEnabled := true   ; master toggle for the vitals overlay (formerly the player HUD)
-g_playerHud := 0   ; legacy alias -> the manager-owned VitalsOverlay (set in LoadOverlaySystem)
+g_vitalsEnabled := true   ; master toggle for the vitals overlay
 g_vitalsOverlay := 0   ; reference to the manager-owned VitalsOverlay (set in LoadOverlaySystem)
 g_vitalsBars := 0      ; Map(barId -> config Map); seeded by LoadVitalsConfig()
 g_vitalsEditMode := false   ; drag-to-place layout edit mode for the vitals bars
@@ -277,10 +277,14 @@ g_maphackSource := "memory"
 g_maphackOutlineHex := "8080FFCC"
 g_maphackBackgroundHex := "66FF6619"
 ; Config tab sub-tab persistence. One of: general / automation /
-; overlay / ggpk / filters / debug. Defaults to General on first run.
+; overlay / vitals / debug / data. Defaults to General on first run.
 g_configSubTab := "general"
 g_rangeCirclesEnabled := true
-g_panelDetectionEnabled := true
+; Panel-respect toggles (per-feature). Panel detection itself always runs;
+; each consumer decides whether to react to an open game panel.
+g_panelHideOverlays := true
+g_panelPauseAutoPilot := true
+g_panelHideLootBars := true
 
 ; Window geometry (restored from INI by LoadConfig)
 g_winX := 20
@@ -329,6 +333,7 @@ LoadLocalApiConfig()      ; local HTTP API (MCP backend) settings + Winsock cons
 LoadLootTracker()         ; map-run / session loot tracker state + [LootTracker] config
 LoadLootPricing()         ; poe.ninja price layer (loads cache, kicks refresh if stale)
 LoadLootRadarValue()      ; value-aware loot radar (price ground drops) + [LootRadarValue] config
+LoadUiHoverPrice()        ; price-on-hover for inventory/stash items + [UiHoverPrice] config
 LoadPoeTradeSession()     ; WebView2 trade-session transport (in-browser, no secrets leave it)
 LoadLootTradePricing()    ; official PoE2 trade-API unique pricing (off by default) + [LootTradePricing]
 LoadStashMover()          ; "dump backpack to open stash" feature + [StashMover] config
@@ -757,8 +762,10 @@ ReadAndShow(forceTreeRefresh := false)
         }
         _totalLastMs := A_TickCount - totalStart
         UpdateOffsetTable(snapshot)
-        ; Push the active (tree) tab plus all special-tab data to the WebView UI.
-        PushActiveTreeToWebView()
+        ; Push the special-tab data (entities / skills / buffs / UI / gameState)
+        ; to the WebView UI. The value-tree push was retired with the Overview
+        ; section; RenderActiveTreeTab still populates the hidden TreeView for
+        ; the on-demand F3 debug dump.
         PushSpecialTabsToWebView(snapshot)
         PushHeaderToWebView()
         PushWatchlistToWebView()
@@ -975,6 +982,7 @@ OnTreeTabChanged(*)
 #Include ahk/MemoryDiff.ahk
 #Include ahk/MemoryDissect.ahk
 #Include ahk/AreaInstanceProbe.ahk
+#Include ahk/UiHoverProbe.ahk
 #Include ahk/PathfindingProbe.ahk
 #Include ahk/OffsetCompare.ahk
 #Include ahk/PatchMaintenance.ahk

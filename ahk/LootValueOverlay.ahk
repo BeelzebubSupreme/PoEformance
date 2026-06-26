@@ -23,15 +23,16 @@ class LootValueOverlay extends GdiOverlayBase
 
     ShouldShow(ctx)
     {
-        global g_lrvEnabled, g_lrvShowList, g_lrvNearby
+        global g_lrvEnabled, g_lrvShowList, g_lrvNearby, g_panelHideLootBars
         if !(IsSet(g_lrvEnabled) && g_lrvEnabled && IsSet(g_lrvShowList) && g_lrvShowList)
             return false
         if !ctx.gameActive
             return false
         if !(IsSet(g_lrvNearby) && IsObject(g_lrvNearby) && g_lrvNearby.Length > 0)
             return false
-        ; Hide while a large blocking panel is open (Atlas / inventory / passive tree).
-        if (ctx.snapshot && Type(ctx.snapshot) = "Map")
+        ; Hide while a large blocking panel is open (Atlas / inventory / passive
+        ; tree) — gated by g_panelHideLootBars.
+        if (IsSet(g_panelHideLootBars) && g_panelHideLootBars && ctx.snapshot && Type(ctx.snapshot) = "Map")
         {
             pv := ctx.snapshot.Has("panelVisibility") ? ctx.snapshot["panelVisibility"] : 0
             if (pv && IsObject(pv) && pv.Has("anyPanelOpen") && pv["anyPanelOpen"])

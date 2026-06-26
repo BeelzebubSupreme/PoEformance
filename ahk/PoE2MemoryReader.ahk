@@ -3112,8 +3112,10 @@ class PoE2GameStateReader extends PoE2InventoryReader
             {
                 this._lastActiveGameUiPtr := activeGameUiPtr
 
-                global g_panelDetectionEnabled
-                if (g_panelDetectionEnabled)
+                ; Panel detection always runs now; the per-feature respect toggles
+                ; (g_panelHideOverlays / g_panelPauseAutoPilot / g_panelHideLootBars)
+                ; decide whether each consumer reacts to an open panel.
+                if (true)
                 {
                     if (PoE2Offsets.DiscoveredPanelOffsets.Count > 0)
                     {

@@ -66,13 +66,13 @@ ToggleRadar()
     PushHeaderToWebView()
 }
 
-; Toggles the Player HUD overlay on/off.
-TogglePlayerHud()
+; Toggles the Vitals overlay on/off (master enable for all vitals bars).
+ToggleVitals()
 {
-    global g_playerHudEnabled, g_playerHud
-    g_playerHudEnabled := !g_playerHudEnabled
-    if (!g_playerHudEnabled && g_playerHud)
-        g_playerHud.Hide()
+    global g_vitalsEnabled, g_vitalsOverlay
+    g_vitalsEnabled := !g_vitalsEnabled
+    if (!g_vitalsEnabled && g_vitalsOverlay)
+        g_vitalsOverlay.Hide()
     SaveConfig()
     PushHeaderToWebView()
 }

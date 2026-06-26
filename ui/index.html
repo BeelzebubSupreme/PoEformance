@@ -1363,7 +1363,7 @@
       box-shadow: 0 2px 6px -2px rgba(200,168,90,0.45)
     }
 
-    /* Toggleable pill — used for Auto-Refresh + Dump Chain.
+    /* Toggleable pill — used for the Skills tab "Internal skills" toggle.
        Inactive: muted brown background, dim ivory text, hairline gold border.
        Active:   gilded fill, near-white text, soft glow underneath.
        Two visual states for the same affordance keep the toolbar quiet
@@ -1901,6 +1901,13 @@
     .inv-tooltip .inv-tt-mod.cat-explicit { color: #c8d8ff }
 
     /* BUFFS */
+    /* Skills & Buffs tab: padded wrapper for the blacklist config section
+       (moved here from the retired Config > Filters sub-tab) so it lines up
+       with the 12px inset of the buff/skill lists below it. */
+    .skills-cfg {
+      padding: 12px 12px 0
+    }
+
     #tab-buffs-content {
       padding: 12px
     }
@@ -3446,16 +3453,58 @@
       padding: 4px 0 0 0
     }
 
-    /* Loot Value Radar: even spacing between the grouped subsections, and a clear
-       nesting cue (indent + left rule) on the items inside an expanded group. */
-    #det-lootvalue details.cfg-subsection {
+    /* Nested config groups (AutoPilot, Radar, Loot Value Radar, …): uniform
+       spacing between the grouped subsections so every chapter's inner groups
+       line up the same way. */
+    .cfg-section details.cfg-subsection {
       margin-top: 6px
     }
-    #det-lootvalue details.cfg-subsection > .cfg-row,
-    #det-lootvalue details.cfg-subsection > .cfg-help {
+    /* Body wrapper inside a nested group whose rows aren't direct children
+       (e.g. AutoPilot's slider-heavy groups) — matches the subsection spacing. */
+    .cfg-subsection-body {
+      margin-top: 4px;
+      padding: 6px 0 4px 4px
+    }
+    /* Every open nested subcategory gets the same vertical nesting cue (left
+       rule + indent) on its body content — everything except the summary — so
+       all collapsible sub-groups (Loot Value Radar, AutoPilot, Radar, …) share
+       one consistent left line instead of only #det-lootvalue having it.
+       `.cfg-row` has no inter-row margin, so consecutive rows' borders join
+       into one continuous line; single body wrappers draw one line outright. */
+    .cfg-section details.cfg-subsection[open] > :not(summary) {
       margin-left: 14px;
-      border-left: 2px solid rgba(200, 168, 90, 0.30);
+      border-left: 2px solid rgba(200, 168, 90, 0.55);
       padding-left: 12px
+    }
+
+    /* ── Section-header consistency ──────────────────────────────────────
+       Sub-section headers (a .cfg-header inside a nested details element)
+       are uniformly smaller than the chapter title — so no section needs an
+       inline font-size on its header. Top-level section titles (one details
+       level deep) keep the full 17px from .cfg-header. */
+    details details summary .cfg-header {
+      font-size: 13px
+    }
+
+    /* Non-collapsible sub-heading inside a panel (when a full collapsible
+       group is overkill, e.g. the Loot tab's "Current run"/"This session").
+       Gilded serif with a hairline rule — consistent everywhere. */
+    .cfg-subhead {
+      color: var(--codex-gold-hi);
+      font-family: var(--codex-serif);
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      padding: 8px 0 4px;
+      border-bottom: 1px solid var(--codex-rule)
+    }
+
+    /* Small ancillary note text — use instead of inline font-size/colour
+       spans so greyed hints read the same across the GUI. */
+    .cfg-note {
+      font-family: var(--codex-serif);
+      font-size: 11px;
+      color: var(--subtext)
     }
 
     .cfg-slider-row {
@@ -3623,6 +3672,18 @@
       gap: 6px;
       align-items: center;
       padding: 6px 0
+    }
+    /* NPC Watch Auto-Sync toggle in the watchlist toolbar (moved here from
+       Config > General; NPC watch is a watchlist feature). Pushed to the
+       right so it doesn't crowd the pin/remove/clear buttons. */
+    .wl-autosync {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--codex-serif);
+      font-size: 12px;
+      color: var(--subtext)
     }
 
     .wl-filter {
@@ -4290,9 +4351,6 @@
     <div class="pill inactive clickable" id="pill-radar" onclick="ahkCall('ToggleRadar')" data-tip="Toggle Radar" data-icon="◎">
       <div class="dot"></div><span id="pill-radar-text">Radar ON</span>
     </div>
-    <div class="pill inactive clickable" id="pill-hud" onclick="ahkCall('TogglePlayerHud')" data-tip="Toggle Player HUD" data-icon="♥">
-      <div class="dot"></div><span id="pill-hud-text">HUD ON</span>
-    </div>
     <!-- Atlas map overlay — draws the endgame-atlas node graph (names, biomes,
          state, connections, content, hop pills) while the Atlas is open. State /
          label set from the header push (d.atlasOverlay). -->
@@ -4342,12 +4400,6 @@
           <line x1="11" y1="8" x2="11" y2="14" />
           <line x1="8" y1="11" x2="14" y2="11" />
         </svg><span class="nav-label">RE</span></div>
-      <div class="cat" data-cat="data" onclick="switchCategory('data')"><svg viewBox="0 0 24 24">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-          <line x1="16" y1="13" x2="8" y2="13" />
-          <line x1="16" y1="17" x2="8" y2="17" />
-        </svg><span class="nav-label">Data</span></div>
       <div class="cat" data-cat="hotkeys" onclick="switchCategory('hotkeys')"><svg viewBox="0 0 24 24">
           <rect x="2" y="6" width="20" height="12" rx="2" />
           <line x1="6" y1="10" x2="6" y2="10.5" />
@@ -4355,7 +4407,7 @@
           <line x1="14" y1="10" x2="14" y2="10.5" />
           <line x1="18" y1="10" x2="18" y2="10.5" />
           <line x1="8" y1="14" x2="16" y2="14" />
-        </svg><span class="nav-label">Hotkeys</span></div>
+        </svg><span class="nav-label">Macro Engine</span></div>
     </div>
     <div id="cat-bar-right">
       <div class="cat" data-cat="config" onclick="switchCategory('config')"><svg viewBox="0 0 24 24">
@@ -4442,23 +4494,17 @@
       <div class="bar-marker tab-marker"></div>
     </div>
 
-    <!-- DATA — single page, sub-tab row hidden via CSS. -->
-    <div class="subtab-row single-tab" data-cat="data">
-      <div class="tab" data-tab="tsvs" onclick="switchTab('tsvs')">TSVs</div>
-      <div class="bar-marker tab-marker"></div>
-    </div>
-
-    <!-- CONFIG — six sub-tabs, mirrors the Game/RE category structure.
-         General      — status + overview + master toggles + actions
-         Automation   — Auto-Flask + AutoPilot + Range Circles + Opacity
-         Overlay      — Radar visualisation toggles + entity-type filters
-         GGPK         — Maphack source + apply/revert + shader colors
-         Filters      — Entity filters + Skill/Buff blacklist
-         Debug        — Diagnostic / RE-style live panels moved here from the
-                        old RE > Panel Diff tab (which is now retired —
-                        its content is purely diagnostic config). -->
+    <!-- CONFIG — sub-tabs, mirrors the Game/RE category structure.
+         General      — status + integrations
+         Automation   — Stash Mover + AutoPilot
+         Overlay      — Map Hack + Radar + Range Circles + Loot Value Radar
+         Vitals       — Vitals bars editor
+         Debug        — Diagnostic / RE-style live panels (incl. the retired
+                        RE > Panel Diff content + the General diagnostics)
+         Data         — TSV dictionary maintenance + browser (was its own
+                        top-level Data category). -->
     <div class="subtab-row" data-cat="config">
-      <!-- The 6 buttons all map to the same top-level `config` tab-panel
+      <!-- The buttons all map to the same top-level `config` tab-panel
            and just toggle which inner .cfg-subpanel is visible — hence
            switchConfigSubTab() instead of switchTab(). This keeps the
            existing category machinery (tabCategory, lastTabPerCategory,
@@ -4477,24 +4523,23 @@
       <div class="tab" data-cfgtab="vitals"     onclick="switchConfigSubTab('vitals')"><svg viewBox="0 0 24 24">
           <path d="M20.8 6.6a5 5 0 0 0-8.8-3 5 5 0 0 0-8.8 3c0 4.5 8.8 10 8.8 10s8.8-5.5 8.8-10z" />
         </svg><span class="nav-label">Vitals</span></div>
-      <div class="tab" data-cfgtab="ggpk"       onclick="switchConfigSubTab('ggpk')"><svg viewBox="0 0 24 24">
-          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-          <polyline points="3.3 7 12 12 20.7 7" /><line x1="12" y1="22" x2="12" y2="12" />
-        </svg><span class="nav-label">GGPK</span></div>
-      <div class="tab" data-cfgtab="filters"    onclick="switchConfigSubTab('filters')"><svg viewBox="0 0 24 24">
-          <polygon points="22 3 2 3 10 12.5 10 19 14 21 14 12.5" />
-        </svg><span class="nav-label">Filters</span></div>
       <div class="tab" data-cfgtab="debug"      onclick="switchConfigSubTab('debug')"><svg viewBox="0 0 24 24">
           <rect x="8" y="6" width="8" height="12" rx="4" /><line x1="12" y1="6" x2="12" y2="3" />
           <line x1="3" y1="9" x2="8" y2="11" /><line x1="3" y1="15" x2="8" y2="14" />
           <line x1="21" y1="9" x2="16" y2="11" /><line x1="21" y1="15" x2="16" y2="14" />
         </svg><span class="nav-label">Debug</span></div>
+      <div class="tab" data-cfgtab="data"       onclick="switchConfigSubTab('data')"><svg viewBox="0 0 24 24">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="16" y1="13" x2="8" y2="13" />
+          <line x1="16" y1="17" x2="8" y2="17" />
+        </svg><span class="nav-label">Data</span></div>
       <div class="bar-marker tab-marker"></div>
     </div>
 
     <!-- HOTKEYS — single page, sub-tab row hidden via CSS. -->
     <div class="subtab-row single-tab" data-cat="hotkeys">
-      <div class="tab" data-tab="hotkeys" onclick="switchTab('hotkeys')">Custom Hotkeys</div>
+      <div class="tab" data-tab="hotkeys" onclick="switchTab('hotkeys')">Macro Engine</div>
       <div class="bar-marker tab-marker"></div>
     </div>
 
@@ -4689,18 +4734,18 @@
         </div>
 
         <div class="cfg-section">
-          <div class="cfg-header" style="margin-bottom:4px">Current run</div>
+          <div class="cfg-subhead">Current run</div>
           <div id="lt-live" class="lt-live"><div class="al-desc">Waiting for data…</div></div>
         </div>
 
         <div class="cfg-section">
-          <div class="cfg-header" style="margin-bottom:4px">This session</div>
+          <div class="cfg-subhead">This session</div>
           <div id="lt-session-summary" class="al-desc" style="margin:0">—</div>
           <div id="lt-runs"></div>
         </div>
 
         <div class="cfg-section">
-          <div class="cfg-header" style="margin-bottom:4px">Valuable drops (session)</div>
+          <div class="cfg-subhead">Valuable drops (session)</div>
           <div id="lt-items"><div class="al-desc">No priced drops yet.</div></div>
         </div>
 
@@ -4714,6 +4759,7 @@
             <div class="al-line">
               <span class="al-item"><span class="al-cap">Show kill counts</span><label class="toggle"><input type="checkbox" id="lt-showKills" onchange="lootChk('showKills',this)"><span class="toggle-slider"></span></label></span>
               <span class="al-item"><span class="al-cap">Anchor bars to right</span><label class="toggle"><input type="checkbox" id="lt-barOnRight" onchange="lootChk('barOnRight',this)"><span class="toggle-slider"></span></label></span>
+              <span class="al-item"><span class="al-cap">Hide while a UI panel is open</span><label class="toggle"><input type="checkbox" id="tog-panel-hidelootbars" onchange="ahkCall('SetPanelRespect','loot', this.checked?1:0)"><span class="toggle-slider"></span></label></span>
             </div>
             <div class="al-line">
               <label class="al-field"><span class="al-cap">poe.ninja league</span><input type="text" class="cfg-input" id="lt-league" placeholder="e.g. Standard" style="width:200px" onchange="lootStr('league',this)"></label>
@@ -4723,7 +4769,7 @@
               <label class="al-field"><span class="al-cap">History size (rows)</span><span class="hk-num"><input type="number" id="lt-historySize" min="5" max="500" onchange="lootNum('historySize',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
               <label class="al-field"><span class="al-cap">Sessions to keep</span><span class="hk-num"><input type="number" id="lt-maxSessions" min="1" max="500" onchange="lootNum('maxSessions',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
             </div>
-            <div class="cfg-header" style="margin:8px 0 2px">On-screen bars</div>
+            <div class="cfg-subhead">On-screen bars</div>
             <div class="al-line">
               <label class="al-field"><span class="al-cap">Compact bar height (px)</span><span class="hk-num"><input type="number" id="lt-compactHeight" min="60" max="400" step="5" onchange="lootNum('compactHeight',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
               <label class="al-field"><span class="al-cap">Bottom offset (px)</span><span class="hk-num"><input type="number" id="lt-barBottomOffset" min="0" max="600" step="5" onchange="lootNum('barBottomOffset',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
@@ -4736,7 +4782,7 @@
         </div>
 
         <div class="cfg-section" id="lt-sec-history" style="display:none">
-          <div class="cfg-header" style="margin-bottom:4px">Session history</div>
+          <div class="cfg-subhead">Session history</div>
           <div id="lt-sessions"><div class="al-desc">Loading…</div></div>
           <div id="lt-detail"></div>
         </div>
@@ -4745,6 +4791,31 @@
 
     <!-- SKILLS & BUFFS TAB (merged) -->
     <div class="tab-panel" id="panel-skills">
+      <!-- Skills & Buffs blacklist (moved here from the retired Config >
+           Filters sub-tab — the filter only ever affected this tab). The
+           cfg-blacklist id + bridge calls are unchanged, so the ➕/✕
+           add/remove flow and header rendering still work. -->
+      <div class="skills-cfg">
+        <div class="cfg-section">
+          <details id="det-blacklist" ontoggle="syncCfgSections()">
+            <summary>
+              <div class="cfg-header">Skills &amp; Buffs Blacklist</div>
+            </summary>
+            <div class="cfg-subsection">
+              <div class="cfg-help">
+                Skill / buff IDs added here are suppressed from the Skills &amp; Buffs tree
+                and from the overlay's status text — useful for hiding constant-up
+                clutter like aura icons, infinite-duration debuffs, or self-applied
+                cosmetic effects. Add an entry via the ➕ button next to a buff on the
+                Skills tab; remove with the ✕ button next to its name below.
+              </div>
+              <div id="cfg-blacklist">
+                <div class="no-data-msg">No blacklisted items</div>
+              </div>
+            </div>
+          </details>
+        </div>
+      </div>
       <div id="tab-buffs-content">
         <div class="buff-empty">Waiting for data…</div>
       </div>
@@ -4806,46 +4877,10 @@
       </div>
     </div>
 
-    <!-- TSVs TAB -->
-    <div class="tab-panel" id="panel-tsvs">
-      <div class="tsv-gen-bar">
-        <button class="cfg-btn tsv-gen-btn" id="tsv-gen-btn" onclick="startTsvGeneration()">⚙ Generate TSVs from Game
-          Data</button>
-        <span id="tsv-gen-status" class="tsv-gen-status"></span>
-        <button class="cfg-btn tsv-log-toggle" id="tsv-log-toggle" onclick="toggleTsvLog()" style="display:none">▾
-          Log</button>
-      </div>
-      <!--
-        Standalone "Refresh base_item_sizes.tsv from local GGPK" button —
-        bypasses the external download pipeline above by reading the
-        user's installed PoE2 (Bundles2/_.index.bin) via the AGPL-fenced
-        ggpk-tools/PoeDataExtract.exe. Runs in ~half a second once the
-        tool has been published; useful when GGG patches and the
-        externally hosted JSON dumps haven't caught up yet.
-      -->
-      <div class="tsv-gen-bar" style="margin-top:6px">
-        <button class="cfg-btn" id="ggpk-refresh-btn" onclick="ggpkRefreshItemSizes()" data-tip="Re-extract all GGPK-derived TSVs (base item sizes + names, monster names, stat names, mod ids) directly from your local PoE2 install via ggpk-tools/PoeDataExtract.exe. Requires the tool to be built (see ggpk-tools/README.md).">⟳ Refresh all TSVs from local GGPK</button>
-        <span id="ggpk-refresh-status" class="tsv-gen-status"></span>
-      </div>
-      <div id="tsv-gen-log" class="tsv-gen-log" style="display:none"></div>
-      <div class="tsv-toolbar">
-        <select id="tsv-file-select" onchange="onTsvFileSelected(this.value)">
-          <option value="">— Select a TSV file —</option>
-        </select>
-        <input id="tsv-search" type="text" placeholder="Filter rows…" oninput="filterTsvRows(this.value)" disabled>
-        <div id="tsv-pager" class="tsv-pager" style="display:none">
-          <button class="tsv-pg-btn" onclick="tsvPageNav(-1)" id="tsv-prev" data-tip="Previous page">◀</button>
-          <span id="tsv-page-info" class="tsv-page-info"></span>
-          <button class="tsv-pg-btn" onclick="tsvPageNav(1)" id="tsv-next" data-tip="Next page">▶</button>
-        </div>
-        <span id="tsv-info" class="tsv-info"></span>
-      </div>
-      <div id="tsv-table-wrap" class="tsv-table-wrap">
-        <div class="no-data-msg">Select a TSV file above to view its contents.</div>
-      </div>
-    </div>
+    <!-- TSVs content moved into Config > Data sub-panel (see #panel-config
+         below). It used to be a standalone top-level "Data" tab. -->
 
-    <!-- CONFIG TAB — split into 6 sub-panels via the cfg-subpanel
+    <!-- CONFIG TAB — split into sub-panels via the cfg-subpanel
          wrappers below. switchConfigSubTab() toggles which one carries
          the .active class; only one is visible at a time. The outer
          #panel-config tab-panel remains a single top-level entry in the
@@ -4855,7 +4890,7 @@
       <div class="cfg-scroll">
 
         <!-- ════════════════════════════════════════════════════════════
-             GENERAL — status, overview, master toggles, action buttons
+             GENERAL — status, integrations
              ════════════════════════════════════════════════════════════ -->
         <div class="cfg-subpanel active" data-cfgtab="general">
 
@@ -4879,28 +4914,6 @@
         </div>
 
         <div class="cfg-section">
-          <details id="det-toggles" open ontoggle="syncCfgSections()">
-            <summary>
-              <div class="cfg-header">Toggles</div>
-            </summary>
-            <div class="cfg-subsection">
-              <div class="cfg-row"><span class="cfg-label">Debug Mode</span>
-                <label class="toggle"><input type="checkbox" id="tog-debug" onchange="ahkCall('ToggleDebug')"><span
-                    class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-row"><span class="cfg-label">Pause Updates</span>
-                <label class="toggle"><input type="checkbox" id="tog-pause" onchange="ahkCall('TogglePause')"><span
-                    class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-row"><span class="cfg-label">NPC Watch Auto-Sync</span>
-                <label class="toggle"><input type="checkbox" id="tog-npcsync" onchange="ahkCall('ToggleNpcSync')"><span
-                    class="toggle-slider"></span></label>
-              </div>
-            </div>
-          </details>
-        </div>
-
-        <div class="cfg-section">
           <details id="det-integrations" ontoggle="syncCfgSections()">
             <summary>
               <div class="cfg-header">Integrations</div>
@@ -4911,46 +4924,6 @@
                     class="toggle-slider"></span></label>
               </div>
               <div class="cfg-help">Exposes a small HTTP API on <code>127.0.0.1:<span id="localapi-port">7777</span></code> so the bundled MCP server (<code>mcp-server/</code>) can let an AI assistant read live game state and change settings. Loopback only; off by default — restart the app after enabling.</div>
-            </div>
-          </details>
-        </div>
-
-        <!-- Actions section — moved from the bottom of the old Config
-             tab to live inside General so the panel order matches the
-             sub-tab order. -->
-        <div class="cfg-section">
-          <details id="det-actions" open ontoggle="syncCfgSections()">
-            <summary>
-              <div class="cfg-header">Actions</div>
-            </summary>
-            <div class="cfg-subsection">
-              <button class="cfg-btn" id="btn-pause" onclick="ahkCall('TogglePause')">⏸ Pause</button>
-              <button class="cfg-btn" onclick="ahkCall('F3Dump')">📷 F3 Dump</button>
-              <button class="cfg-btn" onclick="ahkCall('WatchNpc')">👁 Add NPC Watch</button>
-              <button class="cfg-btn" onclick="ahkCall('ToggleTreePane')">🌲 Toggle Tree Pane</button>
-              <button class="cfg-btn" onclick="ahkCall('DumpEntities')">💾 Dump Entities</button>
-              <button class="cfg-btn" onclick="ahkCall('LootValueDiag')" title="RE test for the value-aware loot radar: open over ground loot (ideally a unique) to check if drops can be priced">🔍 Loot value diagnose</button>
-            </div>
-          </details>
-        </div>
-
-        <!-- Overview lives at the bottom of General — it's a tall live
-             tree, putting it first pushed everything else off-screen on
-             the default window height. -->
-        <div class="cfg-section">
-          <details id="det-overview" open ontoggle="syncCfgSections()">
-            <summary>
-              <div class="cfg-header">Overview</div>
-            </summary>
-            <div class="cfg-subsection" style="padding:0">
-              <div class="tree-toolbar" id="tree-toolbar">
-                <input class="tree-filter" id="tree-filter" placeholder="Filter…" oninput="applyTreeFilter()">
-                <button class="tree-tbtn" onclick="ahkCall('PinSelected')">📌 Pin</button>
-                <button class="tree-tbtn" onclick="ahkCall('DumpEntities')">💾 Dump</button>
-              </div>
-              <div id="tab-overview-content" style="max-height:300px;overflow-y:auto;padding:8px">
-                <div class="tree-empty">Loading…</div>
-              </div>
             </div>
           </details>
         </div>
@@ -4989,7 +4962,7 @@
                 <!-- ══ LEFT: STASHING (collapsible) ══════════════════════ -->
                 <div class="sm-col">
                   <details class="sm-sub sm-top" open>
-                    <summary><span class="sm-top-title">📥 Auto Stashing</span></summary>
+                    <summary><div class="cfg-header">📥 Auto Stashing</div></summary>
                     <div class="sm-sub-body">
                       <div class="cfg-row"><span class="cfg-label">Enable auto stashing</span>
                         <label class="toggle"><input type="checkbox" id="sm-stashEnabled"
@@ -4997,7 +4970,7 @@
                       </div>
 
                       <details class="sm-sub" ontoggle="if(this.open) ahkCall('StashRequestInventory','stash')">
-                        <summary><div class="cfg-header" style="font-size:12px">🚫 Ignore filter
+                        <summary><div class="cfg-header">🚫 Ignore filter
                           <span id="sm-stash-ignore-meta" class="ent-junk-custom-meta"></span></div></summary>
                         <div class="sm-sub-body">
                           <div class="cfg-help">
@@ -5016,7 +4989,7 @@
                       </details>
 
                       <details class="sm-sub">
-                        <summary><div class="cfg-header" style="font-size:12px">🎲 Randomization</div></summary>
+                        <summary><div class="cfg-header">🎲 Randomization</div></summary>
                         <div class="sm-sub-body">
                           <div class="sm-rnd-row">
                             <div class="sm-rnd-group">
@@ -5041,7 +5014,7 @@
                 <!-- ══ RIGHT: AUTO SELLING (collapsible) ═════════════════ -->
                 <div class="sm-col">
                   <details class="sm-sub sm-top" open>
-                    <summary><span class="sm-top-title">🛒 Auto Selling</span></summary>
+                    <summary><div class="cfg-header">🛒 Auto Selling</div></summary>
                     <div class="sm-sub-body">
                       <div class="cfg-row"><span class="cfg-label">Enable auto selling</span>
                         <label class="toggle"><input type="checkbox" id="sm-sellEnabled"
@@ -5049,7 +5022,7 @@
                       </div>
 
                       <details class="sm-sub" ontoggle="if(this.open) ahkCall('StashRequestInventory','sell')">
-                        <summary><div class="cfg-header" style="font-size:12px">🚫 Ignore filter
+                        <summary><div class="cfg-header">🚫 Ignore filter
                           <span id="sm-sell-ignore-meta" class="ent-junk-custom-meta"></span></div></summary>
                         <div class="sm-sub-body">
                           <div class="cfg-help">
@@ -5070,7 +5043,7 @@
                       </details>
 
                       <details class="sm-sub">
-                        <summary><div class="cfg-header" style="font-size:12px">🎲 Randomization</div></summary>
+                        <summary><div class="cfg-header">🎲 Randomization</div></summary>
                         <div class="sm-sub-body">
                           <div class="sm-rnd-row">
                             <div class="sm-rnd-group">
@@ -5095,7 +5068,7 @@
 
               <!-- ══ SHARED OPTIONS (full-width collapsible) ═══════════════ -->
               <details class="sm-sub sm-top" open style="margin-top:10px">
-                <summary><span class="sm-top-title">⚙️ Shared Options</span></summary>
+                <summary><div class="cfg-header">⚙️ Shared Options</div></summary>
                 <div class="sm-sub-body">
                   <div class="cfg-row"><span class="cfg-label">Show overlay button</span>
                     <label class="toggle"><input type="checkbox" id="sm-showButton"
@@ -5156,6 +5129,12 @@
                 avoids transitions / portals / UI).
               </div>
 
+              <div class="cfg-row"><span class="cfg-label">Pause while a UI panel is open</span>
+                <label class="toggle"><input type="checkbox" id="tog-panel-pauseautopilot"
+                    onchange="ahkCall('SetPanelRespect','autopilot', this.checked?1:0)" checked><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Stops sending clicks / skills while a game UI panel is open (inventory, stash, passive tree), so inputs don't land on the panel instead of the world.</div>
+
               <!-- Hidden legacy toggles — kept in DOM so the existing
                    setChk() helpers in updateHeader don't blow up. -->
               <input type="checkbox" id="tog-combat"  style="display:none">
@@ -5166,11 +5145,11 @@
                    doing right now. Loot status + cache count live here
                    too because they're a live readout, not a setting.
                    ════════════════════════════════════════════════════ -->
-              <details open style="margin-top:8px">
-                <summary style="cursor:pointer;padding:4px 0">
-                  <div class="cfg-header" style="font-size:12px">📊 Live Status</div>
+              <details class="cfg-subsection" open>
+                <summary>
+                  <div class="cfg-header">📊 Live Status</div>
                 </summary>
-                <div style="margin-top:4px;padding:6px 0 4px 4px">
+                <div class="cfg-subsection-body">
                   <div class="cfg-row"><span class="cfg-label">State</span><span id="cfg-autopilot-state"
                       class="cfg-status idle">idle</span></div>
                   <div class="cfg-row"><span class="cfg-label">Combat</span><span id="cfg-combat-state"
@@ -5189,11 +5168,11 @@
                    ⚔ COMBAT — engage / disengage ranges, GCD, world-to-
                    screen scale, plus the dynamic skill-slot list.
                    ════════════════════════════════════════════════════ -->
-              <details ontoggle="if(this.open) requestAnimationFrame(_sbInitAll)" style="margin-top:8px">
-                <summary style="cursor:pointer;padding:4px 0">
-                  <div class="cfg-header" style="font-size:12px">⚔ Combat</div>
+              <details class="cfg-subsection" ontoggle="if(this.open) requestAnimationFrame(_sbInitAll)">
+                <summary>
+                  <div class="cfg-header">⚔ Combat</div>
                 </summary>
-                <div style="margin-top:4px;padding:6px 0 4px 4px">
+                <div class="cfg-subsection-body">
                   <div class="cfg-slider-pair">
                     <div class="cfg-slider-item">
                       <span class="cfg-label">Engage</span>
@@ -5239,11 +5218,11 @@
               <!-- ════════════════════════════════════════════════════
                    🧭 EXPLORATION — target coverage %.
                    ════════════════════════════════════════════════════ -->
-              <details ontoggle="if(this.open) requestAnimationFrame(_sbInitAll)" style="margin-top:8px">
-                <summary style="cursor:pointer;padding:4px 0">
-                  <div class="cfg-header" style="font-size:12px">🧭 Exploration</div>
+              <details class="cfg-subsection" ontoggle="if(this.open) requestAnimationFrame(_sbInitAll)">
+                <summary>
+                  <div class="cfg-header">🧭 Exploration</div>
                 </summary>
-                <div style="margin-top:4px;padding:6px 0 4px 4px">
+                <div class="cfg-subsection-body">
                   <div class="cfg-slider-row">
                     <span class="cfg-label">Explore Ziel %</span>
                     <div class="slider-wrap">
@@ -5265,11 +5244,11 @@
                    Live Status above; this sub-section is only for
                    *configuring* the pickup behaviour.
                    ════════════════════════════════════════════════════ -->
-              <details style="margin-top:8px">
-                <summary style="cursor:pointer;padding:4px 0">
-                  <div class="cfg-header" style="font-size:12px">💎 Loot Pickup</div>
+              <details class="cfg-subsection">
+                <summary>
+                  <div class="cfg-header">💎 Loot Pickup</div>
                 </summary>
-                <div style="margin-top:4px;padding:6px 0 4px 4px">
+                <div class="cfg-subsection-body">
                   <div class="cfg-help">
                     Picks up ground items matching the selected rarities. Cached items persist
                     across ticks — drops noticed during combat are collected once the area is safe.
@@ -5292,33 +5271,8 @@
           </details>
         </div>
 
-        <!-- Range Circles + radar overlay opacity — moved into
-             Automation per the user's grouping (they sit visually with
-             the autopilot range tuning, even though SetRadarAlpha
-             technically controls the whole radar's opacity). -->
-        <div class="cfg-section">
-          <details id="det-rangecircles" open ontoggle="syncCfgSections(); if(this.open) requestAnimationFrame(_sbInitAll)">
-            <summary>
-              <div class="cfg-header">Range Circles</div>
-            </summary>
-            <div class="cfg-subsection">
-              <div class="cfg-row"><span class="cfg-label">Show Range Circles</span>
-                <label class="toggle"><input type="checkbox" id="tog-rangecircles" onchange="ahkCall('ToggleRangeCircles')"
-                    checked><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-slider-row">
-                <span class="cfg-label">Opacity</span>
-                <div class="slider-wrap">
-                  <span class="slider-val" id="radar-alpha-bub">100%</span>
-                  <input type="range" id="radar-alpha" min="20" max="255" value="255"
-                    oninput="_sb(this,'radar-alpha-bub',Math.round(this.value/255*100)+'%'); ahkCall('SetRadarAlpha', parseInt(this.value))">
-                </div>
-              </div>
-            </div>
-          </details>
-        </div>
-
         </div><!-- /cfg-subpanel automation -->
+
 
         <!-- ════════════════════════════════════════════════════════════
              OVERLAY — radar visualisation (entity-type filters, zone
@@ -5327,270 +5281,11 @@
              ════════════════════════════════════════════════════════════ -->
         <div class="cfg-subpanel" data-cfgtab="overlay">
 
-        <div class="cfg-section">
-          <details id="det-radar" open ontoggle="syncCfgSections(); if(this.open) requestAnimationFrame(_sbInitAll)">
-            <summary>
-              <div class="cfg-header">Radar</div>
-            </summary>
-            <div class="cfg-subsection">
-              <!-- Every toggle here paints the radar overlay on top of
-                   the game. The help text under each row explains in one
-                   sentence what the user is enabling — keeps the panel
-                   approachable without reaching for the docs. -->
-              <div class="cfg-row"><span class="cfg-label">Enable Radar</span>
-                <label class="toggle"><input type="checkbox" id="tog-radar" onchange="ahkCall('ToggleRadar')"
-                    checked><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-help">Master switch — when off, nothing in this section paints anything on screen.</div>
-
-              <div class="cfg-row"><span class="cfg-label">Player HUD</span>
-                <label class="toggle"><input type="checkbox" id="tog-player-hud" onchange="ahkCall('TogglePlayerHud')"
-                    checked><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-help">Renders a compact life / mana / energy-shield readout near your character so you can see numbers without squinting at the corner bars.</div>
-
-              <div class="cfg-row"><span class="cfg-label">Debug Overlay</span>
-                <label class="toggle"><input type="checkbox" id="tog-overlay-status" onchange="ahkCall('ToggleOverlayStatusText')"
-                    checked><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-help">Standalone debug panel docked to the right edge of the game window: AutoPilot / combat / loot / explore state, pathfinding diagnostics (hz/rg), current navigation target with distance, AutoFlask reason and the running version. Useful for debugging, distracting in normal play.</div>
-
-              <!-- Entity Markers — collapsible nested section. Gets the themed
-                   caret for free (cube when closed, gold diamond when open) via
-                   the .cfg-section details summary::after rule. Replaces the old
-                   pill row; each monster category is now a standard toggle row.
-                   Keeps id="radar-filters" (opacity dim when radar off) and the
-                   rf-* ids / setRadarFilter handlers so header sync is unchanged. -->
-              <details style="margin-top:6px">
-                <summary style="cursor:pointer;padding:4px 0">
-                  <div class="cfg-header" style="font-size:12px">Entity Markers</div>
-                </summary>
-                <div style="margin-top:4px;padding:6px 0 4px 4px">
-                  <div class="cfg-help">Which monster categories the radar draws on the minimap and on-screen overlay. Off = invisible to the radar, even if the entity is in range.</div>
-                  <div id="radar-filters">
-                    <div class="cfg-row"><span class="cfg-label">Normal</span>
-                      <label class="toggle"><input type="checkbox" id="rf-normal" onchange="setRadarFilter('normal', this.checked)" checked><span class="toggle-slider"></span></label>
-                    </div>
-                    <div class="cfg-row"><span class="cfg-label">Rare</span>
-                      <label class="toggle"><input type="checkbox" id="rf-rare" onchange="setRadarFilter('rare', this.checked)" checked><span class="toggle-slider"></span></label>
-                    </div>
-                    <div class="cfg-row"><span class="cfg-label">Boss</span>
-                      <label class="toggle"><input type="checkbox" id="rf-boss" onchange="setRadarFilter('boss', this.checked)" checked><span class="toggle-slider"></span></label>
-                    </div>
-                    <div class="cfg-row"><span class="cfg-label">Minions</span>
-                      <label class="toggle"><input type="checkbox" id="rf-minions" onchange="setRadarFilter('minions', this.checked)"><span class="toggle-slider"></span></label>
-                    </div>
-                    <div class="cfg-row"><span class="cfg-label">NPCs</span>
-                      <label class="toggle"><input type="checkbox" id="rf-npcs" onchange="setRadarFilter('npcs', this.checked)"><span class="toggle-slider"></span></label>
-                    </div>
-                    <div class="cfg-row"><span class="cfg-label">Chests</span>
-                      <label class="toggle"><input type="checkbox" id="rf-chests" onchange="setRadarFilter('chests', this.checked)"><span class="toggle-slider"></span></label>
-                    </div>
-                  </div>
-                </div>
-              </details>
-
-              <div class="cfg-row" style="margin-top:6px"><span class="cfg-label">Zone Navigation</span>
-                <label class="toggle"><input type="checkbox" id="tog-zonenav" onchange="ahkCall('ToggleZoneNav')"
-                    checked><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-help">Draws a hint arrow toward the next unexplored area / zone transition based on the maphack data — handy when you can't immediately see the way forward.</div>
-
-              <div class="cfg-row"><span class="cfg-label">Panel Detection</span>
-                <label class="toggle"><input type="checkbox" id="tog-paneldetection"
-                    onchange="ahkCall('TogglePanelDetection')" checked><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-help">Pauses click-to-walk / skill firing while a game UI panel is open (inventory, stash, vendor). Turn off only if you're debugging panel discovery.</div>
-            </div>
-          </details>
-        </div>
-
-        <div class="cfg-section">
-          <details id="det-lootvalue" ontoggle="syncCfgSections()">
-            <summary>
-              <div class="cfg-header">💰 Loot Value Radar</div>
-            </summary>
-            <div class="cfg-subsection">
-              <div class="cfg-help">
-                Prices ground drops live via poe.ninja (the same data the Loot Tracker uses) and
-                warns when something valuable lands. Currency / fragments / runes / essences price
-                on any league; uniques only where poe.ninja has data (Standard has none, so uniques
-                stay untagged there). Enable Loot pricing in the Loot tab first, or values stay 0.
-              </div>
-              <details class="cfg-subsection" open>
-                <summary><div class="cfg-header" style="font-size:13px">🎯 Detection &amp; alerts</div></summary>
-              <div class="cfg-row"><span class="cfg-label">Enable loot value radar</span>
-                <label class="toggle"><input type="checkbox" id="lrv-enabled"
-                    onchange="ahkCall('SetLootRadarValue','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-row"><span class="cfg-label">Banner on valuable drop</span>
-                <label class="toggle"><input type="checkbox" id="lrv-alertEnabled"
-                    onchange="ahkCall('SetLootRadarValue','alertEnabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-row">
-                <span class="cfg-label">Min. value to track (ex)</span>
-                <span class="hk-num"><input type="number" id="lrv-minLabelEx" min="0" max="100000" step="0.5" onchange="ahkCall('SetLootRadarValue','minLabelEx',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
-              </div>
-              <div class="cfg-row">
-                <span class="cfg-label">Alert threshold (ex)</span>
-                <span class="hk-num"><input type="number" id="lrv-alertEx" min="0" max="100000" step="1" onchange="ahkCall('SetLootRadarValue','alertEx',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
-              </div>
-              </details>
-              <details class="cfg-subsection" open>
-                <summary><div class="cfg-header" style="font-size:13px">📋 Valuable nearby list</div></summary>
-              <div class="cfg-row"><span class="cfg-label">Show "valuable nearby" list</span>
-                <label class="toggle"><input type="checkbox" id="lrv-showList"
-                    onchange="ahkCall('SetLootRadarValue','showList', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-row">
-                <span class="cfg-label">Max rows in the list</span>
-                <span class="hk-num"><input type="number" id="lrv-listMax" min="1" max="20" step="1" onchange="ahkCall('SetLootRadarValue','listMax',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
-              </div>
-              <div class="cfg-row"><span class="cfg-label">Show distance in list</span>
-                <label class="toggle"><input type="checkbox" id="lrv-showDist"
-                    onchange="ahkCall('SetLootRadarValue','showDist', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-row"><span class="cfg-label">Show direction arrow in list</span>
-                <label class="toggle"><input type="checkbox" id="lrv-showArrow"
-                    onchange="ahkCall('SetLootRadarValue','showArrow', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
-              </div>
-              </details>
-              <details class="cfg-subsection" open>
-                <summary><div class="cfg-header" style="font-size:13px">🏷️ On-map label</div></summary>
-              <div class="cfg-row"><span class="cfg-label">Value on the orb (replace dot)</span>
-                <label class="toggle"><input type="checkbox" id="lrv-mapOnOrb"
-                    onchange="ahkCall('SetLootRadarValue','mapOnOrb', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-row">
-                <span class="cfg-label">Map label</span>
-                <span id="lrv-map-preview" style="position:relative;display:inline-flex;align-items:center;gap:4px;min-height:30px" data-tip="Live preview of the on-map label">
-                  <span id="lrv-prev-dot" style="display:inline-block;border-radius:50%;width:7px;height:7px;background:#C8A85A;margin-right:3px"></span>
-                  <span id="lrv-prev-num" style="color:#C8A85A;font-weight:600;line-height:1;font-size:14px">1</span>
-                  <img id="lrv-prev-icon" src="../img/currency/divine.png" alt="" style="width:18px;height:18px" onerror="this.style.visibility='hidden'">
-                </span>
-                <span style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
-                  <span style="display:flex;gap:5px;align-items:center" data-tip="On-map orb icon size (px)">
-                    <span style="font-size:11px;color:var(--subtext)">icon</span>
-                    <span class="hk-num"><input type="number" id="lrv-mapIconSize" min="6" max="48" step="1" onchange="ahkCall('SetLootRadarValue','mapIconSize',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
-                  </span>
-                  <span style="display:flex;gap:5px;align-items:center" data-tip="On-map amount font size (px)">
-                    <span style="font-size:11px;color:var(--subtext)">font</span>
-                    <span class="hk-num"><input type="number" id="lrv-mapFontSize" min="6" max="48" step="1" onchange="ahkCall('SetLootRadarValue','mapFontSize',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
-                  </span>
-                  <span style="display:flex;gap:5px;align-items:center" data-tip="On-map amount text color">
-                    <span style="font-size:11px;color:var(--subtext)">color</span>
-                    <span id="lrv-mapColor-sw" class="cp-swatch" onclick="lrvOpenMapColor(this)"></span>
-                  </span>
-                </span>
-              </div>
-              <div class="cfg-row"><span class="cfg-label">Label outline</span>
-                <span style="display:flex;gap:14px;align-items:center;justify-content:flex-end">
-                  <label class="toggle"><input type="checkbox" id="lrv-mapOutline"
-                      onchange="ahkCall('SetLootRadarValue','mapOutline', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
-                  <span style="display:flex;gap:5px;align-items:center" data-tip="Outline thickness in px (0 = auto from font size)">
-                    <span style="font-size:11px;color:var(--subtext)">width</span>
-                    <span class="hk-num"><input type="number" id="lrv-mapOutlineWidth" min="0" max="8" step="1" onchange="ahkCall('SetLootRadarValue','mapOutlineWidth',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
-                  </span>
-                </span>
-              </div>
-              <div class="cfg-row"><span class="cfg-label">Pulse high-value markers</span>
-                <label class="toggle"><input type="checkbox" id="lrv-mapPulse"
-                    onchange="ahkCall('SetLootRadarValue','mapPulse', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-help">
-                Valued ground drops are labelled on the radar with the matching currency orb
-                (Exalted / Divine) instead of a "1ex / 1div" text, and the "valuable nearby" list
-                shows the top drops in range on the left of the screen. Use "🔍 Loot value diagnose"
-                (General → Actions) to check what nearby ground loot is being priced. Currency /
-                fragments price on any league; uniques only where poe.ninja has data.
-              </div>
-              </details>
-
-              <details class="cfg-subsection">
-                <summary><div class="cfg-header" style="font-size:13px">🛡️ Unique pricing via the official Trade API (advanced)</div></summary>
-                <div class="cfg-help" style="border-left:2px solid #b58b46;padding-left:8px">
-                  <b>Security note — read first.</b> This fills the unique-price gap poe.ninja leaves on
-                  Standard by querying the <b>official PoE2 trade site inside a logged-in browser
-                  window</b>. It is <b>off by default</b>. The lookups run as same-origin requests in
-                  that window, so your login / cookies (POESESSID, cf_clearance) <b>stay inside the
-                  browser</b> — PoEformance never reads, copies or stores them. You just sign in once.
-                  Note: automated trade access is against GGG's ToS and carries some account risk;
-                  requests are strictly rate-limited, on-demand only, and heavily cached.
-                </div>
-                <div class="cfg-row"><span class="cfg-label">Enable trade-API unique pricing</span>
-                  <label class="toggle"><input type="checkbox" id="lt-trade-enabled"
-                      onchange="ahkCall('SetLootTradePricing','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
-                </div>
-                <div class="cfg-row"><span class="cfg-label">League</span>
-                  <input type="text" id="lt-trade-league" class="cfg-input" style="width:160px" placeholder="Standard"
-                      onchange="ahkCall('SetLootTradePricing','league', this.value)">
-                </div>
-                <div class="cfg-row"><span class="cfg-label">Auto-hide window after sign-in</span>
-                  <label class="toggle"><input type="checkbox" id="lt-trade-autohide"
-                      onchange="ahkCall('SetLootTradePricing','autoHide', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
-                </div>
-                <div class="cfg-help" style="margin-top:6px">
-                  Click "Open PoE trade session", sign in to pathofexile.com once (and pass any
-                  Cloudflare check). With auto-hide on, the window disappears to the background after
-                  the first successful lookup and keeps pricing silently — it pops back up only if the
-                  status shows "blocked / sign-in needed", so you can sign in again. Use "Hide window"
-                  to tuck it away manually at any time.
-                </div>
-                <div class="cfg-row" style="gap:8px">
-                  <button type="button" class="cfg-btn" id="lt-trade-openbtn" onclick="ahkCall('PoeTradeOpen')">Open PoE trade session</button>
-                  <button type="button" class="cfg-btn" id="lt-trade-hidebtn" onclick="ahkCall('PoeTradeHide')">Hide window</button>
-                  <button type="button" class="cfg-btn" onclick="ahkCall('LootTradePriceNow')">Price queued now</button>
-                </div>
-                <div class="cfg-help" id="lt-trade-status">Session: closed · status: idle</div>
-              </details>
-            </div>
-          </details>
-        </div>
-
-        </div><!-- /cfg-subpanel overlay -->
-
-        <!-- ════════════════════════════════════════════════════════════
-             VITALS — freely configurable in-game vitals bars (Life / Mana /
-             Energy Shield). Per-bar enable, size, position, colours and text.
-             The per-bar sections are built by renderVitalsBars() into
-             #vitals-bars from the header's vitals config.
-             ════════════════════════════════════════════════════════════ -->
-        <div class="cfg-subpanel" data-cfgtab="vitals">
-
-          <div class="cfg-section">
-            <details id="det-vitals-general" open ontoggle="syncCfgSections()">
-              <summary><div class="cfg-header">Vitals Bars</div></summary>
-              <div class="cfg-subsection">
-                <div class="cfg-row"><span class="cfg-label">Show vitals</span>
-                  <label class="toggle"><input type="checkbox" id="tog-vitals"
-                      onchange="ahkCall('TogglePlayerHud')"><span class="toggle-slider"></span></label>
-                </div>
-                <div class="cfg-help">Each bar has its own <b>Visibility state</b> rules (in its
-                  section below): a priority list of show/hide rules for In&nbsp;Combat /
-                  On&nbsp;Low&nbsp;Life / In&nbsp;Town / While&nbsp;Map&nbsp;open.</div>
-                <div class="cfg-row"><span class="cfg-label">Edit layout (drag on overlay)</span>
-                  <label class="toggle"><input type="checkbox" id="tog-vitals-edit"
-                      onchange="ahkCall('ToggleVitalsEdit', this.checked)"><span class="toggle-slider"></span></label>
-                </div>
-                <div class="cfg-help">Turn on edit mode, then drag each bar directly on the game
-                  overlay to place it. Turn it off to lock the layout (positions are saved).</div>
-              </div>
-            </details>
-          </div>
-
-          <!-- Per-bar sections (Life / Mana / Energy Shield) built by renderVitalsBars() -->
-          <div id="vitals-bars"></div>
-
-        </div><!-- /cfg-subpanel vitals -->
-
-        <!-- ════════════════════════════════════════════════════════════
-             GGPK — bundle/shader modifications. Currently just Map Hack
-             (with source picker + apply/revert + custom shader colors);
-             reserved as its own sub-tab so future GGPK tweaks have a
-             natural home.
-             ════════════════════════════════════════════════════════════ -->
-        <div class="cfg-subpanel" data-cfgtab="ggpk">
-
+        <!-- Map Hack — minimap reveal. Moved here from the retired GGPK
+             sub-tab: it's a map visualisation, so it belongs with the other
+             overlay features (and users never found it under "GGPK"). The
+             Memory/GGPK source picker + apply/revert stay inside as the
+             advanced backend choice. -->
         <div class="cfg-section">
           <details id="det-maphack" open ontoggle="syncCfgSections()">
             <summary>
@@ -5697,45 +5392,318 @@
           </details>
         </div>
 
-        <!-- Placeholder so the sub-tab feels alive when only Map Hack
-             is implemented. Replace with real sections as more GGPK
-             modifications land. -->
-        <div class="cfg-section" style="opacity:.55">
-          <div style="padding:10px 8px;font-size:11px;color:var(--subtext);line-height:1.5">
-            More GGPK modifications coming soon — additional shader patches and
-            bundle tweaks will land here as separate sections.
-          </div>
-        </div>
-
-        </div><!-- /cfg-subpanel ggpk -->
-
-        <!-- ════════════════════════════════════════════════════════════
-             FILTERS — entity-type filters (which entity classes the
-             trees / radar consider at all) and skill/buff blacklist.
-             ════════════════════════════════════════════════════════════ -->
-        <div class="cfg-subpanel" data-cfgtab="filters">
-
         <div class="cfg-section">
-          <details id="det-blacklist" ontoggle="syncCfgSections()">
+          <details id="det-radar" open ontoggle="syncCfgSections(); if(this.open) requestAnimationFrame(_sbInitAll)">
             <summary>
-              <div class="cfg-header">Skills &amp; Buffs Blacklist</div>
+              <div class="cfg-header">Radar</div>
             </summary>
             <div class="cfg-subsection">
-              <div class="cfg-help">
-                Skill / buff IDs added here are suppressed from the Skills &amp; Buffs tree
-                and from the overlay's status text — useful for hiding constant-up
-                clutter like aura icons, infinite-duration debuffs, or self-applied
-                cosmetic effects. Add an entry via the ➕ button next to a buff on the
-                Skills tab; remove with the ✕ button next to its name below.
+              <!-- Every toggle here paints the radar overlay on top of
+                   the game. The help text under each row explains in one
+                   sentence what the user is enabling — keeps the panel
+                   approachable without reaching for the docs. -->
+              <div class="cfg-row"><span class="cfg-label">Enable Radar</span>
+                <label class="toggle"><input type="checkbox" id="tog-radar" onchange="ahkCall('ToggleRadar')"
+                    checked><span class="toggle-slider"></span></label>
               </div>
-              <div id="cfg-blacklist">
-                <div class="no-data-msg">No blacklisted items</div>
+              <div class="cfg-help">Master switch — when off, nothing in this section paints anything on screen.</div>
+
+              <div class="cfg-help">Renders a compact life / mana / energy-shield readout near your character so you can see numbers without squinting at the corner bars.</div>
+
+              <div class="cfg-row"><span class="cfg-label">Debug Overlay</span>
+                <label class="toggle"><input type="checkbox" id="tog-overlay-status" onchange="ahkCall('ToggleOverlayStatusText')"
+                    checked><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Standalone debug panel docked to the right edge of the game window: AutoPilot / combat / loot / explore state, pathfinding diagnostics (hz/rg), current navigation target with distance, AutoFlask reason and the running version. Useful for debugging, distracting in normal play.</div>
+
+              <!-- Entity Markers — collapsible nested section. Gets the themed
+                   caret for free (cube when closed, gold diamond when open) via
+                   the .cfg-section details summary::after rule. Replaces the old
+                   pill row; each monster category is now a standard toggle row.
+                   Keeps id="radar-filters" (opacity dim when radar off) and the
+                   rf-* ids / setRadarFilter handlers so header sync is unchanged. -->
+              <details class="cfg-subsection">
+                <summary>
+                  <div class="cfg-header">Entity Markers</div>
+                </summary>
+                <div class="cfg-subsection-body">
+                  <div class="cfg-help">Which monster categories the radar draws on the minimap and on-screen overlay. Off = invisible to the radar, even if the entity is in range.</div>
+                  <div id="radar-filters">
+                    <div class="cfg-row"><span class="cfg-label">Normal</span>
+                      <label class="toggle"><input type="checkbox" id="rf-normal" onchange="setRadarFilter('normal', this.checked)" checked><span class="toggle-slider"></span></label>
+                    </div>
+                    <div class="cfg-row"><span class="cfg-label">Rare</span>
+                      <label class="toggle"><input type="checkbox" id="rf-rare" onchange="setRadarFilter('rare', this.checked)" checked><span class="toggle-slider"></span></label>
+                    </div>
+                    <div class="cfg-row"><span class="cfg-label">Boss</span>
+                      <label class="toggle"><input type="checkbox" id="rf-boss" onchange="setRadarFilter('boss', this.checked)" checked><span class="toggle-slider"></span></label>
+                    </div>
+                    <div class="cfg-row"><span class="cfg-label">Minions</span>
+                      <label class="toggle"><input type="checkbox" id="rf-minions" onchange="setRadarFilter('minions', this.checked)"><span class="toggle-slider"></span></label>
+                    </div>
+                    <div class="cfg-row"><span class="cfg-label">NPCs</span>
+                      <label class="toggle"><input type="checkbox" id="rf-npcs" onchange="setRadarFilter('npcs', this.checked)"><span class="toggle-slider"></span></label>
+                    </div>
+                    <div class="cfg-row"><span class="cfg-label">Chests</span>
+                      <label class="toggle"><input type="checkbox" id="rf-chests" onchange="setRadarFilter('chests', this.checked)"><span class="toggle-slider"></span></label>
+                    </div>
+                  </div>
+                </div>
+              </details>
+
+              <div class="cfg-row" style="margin-top:6px"><span class="cfg-label">Zone Navigation</span>
+                <label class="toggle"><input type="checkbox" id="tog-zonenav" onchange="ahkCall('ToggleZoneNav')"
+                    checked><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Draws a hint arrow toward the next unexplored area / zone transition based on the maphack data — handy when you can't immediately see the way forward.</div>
+
+              <div class="cfg-row"><span class="cfg-label">Hide overlays while a UI panel is open</span>
+                <label class="toggle"><input type="checkbox" id="tog-panel-hideoverlays"
+                    onchange="ahkCall('SetPanelRespect','overlays', this.checked?1:0)" checked><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Hides the map overlays (radar, map hack, vitals, player HUD, range circles) while a game UI panel is open (inventory, stash, passive tree). Panel detection itself always runs; AutoPilot and the loot overlays have their own respect toggles.</div>
+            </div>
+          </details>
+        </div>
+
+        <!-- Range Circles + radar overlay opacity — visualisation, so it lives
+             in Overlay next to the Radar section (SetRadarAlpha controls the
+             whole radar overlay's opacity, not just the circles). -->
+        <div class="cfg-section">
+          <details id="det-rangecircles" open ontoggle="syncCfgSections(); if(this.open) requestAnimationFrame(_sbInitAll)">
+            <summary>
+              <div class="cfg-header">Range Circles</div>
+            </summary>
+            <div class="cfg-subsection">
+              <div class="cfg-row"><span class="cfg-label">Show Range Circles</span>
+                <label class="toggle"><input type="checkbox" id="tog-rangecircles" onchange="ahkCall('ToggleRangeCircles')"
+                    checked><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-slider-row">
+                <span class="cfg-label">Opacity</span>
+                <div class="slider-wrap">
+                  <span class="slider-val" id="radar-alpha-bub">100%</span>
+                  <input type="range" id="radar-alpha" min="20" max="255" value="255"
+                    oninput="_sb(this,'radar-alpha-bub',Math.round(this.value/255*100)+'%'); ahkCall('SetRadarAlpha', parseInt(this.value))">
+                </div>
               </div>
             </div>
           </details>
         </div>
 
-        </div><!-- /cfg-subpanel filters -->
+        <div class="cfg-section">
+          <details id="det-lootvalue" ontoggle="syncCfgSections()">
+            <summary>
+              <div class="cfg-header">💰 Loot Value Radar</div>
+            </summary>
+            <div class="cfg-subsection">
+              <div class="cfg-help">
+                Prices ground drops live via poe.ninja (the same data the Loot Tracker uses) and
+                warns when something valuable lands. Currency / fragments / runes / essences price
+                on any league; uniques only where poe.ninja has data (Standard has none, so uniques
+                stay untagged there). Enable Loot pricing in the Loot tab first, or values stay 0.
+              </div>
+              <details class="cfg-subsection" open>
+                <summary><div class="cfg-header">🎯 Detection &amp; alerts</div></summary>
+              <div class="cfg-row"><span class="cfg-label">Enable loot value radar</span>
+                <label class="toggle"><input type="checkbox" id="lrv-enabled"
+                    onchange="ahkCall('SetLootRadarValue','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Banner on valuable drop</span>
+                <label class="toggle"><input type="checkbox" id="lrv-alertEnabled"
+                    onchange="ahkCall('SetLootRadarValue','alertEnabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-label">Min. value to track (ex)</span>
+                <span class="hk-num"><input type="number" id="lrv-minLabelEx" min="0" max="100000" step="0.5" onchange="ahkCall('SetLootRadarValue','minLabelEx',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-label">Alert threshold (ex)</span>
+                <span class="hk-num"><input type="number" id="lrv-alertEx" min="0" max="100000" step="1" onchange="ahkCall('SetLootRadarValue','alertEx',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+              </div>
+              </details>
+              <details class="cfg-subsection" open>
+                <summary><div class="cfg-header">📋 Valuable nearby list</div></summary>
+              <div class="cfg-row"><span class="cfg-label">Show "valuable nearby" list</span>
+                <label class="toggle"><input type="checkbox" id="lrv-showList"
+                    onchange="ahkCall('SetLootRadarValue','showList', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-label">Max rows in the list</span>
+                <span class="hk-num"><input type="number" id="lrv-listMax" min="1" max="20" step="1" onchange="ahkCall('SetLootRadarValue','listMax',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Show distance in list</span>
+                <label class="toggle"><input type="checkbox" id="lrv-showDist"
+                    onchange="ahkCall('SetLootRadarValue','showDist', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Show direction arrow in list</span>
+                <label class="toggle"><input type="checkbox" id="lrv-showArrow"
+                    onchange="ahkCall('SetLootRadarValue','showArrow', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              </details>
+              <details class="cfg-subsection" open>
+                <summary><div class="cfg-header">🏷️ On-map label</div></summary>
+              <div class="cfg-row"><span class="cfg-label">Value on the orb (replace dot)</span>
+                <label class="toggle"><input type="checkbox" id="lrv-mapOnOrb"
+                    onchange="ahkCall('SetLootRadarValue','mapOnOrb', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-label">Map label</span>
+                <span id="lrv-map-preview" style="position:relative;display:inline-flex;align-items:center;gap:4px;min-height:30px" data-tip="Live preview of the on-map label">
+                  <span id="lrv-prev-dot" style="display:inline-block;border-radius:50%;width:7px;height:7px;background:#C8A85A;margin-right:3px"></span>
+                  <span id="lrv-prev-num" style="color:#C8A85A;font-weight:600;line-height:1;font-size:14px">1</span>
+                  <img id="lrv-prev-icon" src="../img/currency/divine.png" alt="" style="width:18px;height:18px" onerror="this.style.visibility='hidden'">
+                </span>
+                <span style="display:flex;gap:14px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+                  <span style="display:flex;gap:5px;align-items:center" data-tip="On-map orb icon size (px)">
+                    <span style="font-size:11px;color:var(--subtext)">icon</span>
+                    <span class="hk-num"><input type="number" id="lrv-mapIconSize" min="6" max="48" step="1" onchange="ahkCall('SetLootRadarValue','mapIconSize',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+                  </span>
+                  <span style="display:flex;gap:5px;align-items:center" data-tip="On-map amount font size (px)">
+                    <span style="font-size:11px;color:var(--subtext)">font</span>
+                    <span class="hk-num"><input type="number" id="lrv-mapFontSize" min="6" max="48" step="1" onchange="ahkCall('SetLootRadarValue','mapFontSize',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+                  </span>
+                  <span style="display:flex;gap:5px;align-items:center" data-tip="On-map amount text color">
+                    <span style="font-size:11px;color:var(--subtext)">color</span>
+                    <span id="lrv-mapColor-sw" class="cp-swatch" onclick="lrvOpenMapColor(this)"></span>
+                  </span>
+                </span>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Label outline</span>
+                <span style="display:flex;gap:14px;align-items:center;justify-content:flex-end">
+                  <label class="toggle"><input type="checkbox" id="lrv-mapOutline"
+                      onchange="ahkCall('SetLootRadarValue','mapOutline', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+                  <span style="display:flex;gap:5px;align-items:center" data-tip="Outline thickness in px (0 = auto from font size)">
+                    <span style="font-size:11px;color:var(--subtext)">width</span>
+                    <span class="hk-num"><input type="number" id="lrv-mapOutlineWidth" min="0" max="8" step="1" onchange="ahkCall('SetLootRadarValue','mapOutlineWidth',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+                  </span>
+                </span>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Pulse high-value markers</span>
+                <label class="toggle"><input type="checkbox" id="lrv-mapPulse"
+                    onchange="ahkCall('SetLootRadarValue','mapPulse', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">
+                Valued ground drops are labelled on the radar with the matching currency orb
+                (Exalted / Divine) instead of a "1ex / 1div" text, and the "valuable nearby" list
+                shows the top drops in range on the left of the screen. Use "🔍 Loot value diagnose"
+                (General → Actions) to check what nearby ground loot is being priced. Currency /
+                fragments price on any league; uniques only where poe.ninja has data.
+              </div>
+              </details>
+
+              <details class="cfg-subsection">
+                <summary><div class="cfg-header">🛡️ Unique pricing via the official Trade API (advanced)</div></summary>
+                <div class="cfg-help" style="border-left:2px solid #b58b46;padding-left:8px">
+                  <b>Security note — read first.</b> This fills the unique-price gap poe.ninja leaves on
+                  Standard by querying the <b>official PoE2 trade site inside a logged-in browser
+                  window</b>. It is <b>off by default</b>. The lookups run as same-origin requests in
+                  that window, so your login / cookies (POESESSID, cf_clearance) <b>stay inside the
+                  browser</b> — PoEformance never reads, copies or stores them. You just sign in once.
+                  Note: automated trade access is against GGG's ToS and carries some account risk;
+                  requests are strictly rate-limited, on-demand only, and heavily cached.
+                </div>
+                <div class="cfg-row"><span class="cfg-label">Enable trade-API unique pricing</span>
+                  <label class="toggle"><input type="checkbox" id="lt-trade-enabled"
+                      onchange="ahkCall('SetLootTradePricing','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+                </div>
+                <div class="cfg-row"><span class="cfg-label">League</span>
+                  <input type="text" id="lt-trade-league" class="cfg-input" style="width:160px" placeholder="Standard"
+                      onchange="ahkCall('SetLootTradePricing','league', this.value)">
+                </div>
+                <div class="cfg-row"><span class="cfg-label">Auto-hide window after sign-in</span>
+                  <label class="toggle"><input type="checkbox" id="lt-trade-autohide"
+                      onchange="ahkCall('SetLootTradePricing','autoHide', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+                </div>
+                <div class="cfg-help" style="margin-top:6px">
+                  Click "Open PoE trade session", sign in to pathofexile.com once (and pass any
+                  Cloudflare check). With auto-hide on, the window disappears to the background after
+                  the first successful lookup and keeps pricing silently — it pops back up only if the
+                  status shows "blocked / sign-in needed", so you can sign in again. Use "Hide window"
+                  to tuck it away manually at any time.
+                </div>
+                <div class="cfg-row" style="gap:8px">
+                  <button type="button" class="cfg-btn" id="lt-trade-openbtn" onclick="ahkCall('PoeTradeOpen')">Open PoE trade session</button>
+                  <button type="button" class="cfg-btn" id="lt-trade-hidebtn" onclick="ahkCall('PoeTradeHide')">Hide window</button>
+                  <button type="button" class="cfg-btn" onclick="ahkCall('LootTradePriceNow')">Price queued now</button>
+                </div>
+                <div class="cfg-help" id="lt-trade-status">Session: closed · status: idle</div>
+              </details>
+            </div>
+          </details>
+        </div>
+
+        <div class="cfg-section">
+          <details id="det-uihoverprice" ontoggle="syncCfgSections()">
+            <summary>
+              <div class="cfg-header">🖱️ Price on Hover</div>
+            </summary>
+            <div class="cfg-subsection">
+              <div class="cfg-help">
+                Shows an item's value as a small currency-orb badge on its slot while you hover it
+                in your inventory or a stash tab — read straight from the item under the cursor and
+                priced with the same poe.ninja / trade data as the Loot Value Radar. Currency /
+                fragments / runes / essences price on any league; uniques only where there is price
+                data. Unpriceable items (most rares / magics) show no badge. Enable Loot pricing in
+                the Loot tab first, or values stay 0.
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Enable price on hover</span>
+                <label class="toggle"><input type="checkbox" id="uhp-enabled"
+                    onchange="ahkCall('SetUiHoverPrice','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-label">Min. value to show (ex)</span>
+                <span class="hk-num"><input type="number" id="uhp-minEx" min="0" max="100000" step="0.5" onchange="ahkCall('SetUiHoverPrice','minEx',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        </div><!-- /cfg-subpanel overlay -->
+
+        <!-- ════════════════════════════════════════════════════════════
+             VITALS — freely configurable in-game vitals bars (Life / Mana /
+             Energy Shield). Per-bar enable, size, position, colours and text.
+             The per-bar sections are built by renderVitalsBars() into
+             #vitals-bars from the header's vitals config.
+             ════════════════════════════════════════════════════════════ -->
+        <div class="cfg-subpanel" data-cfgtab="vitals">
+
+          <div class="cfg-section">
+            <details id="det-vitals-general" open ontoggle="syncCfgSections()">
+              <summary><div class="cfg-header">Vitals Bars</div></summary>
+              <div class="cfg-subsection">
+                <div class="cfg-row"><span class="cfg-label">Show vitals</span>
+                  <label class="toggle"><input type="checkbox" id="tog-vitals"
+                      onchange="ahkCall('ToggleVitals')"><span class="toggle-slider"></span></label>
+                </div>
+                <div class="cfg-help">Each bar has its own <b>Visibility state</b> rules (in its
+                  section below): a priority list of show/hide rules for In&nbsp;Combat /
+                  On&nbsp;Low&nbsp;Life / In&nbsp;Town / While&nbsp;Map&nbsp;open.</div>
+                <div class="cfg-row"><span class="cfg-label">Edit layout (drag on overlay)</span>
+                  <label class="toggle"><input type="checkbox" id="tog-vitals-edit"
+                      onchange="ahkCall('ToggleVitalsEdit', this.checked)"><span class="toggle-slider"></span></label>
+                </div>
+                <div class="cfg-help">Turn on edit mode, then drag each bar directly on the game
+                  overlay to place it. Turn it off to lock the layout (positions are saved).</div>
+              </div>
+            </details>
+          </div>
+
+          <!-- Per-bar sections (Life / Mana / Energy Shield) built by renderVitalsBars() -->
+          <div id="vitals-bars"></div>
+
+        </div><!-- /cfg-subpanel vitals -->
+
+        <!-- GGPK sub-tab retired — its only feature (Map Hack) moved to the
+             Overlay sub-tab (it's a map visualisation, and users never found
+             it under "GGPK"). The Memory/GGPK source picker + apply/revert
+             live inside the Map Hack section there. Reintroduce a GGPK sub-tab
+             when there's a real GGPK-only feature to host. -->
+
+        <!-- FILTERS sub-tab retired — its only content (the Skills & Buffs
+             blacklist) moved into the Game > Skills & Buffs tab, since the
+             filter only ever affected that tab. -->
 
         <!-- ════════════════════════════════════════════════════════════
              DEBUG — diagnostic / RE-style live panels. Content moved
@@ -5744,6 +5712,25 @@
              configuration knobs live under Config.
              ════════════════════════════════════════════════════════════ -->
         <div class="cfg-subpanel" data-cfgtab="debug">
+
+        <!-- Diagnostic one-shot actions (moved here from Config > General >
+             Actions — they're RE/dev diagnostics, not everyday actions). -->
+        <div class="cfg-section">
+          <details id="det-debug-actions" open ontoggle="syncCfgSections()">
+            <summary>
+              <div class="cfg-header">🔧 Diagnostic Actions</div>
+            </summary>
+            <div class="cfg-subsection">
+              <button class="cfg-btn" onclick="ahkCall('F3Dump')">📷 F3 Dump</button>
+              <button class="cfg-btn" onclick="ahkCall('DumpEntities')">💾 Dump Entities</button>
+              <button class="cfg-btn" onclick="ahkCall('LootValueDiag')" title="RE test for the value-aware loot radar: open over ground loot (ideally a unique) to check if drops can be priced">🔍 Loot value diagnose</button>
+              <div class="cfg-row"><span class="cfg-label">🔗 Log inventory pointer chain</span>
+                <label class="toggle"><input type="checkbox" id="inv-chain-dump" onchange="ahkCall('ToggleInventoryChainDump')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Writes the full ServerData → PlayerInventories → items pointer chain to <code>InGameStateMonitor.inventory_chain.log</code> on every inventory refresh. Diagnostic / RE only — leave off in normal use.</div>
+            </div>
+          </details>
+        </div>
 
         <div class="cfg-section">
           <details id="det-radar-debug" open ontoggle="syncCfgSections()">
@@ -5845,6 +5832,7 @@
               <button class="tree-tbtn" onclick="ahkCall('ChestProbeRun')" style="font-size:11px" title="Post-patch diagnostic: dump Chest component bytes to pin the IsOpened offset. Run with a chest CLOSED, then open it and run again. Writes logs\InGameStateMonitor.chest_probe.log">📦 Probe Chest</button>
               <button class="tree-tbtn" onclick="ahkCall('TargetableProbeRun')" style="font-size:11px" title="Post-patch diagnostic: diff Targetable component bytes of CLOSED vs OPENED chests to locate IsTargetable/IsHighlightable. Stand near a mix of opened & unopened chests. Writes logs\InGameStateMonitor.targetable_probe.log">🎯 Probe Targetable</button>
               <button class="tree-tbtn" onclick="ahkCall('TargetedByPlayerProbeRun')" style="font-size:11px" title="Post-patch diagnostic: IsTargetedByPlayer hover diff. Run once with no hover (or Ctrl+B), then hover/target a monster and run again. The byte that flips 0->1 is IsTargetedByPlayer. Writes logs\InGameStateMonitor.targetedbyplayer_probe.log">🖱️ Probe TargetedBy</button>
+              <button class="tree-tbtn" onclick="ahkCall('UiHoverProbeRun')" style="font-size:11px" title="RE diagnostic to find the UIHover pointer (hovered UI / inventory / stash element — the UI analog of the world HoverTracker). Single step, via the Ctrl+Alt+Shift+H HOTKEY (not this button — clicking moves the cursor off the item): hover an inventory/stash item so the tooltip shows, then press the hotkey. Wide-scans InGameState + UIRoot and reports the slot whose element rect contains the cursor (= UIHover), plus a nearest-elements fallback. Writes logs\InGameStateMonitor.uihover_probe.log">🖐 Probe UI Hover (Ctrl+Alt+Shift+H)</button>
               <button class="tree-tbtn" onclick="ahkCall('SkillProbeRun')" style="font-size:11px" title="Post-patch diagnostic: trace the player's skill-name DAT chain (Actor->ActiveSkills->GrantedEffectsPerLevel->GrantedEffects->name) to find why skill names fall back to Skill_<hex>. Writes logs\InGameStateMonitor.skill_probe.log">✨ Probe Skills</button>
               <button class="tree-tbtn" onclick="ahkCall('ComponentDumpProbeRun')" style="font-size:11px" title="Diagnostic: dump ALL components + raw field bytes of the currently highlighted entity (highlight one in the tree first). Basis for the systematic component-offset pass. Also Ctrl+Alt+Shift+D. Writes logs\InGameStateMonitor.component_dump.log">🧩 Dump Components</button>
               <button class="tree-tbtn" onclick="ahkCall('PathfindingProbeRun')" style="font-size:11px" title="Diagnostic: enumerate awake monsters, resolve their Pathfinding component and dump the candidate Flying (0xE5) / BaseSpeed (0xEC) fields plus raw hex, to verify the hypothesis offsets cross-referenced from Sikaka/POE2Radar. Stand in a populated area. Writes logs\InGameStateMonitor.pathfinding_probe.log">🏃 Probe Pathfinding</button>
@@ -5864,6 +5852,52 @@
         </div>
 
         </div><!-- /cfg-subpanel debug -->
+
+        <!-- ════════════════════════════════════════════════════════════
+             DATA — TSV dictionary maintenance (generate / refresh from the
+             local GGPK) + a TSV browser. Moved here from the old top-level
+             "Data" category; it's maintenance/config, not a live game view.
+             Keeps the panel-tsvs id so the existing JS + bridge calls are
+             untouched; the cfg-subpanel class wires it into the Config
+             sub-tab switcher via its data-cfgtab of data.
+             ════════════════════════════════════════════════════════════ -->
+        <div id="panel-tsvs" class="cfg-subpanel" data-cfgtab="data">
+          <div class="tsv-gen-bar">
+            <button class="cfg-btn tsv-gen-btn" id="tsv-gen-btn" onclick="startTsvGeneration()">⚙ Generate TSVs from Game
+              Data</button>
+            <span id="tsv-gen-status" class="tsv-gen-status"></span>
+            <button class="cfg-btn tsv-log-toggle" id="tsv-log-toggle" onclick="toggleTsvLog()" style="display:none">▾
+              Log</button>
+          </div>
+          <!--
+            Standalone "Refresh base_item_sizes.tsv from local GGPK" button —
+            bypasses the external download pipeline above by reading the
+            user's installed PoE2 (Bundles2/_.index.bin) via the AGPL-fenced
+            ggpk-tools/PoeDataExtract.exe. Runs in ~half a second once the
+            tool has been published; useful when GGG patches and the
+            externally hosted JSON dumps haven't caught up yet.
+          -->
+          <div class="tsv-gen-bar" style="margin-top:6px">
+            <button class="cfg-btn" id="ggpk-refresh-btn" onclick="ggpkRefreshItemSizes()" data-tip="Re-extract all GGPK-derived TSVs (base item sizes + names, monster names, stat names, mod ids) directly from your local PoE2 install via ggpk-tools/PoeDataExtract.exe. Requires the tool to be built (see ggpk-tools/README.md).">⟳ Refresh all TSVs from local GGPK</button>
+            <span id="ggpk-refresh-status" class="tsv-gen-status"></span>
+          </div>
+          <div id="tsv-gen-log" class="tsv-gen-log" style="display:none"></div>
+          <div class="tsv-toolbar">
+            <select id="tsv-file-select" onchange="onTsvFileSelected(this.value)">
+              <option value="">— Select a TSV file —</option>
+            </select>
+            <input id="tsv-search" type="text" placeholder="Filter rows…" oninput="filterTsvRows(this.value)" disabled>
+            <div id="tsv-pager" class="tsv-pager" style="display:none">
+              <button class="tsv-pg-btn" onclick="tsvPageNav(-1)" id="tsv-prev" data-tip="Previous page">◀</button>
+              <span id="tsv-page-info" class="tsv-page-info"></span>
+              <button class="tsv-pg-btn" onclick="tsvPageNav(1)" id="tsv-next" data-tip="Next page">▶</button>
+            </div>
+            <span id="tsv-info" class="tsv-info"></span>
+          </div>
+          <div id="tsv-table-wrap" class="tsv-table-wrap">
+            <div class="no-data-msg">Select a TSV file above to view its contents.</div>
+          </div>
+        </div><!-- /cfg-subpanel data -->
 
       </div>
     </div>
@@ -5959,25 +5993,12 @@
 
     <!-- INVENTORY TAB — player inventories (Backpack/Flasks/Trinkets) + best-effort stash scan -->
     <div class="tab-panel" id="panel-inventory">
+      <!-- Auto-refresh is always on now (the incremental renderer only touches
+           changed slots, so it's free and flicker-free) — the old Refresh /
+           Auto-Refresh buttons are gone. The "Dump Chain" diagnostic toggle
+           moved to Config > Debug > Diagnostic Actions. -->
       <div class="inv-toolbar">
-        <button class="tree-tbtn" onclick="ahkCall('RequestInventory')">↻ Refresh</button>
-        <!-- Auto-refresh as a togglable pill (was a label-wrapped checkbox).
-             Hidden checkbox preserves the existing JS state that reads
-             `inv-autorefresh`.checked. -->
-        <button id="inv-autorefresh-pill" class="inv-tog-pill active" type="button"
-                onclick="(function(b){var c=document.getElementById('inv-autorefresh');c.checked=!c.checked;b.classList.toggle('active',c.checked);})(this)">
-          Auto-Refresh
-        </button>
-        <input type="checkbox" id="inv-autorefresh" checked style="display:none">
-        <!-- Dump chain as a stateful button (was a checkbox). Mirrors checkbox
-             state for setChk('inv-chain-dump', …) from the header sync. -->
-        <button id="inv-chain-dump-btn" class="inv-tog-pill" type="button"
-                data-tip="Write the full ServerData → PlayerInventories → items pointer chain to InGameStateMonitor.inventory_chain.log on every refresh. Diagnostic only."
-                onclick="(function(b){var c=document.getElementById('inv-chain-dump');c.checked=!c.checked;b.classList.toggle('active',c.checked);ahkCall('ToggleInventoryChainDump');})(this)">
-          Dump Chain
-        </button>
-        <input type="checkbox" id="inv-chain-dump" style="display:none">
-        <span id="inv-status">— click Refresh —</span>
+        <span id="inv-status">Loading…</span>
       </div>
       <div id="inv-content" class="inv-content">
         <div class="no-data-msg">Open this tab to load inventory data.</div>
@@ -5991,6 +6012,9 @@
           <button class="tree-tbtn" onclick="ahkCall('PinSelected')">📌 Pin</button>
           <button class="tree-tbtn" onclick="ahkCall('RemovePinnedSelected')">✕ Remove</button>
           <button class="tree-tbtn" onclick="ahkCall('ClearPins')">🗑 Clear</button>
+          <span class="wl-autosync">NPC Watch Auto-Sync
+            <label class="toggle"><input type="checkbox" id="tog-npcsync" onchange="ahkCall('ToggleNpcSync')"><span class="toggle-slider"></span></label>
+          </span>
         </div>
         <div class="wl-table-wrap">
           <table class="wl-table" id="wl-table">
@@ -6165,34 +6189,39 @@
           background: linear-gradient(180deg, rgba(82,58,30,0.96), rgba(40,26,14,0.96));
         }
         #panel-hotkeys .hk-num-btn:active { color: var(--codex-text); }
-        /* Alerts tab — reuse the themed number stepper + codex inputs */
-        #panel-alerts .al-desc, #panel-groups .al-desc { font-family: var(--codex-serif); font-size: 12px; color: var(--subtext); margin: 0 0 8px; }
-        #panel-alerts .al-line { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-bottom: 8px; }
-        #panel-alerts .al-line:last-child { margin-bottom: 0; }
-        #panel-alerts .al-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; font-family: var(--codex-serif); font-size: 13px; color: var(--codex-text); }
-        #panel-alerts .al-field { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; }
-        #panel-alerts .al-cap { font-family: var(--codex-serif); font-size: 13px; color: var(--codex-text); white-space: nowrap; }
-        #panel-alerts .hk-num { position: relative; display: inline-flex; vertical-align: middle; }
-        #panel-alerts .hk-num > input[type=number] { width: 90px; padding-right: 18px; }
+        /* Alerts + Loot tabs — reuse the themed number stepper + codex inputs.
+           The Loot tab borrows the same .al-* / .hk-num layout primitives, so
+           it must be listed alongside #panel-alerts or its Settings section
+           renders unstyled (default font, no row layout, native spinners). */
+        #panel-alerts .al-desc, #panel-groups .al-desc, #panel-loot .al-desc { font-family: var(--codex-serif); font-size: 12px; color: var(--subtext); margin: 0 0 8px; }
+        #panel-alerts .al-line, #panel-loot .al-line { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; margin-bottom: 8px; }
+        #panel-alerts .al-line:last-child, #panel-loot .al-line:last-child { margin-bottom: 0; }
+        #panel-alerts .al-item, #panel-loot .al-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; font-family: var(--codex-serif); font-size: 13px; color: var(--codex-text); }
+        #panel-alerts .al-field, #panel-loot .al-field { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; }
+        #panel-alerts .al-cap, #panel-loot .al-cap { font-family: var(--codex-serif); font-size: 13px; color: var(--codex-text); white-space: nowrap; }
+        #panel-alerts .hk-num, #panel-loot .hk-num { position: relative; display: inline-flex; vertical-align: middle; }
+        #panel-alerts .hk-num > input[type=number], #panel-loot .hk-num > input[type=number] { width: 90px; padding-right: 18px; }
         #panel-alerts .hk-num > input[type=number]::-webkit-inner-spin-button,
-        #panel-alerts .hk-num > input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-        #panel-alerts .hk-num-spin {
+        #panel-alerts .hk-num > input[type=number]::-webkit-outer-spin-button,
+        #panel-loot .hk-num > input[type=number]::-webkit-inner-spin-button,
+        #panel-loot .hk-num > input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+        #panel-alerts .hk-num-spin, #panel-loot .hk-num-spin {
           position: absolute; top: 1px; bottom: 1px; right: 1px; width: 15px;
           display: flex; flex-direction: column; overflow: hidden; border-radius: 0 1px 1px 0;
         }
-        #panel-alerts .hk-num-btn {
+        #panel-alerts .hk-num-btn, #panel-loot .hk-num-btn {
           flex: 1; min-height: 0; padding: 0; margin: 0; cursor: pointer;
           display: flex; align-items: center; justify-content: center;
           border: none; border-left: 1px solid rgba(90,62,34,0.6);
           background: linear-gradient(180deg, rgba(60,42,22,0.92), rgba(28,18,10,0.92));
           color: var(--codex-gold); font-size: 7px; line-height: 1;
         }
-        #panel-alerts .hk-num-btn:first-child { border-bottom: 1px solid rgba(90,62,34,0.6); }
-        #panel-alerts .hk-num-btn:hover {
+        #panel-alerts .hk-num-btn:first-child, #panel-loot .hk-num-btn:first-child { border-bottom: 1px solid rgba(90,62,34,0.6); }
+        #panel-alerts .hk-num-btn:hover, #panel-loot .hk-num-btn:hover {
           color: var(--codex-gold-hi);
           background: linear-gradient(180deg, rgba(82,58,30,0.96), rgba(40,26,14,0.96));
         }
-        #panel-alerts .hk-num-btn:active { color: var(--codex-text); }
+        #panel-alerts .hk-num-btn:active, #panel-loot .hk-num-btn:active { color: var(--codex-text); }
         /* Vitals tab (Config panel) — reuse the themed number stepper + pill captions */
         #panel-config .hk-num { position: relative; display: inline-flex; vertical-align: middle; }
         #panel-config .hk-num > input[type=number] { width: 72px; padding-right: 18px; }
@@ -6701,12 +6730,11 @@
       gamestate: 're',
       memdiff:   're',
       dissect:   're',
-      tsvs:      'data',
       config:    'config',
       hotkeys:   'hotkeys',
     };
-    // The Config tab is one top-level panel split into 6 inner sub-panels
-    // (general/automation/overlay/ggpk/filters/debug); switchConfigSubTab
+    // The Config tab is one top-level panel split into inner sub-panels
+    // (general/automation/overlay/vitals/debug/data); switchConfigSubTab
     // toggles which inner div carries .active. The currently-active sub-
     // tab is held here so navigating away to e.g. Game and back to Config
     // returns to the same sub-tab. Persisted via AHK on every change.
@@ -6723,6 +6751,10 @@
       document.querySelectorAll('.cfg-subpanel').forEach(p =>
         p.classList.toggle('active', p.dataset.cfgtab === name));
       scheduleMarkerUpdate();
+      // Data sub-tab: lazy-load the TSV file list the first time it's shown
+      // (was a switchTab side-effect back when Data was its own top-level tab).
+      if (name === 'data' && !_tsvFilesLoaded)
+        ahkCall('ListTsvFiles');
       // Tell AHK so the choice survives a restart. Bridge is a no-op if
       // the handler doesn't exist yet (graceful degradation during dev).
       try { ahkCall('SetConfigSubTab', name); } catch (e) {}
@@ -6733,7 +6765,6 @@
     const lastTabPerCategory = {
       game:    'entities',
       re:      'ui',
-      data:    'tsvs',
       config:  'config',
       hotkeys: 'hotkeys',
     };
@@ -7075,8 +7106,6 @@
         ahkCall('UiBrowserClearHighlight');
       if (treeTabs.has(key))
         ahkCall('SwitchTab', key.charAt(0).toUpperCase() + key.slice(1));
-      if (key === 'tsvs' && !_tsvFilesLoaded)
-        ahkCall('ListTsvFiles');
       if (key === 'ui')
         ahkCall('UiBrowseRoot');
       if (key === 'inventory')
@@ -7192,6 +7221,15 @@
           pn.style.left = ''; pn.style.right = ''; pn.style.bottom = ''; pn.style.textShadow = '';
         }
       }
+    }
+
+    // Price-on-hover header settings -> form widgets (skips a field being edited).
+    function uiHoverPriceSyncFromHeader(s) {
+      if (!s) return;
+      const chk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = v === true || v === 1 || v === '1' || v === 'true'; };
+      const val = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
+      chk('uhp-enabled', s.enabled);
+      val('uhp-minEx', s.minEx);
     }
 
     // Map loot-value label color → shared GGPK color picker → SetLootRadarValue mapColor.
@@ -7488,7 +7526,7 @@
       let totalEx = 0, totalSec = 0;
       maps.forEach(m => { totalEx += m.profitEx || 0; totalSec += m.activeSeconds || 0; });
       const rate = d.divRate || 0;
-      let h = '<div class="cfg-header" style="margin:10px 0 4px">Session ' + _ltEsc(d.start) + '</div>';
+      let h = '<div class="cfg-subhead" style="margin-top:10px">Session ' + _ltEsc(d.start) + '</div>';
       h += '<div class="al-desc">Length ' + _ltFmtDurSec(d.durationSec) + ' · Maps ' + maps.length
         + ' · Total ' + (rate > 0 ? (totalEx / rate).toFixed(1) + ' div' : Math.round(totalEx) + ' ex') + '</div>';
       h += '<table class="lt-tbl"><tr><th>Map</th><th>Time</th><th>Profit</th></tr>';
@@ -8880,10 +8918,10 @@
     function _invTabActivated() {
       ahkCall('RequestInventory');
       if (_invPollTimer) clearInterval(_invPollTimer);
-      _invPollTimer = setInterval(() => {
-        const cb = document.getElementById('inv-autorefresh');
-        if (cb && cb.checked) ahkCall('RequestInventory');
-      }, 800);
+      // Always-on auto-refresh while the tab is open — the incremental renderer
+      // makes this cheap (identical payloads are skipped, only changed slots
+      // re-render), so there's no longer a reason to gate it behind a toggle.
+      _invPollTimer = setInterval(() => ahkCall('RequestInventory'), 800);
     }
     function _invTabDeactivated() {
       if (_invPollTimer) { clearInterval(_invPollTimer); _invPollTimer = null; }
@@ -8892,14 +8930,193 @@
     // Pushed from AHK PushInventoryToWebView. Payload shape:
     //   { player: [<inv>...], stash: [<inv>...], hasStash: bool, error?: "..." }
     //   <inv> = { id, type, bx, by, src, tn?, items: [{sx,sy,ex,ey,n,b,r,m:[...]}, ...] }
+    // Incremental inventory rendering. The 800ms poll used to rebuild the whole
+    // grid via innerHTML every tick, which reloaded every <img> and flickered
+    // even when nothing changed. Now: (1) skip identical payloads outright, and
+    // (2) reconcile section-by-section + cell-by-cell so only the item slots that
+    // actually changed are touched (unchanged cells keep their DOM + images).
+    let _invLastJson = '';
+    let _invHtmlCache = new Map();   // section key -> last innerHTML (non-grid sections)
+
+    function _invResetCache() { _invLastJson = ''; _invHtmlCache.clear(); }
+
+    // Per-item change signature: any field that affects the rendered cell.
+    function _invSig(it) {
+      return [it.sx | 0, it.sy | 0, it.ex | 0, it.ey | 0,
+        (typeof it.r === 'number' ? it.r : 0), it.n || '', it.b || '',
+        it.s | 0, it.a || '', it.idf].join('|');
+    }
+
     function updateInventory(jsonStr) {
       const el = document.getElementById('inv-content');
       const status = document.getElementById('inv-status');
       if (!el) return;
+      // Idle fast-path: an identical payload means nothing in any inventory
+      // changed — leave the DOM (and its images) completely untouched.
+      if (jsonStr === _invLastJson) return;
       let data;
       try { data = JSON.parse(jsonStr); }
-      catch (e) { el.innerHTML = '<div class="no-data-msg">⚠ Parse error</div>'; return; }
+      catch (e) { el.innerHTML = '<div class="no-data-msg">⚠ Parse error</div>'; _invResetCache(); return; }
+      try {
+        _invIncrementalRender(data, el, status);
+        _invLastJson = jsonStr;
+      } catch (e) {
+        // Defensive fallback: if the diff path ever throws, fall back to the
+        // old whole-panel rebuild so the inventory can't end up half-rendered.
+        try { _invFullRender(data, el, status); _invLastJson = jsonStr; _invHtmlCache.clear(); }
+        catch (e2) { _invResetCache(); }
+      }
+    }
 
+    // Builds the ordered list of section descriptors (same grouping the full
+    // render uses) and reconciles them against the live DOM in place.
+    function _invIncrementalRender(data, el, status) {
+      if (data.error) {
+        const msg = data.error === 'not-connected' ? 'Not connected to PoE2.'
+                  : data.error === 'no-server-data' ? 'No server data — log in first.'
+                  : ('Error: ' + data.error);
+        el.innerHTML = `<div class="no-data-msg">${escHtml(msg)}</div>`;
+        _invHtmlCache.clear();
+        if (status) status.textContent = msg;
+        return;
+      }
+      const player = Array.isArray(data.player) ? data.player : [];
+      const totalItems = player.reduce((n, inv) => n + (inv.items ? inv.items.length : 0), 0);
+
+      const equipped = [], stash = [], others = [];
+      for (const inv of player) {
+        const id = inv.id;
+        if      (id >= 2 && id <= 11) equipped.push(inv);
+        else if (_isStashTabId(id))   stash.push(inv);
+        else                          others.push(inv);
+      }
+      equipped.sort((a, b) => a.id - b.id);
+      stash.sort((a, b) => a.id - b.id);
+      others.sort((a, b) => (a.id === 1 ? -1 : b.id === 1 ? 1 : a.id - b.id));
+
+      const descs = [];
+      let equippedPlaced = false;
+      for (const inv of others) {
+        descs.push({ key: 'inv:' + inv.id, kind: 'grid', inv });
+        if (inv.id === 1 && equipped.length) { descs.push({ key: 'equipped', kind: 'html', html: _renderEquippedGroup(equipped) }); equippedPlaced = true; }
+      }
+      if (equipped.length && !equippedPlaced) descs.unshift({ key: 'equipped', kind: 'html', html: _renderEquippedGroup(equipped) });
+
+      const stashFull  = stash.filter(i => (i.items || []).length > 0);
+      const stashEmpty = stash.filter(i => (i.items || []).length === 0);
+      if (stashFull.length || stashEmpty.length) {
+        descs.push({ key: 'stash-header', kind: 'html', html: `<div class="inv-section-header" style="margin-top:14px">Stash <span class="inv-section-meta">${stashFull.length} populated · ${stashEmpty.length} empty · ${stash.length} total</span></div>` });
+        for (const inv of stashFull) descs.push({ key: 'inv:' + inv.id, kind: 'grid', inv });
+        if (stashEmpty.length) {
+          const labels = stashEmpty.map(i => i.tn ? i.tn : ('#' + i.id)).join(', ');
+          descs.push({ key: 'stash-empty', kind: 'html', html: `<div class="inv-section" style="opacity:.55;font-size:11px;color:var(--subtext);padding:6px 8px;border:1px dashed var(--border);border-radius:4px">Empty stash tabs: ${escHtml(labels)}</div>` });
+        }
+      }
+
+      if (!descs.length) {
+        el.innerHTML = '<div class="no-data-msg">No inventories found.</div>';
+        _invHtmlCache.clear();
+      } else {
+        _invReconcileSections(el, descs);
+      }
+
+      if (status) {
+        const t = new Date();
+        const stashTag = stashFull.length ? ` · ${stashFull.length} stash tab${stashFull.length === 1 ? '' : 's'} with items` : '';
+        status.textContent = `${totalItems} items · ${player.length} inventories${stashTag} · ${t.toLocaleTimeString()}`;
+      }
+    }
+
+    // Reconciles #inv-content's children against the desired descriptor list,
+    // keyed by data-invkey: reuse+patch existing section nodes, create missing
+    // ones, drop removed ones, and reorder without recreating unchanged nodes.
+    // Builds a detached DOM node from an HTML string (its root element).
+    function _invMakeNode(html) {
+      const t = document.createElement('template');
+      t.innerHTML = html.trim();
+      return t.content.firstElementChild;
+    }
+
+    // Reconciles #inv-content's children against the desired descriptor list,
+    // keyed by data-invkey placed directly on each section's OWN root element (no
+    // wrapper — so existing CSS like .inv-section:nth-child(...) keeps working):
+    // reuse + cell-diff grid sections, recreate html sections only when their
+    // cached HTML changed, drop removed ones, reorder without recreating nodes.
+    function _invReconcileSections(el, descs) {
+      const existing = new Map();
+      for (const ch of Array.from(el.children)) {
+        const k = ch.getAttribute('data-invkey');
+        if (k && !existing.has(k)) existing.set(k, ch);
+        else el.removeChild(ch);   // stray / un-keyed (e.g. after a full-render fallback)
+      }
+      const desiredKeys = new Set(descs.map(d => d.key));
+      for (const [k, node] of existing) {
+        if (!desiredKeys.has(k)) { el.removeChild(node); existing.delete(k); _invHtmlCache.delete(k); }
+      }
+      let prev = null;
+      for (const d of descs) {
+        let node = existing.get(d.key);
+        if (d.kind === 'grid') {
+          const grid = node && node.querySelector('.inv-grid');
+          const bx = Math.max(1, d.inv.bx || 12), by = Math.max(1, d.inv.by || 5);
+          // Reuse + cell-diff when the grid exists at the same dimensions;
+          // otherwise (new, or bx/by changed) build the section fresh.
+          if (grid && (+grid.getAttribute('data-bx')) === bx && (+grid.getAttribute('data-by')) === by) {
+            _invPatchGrid(node, d.inv);
+          } else {
+            node = _invMakeNode(_renderInvSection(d.inv));
+            node.setAttribute('data-invkey', d.key);
+          }
+        } else {   // 'html' — recreate only when the cached HTML changed
+          if (!node || _invHtmlCache.get(d.key) !== d.html) {
+            node = _invMakeNode(d.html);
+            node.setAttribute('data-invkey', d.key);
+            _invHtmlCache.set(d.key, d.html);
+          }
+        }
+        existing.set(d.key, node);
+        const ref = prev ? prev.nextSibling : el.firstChild;
+        if (ref !== node) el.insertBefore(node, ref);
+        prev = node;
+      }
+    }
+
+    // Cell-level diff of one inventory grid (node IS the .inv-section; caller
+    // guarantees same bx/by): only changed/added/removed item cells are touched,
+    // so unchanged cells keep their DOM + already-loaded images (no flicker).
+    function _invPatchGrid(node, inv) {
+      const bx = Math.max(1, inv.bx || 12);
+      const by = Math.max(1, inv.by || 5);
+      const grid = node.querySelector('.inv-grid');
+      if (!grid) return;
+      const header = node.querySelector('.inv-section-header');
+      const desiredHeader = _invSectionHeaderHtml(inv, bx, by);
+      if (header && header.innerHTML !== desiredHeader) header.innerHTML = desiredHeader;
+
+      const items = Array.isArray(inv.items) ? inv.items : [];
+      const desired = new Map();
+      for (const it of items) {
+        const sx = (it.sx | 0), sy = (it.sy | 0);
+        if (sx < 0 || sy < 0 || sx >= bx || sy >= by) continue;
+        desired.set(sx + ',' + sy, it);
+      }
+      const seen = new Set();
+      for (const cell of Array.from(grid.querySelectorAll('.inv-item[data-slot]'))) {
+        const slot = cell.getAttribute('data-slot');
+        if (!desired.has(slot)) { grid.removeChild(cell); continue; }
+        seen.add(slot);
+        const it = desired.get(slot);
+        if (cell.getAttribute('data-sig') !== _invSig(it)) cell.outerHTML = _invItemCellHtml(it, bx, by);
+      }
+      for (const [slot, it] of desired) {
+        if (seen.has(slot)) continue;
+        const html = _invItemCellHtml(it, bx, by);
+        if (html) grid.insertAdjacentHTML('beforeend', html);
+      }
+    }
+
+    // The original whole-panel rebuild — kept as the defensive fallback path.
+    function _invFullRender(data, el, status) {
       if (data.error) {
         const msg = data.error === 'not-connected' ? 'Not connected to PoE2.'
                   : data.error === 'no-server-data' ? 'No server data — log in first.'
@@ -8913,10 +9130,6 @@
       const totalItems = player.reduce((n, inv) => n + (inv.items ? inv.items.length : 0), 0);
 
       let html = '';
-      // Partition player inventories into render groups:
-      //   - equipped (id 2–11)        → one combined "Equipped Items" section
-      //   - stash    (id 13+, !=12)   → individual stash tabs, sorted by id
-      //   - others                    → Backpack (1), Flasks (12)
       const equipped = [];
       const stash    = [];
       const others   = [];
@@ -8928,28 +9141,20 @@
       }
       equipped.sort((a, b) => a.id - b.id);
       stash.sort((a, b) => a.id - b.id);
-      // Render order: Backpack first, then Equipped right after it, then any
-      // remaining player inventories (Flasks, etc.) — matches the mental model.
       others.sort((a, b) => (a.id === 1 ? -1 : b.id === 1 ? 1 : a.id - b.id));
       for (const inv of others) {
         html += _renderInvSection(inv);
         if (inv.id === 1 && equipped.length) html += _renderEquippedGroup(equipped);
       }
-      // Backpack not present (rare — paused or pre-load) → put equipped at the top.
       if (equipped.length && !others.some(i => i.id === 1)) {
         html = _renderEquippedGroup(equipped) + html;
       }
-      // Stash tabs — split into populated (rendered as full grids) and empty
-      // (collapsed into a single line at the bottom). Empty stash tabs are very
-      // common (player may own 50+ tabs, only a few hold items at any time) and
-      // rendering 50 empty 12×12 grids tanks the UI.
       const stashFull  = stash.filter(i => (i.items || []).length > 0);
       const stashEmpty = stash.filter(i => (i.items || []).length === 0);
       if (stashFull.length || stashEmpty.length) {
         html += `<div class="inv-section-header" style="margin-top:14px">Stash <span class="inv-section-meta">${stashFull.length} populated · ${stashEmpty.length} empty · ${stash.length} total</span></div>`;
         for (const inv of stashFull) html += _renderInvSection(inv);
         if (stashEmpty.length) {
-          // Prefer user-given names where the heuristic found them; fall back to id.
           const labels = stashEmpty.map(i => i.tn ? i.tn : ('#' + i.id)).join(', ');
           html += `<div class="inv-section" style="opacity:.55;font-size:11px;color:var(--subtext);padding:6px 8px;border:1px dashed var(--border);border-radius:4px">Empty stash tabs: ${escHtml(labels)}</div>`;
         }
@@ -9006,12 +9211,11 @@
       </div>`;
     }
 
-    function _renderInvSection(inv) {
+    // Header line ("#id name · meta") for one inventory section — shared by the
+    // full render and the in-place patcher so they stay byte-identical.
+    function _invSectionHeaderHtml(inv, bx, by) {
       const id = inv.id;
-      const bx = Math.max(1, inv.bx || 12);
-      const by = Math.max(1, inv.by || 5);
       const items = Array.isArray(inv.items) ? inv.items : [];
-
       // Top row: "#<id> <name>". Prefer the translated inventory type (from
       // Inventories.datc64 via the AHK bridge); fall back to the user-given stash
       // tab name, then the heuristic id-range label.
@@ -9022,48 +9226,57 @@
       // Keep the raw internal type (e.g. "LakeTabletInventory1") in the meta line.
       const metaType = rawType ? `${escHtml(rawType)} · ` : '';
       const meta = `${metaType}${bx}×${by} · ${items.length} items` + (inv.src ? ' · ' + escHtml(inv.src) : '');
+      return `${escHtml(labelBase)}<span class="inv-section-meta">${meta}</span>`;
+    }
 
-      // Background empty cells for the full grid
+    // HTML for one placed item cell. Carries data-slot (its grid position — the
+    // reconcile key) and data-sig (its change signature) so the patcher can tell
+    // at a glance whether the cell needs replacing. Returns '' if the item
+    // projects outside the grid (defensive — some non-grid inventories do this,
+    // e.g. trinket holsters where slotEnd > totalBoxes).
+    function _invItemCellHtml(it, bx, by) {
+      const sx = (it.sx | 0), sy = (it.sy | 0);
+      const ex = Math.max(sx + 1, (it.ex | 0));
+      const ey = Math.max(sy + 1, (it.ey | 0));
+      if (sx < 0 || sy < 0 || sx >= bx || sy >= by) return '';
+      const w = Math.max(1, ex - sx);
+      const h = Math.max(1, ey - sy);
+      const rarity = (typeof it.r === 'number' && it.r >= 0 && it.r <= 3) ? it.r : 0;
+      const name = it.n || it.b || '?';
+      const stack = (typeof it.s === 'number' && it.s > 1) ? it.s : 0;
+      const stackBadge = stack ? `<span class="inv-stack">${stack}</span>` : '';
+      const tip = _buildItemTooltipPayload(it);
+      // Real item art (RenderItem ResourcePath via poe2db). The icon fills the
+      // cell; the name label sits behind it and is revealed again if the CDN
+      // has no art for this path. idf===0 → unidentified corner glyph.
+      const icon = _iconUrl(it.a);
+      const imgLayer = icon ? `<img class="inv-item-img" src="${escAttr(icon)}" loading="lazy" onerror="this.style.display='none';var l=this.parentElement.querySelector('.inv-item-label');if(l)l.style.display=''">` : '';
+      const label = `<span class="inv-item-label"${icon ? ' style="display:none"' : ''}>${escHtml(_truncateForCell(name, w * h))}</span>`;
+      const unidBadge = (it.idf === 0) ? '<span class="inv-unid-badge" title="Unidentified">?</span>' : '';
+      return `<div class="inv-item rarity-${rarity}" data-slot="${sx},${sy}" data-sig="${escAttr(_invSig(it))}" `
+            + `style="grid-column:${sx + 1} / span ${w};grid-row:${sy + 1} / span ${h}" `
+            + `onmouseenter="_invShowTip(event,'${tip}')" onmouseleave="_invHideTip()" onmousemove="_invMoveTip(event)">`
+            + imgLayer + label + unidBadge + stackBadge + `</div>`;
+    }
+
+    function _renderInvSection(inv) {
+      const bx = Math.max(1, inv.bx || 12);
+      const by = Math.max(1, inv.by || 5);
+      const items = Array.isArray(inv.items) ? inv.items : [];
+
+      // Background empty cells for the full grid.
+      let bg = '';
+      for (let y = 0; y < by; y++)
+        for (let x = 0; x < bx; x++)
+          bg += `<div class="inv-cell" style="grid-column:${x + 1};grid-row:${y + 1}"></div>`;
+      // Placed items on top.
       let cells = '';
-      for (let y = 0; y < by; y++) {
-        for (let x = 0; x < bx; x++) {
-          cells += `<div class="inv-cell" style="grid-column:${x + 1};grid-row:${y + 1}"></div>`;
-        }
-      }
-      // Items on top, spanning their slot region
-      for (const it of items) {
-        const sx = (it.sx | 0), sy = (it.sy | 0);
-        const ex = Math.max(sx + 1, (it.ex | 0));
-        const ey = Math.max(sy + 1, (it.ey | 0));
-        // Skip items projecting outside the declared grid (defensive — happens for
-        // some non-grid inventories like trinket holsters where slotEnd > totalBoxes).
-        if (sx < 0 || sy < 0 || sx >= bx || sy >= by) continue;
-        const w = Math.max(1, ex - sx);
-        const h = Math.max(1, ey - sy);
-        const rarity = (typeof it.r === 'number' && it.r >= 0 && it.r <= 3) ? it.r : 0;
-        const name = it.n || it.b || '?';
-        const stack = (typeof it.s === 'number' && it.s > 1) ? it.s : 0;
-        const stackBadge = stack ? `<span class="inv-stack">${stack}</span>` : '';
-        const tip = _buildItemTooltipPayload(it);
-        // Real item art (RenderItem ResourcePath via poe2db). The icon fills the
-        // cell; the name label sits behind it and is revealed again if the CDN
-        // has no art for this path. idf===0 → unidentified corner glyph.
-        const icon = _iconUrl(it.a);
-        const imgLayer = icon ? `<img class="inv-item-img" src="${escAttr(icon)}" loading="lazy" onerror="this.style.display='none';var l=this.parentElement.querySelector('.inv-item-label');if(l)l.style.display=''">` : '';
-        const label = `<span class="inv-item-label"${icon ? ' style="display:none"' : ''}>${escHtml(_truncateForCell(name, w * h))}</span>`;
-        const unidBadge = (it.idf === 0) ? '<span class="inv-unid-badge" title="Unidentified">?</span>' : '';
-        cells += `<div class="inv-item rarity-${rarity}" `
-              + `style="grid-column:${sx + 1} / span ${w};grid-row:${sy + 1} / span ${h}" `
-              + `onmouseenter="_invShowTip(event,'${tip}')" onmouseleave="_invHideTip()" onmousemove="_invMoveTip(event)">`
-              + imgLayer
-              + label
-              + unidBadge
-              + stackBadge
-              + `</div>`;
-      }
+      for (const it of items) cells += _invItemCellHtml(it, bx, by);
+
+      // data-bx/data-by on the grid let the patcher detect a dimension change.
       return `<div class="inv-section">
-        <div class="inv-section-header">${escHtml(labelBase)}<span class="inv-section-meta">${meta}</span></div>
-        <div class="inv-grid" style="grid-template-columns:repeat(${bx},36px);grid-template-rows:repeat(${by},36px)">${cells}</div>
+        <div class="inv-section-header">${_invSectionHeaderHtml(inv, bx, by)}</div>
+        <div class="inv-grid" data-bx="${bx}" data-by="${by}" style="grid-template-columns:repeat(${bx},36px);grid-template-rows:repeat(${by},36px)">${bg}${cells}</div>
       </div>`;
     }
 
@@ -9243,6 +9456,7 @@
       if (d.loot !== undefined) lootSyncFromHeader(d.loot);
       if (d.stashMover !== undefined) stashMoverSyncFromHeader(d.stashMover);
       if (d.lootRadarValue !== undefined) lootRadarValueSyncFromHeader(d.lootRadarValue);
+      if (d.uiHoverPrice !== undefined) uiHoverPriceSyncFromHeader(d.uiHoverPrice);
       if (d.lootTradePricing !== undefined) lootTradePricingSyncFromHeader(d.lootTradePricing);
 
       // Version tags
@@ -9303,12 +9517,6 @@
         pillRadar.className = 'pill clickable ' + (on ? 'active' : 'inactive');
         document.getElementById('pill-radar-text').textContent = 'Radar ' + (on ? 'ON' : 'OFF');
       }
-      const pillHud = document.getElementById('pill-hud');
-      if (pillHud) {
-        const on = d.playerHud !== false && d.playerHud !== 'false';
-        pillHud.className = 'pill clickable ' + (on ? 'active' : 'inactive');
-        document.getElementById('pill-hud-text').textContent = 'HUD ' + (on ? 'ON' : 'OFF');
-      }
       const pillAtlas = document.getElementById('pill-atlas');
       if (pillAtlas) {
         const on = d.atlasOverlay === true || d.atlasOverlay === 'true';
@@ -9364,8 +9572,6 @@
       }
 
       // Header buttons active state
-      const setBtnActive = (id, val) => { const b = document.getElementById(id); if (b) b.classList.toggle('active', val === true || val === 'true'); };
-      setBtnActive('btn-pause', d.paused);
 
       // Show ▶ PoE2 only when game not running
       // Snap-or-Start dual button — text + intent track whether PoE2 is up
@@ -9391,14 +9597,11 @@
 
       // Config tab sync
       const setChk = (id, val) => { const el = document.getElementById(id); if (el) el.checked = val === true || val === 'true'; };
-      setChk('tog-debug', d.debug);
-      setChk('tog-pause', d.paused);
       setChk('tog-flask', d.autoFlask);
       setChk('tog-afperf', d.afPerf);
       setChk('tog-npcsync', d.npcSync);
       setChk('tog-radar', d.radarEnabled !== undefined ? d.radarEnabled : true);
-      setChk('tog-player-hud', d.playerHud !== undefined ? d.playerHud : true);
-      setChk('tog-vitals', d.playerHud !== undefined ? d.playerHud : true);
+      setChk('tog-vitals', d.vitalsEnabled !== undefined ? d.vitalsEnabled : true);
       if (d.vitals) vitalsSyncFromHeader(d.vitals);
       setChk('tog-overlay-status', d.overlayStatusText !== undefined ? d.overlayStatusText : true);
       setChk('tog-localapi', d.localApi !== undefined ? d.localApi : false);
@@ -9539,7 +9742,9 @@
         // Don't auto-clear ggpkStatus here — see note above.
       }
       setChk('tog-rangecircles', d.rangeCircles !== undefined ? d.rangeCircles : true);
-      setChk('tog-paneldetection', d.panelDetection !== undefined ? d.panelDetection : true);
+      setChk('tog-panel-hideoverlays', d.panelHideOverlays !== undefined ? d.panelHideOverlays : true);
+      setChk('tog-panel-pauseautopilot', d.panelPauseAutoPilot !== undefined ? d.panelPauseAutoPilot : true);
+      setChk('tog-panel-hidelootbars', d.panelHideLootBars !== undefined ? d.panelHideLootBars : true);
 
       if (d.radarAlpha !== undefined) {
         const sl = document.getElementById('radar-alpha');
@@ -9572,12 +9777,8 @@
       const apReasonSum = document.getElementById('cfg-autopilot-reason-summary');
       if (apReasonSum && d.autoPilotReason !== undefined) apReasonSum.textContent = d.autoPilotReason || '—';
 
-      // Inventory diagnostics — chain dump toggle in the Inventory tab toolbar.
-      if (d.invChainDump !== undefined) {
-        setChk('inv-chain-dump', d.invChainDump);
-        const cdBtn = document.getElementById('inv-chain-dump-btn');
-        if (cdBtn) cdBtn.classList.toggle('active', !!d.invChainDump);
-      }
+      // Inventory diagnostics — pointer-chain logging toggle (Config > Debug).
+      if (d.invChainDump !== undefined) setChk('inv-chain-dump', d.invChainDump);
 
       // Combat Automation config sync
       const prevCombatEnabled = document.getElementById('tog-combat')?.checked || false;
@@ -10069,64 +10270,10 @@
     function showSkillRangeCircle(slotNum) { _rcFocusedSlot = slotNum; updateRangeCircleVisibility(); }
     function clearSkillRangeCircleFocus() { _rcFocusedSlot = 0; updateRangeCircleVisibility(); }
 
-    // ═══════════════════════════════════════════════════════════════════
-    //  OVERVIEW TREE
-    // ═══════════════════════════════════════════════════════════════════
-    let _treeData = {};
-    let _selectedNodePath = '';
-    let _treeFilter = '';
-
-    function updateTree(tabKey, nodesJson) {
-      let nodes; try { nodes = typeof nodesJson === 'string' ? JSON.parse(nodesJson) : nodesJson; } catch (e) { return; }
-      _treeData[tabKey] = nodes;
-      if (activeTab === 'config') _renderTree(nodes);
-    }
-
-    function _renderTree(nodes) {
-      const el = document.getElementById('tab-overview-content');
-      if (!el) return;
-      if (!Array.isArray(nodes) || nodes.length === 0) { el.innerHTML = '<div class="tree-empty">No data</div>'; return; }
-      el.innerHTML = _renderNodes(nodes, _treeFilter.toLowerCase());
-    }
-
-    function _renderNodes(nodes, filter) {
-      let html = '';
-      for (const n of nodes) {
-        const label = n.text || '';
-        const path = n.path || '';
-        const kids = Array.isArray(n.children) ? n.children : [];
-        const hasKids = kids.length > 0;
-        if (filter) {
-          const matchSelf = label.toLowerCase().includes(filter);
-          const kidHtml = hasKids ? _renderNodes(kids, filter) : '';
-          if (!matchSelf && !kidHtml) continue;
-          const row = `<div class="tree-node-row${path === _selectedNodePath ? ' selected' : ''}" onclick="selectNode('${escHtml(path)}')">
-        <span class="tree-toggle">${hasKids ? '▸' : ' '}</span>
-        <span class="tree-label">${escHtml(label)}</span></div>`;
-          html += `<div class="tree-node">${row}${kidHtml ? `<div class="tree-children">${kidHtml}</div>` : ''}</div>`;
-        } else {
-          const row = `<div class="tree-node-row${path === _selectedNodePath ? ' selected' : ''}" onclick="selectNode('${escHtml(path)}')">
-        <span class="tree-toggle">${hasKids ? '▸' : ' '}</span>
-        <span class="tree-label">${escHtml(label)}</span></div>`;
-          const childHtml = hasKids ? `<div class="tree-children">${_renderNodes(kids, '')}</div>` : '';
-          html += `<div class="tree-node">${row}${childHtml}</div>`;
-        }
-      }
-      return html;
-    }
-
-    function selectNode(path) {
-      _selectedNodePath = path;
-      ahkCall('SelectNode', path);
-      document.querySelectorAll('.tree-node-row').forEach(r => r.classList.remove('selected'));
-      event.currentTarget.classList.add('selected');
-    }
-
-    function applyTreeFilter() {
-      _treeFilter = document.getElementById('tree-filter').value;
-      const tab = activeTab;
-      if (_treeData[tab]) _renderTree(_treeData[tab]);
-    }
+    // The Overview value-tree (updateTree / _renderTree / selectNode /
+    // applyTreeFilter) was retired together with the Config > General >
+    // Overview section. Entities / Skills / Buffs / UI / gameState each have
+    // their own renderers (updateEntities, updateSkills, …) and are unaffected.
 
     // ═══════════════════════════════════════════════════════════════════
     //  BLACKLIST (Skills & Buffs)
@@ -11333,7 +11480,7 @@
     // ═══════════════════════════════════════════════════════════════════
     //  CONFIG HELPERS
     // ═══════════════════════════════════════════════════════════════════
-    const _cfgSectionIds = ['status', 'overview', 'toggles', 'integrations', 'autoflask', 'autopilot', 'stashmover', 'rangecircles', 'radar', 'lootvalue', 'maphack', 'blacklist', 'actions', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
+    const _cfgSectionIds = ['status', 'integrations', 'autoflask', 'autopilot', 'stashmover', 'rangecircles', 'radar', 'lootvalue', 'uihoverprice', 'maphack', 'blacklist', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
     let _cfgSectionsGuard = 0;
     let _cfgSectionsLoaded = false;
 
@@ -12105,7 +12252,7 @@
       // the new file size + mtime show up.
       if (r.ok) {
         _tsvFilesLoaded = false;
-        if (activeTab === 'tsvs') ahkCall('ListTsvFiles');
+        if (activeTab === 'config' && activeConfigSubTab === 'data') ahkCall('ListTsvFiles');
       }
     }
 
