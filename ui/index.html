@@ -5765,9 +5765,9 @@
         </div>
 
         <!-- Overlay Placement — free positioning for the info overlays (Debug, the
-             Valuable-loot list, the two Loot bars, the Alert banner, the Focus
-             readout). Rows are rendered by overlayPlaceRender() from the header's
-             overlayPlacement data. Drag in-game OR set X/Y %; Reset = default spot. -->
+             Valuable-loot list, the two Loot bars and the Alert banner). Rows are
+             rendered by overlayPlaceRender() from the header's overlayPlacement data.
+             Drag in-game OR set X/Y %; Reset = default spot. -->
         <div class="cfg-section">
           <details id="det-overlay-placement" ontoggle="syncCfgSections()">
             <summary><div class="cfg-header">Overlay Placement</div></summary>
@@ -7390,8 +7390,8 @@
       { name: 'notification', label: 'Alert banner' },
     ];
     let _ovpBuilt = false;
-    // Builds the per-overlay rows once. The Focus row also carries an enable
-    // toggle (it has no other home); the others are enabled in their own tabs.
+    // Builds the per-overlay rows once (Move drag toggle + X/Y % + Reset). Each
+    // overlay's own enable toggle lives in its respective tab, not here.
     function overlayPlaceRender() {
       const host = document.getElementById('overlay-place-list');
       if (!host) return;

@@ -1,7 +1,7 @@
 ; OverlayPlacement.ahk
 ; Generic free-positioning for the GDI info overlays (Debug, the Valuable-loot list,
-; the two Loot bars, the Alert banner and the Focus readout). Each placeable overlay
-; may store an OPTIONAL top-left anchor as a fraction of the game window (xPct/yPct).
+; the two Loot bars and the Alert banner). Each placeable overlay may store an OPTIONAL
+; top-left anchor as a fraction of the game window (xPct/yPct).
 ; While no override is stored the overlay keeps its built-in default anchor, so nothing
 ; moves until the user drags it — free positioning is opt-in.
 ;
@@ -108,20 +108,41 @@ SetOverlayEdit(name, on)
 
 ; Sets one position axis ("x"/"y") for an overlay from a UI PERCENT value (0..100).
 ; Creates the override if needed, persists, refreshes the header. Bridge: SetOverlayPos.
+; An empty value is ignored (so clearing the field doesn't snap to 0%). When no override
+; exists yet, both axes are seeded from the overlay's CURRENT on-screen position so that
+; editing only one axis leaves the other where it visually sits (not jumping to 50%).
 SetOverlayPos(name, axis, pct)
 {
     global g_ovPlace
     if !_OvIsPlaceable(name)
         return
+    if (Trim(pct "") = "")   ; empty field — don't coerce "" to 0
+        return
     frac := _OvClampFrac((pct + 0) / 100.0)
     if !g_ovPlace.Has(name)
-        g_ovPlace[name] := Map("xPct", 0.5, "yPct", 0.5)
+        g_ovPlace[name] := _OvCurrentFrac(name)
     if (axis = "x" || axis = "xPct")
         g_ovPlace[name]["xPct"] := frac
     else if (axis = "y" || axis = "yPct")
         g_ovPlace[name]["yPct"] := frac
     SaveOverlayPlacement()
     SetTimer(PushHeaderToWebView, -50)
+}
+
+; Best-effort current top-left fraction of an overlay from its live, cached on-screen
+; rect (set each tick by GdiOverlayBase). Falls back to centre (0.5/0.5) when the overlay
+; isn't currently shown or the game-window rect is unknown.
+_OvCurrentFrac(name)
+{
+    global g_overlayManager
+    if (IsSet(g_overlayManager) && IsObject(g_overlayManager))
+    {
+        ov := g_overlayManager.Get(name)
+        if (IsObject(ov) && ov.isVisible && ov._gwW > 1 && ov._gwH > 1)
+            return Map("xPct", _OvClampFrac((ov._lastX - ov._gwX) / ov._gwW)
+                     , "yPct", _OvClampFrac((ov._lastY - ov._gwY) / ov._gwH))
+    }
+    return Map("xPct", 0.5, "yPct", 0.5)
 }
 
 ; Clears an overlay's override so it returns to its built-in default anchor. Bridge: ResetOverlayPos.
