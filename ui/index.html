@@ -4397,8 +4397,6 @@
       flex: 1; min-width: 110px;
       color: var(--codex-text); font-family: var(--codex-serif); font-size: 13px;
     }
-    .ovp-on { width: 32px; display: flex; justify-content: center }
-    .ovp-spacer { display: inline-block; width: 32px }
     .ovp-cap { font-size: 10.5px; color: var(--subtext); width: 30px }
     .ovp-xy { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: var(--subtext) }
     .ovp-xy input { width: 52px; text-align: right }
@@ -5963,7 +5961,6 @@
               <button class="tree-tbtn" onclick="ahkCall('SkillProbeRun')" style="font-size:11px" title="Post-patch diagnostic: trace the player's skill-name DAT chain (Actor->ActiveSkills->GrantedEffectsPerLevel->GrantedEffects->name) to find why skill names fall back to Skill_<hex>. Writes logs\InGameStateMonitor.skill_probe.log">✨ Probe Skills</button>
               <button class="tree-tbtn" onclick="ahkCall('ComponentDumpProbeRun')" style="font-size:11px" title="Diagnostic: dump ALL components + raw field bytes of the currently highlighted entity (highlight one in the tree first). Basis for the systematic component-offset pass. Also Ctrl+Alt+Shift+D. Writes logs\InGameStateMonitor.component_dump.log">🧩 Dump Components</button>
               <button class="tree-tbtn" onclick="ahkCall('PathfindingProbeRun')" style="font-size:11px" title="Diagnostic: enumerate awake monsters, resolve their Pathfinding component and dump the candidate Flying (0xE5) / BaseSpeed (0xEC) fields plus raw hex, to verify the hypothesis offsets cross-referenced from Sikaka/POE2Radar. Stand in a populated area. Writes logs\InGameStateMonitor.pathfinding_probe.log">🏃 Probe Pathfinding</button>
-              <button class="tree-tbtn" onclick="ahkCall('ToggleFocusOverlay')" style="font-size:11px" title="Toggle the focused-entity TEST overlay (top-left in game): shows the currently targeted monster (name/type/rarity/life via IsTargetedByPlayer 0x6B) and the hovered world object (chest/ground-item via HoverTracker tracker+0x648). On by default.">🎯 Focus Overlay</button>
               <button class="tree-tbtn" onclick="ahkCall('OffsetCompareShowHistory')" style="font-size:11px">🕑 History</button>
               <button class="tree-tbtn" onclick="ahkCall('OffsetComparePredict')" style="font-size:11px">🔮 Predict</button>
             </div>
@@ -7391,7 +7388,6 @@
       { name: 'lootstrip',    label: 'Loot bar (on map)' },
       { name: 'lootcompact',  label: 'Loot bar (hideout)' },
       { name: 'notification', label: 'Alert banner' },
-      { name: 'focus',        label: 'Focus readout' },
     ];
     let _ovpBuilt = false;
     // Builds the per-overlay rows once. The Focus row also carries an enable
@@ -7400,12 +7396,8 @@
       const host = document.getElementById('overlay-place-list');
       if (!host) return;
       host.innerHTML = OV_PLACEABLE.map(o => {
-        const enableCol = o.name === 'focus'
-          ? `<label class="toggle" title="Enable the Focus readout overlay (targeted monster + hovered object)"><input type="checkbox" data-ovenable="${o.name}" onchange="ovFocusEnable(this.checked)"><span class="toggle-slider"></span></label>`
-          : `<span class="ovp-spacer"></span>`;
         return `<div class="ovp-row">
           <span class="ovp-name">${o.label}</span>
-          <span class="ovp-on">${enableCol}</span>
           <label class="toggle ovp-move" title="Drag this overlay on the game screen, then turn off to lock"><input type="checkbox" data-ovedit="${o.name}" onchange="ovMove('${o.name}',this.checked)"><span class="toggle-slider"></span></label>
           <span class="ovp-cap">Move</span>
           <span class="ovp-xy">X<input type="number" class="cfg-input" min="0" max="100" step="0.5" data-ovx="${o.name}" onchange="ovPos('${o.name}','x',this.value)" placeholder="auto"></span>
@@ -7429,13 +7421,10 @@
         if (x && document.activeElement !== x) x.value = (it.moved && it.xPct != null) ? it.xPct : '';
         if (y && document.activeElement !== y) y.value = (it.moved && it.yPct != null) ? it.yPct : '';
       }
-      const fe = document.querySelector('[data-ovenable="focus"]');
-      if (fe) fe.checked = !!d.focusEnabled;
     }
     function ovMove(name, on)      { ahkCall('SetOverlayEdit', name, on ? 1 : 0); }
     function ovPos(name, axis, v)  { ahkCall('SetOverlayPos', name, axis, v); }
     function ovReset(name)         { ahkCall('ResetOverlayPos', name); }
-    function ovFocusEnable(on)     { ahkCall('SetFocusOverlay', on ? 1 : 0); }
 
     // Stash Mover header settings -> form widgets (skips a field being edited).
     // Loot Value Radar header settings -> form widgets (skips a field being edited).

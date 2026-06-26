@@ -1,6 +1,5 @@
 ; EntityFocus.ahk
-; Focused-entity readout for the test overlay (and groundwork for hardening
-; auto-combat). Two signals:
+; Focused-entity / hovered-entity resolvers (RE helpers). Two signals:
 ;   * GetTargetedMonster - the awake monster with Targetable.IsTargetedByPlayer (0x6B)
 ;   * _FocusResolveHovered - the hovered WORLD OBJECT via PoE2Offsets.HoverTracker
 ;     (tracker+0x648). NOTE: that slot tracks chests/ground-items/shrines, NOT
@@ -8,7 +7,8 @@
 ;
 ; The monster scan reads the ALREADY-DECODED radar snapshot (no second enumeration);
 ; only a single fresh Targetable byte is read per monster. The hover resolve is a
-; short pointer chain. BuildFocusLines() is consumed by FocusOverlay (driven by OverlayManager).
+; short pointer chain. The standalone focus TEST overlay is gone; DebugOverlay now
+; reuses _FocusResolveMouseOverEntity / MouseOverLifeLine / _FocusLeaf for its hover line.
 ; Included by InGameStateMonitor.ahk.
 
 ; Returns the Targetable component address cached on a snapshot entity, or 0.
@@ -187,70 +187,8 @@ _FocusResolveMouseOverEntity(reader, snap)
         "decodedComponents", (IsObject(dc) && Type(dc) = "Map") ? dc : 0)
 }
 
-; Builds the focus-overlay lines: the targeted monster (name/type/rarity/life), the
-; entity under the cursor (MouseOver chain), and the hovered world object. Returns an
-; array of strings.
-BuildFocusLines(reader, snap)
-{
-    lines := []
-
-    mon := GetTargetedMonster(reader, snap)
-    if (mon && Type(mon) = "Map")
-    {
-        path := mon.Has("path") ? mon["path"] : ""
-        dc := mon.Has("decodedComponents") ? mon["decodedComponents"] : 0
-        type := ExtractMetaGroup(path)
-        rarity := RarityIdToName(ReadEntityRarityId(dc))
-        hp := _FocusLifeStr(dc)
-        lines.Push("TARGET: " _FocusLeaf(path))
-        lines.Push("  type: " (type != "" ? type : "?") "   rarity: " rarity)
-        if (hp != "")
-            lines.Push("  life: " hp)
-    }
-    else
-        lines.Push("TARGET: (none)")
-
-    mo := _FocusResolveMouseOverEntity(reader, snap)
-    if (mo && Type(mo) = "Map" && mo.Has("path") && mo["path"] != "")
-    {
-        moLvl := ExtractEntityLevel(mo["path"])
-        lines.Push("MOUSEOVER: " ResolveMonsterDisplayName(mo["path"], _FocusLeaf(mo["path"]))
-            (moLvl != "" ? "  ·  lvl " moLvl : ""))
-        dc := (mo.Has("decodedComponents") && Type(mo["decodedComponents"]) = "Map") ? mo["decodedComponents"] : 0
-        mg := ExtractMetaCategory(mo["path"])
-        rarity := dc ? RarityIdToName(ReadEntityRarityId(dc)) : ""
-        if (mg != "" || rarity != "")
-            lines.Push("  type: " (mg != "" ? mg : "?") (rarity != "" ? "   rarity: " rarity : ""))
-        moLife := dc ? _FocusLifeStr(dc) : ""
-        if (moLife != "")
-            lines.Push("  life: " moLife)
-    }
-
-    hov := _FocusResolveHovered(reader, snap)
-    if (hov && Type(hov) = "Map" && hov.Has("path") && hov["path"] != "")
-    {
-        lines.Push("HOVER: " _FocusLeaf(hov["path"]))
-        mg := ExtractMetaGroup(hov["path"])
-        if (mg != "")
-            lines.Push("  type: " mg)
-    }
-
-    return lines
-}
-
-; NOTE: the focus overlay is now driven by OverlayManager through the FocusOverlay
-; class itself (it builds its lines from the snapshot in ShouldShow via
-; BuildFocusLines). The old TickFocusOverlay() driver has been removed.
-
-; Toggles the focused-entity test overlay on/off (bridge case ToggleFocusOverlay).
-ToggleFocusOverlay()
-{
-    global g_focusOverlayEnabled, g_focusOverlay
-    g_focusOverlayEnabled := !g_focusOverlayEnabled
-    if (!g_focusOverlayEnabled && IsObject(g_focusOverlay))
-        g_focusOverlay.Hide()
-    SaveOverlayPlacement()   ; persist the enabled flag (default OFF, survives restart)
-    SetTimer(PushHeaderToWebView, -50)
-    try ToolTip("Focus overlay: " (g_focusOverlayEnabled ? "ON" : "OFF"))
-    SetTimer(() => ToolTip(), -1500)
-}
+; NOTE: the focus-overlay TEST surface (the FocusOverlay class, BuildFocusLines and
+; ToggleFocusOverlay) has been removed. The resolver helpers above
+; (GetTargetedMonster / _FocusResolveHovered / _FocusLifeStr / _FocusTargetableAddr)
+; are kept as shared RE helpers; DebugOverlay still reuses _FocusResolveMouseOverEntity,
+; MouseOverLifeLine and _FocusLeaf for its hovered-entity status line.

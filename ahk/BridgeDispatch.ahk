@@ -253,10 +253,6 @@ _DispatchBridgeCall(method, args)
             ; Clear an overlay's stored position -> back to its built-in default anchor.
             if (args.Length >= 1)
                 ResetOverlayPos(String(args[1]))
-        case "SetFocusOverlay":
-            ; Enable/disable the Focus readout overlay (persisted); args: on.
-            if (args.Length >= 1)
-                SetFocusOverlayEnabled(args[1])
         case "DecodeComponent":
             ; Lazy-decode a single component for the Entity Inspector. The
             ; radar fast-path skips Stats/Buffs/Actor/Animated/StateMachine
@@ -832,9 +828,6 @@ _DispatchBridgeCall(method, args)
         case "PathfindingProbeRun":
             ; TEMP diagnostic: verify Pathfinding Flying/BaseSpeed offsets.
             SetTimer(() => PathfindingProbeRun(), -1)
-        case "ToggleFocusOverlay":
-            ; Toggle the focused-entity test overlay (targeted monster + hovered object).
-            SetTimer(() => ToggleFocusOverlay(), -1)
         case "ComponentDumpProbeRun":
             ; TEMP diagnostic: dump all components + raw fields of the highlighted entity.
             SetTimer(() => ComponentDumpProbeRun(), -1)

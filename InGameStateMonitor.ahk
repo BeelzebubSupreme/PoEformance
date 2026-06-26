@@ -29,7 +29,6 @@ SetWorkingDir(A_ScriptDir)
 #Include ahk/VitalsOverlay.ahk
 #Include ahk/NotificationOverlay.ahk
 #Include ahk/DebugOverlay.ahk
-#Include ahk/FocusOverlay.ahk
 #Include ahk/LootTrackerOverlay.ahk
 #Include ahk/LootValueOverlay.ahk
 #Include ahk/UiHoverPrice.ahk
@@ -51,7 +50,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.84"
+POEFORMANCE_VERSION := "0.45.13.85"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -124,8 +123,6 @@ g_vitalsBars := 0      ; Map(barId -> config Map); seeded by LoadVitalsConfig()
 g_vitalsEditMode := false   ; drag-to-place layout edit mode for the vitals bars
 g_vitalsNeedsCombat := false   ; true when a vitals bar uses an "In Combat" condition (gates the standalone combat detector)
 g_notifyOverlay := 0   ; reference to the manager-owned NotificationOverlay (set in LoadOverlaySystem)
-g_focusOverlay := 0   ; reference to the manager-owned FocusOverlay (set in LoadOverlaySystem)
-g_focusOverlayEnabled := false   ; focused-entity test overlay — default OFF, persisted in [OverlayPlacement] (LoadOverlayPlacement)
 g_ovPlace := 0   ; Map(overlayName -> Map("xPct","yPct")) free-position overrides; seeded by LoadOverlayPlacement()
 g_ovEdit  := 0   ; Map(overlayName -> bool) per-overlay drag edit mode; seeded by LoadOverlayPlacement()
 g_atlasOverlayEnabled := false  ; Atlas map overlay (opt-in; node graph + names + biomes)

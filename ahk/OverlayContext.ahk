@@ -11,7 +11,7 @@ class OverlayContext
     __New()
     {
         this.snapshot           := 0       ; radar snapshot Map for this tick (may be stale within grace)
-        this.reader             := 0       ; PoE2 reader (FocusOverlay needs live reads)
+        this.reader             := 0       ; PoE2 reader (DebugOverlay's hovered-entity line needs live reads)
         this.gameHwnd           := 0       ; resolved PoE window handle (0 when not found)
         this.gwX                := 0
         this.gwY                := 0

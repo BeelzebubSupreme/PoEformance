@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.84`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.85`.
 
 ## Language
 
@@ -692,23 +692,27 @@ overlay can be positioned freely (the Vitals bars keep their own, unchanged syst
   `BuildOverlayPlacementHeaderJson`, self-persist `[OverlayPlacement]`. Seeded by
   `LoadOverlayPlacement()` (init gotcha).
 - **Converted overlays** (set `Placeable` + wrap the Layout return in `_Placed`):
-  DebugOverlay, FocusOverlay, NotificationOverlay, LootValueOverlay, LootMapStripOverlay,
+  DebugOverlay, NotificationOverlay, LootValueOverlay, LootMapStripOverlay,
   LootCompactBarOverlay. The legacy loot **anchor knobs** (`g_ltBarOnRight` /
   `g_ltBarBottomOffset`) stay only as the bars' DEFAULT anchor — their UI controls are gone.
-- **FocusOverlay** (the "Einzeiler links oben" debug leftover): now **default OFF +
-  persisted** (`[OverlayPlacement] focus_enabled`, `g_focusOverlayEnabled := false`); the
-  existing `ToggleFocusOverlay` persists; a proper enable toggle lives in the new UI panel.
+- **FocusOverlay REMOVED (0.45.13.85):** the "Einzeiler links oben" focused-entity TEST
+  overlay was a debug leftover stuck on with no findable off-switch. Fully deleted —
+  `ahk/FocusOverlay.ahk`, its `#Include` + OverlayManager registration + `g_focusOverlay` /
+  `g_focusOverlayEnabled` globals, the `ToggleFocusOverlay` + `SetFocusOverlay` bridge cases,
+  the buried "🎯 Focus Overlay" tree button, and `BuildFocusLines` / `ToggleFocusOverlay` in
+  `EntityFocus.ahk`. **`EntityFocus.ahk` is kept** — its resolver helpers
+  (`_FocusResolveMouseOverEntity` / `MouseOverLifeLine` / `_FocusLeaf`) are still used by
+  DebugOverlay's hovered-entity status line (`ctx.reader` stays for that read).
 - **Wiring:** `InGameStateMonitor.ahk` includes the module, declares `g_ovPlace`/`g_ovEdit`,
-  flips the focus default, calls `LoadOverlayPlacement()` before `LoadOverlaySystem()`.
-  `BridgeDispatch.ahk` cases `SetOverlayEdit`/`SetOverlayPos`/`ResetOverlayPos`/
-  `SetFocusOverlay`; `WebViewBridge.ahk` pushes `overlayPlacement`.
+  calls `LoadOverlayPlacement()` before `LoadOverlaySystem()`. `BridgeDispatch.ahk` cases
+  `SetOverlayEdit`/`SetOverlayPos`/`ResetOverlayPos`; `WebViewBridge.ahk` pushes `overlayPlacement`.
 - **UI (`ui/index.html`):** **Config → Overlay → "Overlay Placement"** (`det-overlay-placement`)
-  — one JS-rendered row per overlay (name · optional enable [focus only] · 📍 Move drag toggle ·
-  X/Y % · Reset), `OV_PLACEABLE` + `overlayPlaceRender`/`overlayPlaceSync` + `ovMove`/`ovPos`/
-  `ovReset`/`ovFocusEnable`. The Loot tab's old "Anchor bars to right" + "Bottom offset" rows
-  were removed (replaced by free positioning).
+  — one JS-rendered row per overlay (name · 📍 Move drag toggle · X/Y % · Reset),
+  `OV_PLACEABLE` + `overlayPlaceRender`/`overlayPlaceSync` + `ovMove`/`ovPos`/`ovReset`.
+  The Loot tab's old "Anchor bars to right" + "Bottom offset" rows were removed (replaced by
+  free positioning).
 - **Pending in-game verification:** drag + click-through flip per overlay; the
-  X/Y % round-trip + persistence across restart; that the Focus overlay now starts hidden;
+  X/Y % round-trip + persistence across restart; that the old focus one-liner is gone;
   banner placeholder grab-size while no banner is active.
 
 ## Reference

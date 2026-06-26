@@ -23,8 +23,7 @@ OverlayPlaceableList()
            , Map("name", "lootvalue",    "label", "Valuable-loot list")
            , Map("name", "lootstrip",    "label", "Loot bar (on map)")
            , Map("name", "lootcompact",  "label", "Loot bar (hideout)")
-           , Map("name", "notification", "label", "Alert banner")
-           , Map("name", "focus",        "label", "Focus readout") ]
+           , Map("name", "notification", "label", "Alert banner") ]
 }
 
 ; True when name is a known placeable overlay.
@@ -40,10 +39,10 @@ _OvIsPlaceable(name)
 _OvClampFrac(v) => (v < 0) ? 0.0 : (v > 1) ? 1.0 : v
 
 ; Seeds the placement globals (unconditionally, per the init gotcha) then overlays any
-; persisted overrides + the Focus-overlay enabled flag from [OverlayPlacement].
+; persisted overrides from [OverlayPlacement].
 LoadOverlayPlacement()
 {
-    global g_ovPlace, g_ovEdit, g_focusOverlayEnabled
+    global g_ovPlace, g_ovEdit
     g_ovPlace := Map()
     g_ovEdit  := Map()
     f := _ConfigPath()
@@ -57,19 +56,14 @@ LoadOverlayPlacement()
             if (xs != "" && ys != "")
                 g_ovPlace[nm] := Map("xPct", _OvClampFrac(Float(xs)), "yPct", _OvClampFrac(Float(ys)))
         }
-        ; Focus overlay enabled state now persists (default OFF — it was a stuck debug
-        ; leftover); the toggle therefore survives a restart.
-        g_focusOverlayEnabled := (IniRead(f, "OverlayPlacement", "focus_enabled", "0") = "1")
     }
-    else
-        g_focusOverlayEnabled := false
 }
 
-; Persists the current placement overrides (and the focus-enabled flag). Names with no
-; override get their keys deleted so a reset is durable.
+; Persists the current placement overrides. Names with no override get their keys
+; deleted so a reset is durable.
 SaveOverlayPlacement()
 {
-    global g_ovPlace, g_focusOverlayEnabled
+    global g_ovPlace
     f := _ConfigPath()
     for it in OverlayPlaceableList()
     {
@@ -85,7 +79,6 @@ SaveOverlayPlacement()
             try IniDelete(f, "OverlayPlacement", nm "_yPct")
         }
     }
-    IniWrite((IsSet(g_focusOverlayEnabled) && g_focusOverlayEnabled) ? "1" : "0", f, "OverlayPlacement", "focus_enabled")
 }
 
 ; True when overlay <name> is in drag edit mode.
@@ -141,23 +134,12 @@ ResetOverlayPos(name)
     SetTimer(PushHeaderToWebView, -50)
 }
 
-; Sets the Focus overlay enabled state (persisted). Bridge: SetFocusOverlay.
-SetFocusOverlayEnabled(on)
-{
-    global g_focusOverlayEnabled, g_focusOverlay
-    g_focusOverlayEnabled := (on = true || on = 1 || on = "1" || on = "true")
-    if (!g_focusOverlayEnabled && IsSet(g_focusOverlay) && IsObject(g_focusOverlay))
-        try g_focusOverlay.Hide()
-    SaveOverlayPlacement()
-    SetTimer(PushHeaderToWebView, -50)
-}
-
-; Serialises placement state for the header push: per overlay { moved, xPct, yPct, edit }
-; plus the focus-enabled flag. xPct/yPct are the stored override (as PERCENT) and are
-; omitted when unmoved (the UI shows them blank / "auto").
+; Serialises placement state for the header push: per overlay { moved, xPct, yPct, edit }.
+; xPct/yPct are the stored override (as PERCENT) and are omitted when unmoved (the UI
+; shows them blank / "auto").
 BuildOverlayPlacementHeaderJson()
 {
-    global g_ovPlace, g_focusOverlayEnabled
+    global g_ovPlace
     items := Map()
     for it in OverlayPlaceableList()
     {
@@ -171,7 +153,5 @@ BuildOverlayPlacementHeaderJson()
         }
         items[nm] := m
     }
-    return JsonFull_Stringify(Map(
-        "focusEnabled", (IsSet(g_focusOverlayEnabled) && g_focusOverlayEnabled) ? true : false,
-        "items", items), false)
+    return JsonFull_Stringify(Map("items", items), false)
 }
