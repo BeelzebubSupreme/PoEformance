@@ -7,5 +7,8 @@
   "sec:det-maphack": "ColdAndFireHybridNotable","sec:det-radar": "PressurePoints","sec:det-entitymarkers": "TacticianNode","sec:det-rangecircles": "TemporalistNode","sec:det-lootvalue": "ShieldNodeOffensive","sec:lrv-detection": "Rage","sec:lrv-list": "SpellSuppresionNode","sec:lrv-onmap": "RangedTotemDamage","sec:lrv-trade": "ClawsOfTheMagpie","sec:det-uihoverprice": "projectilespeed",
   "sec:det-vitals-general": "CorpseDamage","sec:det-debug-actions": "axedmgspeed","sec:det-radar-debug": "PathfinderPathoftheWarrior","sec:det-debug-panels": "ColdDamagenode","sec:det-debug-discovery": "LightningDamagenode","sec:det-debug-diff": "ManaLeechThemedNode","sec:det-debug-overlay": "ElementalDamagenode","sec:det-offset-compare": "plusstrengthdexterity",
   "sec:det-al-conditions": "blankDex","sec:det-al-timing": "blankInt","sec:det-al-output": "blankStr","sec:det-lt-settings": "KeystoneWhispersOfDoom","sec:det-blacklist": "ArmourAndEvasionNode",
-  "sec:det-vitals-life": "IncreasedMaximumLifeNotable","sec:det-vitals-mana": "MineManaReservationNotable","sec:det-vitals-es": "EnergyShieldNode"
+  "sec:det-vitals-life": "IncreasedMaximumLifeNotable","sec:det-vitals-mana": "MineManaReservationNotable","sec:det-vitals-es": "EnergyShieldNode",
+  "gs:gs-area": "PathfinderPathoftheWarrior","gs:gs-player": "HollowPalmTechniqueKeystone","gs:gs-server": "ChannellingSpeed",
+  "sec:ent-typebox": "TacticianNode","sec:ent-junkbox": "CorpseDamage",
+  "sec:junk-cosmetic": "auraeffect","sec:junk-engine": "ElementalDamagenode","sec:junk-daemon": "BloodMageNode","sec:junk-pets": "MinionElementalResistancesNode","sec:junk-markers": "PressurePoints","sec:junk-hideout": "MiracleMaker"
 }

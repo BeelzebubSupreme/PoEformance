@@ -3287,13 +3287,23 @@
        is an .ent-junkbox (not a .cfg-section), so we replicate the marker. */
     .junk-cat-head {
       display: flex;
-      flex-direction: column;
-      gap: 3px;
+      flex-direction: row;
+      align-items: center;
+      gap: 8px;
       position: relative;
       cursor: pointer;
       list-style: none;
       padding-right: 22px
     }
+    /* Name + one-line description stack vertically beside the (left) icon. */
+    .junk-cat-text {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      flex: 1;
+      min-width: 0
+    }
+    .junk-cat-head > .snode { width: 18px; height: 18px; margin-right: 0 }
     .junk-cat-head::-webkit-details-marker { display: none }
     /* Title row holds the name; the caret is centred over the whole header
        (name + desc) so it stays vertically centred now that the summary is
@@ -4322,6 +4332,10 @@
     /* Nav chips (category / tab / config sub-tab): allocated art while active. */
     .cat > .snode, .tab > .snode { width: 18px; height: 18px; margin-right: 6px; background-image: var(--off) }
     .cat.active > .snode, .tab.active > .snode { background-image: var(--on) }
+    /* Game-state prop-cards (not <details>): smaller icon to match the compact
+       11px header, spacing from the header's own flex gap; allocated while open. */
+    .prop-card-hdr > .snode { width: 16px; height: 16px; margin-right: 0 }
+    .prop-card:not(.collapsed) > .prop-card-hdr > .snode { background-image: var(--on) }
 
     /* ── One uniform collapsible-section rhythm ──────────────────────────────
        Every section header — flat (Radar, Loot Value, …) or boxed (Stash Mover,
@@ -4348,7 +4362,27 @@
     }
     /* Box body lines up under the text (icon width + gap ≈ 26px), not the icon. */
     .cfg-section > details[open] > :not(summary) { padding-left: 26px }
-  </style>
+
+    /* ── Entities tab (#4): the same icon + open-underline rhythm for the boxed
+       Entity Classes / Junk Filter summaries and the junk sub-categories. These
+       are .ent-junkbox / .junk-cat <details>, not .cfg-section, so the underline
+       is drawn as a 1px bottom gradient inset past the icon (so it starts at the
+       text, never under the icon) and only while open. ── */
+    .ent-junkbox-sum > .snode { margin-right: 0 }
+    .ent-junkbox[open] > .ent-junkbox-sum {
+      background-image: linear-gradient(var(--codex-rule), var(--codex-rule));
+      background-repeat: no-repeat;
+      background-position: right bottom;
+      background-size: calc(100% - 40px) 1px;
+    }
+    .junk-cat[open] > .junk-cat-head {
+      padding-bottom: 5px;
+      background-image: linear-gradient(var(--codex-rule), var(--codex-rule));
+      background-repeat: no-repeat;
+      background-position: right bottom;
+      background-size: calc(100% - 26px) 1px;
+    }
+</style>
 </head>
 
 <body>
@@ -4781,6 +4815,41 @@
           </div>
         </div>
 
+        <!-- Settings — sits directly under the enable toggle. Standard Config rows
+             (.cfg-row / .cfg-label / themed sliders), one option per line. -->
+        <div class="cfg-section" id="lt-sec-settings">
+          <details id="det-lt-settings" ontoggle="syncCfgSections()">
+            <summary><div class="cfg-header">Settings</div></summary>
+            <div class="cfg-subsection">
+              <div class="cfg-row"><span class="cfg-label">Show kill counts</span>
+                <label class="toggle"><input type="checkbox" id="lt-showKills" onchange="lootChk('showKills',this)"><span class="toggle-slider"></span></label></div>
+              <div class="cfg-row"><span class="cfg-label">Anchor bars to right</span>
+                <label class="toggle"><input type="checkbox" id="lt-barOnRight" onchange="lootChk('barOnRight',this)"><span class="toggle-slider"></span></label></div>
+              <div class="cfg-row"><span class="cfg-label">Hide while a UI panel is open</span>
+                <label class="toggle"><input type="checkbox" id="tog-panel-hidelootbars" onchange="ahkCall('SetPanelRespect','loot', this.checked?1:0)"><span class="toggle-slider"></span></label></div>
+              <div class="cfg-row"><span class="cfg-label">poe.ninja league</span>
+                <input type="text" class="cfg-input" id="lt-league" placeholder="e.g. Standard" style="width:200px" onchange="lootStr('league',this)"></div>
+              <div class="cfg-row"><span class="cfg-label">Price refresh (min)</span>
+                <span class="hk-num"><input type="number" id="lt-cacheTtlMin" min="5" max="1440" onchange="lootNum('cacheTtlMin',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></div>
+              <div class="cfg-row"><span class="cfg-label">History size (rows)</span>
+                <span class="hk-num"><input type="number" id="lt-historySize" min="5" max="500" onchange="lootNum('historySize',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></div>
+              <div class="cfg-row"><span class="cfg-label">Sessions to keep</span>
+                <span class="hk-num"><input type="number" id="lt-maxSessions" min="1" max="500" onchange="lootNum('maxSessions',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></div>
+              <div class="cfg-subhead">On-screen bars</div>
+              <div class="cfg-row"><span class="cfg-label">Compact bar height (px)</span>
+                <span class="hk-num"><input type="number" id="lt-compactHeight" min="60" max="400" step="5" onchange="lootNum('compactHeight',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></div>
+              <div class="cfg-row"><span class="cfg-label">Bottom offset (px)</span>
+                <span class="hk-num"><input type="number" id="lt-barBottomOffset" min="0" max="600" step="5" onchange="lootNum('barBottomOffset',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></div>
+              <div class="cfg-slider-row"><span class="cfg-label">Bar opacity</span>
+                <div class="slider-wrap"><span class="slider-val" id="lt-barOpacity-bub">0.55</span><input type="range" id="lt-barOpacity" min="0.05" max="1" step="0.05" value="0.55" oninput="_sb(this,'lt-barOpacity-bub',this.value)" onchange="ahkCall('SetLootConfig','barOpacity',parseFloat(this.value))"></div>
+              </div>
+              <div class="cfg-slider-row"><span class="cfg-label">Bar UI scale</span>
+                <div class="slider-wrap"><span class="slider-val" id="lt-uiScale-bub">1.0</span><input type="range" id="lt-uiScale" min="0.5" max="3" step="0.05" value="1" oninput="_sb(this,'lt-uiScale-bub',this.value)" onchange="ahkCall('SetLootConfig','uiScale',parseFloat(this.value))"></div>
+              </div>
+            </div>
+          </details>
+        </div>
+
         <div class="cfg-section">
           <div class="cfg-subhead">Current run</div>
           <div id="lt-live" class="lt-live"><div class="al-desc">Waiting for data…</div></div>
@@ -4799,34 +4868,6 @@
 
         <div class="cfg-section">
           <div class="cfg-row"><span class="cfg-label">Pricing</span><span id="lt-price-status" class="al-desc" style="margin:0">idle</span></div>
-        </div>
-
-        <div class="cfg-section" id="lt-sec-settings">
-          <details id="det-lt-settings" ontoggle="syncCfgSections()"><summary><div class="cfg-header">Settings</div></summary>
-          <div class="cfg-subsection">
-            <div class="al-line">
-              <span class="al-item"><span class="al-cap">Show kill counts</span><label class="toggle"><input type="checkbox" id="lt-showKills" onchange="lootChk('showKills',this)"><span class="toggle-slider"></span></label></span>
-              <span class="al-item"><span class="al-cap">Anchor bars to right</span><label class="toggle"><input type="checkbox" id="lt-barOnRight" onchange="lootChk('barOnRight',this)"><span class="toggle-slider"></span></label></span>
-              <span class="al-item"><span class="al-cap">Hide while a UI panel is open</span><label class="toggle"><input type="checkbox" id="tog-panel-hidelootbars" onchange="ahkCall('SetPanelRespect','loot', this.checked?1:0)"><span class="toggle-slider"></span></label></span>
-            </div>
-            <div class="al-line">
-              <label class="al-field"><span class="al-cap">poe.ninja league</span><input type="text" class="cfg-input" id="lt-league" placeholder="e.g. Standard" style="width:200px" onchange="lootStr('league',this)"></label>
-              <label class="al-field"><span class="al-cap">Price refresh (min)</span><span class="hk-num"><input type="number" id="lt-cacheTtlMin" min="5" max="1440" onchange="lootNum('cacheTtlMin',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
-            </div>
-            <div class="al-line">
-              <label class="al-field"><span class="al-cap">History size (rows)</span><span class="hk-num"><input type="number" id="lt-historySize" min="5" max="500" onchange="lootNum('historySize',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
-              <label class="al-field"><span class="al-cap">Sessions to keep</span><span class="hk-num"><input type="number" id="lt-maxSessions" min="1" max="500" onchange="lootNum('maxSessions',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
-            </div>
-            <div class="cfg-subhead">On-screen bars</div>
-            <div class="al-line">
-              <label class="al-field"><span class="al-cap">Compact bar height (px)</span><span class="hk-num"><input type="number" id="lt-compactHeight" min="60" max="400" step="5" onchange="lootNum('compactHeight',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
-              <label class="al-field"><span class="al-cap">Bottom offset (px)</span><span class="hk-num"><input type="number" id="lt-barBottomOffset" min="0" max="600" step="5" onchange="lootNum('barBottomOffset',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></label>
-            </div>
-            <div class="al-line">
-              <label class="al-field"><span class="al-cap">Bar opacity</span><span class="slider-wrap"><span class="slider-val" id="lt-barOpacity-bub">0.55</span><input type="range" id="lt-barOpacity" min="0.05" max="1" step="0.05" value="0.55" oninput="_sb(this,'lt-barOpacity-bub',this.value)" onchange="ahkCall('SetLootConfig','barOpacity',parseFloat(this.value))"></span></label>
-              <label class="al-field"><span class="al-cap">Bar UI scale</span><span class="slider-wrap"><span class="slider-val" id="lt-uiScale-bub">1.0</span><input type="range" id="lt-uiScale" min="0.5" max="3" step="0.05" value="1" oninput="_sb(this,'lt-uiScale-bub',this.value)" onchange="ahkCall('SetLootConfig','uiScale',parseFloat(this.value))"></span></label>
-            </div>
-          </div></details>
         </div>
 
         <div class="cfg-section" id="lt-sec-history" style="display:none">
@@ -6648,7 +6689,10 @@
       "sec:det-maphack":"ColdAndFireHybridNotable","sec:det-radar":"PressurePoints","sec:det-entitymarkers":"TacticianNode","sec:det-rangecircles":"TemporalistNode","sec:det-lootvalue":"ShieldNodeOffensive","sec:lrv-detection":"Rage","sec:lrv-list":"SpellSuppresionNode","sec:lrv-onmap":"RangedTotemDamage","sec:lrv-trade":"ClawsOfTheMagpie","sec:det-uihoverprice":"projectilespeed",
       "sec:det-vitals-general":"CorpseDamage","sec:det-debug-actions":"axedmgspeed","sec:det-radar-debug":"PathfinderPathoftheWarrior","sec:det-debug-panels":"ColdDamagenode","sec:det-debug-discovery":"LightningDamagenode","sec:det-debug-diff":"ManaLeechThemedNode","sec:det-debug-overlay":"ElementalDamagenode","sec:det-offset-compare":"plusstrengthdexterity",
       "sec:det-al-conditions":"blankDex","sec:det-al-timing":"blankInt","sec:det-al-output":"blankStr","sec:det-lt-settings":"KeystoneWhispersOfDoom","sec:det-blacklist":"ArmourAndEvasionNode",
-      "sec:det-vitals-life":"IncreasedMaximumLifeNotable","sec:det-vitals-mana":"MineManaReservationNotable","sec:det-vitals-es":"EnergyShieldNode"
+      "sec:det-vitals-life":"IncreasedMaximumLifeNotable","sec:det-vitals-mana":"MineManaReservationNotable","sec:det-vitals-es":"EnergyShieldNode",
+      "gs:gs-area":"PathfinderPathoftheWarrior","gs:gs-player":"HollowPalmTechniqueKeystone","gs:gs-server":"ChannellingSpeed",
+      "sec:ent-typebox":"TacticianNode","sec:ent-junkbox":"CorpseDamage",
+      "sec:junk-cosmetic":"auraeffect","sec:junk-engine":"ElementalDamagenode","sec:junk-daemon":"BloodMageNode","sec:junk-pets":"MinionElementalResistancesNode","sec:junk-markers":"PressurePoints","sec:junk-hideout":"MiracleMaker"
     };
     function _snodeSpan(name) {
       const s = document.createElement('span');
@@ -6691,6 +6735,16 @@
           if (!summary || summary.querySelector(':scope > .snode')) continue;
           _snodeStripGlyph(summary);
           summary.insertBefore(_snodeSpan(name), summary.firstChild);
+        } else if (kind === 'gs') {
+          // Game-state prop-cards are not <details>; the header is a .prop-card-hdr
+          // with a leading collapse arrow. Drop the leading emoji and slot the icon
+          // right after that arrow (allocated art swaps in while the card is open —
+          // see the .prop-card:not(.collapsed) rule).
+          const hdr = document.querySelector(`#pc-${id} > .prop-card-hdr`);
+          if (!hdr || hdr.querySelector(':scope > .snode')) continue;
+          _snodeStripGlyph(hdr);
+          const arrow = hdr.querySelector(':scope > .arrow');
+          hdr.insertBefore(_snodeSpan(name), arrow ? arrow.nextSibling : hdr.firstChild);
         }
       }
     }
@@ -7099,7 +7153,11 @@
       let mainHtml = "";
       for (const c of cats)
         mainHtml += junkCatRow(c, String(c.key || ""));
-      if (host && mainHtml !== _junkLastMain) { host.innerHTML = mainHtml; _junkLastMain = mainHtml; }
+      if (host && mainHtml !== _junkLastMain) {
+        host.innerHTML = mainHtml; _junkLastMain = mainHtml;
+        // Icon the freshly-built junk categories (idempotent — skips done ones).
+        snodeInit();
+      }
     }
 
     // Builds one junk category as a collapsible <details> (cube caret when
@@ -7129,8 +7187,10 @@
              + `<span class="junk-pat">${allOn ? "disable all" : "enable all"}</span></label>`;
       return `<details class="junk-cat"${_junkOpenCats.has(ck) ? " open" : ""} ontoggle="junkCatToggle('${ck}', this.open)">`
            + `<summary class="junk-cat-head">`
+           + `<div class="junk-cat-text" data-snodekey="junk-${escAttr(ck)}">`
            + `<div class="junk-cat-titlerow"><span class="junk-cat-name">${escHtml(ci.short)}</span></div>`
            + `<div class="junk-cat-desc">${escHtml(ci.desc)}</div>`
+           + `</div>`
            + `</summary>`
            + `<div class="junk-pat-row">${pills}${allBtn}</div></details>`;
     }
@@ -11082,9 +11142,9 @@
       }
 
       const groups = [
-        { id: 'gs-area', title: '🗺 Area Instance', keys: areaKeys },
-        { id: 'gs-player', title: '👤 Player Pointers', keys: playerKeys },
-        { id: 'gs-server', title: '🔗 Server / Memory', keys: [...ptrKeys, ...otherKeys] },
+        { id: 'gs-area', title: 'Area Instance', keys: areaKeys },
+        { id: 'gs-player', title: 'Player Pointers', keys: playerKeys },
+        { id: 'gs-server', title: 'Server / Memory', keys: [...ptrKeys, ...otherKeys] },
       ];
       // Add each nested object as its own card
       for (const k of nestedKeys) {
@@ -11101,6 +11161,9 @@
         if (!rows) return '';
         return _propCard(g.id, g.title, rows);
       }).join('') + '</div>';
+      // The cards are rebuilt on every push; re-run the idempotent icon injector
+      // so the freshly-built .prop-card-hdr rows get their skill-node icons.
+      snodeInit();
     }
 
     // ── Property inspector helpers ──
