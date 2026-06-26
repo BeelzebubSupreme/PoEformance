@@ -41,6 +41,7 @@ class DebugOverlay extends GdiOverlayBase
     {
         super.__New(235)
         this.Name := "debug"
+        this.Placeable := true   ; free-positionable (OverlayPlacement.ahk)
     }
 
     ; ── Overlay contract ────────────────────────────────────────────────────
@@ -72,9 +73,11 @@ class DebugOverlay extends GdiOverlayBase
         }
         boxW := maxW + DebugOverlay.PAD_X * 2
         boxH := lines.Length * DebugOverlay.LINE_PITCH + DebugOverlay.PAD_Y * 2
-        return Map("x", ctx.gwX + ctx.gwW - boxW - DebugOverlay.EDGE_MARGIN
-                 , "y", ctx.gwY + Round(ctx.gwH * DebugOverlay.TOP_FRACTION)
-                 , "w", boxW, "h", boxH)
+        ; Built-in default anchor: docked to the outer right edge below the quest
+        ; tracker. _Placed() overrides it with the user's stored position if any.
+        defX := ctx.gwX + ctx.gwW - boxW - DebugOverlay.EDGE_MARGIN
+        defY := ctx.gwY + Round(ctx.gwH * DebugOverlay.TOP_FRACTION)
+        return this._Placed(ctx, defX, defY, boxW, boxH)
     }
 
     ; Solid panel + border + the status lines collected in Layout().

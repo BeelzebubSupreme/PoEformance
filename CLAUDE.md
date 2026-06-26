@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.83`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.85`.
 
 ## Language
 
@@ -670,6 +670,50 @@ each carries a built-in allocated/unallocated look used as an on/off state.
   summary-padding + caret-inset overrides at the end of the main `<style>`.
 - **Pending in-game verification:** icon legibility at the real WebView size; the on/off
   swap on section open/close + tab switch; that `../img/skillnodes/` resolves in WebView2.
+
+## Free overlay positioning (shipped 0.45.13.84)
+
+Generalizes the Vitals bars' drag-to-place into a reusable layer so every GDI info
+overlay can be positioned freely (the Vitals bars keep their own, unchanged system).
+
+- **`ahk/GdiOverlayBase.ahk`** — opt-in `Placeable` flag + the lifted Vitals drag
+  machinery: `_Placed(ctx, defX, defY, w, h)` (stored `xPct`/`yPct` top-left override wins
+  over the overlay's built-in default anchor, clamped into the game window — so **nothing
+  moves until the user drags it**), per-overlay edit mode (`_EnsureOverlayEditStyle` flips
+  `WS_EX_TRANSPARENT` + hooks WM_LBUTTONDOWN; `_OvDragTick` 10 ms poll-drag updating
+  `g_ovPlace[name]`), an edit-mode force-show with a labelled grab frame
+  (`_OvDrawEditChrome`) + a placeholder rect (`_OvPlaceholderRect`) for content-less
+  overlays. `Update()` caches the game-window rect on placeable overlays and bypasses
+  ShouldShow while editing.
+- **`ahk/OverlayPlacement.ahk` (new)** — `g_ovPlace` (name→`{xPct,yPct}` overrides, only
+  when moved) + `g_ovEdit` (name→drag mode). `OverlayPlaceableList()` is the single source
+  of truth (debug / lootvalue / lootstrip / lootcompact / notification / focus).
+  `SetOverlayEdit` / `SetOverlayPos` / `ResetOverlayPos` / `SetFocusOverlayEnabled`,
+  `BuildOverlayPlacementHeaderJson`, self-persist `[OverlayPlacement]`. Seeded by
+  `LoadOverlayPlacement()` (init gotcha).
+- **Converted overlays** (set `Placeable` + wrap the Layout return in `_Placed`):
+  DebugOverlay, NotificationOverlay, LootValueOverlay, LootMapStripOverlay,
+  LootCompactBarOverlay. The legacy loot **anchor knobs** (`g_ltBarOnRight` /
+  `g_ltBarBottomOffset`) stay only as the bars' DEFAULT anchor — their UI controls are gone.
+- **FocusOverlay REMOVED (0.45.13.85):** the "Einzeiler links oben" focused-entity TEST
+  overlay was a debug leftover stuck on with no findable off-switch. Fully deleted —
+  `ahk/FocusOverlay.ahk`, its `#Include` + OverlayManager registration + `g_focusOverlay` /
+  `g_focusOverlayEnabled` globals, the `ToggleFocusOverlay` + `SetFocusOverlay` bridge cases,
+  the buried "🎯 Focus Overlay" tree button, and `BuildFocusLines` / `ToggleFocusOverlay` in
+  `EntityFocus.ahk`. **`EntityFocus.ahk` is kept** — its resolver helpers
+  (`_FocusResolveMouseOverEntity` / `MouseOverLifeLine` / `_FocusLeaf`) are still used by
+  DebugOverlay's hovered-entity status line (`ctx.reader` stays for that read).
+- **Wiring:** `InGameStateMonitor.ahk` includes the module, declares `g_ovPlace`/`g_ovEdit`,
+  calls `LoadOverlayPlacement()` before `LoadOverlaySystem()`. `BridgeDispatch.ahk` cases
+  `SetOverlayEdit`/`SetOverlayPos`/`ResetOverlayPos`; `WebViewBridge.ahk` pushes `overlayPlacement`.
+- **UI (`ui/index.html`):** **Config → Overlay → "Overlay Placement"** (`det-overlay-placement`)
+  — one JS-rendered row per overlay (name · 📍 Move drag toggle · X/Y % · Reset),
+  `OV_PLACEABLE` + `overlayPlaceRender`/`overlayPlaceSync` + `ovMove`/`ovPos`/`ovReset`.
+  The Loot tab's old "Anchor bars to right" + "Bottom offset" rows were removed (replaced by
+  free positioning).
+- **Pending in-game verification:** drag + click-through flip per overlay; the
+  X/Y % round-trip + persistence across restart; that the old focus one-liner is gone;
+  banner placeholder grab-size while no banner is active.
 
 ## Reference
 

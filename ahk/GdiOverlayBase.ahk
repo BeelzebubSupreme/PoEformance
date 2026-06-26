@@ -48,6 +48,19 @@ class GdiOverlayBase
         this._rectBuf     := Buffer(16, 0)
         this._textSizeBuf := Buffer(8, 0)
         this._nullBrush   := DllCall("GetStockObject", "Int", 5, "Ptr")   ; NULL_BRUSH (hollow)
+        ; ── Free-placement / drag edit (OverlayPlacement.ahk) ────────────────
+        ; Opt-in: subclasses set Placeable := true to gain a stored xPct/yPct anchor
+        ; and a per-overlay drag "Move" mode. The game-window rect is cached each
+        ; tick because the async drag handlers need it off the render path.
+        this.Placeable          := false
+        this._gwX := 0, this._gwY := 0, this._gwW := 0, this._gwH := 0
+        this._ovEditInteractive := false
+        this._ovMouseBound      := false
+        this._ovDragging        := false
+        this._ovFnDragTick      := 0
+        this._ovFnDown          := 0
+        this._ovDownSX := 0, this._ovDownSY := 0   ; cursor screen pos at mouse-down
+        this._ovAnchorX := 0, this._ovAnchorY := 0  ; window screen pos at mouse-down
     }
 
     ; ── Overlay contract ─────────────────────────────────────────────────────
@@ -66,7 +79,18 @@ class GdiOverlayBase
     Update(ctx)
     {
         global Profiler
-        if (!this.Enabled || !this.ShouldShow(ctx))
+        ; Placeable overlays cache the game-window rect (the async drag handlers need
+        ; it) and keep their click-through / mouse-hook state in sync with the
+        ; per-overlay Move toggle. In edit mode the overlay force-shows so it can be
+        ; grabbed even when its normal ShouldShow gate is false.
+        editing := false
+        if this.Placeable
+        {
+            this._gwX := ctx.gwX, this._gwY := ctx.gwY, this._gwW := ctx.gwW, this._gwH := ctx.gwH
+            this._EnsureOverlayEditStyle()
+            editing := _OvEditOn(this.Name) && (ctx.gwW > 100 && ctx.gwH > 100)
+        }
+        if (!this.Enabled || (!editing && !this.ShouldShow(ctx)))
         {
             this._RequestHide()
             return
@@ -74,8 +98,12 @@ class GdiOverlayBase
         rect := this.Layout(ctx)
         if (!rect || rect["w"] < 1 || rect["h"] < 1)
         {
-            this._RequestHide()
-            return
+            if !editing
+            {
+                this._RequestHide()
+                return
+            }
+            rect := this._OvPlaceholderRect()   ; nothing to size against yet — show a grab box
         }
         this._hideSince := 0
         if !this._EnsureShown(rect["x"], rect["y"], rect["w"], rect["h"])
@@ -83,6 +111,8 @@ class GdiOverlayBase
         this._ClearBackBuffer(rect["w"], rect["h"])
         Profiler.Begin("ov." this.Name ".draw")
         this.Draw(ctx, rect)
+        if editing
+            this._OvDrawEditChrome(rect)
         Profiler.End("ov." this.Name ".draw")
         Profiler.Begin("ov." this.Name ".blit")
         this._Blit(rect["w"], rect["h"])
@@ -104,6 +134,167 @@ class GdiOverlayBase
             this._hideSince := 0
         }
         ; else: within the debounce window — leave the last frame up, do nothing.
+    }
+
+    ; ── Free placement (OverlayPlacement.ahk) ─────────────────────────────────
+    ; Resolves the final screen rect for a placeable overlay. The subclass passes the
+    ; screen x,y of its BUILT-IN default anchor (computed exactly as before) plus its
+    ; own w,h; when the user has stored an override for this overlay it wins (top-left
+    ; = xPct/yPct of the game window). The result is clamped inside the game window.
+    _Placed(ctx, defX, defY, w, h)
+    {
+        global g_ovPlace
+        x := defX, y := defY
+        if (IsSet(g_ovPlace) && IsObject(g_ovPlace) && g_ovPlace.Has(this.Name))
+        {
+            p := g_ovPlace[this.Name]
+            x := ctx.gwX + Round(p["xPct"] * ctx.gwW)
+            y := ctx.gwY + Round(p["yPct"] * ctx.gwH)
+        }
+        x := Min(ctx.gwX + ctx.gwW - w, Max(ctx.gwX, x))
+        y := Min(ctx.gwY + ctx.gwH - h, Max(ctx.gwY, y))
+        return Map("x", x, "y", y, "w", w, "h", h)
+    }
+
+    ; Fallback rect while in edit mode but the overlay has no content to size itself
+    ; (e.g. the loot list with nothing nearby): a small labeled grab box at the stored
+    ; position (or the window centre when unmoved).
+    _OvPlaceholderRect()
+    {
+        global g_ovPlace
+        w := 240, h := 44
+        x := this._gwX + (this._gwW - w) // 2
+        y := this._gwY + (this._gwH - h) // 2
+        if (IsSet(g_ovPlace) && IsObject(g_ovPlace) && g_ovPlace.Has(this.Name) && this._gwW > 1)
+        {
+            p := g_ovPlace[this.Name]
+            x := this._gwX + Round(p["xPct"] * this._gwW)
+            y := this._gwY + Round(p["yPct"] * this._gwH)
+        }
+        x := Min(this._gwX + this._gwW - w, Max(this._gwX, x))
+        y := Min(this._gwY + this._gwH - h, Max(this._gwY, y))
+        return Map("x", x, "y", y, "w", w, "h", h)
+    }
+
+    ; Draws the edit-mode chrome over the overlay: a bright grab frame + the overlay
+    ; name, so the user can see and grab the otherwise content-shaped window.
+    _OvDrawEditChrome(rect)
+    {
+        w := rect["w"], h := rect["h"]
+        this._DrawRectOutline(0, 0, w, h, 0x66E0FF, 2)   ; bright cyan grab frame (BGR)
+        font := this._GetFont(-13, 700)
+        old  := DllCall("SelectObject", "Ptr", this.memDC, "Ptr", font, "Ptr")
+        this._DrawText(4, 1, "+ " this.Name, 0x66E0FF)
+        DllCall("SelectObject", "Ptr", this.memDC, "Ptr", old)
+    }
+
+    ; Syncs the window's click-through + mouse hook with this overlay's Move toggle.
+    ; Mirrors VitalsBarWindow._EnsureEditStyle but keyed off g_ovEdit[Name].
+    _EnsureOverlayEditStyle()
+    {
+        want := _OvEditOn(this.Name)
+        if (want = this._ovEditInteractive)
+            return
+        if !this._styled
+            return
+        if want
+        {
+            WinSetExStyle("-0x20", this.hwnd)   ; remove WS_EX_TRANSPARENT -> clickable
+            this._OvRegisterMouse()
+        }
+        else
+        {
+            WinSetExStyle("+0x20", this.hwnd)   ; restore click-through
+            this._OvUnregisterMouse()
+        }
+        this._ovEditInteractive := want
+    }
+
+    _OvRegisterMouse()
+    {
+        if this._ovMouseBound
+            return
+        this._ovFnDown := ObjBindMethod(this, "_OvOnLDown")
+        OnMessage(0x201, this._ovFnDown)   ; WM_LBUTTONDOWN
+        this._ovMouseBound := true
+    }
+
+    _OvUnregisterMouse()
+    {
+        if !this._ovMouseBound
+            return
+        OnMessage(0x201, this._ovFnDown, 0)
+        this._ovMouseBound := false
+        this._OvEndDrag()
+    }
+
+    _OvCursorScreen(&cx, &cy)
+    {
+        pt := Buffer(8, 0)
+        DllCall("GetCursorPos", "Ptr", pt)
+        cx := NumGet(pt, 0, "Int")
+        cy := NumGet(pt, 4, "Int")
+    }
+
+    ; Mouse-down on the overlay starts a drag: capture + a 10 ms poll that follows the
+    ; cursor while the left button is physically held (robust for tiny windows).
+    _OvOnLDown(wParam, lParam, msg, hwnd)
+    {
+        if (hwnd != this.hwnd)
+            return
+        cx := 0, cy := 0
+        this._OvCursorScreen(&cx, &cy)
+        this._ovDownSX := cx, this._ovDownSY := cy
+        this._ovAnchorX := this._lastX, this._ovAnchorY := this._lastY
+        this._ovDragging := true
+        DllCall("SetCapture", "Ptr", this.hwnd)
+        if !this._ovFnDragTick
+            this._ovFnDragTick := ObjBindMethod(this, "_OvDragTick")
+        SetTimer(this._ovFnDragTick, 10)
+    }
+
+    ; Poll: reposition the window to follow the cursor; persist + push when the button
+    ; is released. Updates g_ovPlace[Name] live so the stored anchor tracks the drag.
+    _OvDragTick()
+    {
+        global g_ovPlace
+        if !this._ovDragging
+        {
+            SetTimer(this._ovFnDragTick, 0)
+            return
+        }
+        if !GetKeyState("LButton", "P")   ; released anywhere -> finish
+        {
+            this._OvEndDrag()
+            SaveOverlayPlacement()
+            SetTimer(PushHeaderToWebView, -30)
+            return
+        }
+        cx := 0, cy := 0
+        this._OvCursorScreen(&cx, &cy)
+        gwX := this._gwX, gwY := this._gwY, gwW := this._gwW, gwH := this._gwH
+        if (gwW < 1 || gwH < 1)
+            return
+        w := this._lastW, h := this._lastH
+        nsx := this._ovAnchorX + (cx - this._ovDownSX)
+        nsy := this._ovAnchorY + (cy - this._ovDownSY)
+        nsx := Min(gwX + gwW - w, Max(gwX, nsx))   ; clamp inside the game window
+        nsy := Min(gwY + gwH - h, Max(gwY, nsy))
+        if !IsObject(g_ovPlace)
+            return
+        g_ovPlace[this.Name] := Map("xPct", (nsx - gwX) / gwW, "yPct", (nsy - gwY) / gwH)
+        WinMove(nsx, nsy, , , this.hwnd)
+        this._lastX := nsx, this._lastY := nsy   ; keep base move-tracking in sync
+    }
+
+    ; Ends the drag: stop the poll, release capture, clear the flag.
+    _OvEndDrag()
+    {
+        if this._ovFnDragTick
+            SetTimer(this._ovFnDragTick, 0)
+        if this._ovDragging
+            DllCall("ReleaseCapture")
+        this._ovDragging := false
     }
 
     ; Visibility policy — return true to show this frame, false to hide.

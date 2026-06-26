@@ -21,6 +21,7 @@ class LootMapStripOverlay extends GdiOverlayBase
         this._segs := []
         this._fontH := -20
         this._padX := 10, this._padY := 5, this._gap := 12
+        this.Placeable := true   ; free-positionable (OverlayPlacement.ahk)
     }
 
     ShouldShow(ctx)
@@ -59,9 +60,12 @@ class LootMapStripOverlay extends GdiOverlayBase
         if (a != this._alpha)
             this.SetAlpha(a)
 
-        y := ctx.gwY + ctx.gwH - Round(g_ltBarBottomOffset * scale) - barH
-        x := g_ltBarOnRight ? (ctx.gwX + ctx.gwW - Round(12 * scale) - barW) : (ctx.gwX + Round(12 * scale))
-        return Map("x", x, "y", y, "w", barW, "h", barH)
+        ; Built-in default anchor: bottom edge, left/right per the legacy knobs (kept
+        ; as the default only — the UI controls are gone). _Placed() applies a user
+        ; override if set, which is the new way to position it.
+        defY := ctx.gwY + ctx.gwH - Round(g_ltBarBottomOffset * scale) - barH
+        defX := g_ltBarOnRight ? (ctx.gwX + ctx.gwW - Round(12 * scale) - barW) : (ctx.gwX + Round(12 * scale))
+        return this._Placed(ctx, defX, defY, barW, barH)
     }
 
     Draw(ctx, rect)
@@ -91,6 +95,7 @@ class LootCompactBarOverlay extends GdiOverlayBase
         this.Name   := "lootcompact"
         this._fontH := -16
         this._scale := 1.0
+        this.Placeable := true   ; free-positionable (OverlayPlacement.ahk)
     }
 
     ShouldShow(ctx)
@@ -128,9 +133,11 @@ class LootCompactBarOverlay extends GdiOverlayBase
         if (a != this._alpha)
             this.SetAlpha(a)
 
-        y := ctx.gwY + ctx.gwH - Round(g_ltBarBottomOffset * scale) - barH
-        x := g_ltBarOnRight ? (ctx.gwX + ctx.gwW - Round(20 * scale) - barW) : (ctx.gwX + Round(20 * scale))
-        return Map("x", x, "y", y, "w", barW, "h", barH)
+        ; Built-in default anchor: bottom edge, left/right per the legacy knobs (kept
+        ; as the default only). _Placed() applies a user override if set.
+        defY := ctx.gwY + ctx.gwH - Round(g_ltBarBottomOffset * scale) - barH
+        defX := g_ltBarOnRight ? (ctx.gwX + ctx.gwW - Round(20 * scale) - barW) : (ctx.gwX + Round(20 * scale))
+        return this._Placed(ctx, defX, defY, barW, barH)
     }
 
     Draw(ctx, rect)

@@ -24,11 +24,11 @@ SetWorkingDir(A_ScriptDir)
 #Include Lib/TerrainPathfinder.ahk
 #Include ahk/OverlayImage.ahk
 #Include ahk/GdiOverlayBase.ahk
+#Include ahk/OverlayPlacement.ahk
 #Include ahk/RadarOverlay.ahk
 #Include ahk/VitalsOverlay.ahk
 #Include ahk/NotificationOverlay.ahk
 #Include ahk/DebugOverlay.ahk
-#Include ahk/FocusOverlay.ahk
 #Include ahk/LootTrackerOverlay.ahk
 #Include ahk/LootValueOverlay.ahk
 #Include ahk/UiHoverPrice.ahk
@@ -50,7 +50,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.83"
+POEFORMANCE_VERSION := "0.45.13.85"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -123,8 +123,8 @@ g_vitalsBars := 0      ; Map(barId -> config Map); seeded by LoadVitalsConfig()
 g_vitalsEditMode := false   ; drag-to-place layout edit mode for the vitals bars
 g_vitalsNeedsCombat := false   ; true when a vitals bar uses an "In Combat" condition (gates the standalone combat detector)
 g_notifyOverlay := 0   ; reference to the manager-owned NotificationOverlay (set in LoadOverlaySystem)
-g_focusOverlay := 0   ; reference to the manager-owned FocusOverlay (set in LoadOverlaySystem)
-g_focusOverlayEnabled := true   ; whether the focused-entity test overlay is active
+g_ovPlace := 0   ; Map(overlayName -> Map("xPct","yPct")) free-position overrides; seeded by LoadOverlayPlacement()
+g_ovEdit  := 0   ; Map(overlayName -> bool) per-overlay drag edit mode; seeded by LoadOverlayPlacement()
 g_atlasOverlayEnabled := false  ; Atlas map overlay (opt-in; node graph + names + biomes)
 g_atlasBuildTick := 0           ; throttle stamp for TryBuildAtlasRender
 g_atlasRender := 0              ; Atlas render snapshot (built by TryBuildAtlasRender)
@@ -338,6 +338,7 @@ LoadPoeTradeSession()     ; WebView2 trade-session transport (in-browser, no sec
 LoadLootTradePricing()    ; official PoE2 trade-API unique pricing (off by default) + [LootTradePricing]
 LoadStashMover()          ; "dump backpack to open stash" feature + [StashMover] config
 LoadOverlayIcons()        ; GDI+ currency orb icons for the value-aware loot radar
+LoadOverlayPlacement()    ; free-position overrides + Focus-overlay enabled flag ([OverlayPlacement])
 LoadOverlaySystem()       ; build the OverlayManager + all overlays; wire legacy globals
 InitProfiler()            ; QPC profiler singleton (disabled until Shift+F3 enables it)
 ItemSizeRegistry.Load()   ; ~4000-entry path→(w,h) map used by loot fit-check
