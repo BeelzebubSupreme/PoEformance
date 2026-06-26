@@ -50,7 +50,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.85"
+POEFORMANCE_VERSION := "0.45.13.87"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -338,7 +338,7 @@ LoadPoeTradeSession()     ; WebView2 trade-session transport (in-browser, no sec
 LoadLootTradePricing()    ; official PoE2 trade-API unique pricing (off by default) + [LootTradePricing]
 LoadStashMover()          ; "dump backpack to open stash" feature + [StashMover] config
 LoadOverlayIcons()        ; GDI+ currency orb icons for the value-aware loot radar
-LoadOverlayPlacement()    ; free-position overrides + Focus-overlay enabled flag ([OverlayPlacement])
+LoadOverlayPlacement()    ; per-overlay free-position overrides ([OverlayPlacement])
 LoadOverlaySystem()       ; build the OverlayManager + all overlays; wire legacy globals
 InitProfiler()            ; QPC profiler singleton (disabled until Shift+F3 enables it)
 ItemSizeRegistry.Load()   ; ~4000-entry path→(w,h) map used by loot fit-check

@@ -151,8 +151,10 @@ class GdiOverlayBase
             x := ctx.gwX + Round(p["xPct"] * ctx.gwW)
             y := ctx.gwY + Round(p["yPct"] * ctx.gwH)
         }
-        x := Min(ctx.gwX + ctx.gwW - w, Max(ctx.gwX, x))
-        y := Min(ctx.gwY + ctx.gwH - h, Max(ctx.gwY, y))
+        ; Max(gw, …) is the OUTER bound so an overlay larger than the game window pins
+        ; to the top-left corner instead of clamping to a negative coordinate.
+        x := Max(ctx.gwX, Min(ctx.gwX + ctx.gwW - w, x))
+        y := Max(ctx.gwY, Min(ctx.gwY + ctx.gwH - h, y))
         return Map("x", x, "y", y, "w", w, "h", h)
     }
 
@@ -171,8 +173,8 @@ class GdiOverlayBase
             x := this._gwX + Round(p["xPct"] * this._gwW)
             y := this._gwY + Round(p["yPct"] * this._gwH)
         }
-        x := Min(this._gwX + this._gwW - w, Max(this._gwX, x))
-        y := Min(this._gwY + this._gwH - h, Max(this._gwY, y))
+        x := Max(this._gwX, Min(this._gwX + this._gwW - w, x))
+        y := Max(this._gwY, Min(this._gwY + this._gwH - h, y))
         return Map("x", x, "y", y, "w", w, "h", h)
     }
 
@@ -278,8 +280,8 @@ class GdiOverlayBase
         w := this._lastW, h := this._lastH
         nsx := this._ovAnchorX + (cx - this._ovDownSX)
         nsy := this._ovAnchorY + (cy - this._ovDownSY)
-        nsx := Min(gwX + gwW - w, Max(gwX, nsx))   ; clamp inside the game window
-        nsy := Min(gwY + gwH - h, Max(gwY, nsy))
+        nsx := Max(gwX, Min(gwX + gwW - w, nsx))   ; clamp inside the game window (Max outer -> over-sized box pins top-left, never negative)
+        nsy := Max(gwY, Min(gwY + gwH - h, nsy))
         if !IsObject(g_ovPlace)
             return
         g_ovPlace[this.Name] := Map("xPct", (nsx - gwX) / gwW, "yPct", (nsy - gwY) / gwH)

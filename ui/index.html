@@ -4853,7 +4853,7 @@
               <div class="cfg-row"><span class="cfg-label">Sessions to keep</span>
                 <span class="hk-num"><input type="number" id="lt-maxSessions" min="1" max="500" onchange="lootNum('maxSessions',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></div>
               <div class="cfg-subhead">On-screen bars</div>
-              <div class="cfg-help" style="padding:0 2px 4px">Position the bars freely via <b>Config → Overlay → Overlay Placement</b> (drag them in-game or set X/Y %).</div>
+              <div class="cfg-help" style="margin:5px 0 0;padding:0 2px 4px">Position the bars freely via <b>Config → Overlay → Overlay Placement</b> (drag them in-game or set X/Y %).</div>
               <div class="cfg-row"><span class="cfg-label">Compact bar height (px)</span>
                 <span class="hk-num"><input type="number" id="lt-compactHeight" min="60" max="400" step="5" onchange="lootNum('compactHeight',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span></div>
               <div class="cfg-slider-row"><span class="cfg-label">Bar opacity</span>
@@ -5765,9 +5765,9 @@
         </div>
 
         <!-- Overlay Placement — free positioning for the info overlays (Debug, the
-             Valuable-loot list, the two Loot bars, the Alert banner, the Focus
-             readout). Rows are rendered by overlayPlaceRender() from the header's
-             overlayPlacement data. Drag in-game OR set X/Y %; Reset = default spot. -->
+             Valuable-loot list, the two Loot bars and the Alert banner). Rows are
+             rendered by overlayPlaceRender() from the header's overlayPlacement data.
+             Drag in-game OR set X/Y %; Reset = default spot. -->
         <div class="cfg-section">
           <details id="det-overlay-placement" ontoggle="syncCfgSections()">
             <summary><div class="cfg-header">Overlay Placement</div></summary>
@@ -7390,8 +7390,8 @@
       { name: 'notification', label: 'Alert banner' },
     ];
     let _ovpBuilt = false;
-    // Builds the per-overlay rows once. The Focus row also carries an enable
-    // toggle (it has no other home); the others are enabled in their own tabs.
+    // Builds the per-overlay rows once (Move drag toggle + X/Y % + Reset). Each
+    // overlay's own enable toggle lives in its respective tab, not here.
     function overlayPlaceRender() {
       const host = document.getElementById('overlay-place-list');
       if (!host) return;
