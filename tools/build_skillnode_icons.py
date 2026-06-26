@@ -13,7 +13,7 @@ cached under tools/.skilltree_cache/ (gitignored); pass --src DIR to use a local
 Run:  python3 tools/build_skillnode_icons.py
 Deps: pillow  (pip install pillow)
 """
-import json, os, sys, urllib.request
+import json, os, re, sys, urllib.request
 
 ROOT  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CACHE = os.path.join(ROOT, "tools", ".skilltree_cache")
@@ -41,11 +41,44 @@ def src_path(srcdir, name):
     return p
 
 
+def verify_ui_map(mapping):
+    """Drift guard: the runtime SNODE_MAP in ui/index.html must match this build's
+    slot->icon map (tools/skillnode_map.json), or the UI could reference an icon
+    that was never generated (broken header) or vice-versa. Exits non-zero on a
+    mismatch so the two never drift apart silently. No-op if the UI isn't found."""
+    ui = os.path.join(ROOT, "ui", "index.html")
+    try:
+        html = open(ui, encoding="utf-8").read()
+    except OSError:
+        return
+    m = re.search(r"const\s+SNODE_MAP\s*=\s*\{([^{}]*)\}", html, re.S)
+    if not m:
+        print("warning: SNODE_MAP not found in ui/index.html — skipping drift check")
+        return
+    try:
+        ui_map = json.loads("{" + re.sub(r",\s*$", "", m.group(1).strip()) + "}")
+    except json.JSONDecodeError as e:
+        print("warning: SNODE_MAP block is not valid JSON — skipping drift check:", e)
+        return
+    if ui_map != mapping:
+        only_map = sorted(set(mapping) - set(ui_map))
+        only_ui  = sorted(set(ui_map) - set(mapping))
+        changed  = {k: (mapping[k], ui_map[k]) for k in set(mapping) & set(ui_map) if mapping[k] != ui_map[k]}
+        msg = ["error: ui/index.html SNODE_MAP and tools/skillnode_map.json disagree — keep them in sync:"]
+        if only_map: msg.append("  slots only in skillnode_map.json: " + ", ".join(only_map))
+        if only_ui:  msg.append("  slots only in SNODE_MAP: " + ", ".join(only_ui))
+        if changed:  msg.append("  different icon: " + ", ".join(f"{k} ({a} != {b})" for k, (a, b) in changed.items()))
+        sys.exit("\n".join(msg))
+
+
 def main():
     from PIL import Image
     srcdir = None
     if "--src" in sys.argv:
-        srcdir = sys.argv[sys.argv.index("--src") + 1]
+        i = sys.argv.index("--src")
+        if i + 1 >= len(sys.argv):
+            sys.exit("error: --src requires a directory argument, e.g. --src ./assets")
+        srcdir = sys.argv[i + 1]
 
     files = {n: src_path(srcdir, n) for n in FILES}
     A  = Image.open(files["skills.webp"]).convert("RGBA")
@@ -55,6 +88,7 @@ def main():
     fd = json.load(open(files["skills-disabled.json"]))["frames"]
     ff = json.load(open(files["frame.json"]))["frames"]
     mapping = json.load(open(MAP))
+    verify_ui_map(mapping)
 
     # index active frames by basename, preferring 'normal' on a basename collision
     # (same source symbol; the simpler ring reads cleaner at header size).
