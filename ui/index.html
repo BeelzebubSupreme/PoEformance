@@ -6647,9 +6647,9 @@
       "sec:det-status":"HollowPalmTechniqueKeystone","sec:det-integrations":"KeystoneAvatarOfFire","sec:det-stashmover":"KeystonePainAttunement","sec:sm-stash":"AzmeriPrimalMonkey","sec:sm-stash-ignore":"shieldblock","sec:sm-stash-rnd":"criticalstrikechance","sec:sm-sell":"AzmeriWildBear","sec:sm-sell-ignore":"shieldblock","sec:sm-sell-rnd":"criticalstrikechance","sec:sm-shared":"TemporalistNearbyEnemiesProjectilesSlowed","sec:det-autopilot":"KeystoneAvatarOfFire","sec:ap-status":"WarbringerEncasedInJade","sec:ap-combat":"LightningDamagenode","sec:ap-explore":"MiracleMaker","sec:ap-loot":"energyshield",
       "sec:det-maphack":"ColdAndFireHybridNotable","sec:det-radar":"PressurePoints","sec:det-entitymarkers":"TacticianNode","sec:det-rangecircles":"TemporalistNode","sec:det-lootvalue":"ShieldNodeOffensive","sec:lrv-detection":"Rage","sec:lrv-list":"SpellSuppresionNode","sec:lrv-onmap":"RangedTotemDamage","sec:lrv-trade":"ClawsOfTheMagpie","sec:det-uihoverprice":"projectilespeed",
       "sec:det-vitals-general":"CorpseDamage","sec:det-debug-actions":"axedmgspeed","sec:det-radar-debug":"PathfinderPathoftheWarrior","sec:det-debug-panels":"ColdDamagenode","sec:det-debug-discovery":"LightningDamagenode","sec:det-debug-diff":"ManaLeechThemedNode","sec:det-debug-overlay":"ElementalDamagenode","sec:det-offset-compare":"plusstrengthdexterity",
-      "sec:det-al-conditions":"blankDex","sec:det-al-timing":"blankInt","sec:det-al-output":"blankStr","sec:det-lt-settings":"KeystoneWhispersOfDoom","sec:det-blacklist":"ArmourAndEvasionNode"
+      "sec:det-al-conditions":"blankDex","sec:det-al-timing":"blankInt","sec:det-al-output":"blankStr","sec:det-lt-settings":"KeystoneWhispersOfDoom","sec:det-blacklist":"ArmourAndEvasionNode",
+      "sec:det-vitals-life":"IncreasedMaximumLifeNotable","sec:det-vitals-mana":"MineManaReservationNotable","sec:det-vitals-es":"EnergyShieldNode"
     };
-    let _snodeDone = false;
     function _snodeSpan(name) {
       const s = document.createElement('span');
       s.className = 'snode';
@@ -6668,8 +6668,11 @@
         }
       }
     }
+    // Inject skill-node icons. IDEMPOTENT + re-runnable: it skips any slot whose
+    // target already carries a .snode, so it can be called again after a dynamic
+    // render (vitals bars, junk categories, game-state) to icon the freshly-built
+    // sections without duplicating the ones already done.
     function snodeInit() {
-      if (_snodeDone) return; _snodeDone = true;
       for (const slot in SNODE_MAP) {
         const c = slot.indexOf(':'), kind = slot.slice(0, c), id = slot.slice(c + 1), name = SNODE_MAP[slot];
         if (kind === 'cat' || kind === 'tab' || kind === 'cfgtab') {
@@ -6677,7 +6680,7 @@
                     : kind === 'cfgtab' ? `.tab[data-cfgtab="${id}"]`
                     : `.tab[data-tab="${id}"]`;
           const el = document.querySelector(sel);
-          if (!el) continue;
+          if (!el || el.querySelector(':scope > .snode')) continue;
           el.querySelector(':scope > svg')?.remove();   // drop the old inline SVG glyph
           el.insertBefore(_snodeSpan(name), el.firstChild);
         } else if (kind === 'sec') {
@@ -6685,7 +6688,7 @@
           const det = document.getElementById(id);
           if (det && det.tagName === 'DETAILS') summary = det.querySelector(':scope > summary');
           if (!summary) summary = document.querySelector(`[data-snodekey="${id}"]`)?.closest('summary');
-          if (!summary) continue;
+          if (!summary || summary.querySelector(':scope > .snode')) continue;
           _snodeStripGlyph(summary);
           summary.insertBefore(_snodeSpan(name), summary.firstChild);
         }
@@ -11943,6 +11946,7 @@
       host.innerHTML = VITALS_BARS.map(([id, label]) => _vBarSectionHtml(id, label)).join('');
       _vitalsBuilt = true;
       for (const [id] of VITALS_BARS) renderVitalsConds(id);
+      snodeInit();   // icon the freshly-built det-vitals-* sections (idempotent)
     }
 
     // ── Per-bar visibility condition list (drag&drop, add/remove, import/export) ──
