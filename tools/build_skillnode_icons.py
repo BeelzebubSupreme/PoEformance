@@ -1,24 +1,24 @@
 #!/usr/bin/env python3
 """Build framed PoE2 skill-node UI icons from GGG's official passive-tree export.
 
-For every icon named in Tools/skillnode_map.json this slices the matching node out of
+For every icon named in tools/skillnode_map.json this slices the matching node out of
 GGG's sprite sheets and composites it with the node frame, producing two PNGs per icon
 in img/skillnodes/:
   <name>.png      allocated look   (active art  + allocated frame)   -> section OPEN / tab active
   <name>_off.png  unallocated look (disabled art + unallocated frame)-> section CLOSED / tab idle
 
 Source = grindinggear/poe2-skilltree-export (official, free). The six source files are
-cached under Tools/.skilltree_cache/ (gitignored); pass --src DIR to use a local copy.
+cached under tools/.skilltree_cache/ (gitignored); pass --src DIR to use a local copy.
 
-Run:  python3 Tools/build_skillnode_icons.py
+Run:  python3 tools/build_skillnode_icons.py
 Deps: pillow  (pip install pillow)
 """
 import json, os, sys, urllib.request
 
 ROOT  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-CACHE = os.path.join(ROOT, "Tools", ".skilltree_cache")
+CACHE = os.path.join(ROOT, "tools", ".skilltree_cache")
 OUT   = os.path.join(ROOT, "img", "skillnodes")
-MAP   = os.path.join(ROOT, "Tools", "skillnode_map.json")
+MAP   = os.path.join(ROOT, "tools", "skillnode_map.json")
 BASE  = "https://raw.githubusercontent.com/grindinggear/poe2-skilltree-export/main/assets/"
 FILES = ["skills.webp", "skills.json", "skills-disabled.webp",
          "skills-disabled.json", "frame.webp", "frame.json"]

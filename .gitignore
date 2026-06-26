@@ -64,4 +64,4 @@ PoEformance.exe
 WebView2Loader.dll
 
 # Skill-node icon build cache (downloaded GGG sprite sheets)
-Tools/.skilltree_cache/
+tools/.skilltree_cache/
