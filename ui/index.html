@@ -813,14 +813,17 @@
     .subtab-group-label {
       font-family: var(--codex-display);
       font-style: italic;
-      font-size: 9px;
+      font-size: 8.5px;
       font-weight: 600;
-      letter-spacing: 0.20em;
+      letter-spacing: 0.26em;
       text-transform: uppercase;
-      color: var(--codex-gold);
-      opacity: 0.7;
-      padding: 0 10px 0 16px;
+      /* Muted parchment grey — deliberately NOT the tab gold, so it reads as a
+         non-clickable group caption, not an active tab. */
+      color: var(--subtext);
+      opacity: 0.78;
+      padding: 0 12px 0 18px;
       align-self: center;
+      cursor: default;
       user-select: none
     }
     /* Slim brown rule between groups (Live | Tools). */
@@ -4309,7 +4312,7 @@
        overrides below win over the per-component summary rules. ═══ */
     .snode {
       display: inline-block; flex: none;
-      width: 20px; height: 20px; margin-right: 8px;
+      width: 20px; height: 20px; margin-right: 5px;
       background: var(--off) center / contain no-repeat;
       vertical-align: middle;
     }
@@ -4317,19 +4320,31 @@
        variants — StashMover, junk cats — since they are all details elements). */
     details[open] > summary > .snode { background-image: var(--on) }
     /* Nav chips (category / tab / config sub-tab): allocated art while active. */
-    .cat > .snode, .tab > .snode { width: 18px; height: 18px; margin-right: 7px; background-image: var(--off) }
+    .cat > .snode, .tab > .snode { width: 18px; height: 18px; margin-right: 6px; background-image: var(--off) }
     .cat.active > .snode, .tab.active > .snode { background-image: var(--on) }
 
     /* ── One uniform collapsible-section rhythm ──────────────────────────────
        Every section header — flat (Radar, Loot Value, …) or boxed (Stash Mover,
        junk categories) — shares the same left-icon inset and right-caret inset.
-       Fixes the Stash Mover boxes that felt "imported from another tool" (icon
-       jammed left, caret jammed right). Last in the cascade so it wins. */
+       Last in the cascade so it wins. */
     .cfg-section details summary::after { right: 9px }
     .cfg-summary-status { padding-right: 24px }
-    .sm-sub > summary, .sm-top > summary { padding: 6px 28px 6px 10px }
-    .sm-sub-body { padding: 6px 10px 9px 10px }
+    .sm-sub > summary, .sm-top > summary { padding: 7px 28px 7px 11px }
+    .sm-sub-body { padding: 6px 11px 9px 33px }
     .ent-junkbox-sum, .junk-cat > summary { padding-right: 26px }
+
+    /* ── Heading underline: ONLY while open, and starting at the TEXT (the icon
+       is never underlined). The summary's own full-row rule is dropped; the
+       .cfg-header (flex:1, after the icon) carries the line so it spans
+       text → right edge. Collapsed = no line. ──────────────────────────────── */
+    .cfg-section > details > summary { border-bottom: none }
+    .cfg-section details > summary > .cfg-header { border-bottom: none }
+    .cfg-section details[open] > summary > .cfg-header {
+      border-bottom: 1px solid var(--codex-rule);
+      padding-bottom: 5px;
+    }
+    /* Box body lines up under the text (icon width + gap ≈ 26px), not the icon. */
+    .cfg-section > details[open] > :not(summary) { padding-left: 26px }
   </style>
 </head>
 
@@ -5000,7 +5015,7 @@
                       </div>
 
                       <details class="sm-sub" ontoggle="if(this.open) ahkCall('StashRequestInventory','stash')">
-                        <summary><div class="cfg-header">🚫 Ignore filter
+                        <summary><div class="cfg-header" data-snodekey="sm-stash-ignore">🚫 Ignore filter
                           <span id="sm-stash-ignore-meta" class="ent-junk-custom-meta"></span></div></summary>
                         <div class="sm-sub-body">
                           <div class="cfg-help">
@@ -5019,7 +5034,7 @@
                       </details>
 
                       <details class="sm-sub">
-                        <summary><div class="cfg-header">🎲 Randomization</div></summary>
+                        <summary><div class="cfg-header" data-snodekey="sm-stash-rnd">🎲 Randomization</div></summary>
                         <div class="sm-sub-body">
                           <div class="sm-rnd-row">
                             <div class="sm-rnd-group">
@@ -5052,7 +5067,7 @@
                       </div>
 
                       <details class="sm-sub" ontoggle="if(this.open) ahkCall('StashRequestInventory','sell')">
-                        <summary><div class="cfg-header">🚫 Ignore filter
+                        <summary><div class="cfg-header" data-snodekey="sm-sell-ignore">🚫 Ignore filter
                           <span id="sm-sell-ignore-meta" class="ent-junk-custom-meta"></span></div></summary>
                         <div class="sm-sub-body">
                           <div class="cfg-help">
@@ -5073,7 +5088,7 @@
                       </details>
 
                       <details class="sm-sub">
-                        <summary><div class="cfg-header">🎲 Randomization</div></summary>
+                        <summary><div class="cfg-header" data-snodekey="sm-sell-rnd">🎲 Randomization</div></summary>
                         <div class="sm-sub-body">
                           <div class="sm-rnd-row">
                             <div class="sm-rnd-group">
@@ -6626,7 +6641,7 @@
       "tab:entities":"SorceressInvocationSpellsKeystone","tab:skills":"SmithofKitavaNode","tab:inventory":"SpearsNode1","tab:watchlist":"ArchonGeneric","tab:groups":"FlaskNotableCritStrikeRecharge","tab:alerts":"MinionElementalResistancesNode","tab:loot":"KeystoneUnwaveringStance",
       "tab:ui":"ChannellingAttacksNotable2","tab:gamestate":"auraeffect","tab:memdiff":"flaskstr","tab:dissect":"flaskint","tab:hotkeys":"KeystoneResoluteTechnique",
       "cfgtab:general":"blankStr","cfgtab:automation":"PhysicalDamageOverTimeNode","cfgtab:overlay":"LifeandMana","cfgtab:vitals":"BloodMageNode","cfgtab:debug":"tempint","cfgtab:data":"ChannellingSpeed",
-      "sec:det-status":"HollowPalmTechniqueKeystone","sec:det-integrations":"KeystoneAvatarOfFire","sec:det-stashmover":"KeystonePainAttunement","sec:sm-stash":"AzmeriPrimalMonkey","sec:sm-sell":"AzmeriWildBear","sec:sm-shared":"TemporalistNearbyEnemiesProjectilesSlowed","sec:det-autopilot":"KeystoneAvatarOfFire","sec:ap-status":"WarbringerEncasedInJade","sec:ap-combat":"LightningDamagenode","sec:ap-explore":"MiracleMaker","sec:ap-loot":"energyshield",
+      "sec:det-status":"HollowPalmTechniqueKeystone","sec:det-integrations":"KeystoneAvatarOfFire","sec:det-stashmover":"KeystonePainAttunement","sec:sm-stash":"AzmeriPrimalMonkey","sec:sm-stash-ignore":"shieldblock","sec:sm-stash-rnd":"criticalstrikechance","sec:sm-sell":"AzmeriWildBear","sec:sm-sell-ignore":"shieldblock","sec:sm-sell-rnd":"criticalstrikechance","sec:sm-shared":"TemporalistNearbyEnemiesProjectilesSlowed","sec:det-autopilot":"KeystoneAvatarOfFire","sec:ap-status":"WarbringerEncasedInJade","sec:ap-combat":"LightningDamagenode","sec:ap-explore":"MiracleMaker","sec:ap-loot":"energyshield",
       "sec:det-maphack":"ColdAndFireHybridNotable","sec:det-radar":"PressurePoints","sec:det-entitymarkers":"TacticianNode","sec:det-rangecircles":"TemporalistNode","sec:det-lootvalue":"ShieldNodeOffensive","sec:lrv-detection":"Rage","sec:lrv-list":"SpellSuppresionNode","sec:lrv-onmap":"RangedTotemDamage","sec:lrv-trade":"ClawsOfTheMagpie","sec:det-uihoverprice":"projectilespeed",
       "sec:det-vitals-general":"CorpseDamage","sec:det-debug-actions":"axedmgspeed","sec:det-radar-debug":"PathfinderPathoftheWarrior","sec:det-debug-panels":"ColdDamagenode","sec:det-debug-discovery":"LightningDamagenode","sec:det-debug-diff":"ManaLeechThemedNode","sec:det-debug-overlay":"ElementalDamagenode","sec:det-offset-compare":"plusstrengthdexterity",
       "sec:det-al-conditions":"blankDex","sec:det-al-timing":"blankInt","sec:det-al-output":"blankStr","sec:det-lt-settings":"KeystoneWhispersOfDoom","sec:det-blacklist":"ArmourAndEvasionNode"
