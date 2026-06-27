@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.106`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.107`.
 
 ## Language
 
@@ -749,7 +749,7 @@ there; this is the persistent, all-at-once alternative.
 - **Verified in-game (2026-06-27):** badges render on the reward cells (small 1×1 and large
   2×3), correctly top-right, no clash with the game's own stack-count label.
 
-## Startup-timing trace + in-tool Diagnostic Files viewer (shipped 0.45.13.106)
+## Startup-timing trace + in-tool Diagnostic Files viewer (shipped 0.45.13.107)
 
 Two debug-tooling features. Motivation: occasionally (~1 in 4) startup is very slow before the
 tool becomes responsive; and diagnostic output is scattered across `logs/`, `debug/`, `data/`.
@@ -766,23 +766,31 @@ tool becomes responsive; and diagnostic output is scattered across `logs/`, `deb
   intermittent stall). `SetStartupTrace`/`BuildStartupTraceHeaderJson`. NOTE: `InitializeErrorLog()`
   (the `===== Start =====` header) runs LATE in startup, so the normal error log never bounded the
   load sequence — that's why this trace starts from the true beginning.
-- **`ahk/DiagFiles.ahk` (new):** in-tool diagnostic-file browser. Enumerates `logs\*`, `debug\*`,
-  `data\*.tsv|*.txt` (shipped `.json` data intentionally excluded) → `BuildDiagFilesJson`
-  (`{name,rel,folder,size,mtime}`). `ReadDiagFile` tail-caps at 256 KB (logs: the recent end
-  matters), images report size only. `_DiagResolve` constrains ALL access to those three folders
-  (rejects `..` / drive-absolute / unknown folders). `PushDiagFilesToWebView` /
+- **`ahk/DiagFiles.ahk` (new):** backend for the unified **Config → "Data & Logs"** browser (the
+  old standalone Diagnostic-Files section + the Data TSV dropdown were merged into ONE browser to
+  avoid a second file-viewing system). Enumerates `data\*.tsv` + `logs\*` + `debug\*` (data TSVs
+  listed ONCE here; shipped `.json` excluded) → `BuildDiagFilesJson` (`{name,rel,folder,size,mtime}`).
+  `ReadDiagFile` tail-caps at 256 KB and adds a `tabular` hint (`_DiagIsTabular`: `.tsv` or
+  mostly-tab-delimited → Table, else Text); images report size only. `_DiagResolve` constrains ALL
+  access to those three folders (rejects `..` / drive-absolute / unknown). `PushDiagFilesToWebView` /
   `PushDiagFileToWebView` (via `WebViewExec`), `DiagOpenFolder`, `DiagDeleteFile`. Reuses
-  `_JsStr`/`WebViewExec` from WebViewBridge.
-- **Wiring:** `InGameStateMonitor.ahk` `#Include`s both; `StTraceInit()` + the `StTrace` marks in
-  the auto-exec. `BridgeDispatch.ahk`: `SetStartupTrace`, `DiagListFiles`, `DiagReadFile`,
+  `_JsStr`/`WebViewExec`.
+- **Unified viewer (`ui/index.html`, Config → Data & Logs):** a two-pane browser — a filterable file
+  **list** (folder/name/size/date) on the left, a **dual-mode** viewer on the right. TABLE mode
+  reuses the proven sortable/searchable/paginated `renderTsvData`/`_tsvRender` (now with
+  **drag-to-resize columns** via a `<colgroup>` + `.tsv-colsz` handles + `_tsvColWidths`); TEXT mode
+  renders free-form reports (`*_diag_*.txt`, `.log`) with its own search + line pagination. Auto-mode
+  by the `tabular` hint + a manual **Table⇄Text** toggle (`dataSetMode`, caches raw content). JS:
+  `updateDiagFiles`/`_diagRenderList`/`dataFilterList`, `updateDiagFile`, `_dataParseTsv`,
+  `dataRenderText`/`_txtRender`. The sub-tab open + post-TSV-generation refresh call `DiagListFiles`
+  (the old `ListTsvFiles`/`ReadTsvFile` + dropdown JS are now unused dead code, pending cleanup).
+- **Wiring:** `InGameStateMonitor.ahk` `#Include`s both modules; `StTraceInit()` + the `StTrace`
+  marks in the auto-exec. `BridgeDispatch.ahk`: `SetStartupTrace`, `DiagListFiles`, `DiagReadFile`,
   `DiagOpenFolder`, `DiagDeleteFile`. `WebViewBridge.ahk`: `startupTrace` in the header push.
-  `ui/index.html`: a "⏱ Startup timing trace" toggle in **Config → Debug → Diagnostic Actions**,
-  and a new **Config → Debug → "📂 Diagnostic Files"** section (`det-diagnostic-files`: file list +
-  content `<pre>`; refresh / open-folder / per-row delete; auto-lists on expand). JS
-  `updateDiagFiles` / `updateDiagFile` / `diagRead` / `diagDelete`; `startup-trace` synced in
-  `updateHeader` via `setChk`.
+  `ui/index.html`: the "⏱ Startup timing trace" toggle in **Config → Debug → Diagnostic Actions**.
 - **Pending in-game verification:** enable the trace, restart until a slow start is captured, read
-  `startup_trace.log` via the viewer, and identify the spiking step.
+  `startup_trace.log` in **Data & Logs**, and identify the spiking step; verify Table/Text auto-mode,
+  the per-line text search/pagination, and column drag-resize.
 
 ## Reference
 

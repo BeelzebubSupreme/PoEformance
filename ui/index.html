@@ -1008,6 +1008,22 @@
       background: var(--border)
     }
 
+    /* Drag-to-resize handle on the right edge of each column header. */
+    .tsv-colsz {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 6px;
+      height: 100%;
+      cursor: col-resize;
+      user-select: none
+    }
+
+    .tsv-colsz:hover {
+      background: var(--codex-gold, #c8a85a);
+      opacity: .55
+    }
+
     .tsv-table th .sort-ind {
       font-size: 9px;
       margin-left: 3px;
@@ -12784,6 +12800,7 @@
     let _tsvFilesLoaded = false;
     const TSV_PAGE_SIZE = 1000;
     let _tsvPage = 0;
+    let _tsvColWidths = [];   // px per column (idx 0 = row-number col); persists across sort/page/filter
 
     function _tsvRows() { return _tsvFiltered || _tsvData; }
     function _tsvTotalPages() { return Math.max(1, Math.ceil(_tsvRows().length / TSV_PAGE_SIZE)); }
@@ -12825,6 +12842,7 @@
       _tsvSortCol = -1;
       _tsvSortAsc = true;
       _tsvPage = 0;
+      _tsvColWidths = [];   // recompute default widths for the new file
 
       const searchEl = document.getElementById('tsv-search');
       searchEl.disabled = false;
@@ -12865,11 +12883,18 @@
       const start = _tsvPage * TSV_PAGE_SIZE;
       const end = Math.min(start + TSV_PAGE_SIZE, rows.length);
 
-      let html = '<table class="tsv-table"><thead><tr>';
+      // Default column widths once per file (idx 0 = row-number col); user drags persist after.
+      if (!_tsvColWidths.length) {
+        _tsvColWidths = [46];
+        _tsvHeaders.forEach(h => _tsvColWidths.push(Math.max(70, Math.min(320, String(h).length * 8 + 28))));
+      }
+      const colTags = _tsvColWidths.map(w => `<col style="width:${w}px">`).join('');
+
+      let html = `<table class="tsv-table" style="table-layout:fixed"><colgroup>${colTags}</colgroup><thead><tr>`;
       html += '<th class="tsv-rownum">#</th>';
       _tsvHeaders.forEach((h, i) => {
         const ind = _tsvSortCol === i ? (_tsvSortAsc ? '▲' : '▼') : '';
-        html += `<th onclick="sortTsvBy(${i})">${escHtml(h)}<span class="sort-ind">${ind}</span></th>`;
+        html += `<th onclick="sortTsvBy(${i})" style="position:relative">${escHtml(h)}<span class="sort-ind">${ind}</span><span class="tsv-colsz" data-ci="${i + 1}"></span></th>`;
       });
       html += '</tr></thead><tbody>';
 
@@ -12878,13 +12903,38 @@
         html += `<td style="color:var(--subtext);font-size:10px">${r + 1}</td>`;
         const row = rows[r];
         for (let c = 0; c < _tsvHeaders.length; c++) {
-          html += `<td>${escHtml(row[c] ?? '')}</td>`;
+          const v = escHtml(row[c] ?? '');
+          html += `<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${v}">${v}</td>`;
         }
         html += '</tr>';
       }
       html += '</tbody></table>';
       wrap.innerHTML = html;
       wrap.scrollTop = 0;
+      _tsvBindColResize(wrap);
+    }
+    // Drag-to-resize table columns. One delegated mousedown (drag) + one capture-phase click
+    // (swallow the click so the column's sort handler doesn't fire) bound once on the wrap.
+    function _tsvBindColResize(wrap) {
+      if (wrap._tsvResizeBound) return;
+      wrap._tsvResizeBound = true;
+      wrap.addEventListener('click', (ev) => { if (ev.target.closest('.tsv-colsz')) ev.stopPropagation(); }, true);
+      wrap.addEventListener('mousedown', (ev) => {
+        const h = ev.target.closest('.tsv-colsz');
+        if (!h) return;
+        ev.preventDefault(); ev.stopPropagation();
+        const ci = +h.getAttribute('data-ci');
+        const startX = ev.clientX, startW = _tsvColWidths[ci] || 120;
+        const colgrp = wrap.querySelector('table.tsv-table > colgroup');
+        const onMove = (e) => {
+          const w = Math.max(40, startW + (e.clientX - startX));
+          _tsvColWidths[ci] = w;
+          if (colgrp && colgrp.children[ci]) colgrp.children[ci].style.width = w + 'px';
+        };
+        const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
     }
 
     function tsvPageNav(delta) {
