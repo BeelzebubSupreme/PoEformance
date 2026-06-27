@@ -1374,3 +1374,234 @@ _ApDiagFinish(out)
     else
         try MsgBox(out, "AutoPilot Diagnose", 0x40)
 }
+
+; ── AutoPilot W2S-matrix offset scan (issue #158) ──────────────────────────
+; When AutoPilotDiagnose shows the matrix is PRESENT but degenerate (the player
+; projects to centre yet a far enemy collapses onto the SAME pixel — w hugely
+; inflated), the matrix at the current offset is no longer the real camera
+; matrix on this build (a game patch shifted the camera struct — see the +0x18
+; AreaInstance drifts in PoE2Offsets). This sweeps candidate matrix offsets and
+; reports which one projects the player near centre AND a 500-unit test point
+; FAR from the player (the signature of a usable W2S matrix). It scans the
+; WorldData struct directly and the camera pointer at WorldData+0xA0, in both
+; row-major and transposed layouts. No params / no return; MsgBox + debug\ file.
+AutoPilotMatrixScan()
+{
+    global g_reader, g_radarLastSnap
+
+    if !(IsObject(g_reader) && IsObject(g_reader.Mem) && g_reader.Mem.Handle)
+    {
+        try MsgBox("Matrix scan: game not connected.", "AutoPilot Matrix Scan", 0x40)
+        return
+    }
+
+    nl := "`n"
+    out := "=== AutoPilot W2S-matrix offset scan  (" FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") ") ===" nl nl
+
+    inGs := 0
+    try inGs := g_reader._radarInGameStateCache
+    if !g_reader.IsProbablyValidPointer(inGs)
+    {
+        out .= "InGameState not resolved yet — enter an area and let the radar run, then retry." nl
+        _ApDiagFinish2(out)
+        return
+    }
+    worldData := g_reader.Mem.ReadPtr(inGs + PoE2Offsets.InGameState["WorldData"])
+    if !g_reader.IsProbablyValidPointer(worldData)
+    {
+        out .= "WorldData pointer invalid (InGameState+0x" Format("{:X}", PoE2Offsets.InGameState["WorldData"]) ")." nl
+        _ApDiagFinish2(out)
+        return
+    }
+
+    ; Need the live player + a far test point. Reuse the combat extraction.
+    snap := (IsObject(g_radarLastSnap) && g_radarLastSnap is Map) ? g_radarLastSnap : 0
+    if !snap
+    {
+        out .= "No radar snapshot yet." nl
+        _ApDiagFinish2(out)
+        return
+    }
+    info := _DetectCombat(snap)
+    pwx := info["playerWorldX"], pwy := info["playerWorldY"], pwz := info["playerWorldZ"]
+    if (pwx = 0 && pwy = 0)
+    {
+        out .= "Player world pos is (0,0) — cannot test projection." nl
+        _ApDiagFinish2(out)
+        return
+    }
+    gHwnd := ResolvePoEWindow()
+    rect := gHwnd ? NavClientRect(gHwnd) : 0
+    if !IsObject(rect)
+    {
+        out .= "PoE window / client rect unavailable." nl
+        _ApDiagFinish2(out)
+        return
+    }
+
+    ; A far test point in front of the player (500 world units in +x and +y). A
+    ; usable matrix moves it well away from the player on screen; the degenerate
+    ; matrix keeps it on top of the player.
+    haveEnemy := (info["hostileCount"] > 0 && info["nearestWorldX"] != 0)
+    enX := haveEnemy ? info["nearestWorldX"] : (pwx + 500)
+    enY := haveEnemy ? info["nearestWorldY"] : pwy
+
+    out .= "WorldData=0x" Format("{:X}", worldData)
+        . "   player=" Round(pwx) "," Round(pwy) "," Round(pwz)
+        . "   testPt=" Round(enX) "," Round(enY) (haveEnemy ? " (enemy)" : " (+500)") nl
+    out .= "client=" rect["w"] "x" rect["h"] "   scanning for: player near centre + testPt >50px away" nl nl
+
+    cands := []
+    ; Direct sweep of WorldData offsets around the current 0x1A8.
+    _ApScanRange(g_reader, worldData, 0x100, 0x300, "WorldData", pwx, pwy, pwz, enX, enY, rect, cands)
+    ; Camera pointer at WorldData+0xA0 (in case the struct became a pointer on this build).
+    camPtr := g_reader.Mem.ReadPtr(worldData + PoE2Offsets.WorldData["CameraStructure"])
+    if g_reader.IsProbablyValidPointer(camPtr)
+    {
+        out .= "Camera pointer @WorldData+0xA0 = 0x" Format("{:X}", camPtr) " (also scanning it)" nl nl
+        _ApScanRange(g_reader, camPtr, 0x00, 0x200, "CamPtr", pwx, pwy, pwz, enX, enY, rect, cands)
+    }
+
+    ; Sort candidates by screen-distance of the test point from the player (desc).
+    _ApScanSort(cands)
+
+    out .= "GOOD candidates (player <=30% off centre, testPt moved): " cands.Length nl
+    out .= "fmt: base+0xOFF [layout]  player->(x,y)  testPt->(x,y)  sep=PX" nl
+    shown := 0
+    for _, c in cands
+    {
+        if (shown >= 24)
+        {
+            out .= "  … more omitted" nl
+            break
+        }
+        shown += 1
+        mark := (c["who"] = "WorldData" && c["off"] = 0x1A8) ? "  <== CURRENT 0x1A8"
+            : (c["who"] = "WorldData" && c["off"] = 0x1C0) ? "  <== +0x18 candidate"
+            : ""
+        out .= "  " c["who"] "+0x" Format("{:X}", c["off"]) " [" c["layout"] "]"
+            . "  P->" c["px"] "," c["py"]
+            . "  T->" c["tx"] "," c["ty"]
+            . "  sep=" Round(c["sep"]) mark nl
+    }
+    if (cands.Length = 0)
+        out .= "  (none — no offset in the scanned range yields a usable projection;"
+            . " the camera struct may live elsewhere / behind another pointer)" nl
+
+    _ApDiagFinish2(out)
+}
+
+; Scans byte offsets lo..hi from base in 4-byte steps, reading a 4x4 float
+; matrix at each and testing whether it projects the player near screen centre
+; and the test point away from the player (both row-major and transposed
+; layouts). Appends GOOD hits to `cands`. Params as named; no return.
+_ApScanRange(reader, base, lo, hi, who, pwx, pwy, pwz, enX, enY, rect, cands)
+{
+    cxm := rect["x"] + rect["w"] / 2
+    cym := rect["y"] + rect["h"] / 2
+    margX := rect["w"] * 0.30
+    margY := rect["h"] * 0.30
+    off := lo
+    while (off < hi)
+    {
+        buf := reader.Mem.ReadBytes(base + off, 64)
+        off += 4
+        if !(buf && buf.Size >= 64)
+            continue
+        m := []
+        bad := false
+        Loop 16
+        {
+            v := NumGet(buf.Ptr, (A_Index - 1) * 4, "Float")
+            if (v != v || Abs(v) > 1.0e12)   ; NaN or absurd magnitude
+            {
+                bad := true
+                break
+            }
+            m.Push(v)
+        }
+        if bad
+            continue
+        ; Try both layouts; keep whichever projects the player nearest centre.
+        for _, layout in ["row", "T"]
+        {
+            pSp := _ApMatProj(m, pwx, pwy, pwz, rect, layout)
+            if !pSp
+                continue
+            if (Abs(pSp["x"] - cxm) > margX || Abs(pSp["y"] - cym) > margY)
+                continue
+            tSp := _ApMatProj(m, enX, enY, pwz, rect, layout)
+            if !tSp
+                continue
+            dx := tSp["x"] - pSp["x"], dy := tSp["y"] - pSp["y"]
+            sep := Sqrt(dx * dx + dy * dy)
+            if (sep < 50)
+                continue
+            cands.Push(Map("who", who, "off", off - 4, "layout", layout
+                , "px", pSp["x"], "py", pSp["y"], "tx", tSp["x"], "ty", tSp["y"], "sep", sep))
+        }
+    }
+}
+
+; Projects a world point through a 16-float matrix `m` (1-based Array). layout
+; "row" = NavProject's column-dot convention; "T" = transposed (row-dot).
+; Returns Map("x","y") or 0 (degenerate w). Param: m, wx, wy, wz, rect, layout.
+_ApMatProj(m, wx, wy, wz, rect, layout)
+{
+    if (layout = "row")
+    {
+        r1 := m[1]*wx + m[5]*wy + m[9]*wz  + m[13]
+        r2 := m[2]*wx + m[6]*wy + m[10]*wz + m[14]
+        r4 := m[4]*wx + m[8]*wy + m[12]*wz + m[16]
+    }
+    else
+    {
+        r1 := m[1]*wx + m[2]*wy + m[3]*wz  + m[4]
+        r2 := m[5]*wx + m[6]*wy + m[7]*wz  + m[8]
+        r4 := m[13]*wx + m[14]*wy + m[15]*wz + m[16]
+    }
+    if (Abs(r4) < 0.0001)
+        return 0
+    return Map("x", Round(rect["x"] + (r1 / r4 + 1) * rect["w"] / 2)
+             , "y", Round(rect["y"] + (1 - r2 / r4) * rect["h"] / 2))
+}
+
+; Insertion-sort cands by screen separation desc (best candidate first).
+; Param: cands (Array of Maps). No return.
+_ApScanSort(cands)
+{
+    i := 2
+    while (i <= cands.Length)
+    {
+        cur := cands[i], j := i - 1
+        while (j >= 1 && cands[j]["sep"] < cur["sep"])
+        {
+            cands[j + 1] := cands[j]
+            j -= 1
+        }
+        cands[j + 1] := cur
+        i += 1
+    }
+}
+
+; Writes a matrix-scan report to debug\ and shows a short MsgBox. Param: out.
+_ApDiagFinish2(out)
+{
+    outDir := A_ScriptDir "\debug"
+    if !DirExist(outDir)
+        try DirCreate(outDir)
+    outPath := outDir "\autopilot_matrixscan_" FormatTime(A_Now, "yyyyMMdd_HHmmss") ".txt"
+    wrote := false
+    try {
+        FileAppend(out, outPath, "UTF-8")
+        wrote := true
+    }
+    if wrote
+    {
+        msg := "Matrix scan written to:`n" outPath
+            . "`n`nOpen it in Config -> Data & Logs (or paste it).`n`n--- summary ---`n" SubStr(out, 1, 700)
+        try MsgBox(msg, "AutoPilot Matrix Scan", 0x40)
+    }
+    else
+        try MsgBox(out, "AutoPilot Matrix Scan", 0x40)
+}
