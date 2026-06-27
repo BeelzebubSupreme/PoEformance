@@ -31,7 +31,12 @@ class PoE2Offsets
         "WorldAreaDetailsPtr", 0x98,
         "WorldAreaDetailsRowPtr", 0xA0,
         "CameraStructure", 0xA0,
-        "W2SMatrix", 0x1A8   ; CameraStructure(0xA0) + Matrix4x4 offset(0x108) — PoE2 v0.5
+        "W2SMatrix", 0x1A0   ; CameraStructure(0xA0) + Matrix4x4 offset(0x100); was 0x1A8 — a
+                             ; game patch shifted the matrix -8 bytes (issue #158). Confirmed by
+                             ; AutoPilotMatrixScan: at 0x1A0 the W2S w-row direction (0.467,0.467,
+                             ; 0.751) is a unit vector (a real camera forward); the old 0x1A8 read
+                             ; was misaligned by 2 floats so -24951 landed in the w z-slot, blowing
+                             ; w up to ~1.8M and collapsing every projection onto screen centre.
     )
 
     static AreaInstance := Map(

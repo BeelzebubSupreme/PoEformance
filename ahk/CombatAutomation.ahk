@@ -1265,7 +1265,8 @@ AutoPilotDiagnose()
     out .= "W2S matrix length: " matLen
     if (matLen != 16)
         out .= "   <<< NOT 16 — the reader returned NO matrix this tick."
-            . nl . "      => InGameState.WorldData (0x368) or WorldData.W2SMatrix (0x1A8) did not"
+            . nl . "      => InGameState.WorldData (0x" Format("{:X}", PoE2Offsets.InGameState["WorldData"])
+            . ") or WorldData.W2SMatrix (0x" Format("{:X}", PoE2Offsets.WorldData["W2SMatrix"]) ") did not"
             . nl . "         resolve: bad pointer, a game-version offset shift, or the camera was"
             . nl . "         not ready. This is the cause of BOTH symptoms."
     out .= nl
@@ -1452,7 +1453,8 @@ AutoPilotMatrixScan()
     out .= "client=" rect["w"] "x" rect["h"] "   scanning for: player near centre + testPt >50px away" nl nl
 
     cands := []
-    ; Direct sweep of WorldData offsets around the current 0x1A8.
+    curW2S := PoE2Offsets.WorldData["W2SMatrix"]   ; the offset currently in use (mark it below)
+    ; Direct sweep of WorldData offsets around the current matrix offset.
     _ApScanRange(g_reader, worldData, 0x100, 0x300, "WorldData", pwx, pwy, pwz, enX, enY, rect, cands)
     ; Camera pointer at WorldData+0xA0 (in case the struct became a pointer on this build).
     camPtr := g_reader.Mem.ReadPtr(worldData + PoE2Offsets.WorldData["CameraStructure"])
@@ -1476,9 +1478,7 @@ AutoPilotMatrixScan()
             break
         }
         shown += 1
-        mark := (c["who"] = "WorldData" && c["off"] = 0x1A8) ? "  <== CURRENT 0x1A8"
-            : (c["who"] = "WorldData" && c["off"] = 0x1C0) ? "  <== +0x18 candidate"
-            : ""
+        mark := (c["who"] = "WorldData" && c["off"] = curW2S) ? "  <== CURRENT (in use)" : ""
         out .= "  " c["who"] "+0x" Format("{:X}", c["off"]) " [" c["layout"] "]"
             . "  P->" c["px"] "," c["py"]
             . "  T->" c["tx"] "," c["ty"]
