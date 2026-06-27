@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.113`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.114`.
 
 ## Language
 
@@ -854,10 +854,24 @@ no click → no movement).
   separation; marks the CURRENT `0x1A8` and the `+0x18` (`0x1C0`) candidate. Writes
   `debug\autopilot_matrixscan_*.txt`. Bridge `AutoPilotMatrixScan`; UI "🧭 Scan matrix offset"
   button next to "🔍 Diagnose projection" in Config → AutoPilot → Live Status.
-- **Pending (needs the owner):** run "🧭 Scan matrix offset" near a monster and read
-  `autopilot_matrixscan_*.txt`. The winning `base+0xOFF [layout]` gives the corrected
-  `PoE2Offsets.WorldData["W2SMatrix"]` (and whether a pointer-deref / transpose is needed); apply
-  that, then AutoPilot projection is fixed.
+- **FIXED — corrected offset `0x1A8` → `0x1A0` (0.45.13.114):** the scan's clear winner was
+  `WorldData+0x1A0 [row]` (sep=1968 px, the highest by far; player projects to x=1720 = dead
+  centre; duplicated at `0x1E0`). Reconstructing it confirmed it: at `0x1A0` the W2S w-row
+  direction `(0.467, 0.467, 0.751)` is a **unit vector** (0.467²+0.467²+0.751² = 1.0) — a real
+  camera forward axis. The old `0x1A8` read was misaligned by 2 floats (−8 bytes), so the large
+  translation value `-24951` landed in the w-row's z-slot, blowing `w` up to ~1.8M and collapsing
+  every projection onto screen centre. A recent game patch shifted the camera matrix −8 bytes
+  (matrix moved from CameraStructure+0x108 to +0x100), so `0x1A8` was correct before the patch and
+  wrong after — i.e. it WAS an offset drift after all (same class as the `+0x18` `AreaInstance`
+  drifts). Fix: `PoE2Offsets.WorldData["W2SMatrix"] := 0x1A0`; the existing `[row]` layout is
+  correct (no transpose / no pointer-deref). Both matrix reads (`PoE2MemoryReader` lines ~1322 and
+  ~3075) go through that constant, so the one-line change fixes the whole projection chain. The
+  diagnostic tools (`AutoPilotDiagnose` / `AutoPilotMatrixScan`) now read the offset dynamically so
+  they stay useful for the next drift; the mandatory combat gate stays as defence-in-depth.
+- **Pending in-game verification (owner):** turn AutoPilot on near monsters — the character should
+  move along the explored route and skills should aim at enemies (no more centre-fire / standing
+  still). Re-run "🔍 Diagnose projection" to confirm an enemy now projects to a DIFFERENT pixel
+  than the player.
 
 ## Reference
 
