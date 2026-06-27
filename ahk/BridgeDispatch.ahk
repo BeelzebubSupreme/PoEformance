@@ -187,6 +187,27 @@ _DispatchBridgeCall(method, args)
                 _LlcApplySetting(args[1], args[2])
             SaveLootLabelClear()
             SetTimer(PushHeaderToWebView, -50)
+        case "SetStartupTrace":
+            ; Persistent startup-timing diagnostic toggle ([Diagnostics] startupTrace). args[1]=on.
+            if (args.Length >= 1)
+                SetStartupTrace(args[1])
+            SetTimer(PushHeaderToWebView, -50)
+        case "DiagListFiles":
+            ; Enumerate all diagnostic files (logs/debug/data) and push the list to the WebView.
+            SetTimer(PushDiagFilesToWebView, -1)
+        case "DiagReadFile":
+            ; Read one diagnostic file (relative path under logs/debug/data) and push its content.
+            diagRel := (args.Length >= 1) ? args[1] : ""
+            if (diagRel != "")
+                SetTimer(() => PushDiagFileToWebView(diagRel), -1)
+        case "DiagOpenFolder":
+            ; Open a diagnostic folder in Explorer. args[1]=folder (logs/debug/data).
+            SetTimer(() => DiagOpenFolder((args.Length >= 1) ? args[1] : "logs"), -1)
+        case "DiagDeleteFile":
+            ; Delete one diagnostic file (relative path), then refresh the list.
+            diagDel := (args.Length >= 1) ? args[1] : ""
+            if (diagDel != "")
+                SetTimer(() => DiagDeleteFile(diagDel), -1)
         case "SetLootTradePricing":
             ; Official PoE2 trade-API unique pricing. args[1]=key, args[2]=value.
             if (args.Length >= 2)

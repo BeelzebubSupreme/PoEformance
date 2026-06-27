@@ -5887,6 +5887,10 @@
                 <label class="toggle"><input type="checkbox" id="inv-chain-dump" onchange="ahkCall('ToggleInventoryChainDump')"><span class="toggle-slider"></span></label>
               </div>
               <div class="cfg-help">Writes the full ServerData → PlayerInventories → items pointer chain to <code>InGameStateMonitor.inventory_chain.log</code> on every inventory refresh. Diagnostic / RE only — leave off in normal use.</div>
+              <div class="cfg-row"><span class="cfg-label">⏱ Startup timing trace</span>
+                <label class="toggle"><input type="checkbox" id="startup-trace" onchange="ahkCall('SetStartupTrace', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Times every startup step (QueryPerformanceCounter) into <code>logs\InGameStateMonitor.startup_trace.log</code>. Most starts are fast — leave this <b>ON across several restarts</b> to catch the occasional slow one, then turn it off. Read the result below under <b>📂 Diagnostic Files</b>.</div>
             </div>
           </details>
         </div>
@@ -5968,6 +5972,26 @@
             </summary>
             <div class="cfg-body" id="debug-overlay-state">
               <div class="no-data-msg">Waiting for data…</div>
+            </div>
+          </details>
+        </div>
+        <div class="cfg-section">
+          <details id="det-diagnostic-files" ontoggle="syncCfgSections(); if(this.open) ahkCall('DiagListFiles')">
+            <summary>
+              <div class="cfg-header">📂 Diagnostic Files</div>
+            </summary>
+            <div style="padding:6px 0;display:flex;gap:8px;align-items:center;font-size:11px;flex-wrap:wrap">
+              <button class="tree-tbtn" onclick="ahkCall('DiagListFiles')" style="font-size:11px">🔄 Refresh</button>
+              <button class="tree-tbtn" onclick="ahkCall('DiagOpenFolder','logs')" style="font-size:11px">📁 logs</button>
+              <button class="tree-tbtn" onclick="ahkCall('DiagOpenFolder','debug')" style="font-size:11px">📁 debug</button>
+              <button class="tree-tbtn" onclick="ahkCall('DiagOpenFolder','data')" style="font-size:11px">📁 data</button>
+              <span id="diag-file-current" style="color:var(--subtext);margin-left:auto"></span>
+            </div>
+            <div style="display:flex;gap:12px;flex-wrap:wrap">
+              <div id="diag-files-list" style="flex:0 0 300px;max-height:380px;overflow:auto;border:1px solid #2a2a2a;border-radius:4px;background:#161616">
+                <div class="no-data-msg">Click 🔄 Refresh to list files</div>
+              </div>
+              <pre id="diag-file-content" style="flex:1;min-width:280px;margin:0;padding:8px;max-height:380px;overflow:auto;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:4px;font-family:Consolas,monospace;font-size:11px;color:#d8d8d8;white-space:pre-wrap;word-break:break-all;user-select:text">(select a file on the left)</pre>
             </div>
           </details>
         </div>
@@ -10083,6 +10107,8 @@
 
       // Inventory diagnostics — pointer-chain logging toggle (Config > Debug).
       if (d.invChainDump !== undefined) setChk('inv-chain-dump', d.invChainDump);
+      // Startup timing trace toggle (Config > Debug > Diagnostic Actions).
+      if (d.startupTrace !== undefined) setChk('startup-trace', d.startupTrace);
 
       // Combat Automation config sync
       const prevCombatEnabled = document.getElementById('tog-combat')?.checked || false;
@@ -11411,6 +11437,73 @@
         document.execCommand('copy');
         document.body.removeChild(ta);
       }
+    }
+
+    // ── Diagnostic Files viewer (Config > Debug) ──────────────────────────
+    let _diagSelectedRel = null;
+    function _diagFmtSize(n) {
+      n = +n || 0;
+      if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+      if (n >= 1024) return (n / 1024).toFixed(1) + ' KB';
+      return n + ' B';
+    }
+    // Renders the file list (sorted newest-first). Payload: JSON array of {name,rel,folder,size,mtime}.
+    function updateDiagFiles(jsonStr) {
+      let arr;
+      try { arr = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr; } catch (e) { return; }
+      const host = document.getElementById('diag-files-list');
+      if (!host) return;
+      if (!Array.isArray(arr) || arr.length === 0) {
+        host.innerHTML = '<div class="no-data-msg">No diagnostic files found</div>';
+        return;
+      }
+      arr.sort((a, b) => String(b.mtime || '').localeCompare(String(a.mtime || '')));
+      const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      let html = '';
+      for (const f of arr) {
+        const sel = (f.rel === _diagSelectedRel) ? 'background:#2a2f3a;' : '';
+        html += '<div class="diag-file-row" style="display:flex;gap:6px;align-items:center;padding:4px 6px;border-bottom:1px solid #222;cursor:pointer;' + sel + '" '
+          + 'onclick="diagRead(' + JSON.stringify(f.rel) + ')">'
+          + '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + esc(f.rel) + '">'
+          + '<span style="color:#7a8aa0">' + esc(f.folder) + '\\</span>' + esc(f.name) + '</span>'
+          + '<span style="color:var(--subtext);font-size:10px;white-space:nowrap">' + _diagFmtSize(f.size) + '</span>'
+          + '<span style="color:var(--subtext);font-size:10px;white-space:nowrap">' + esc((f.mtime || '').slice(5, 16)) + '</span>'
+          + '<span title="Delete" style="cursor:pointer;color:#c06a6a" onclick="event.stopPropagation();diagDelete(' + JSON.stringify(f.rel) + ')">🗑</span>'
+          + '</div>';
+      }
+      host.innerHTML = html;
+    }
+    function diagRead(rel) {
+      _diagSelectedRel = rel;
+      const cur = document.getElementById('diag-file-current');
+      if (cur) cur.textContent = rel + ' — loading…';
+      const c = document.getElementById('diag-file-content');
+      if (c) c.textContent = '(loading…)';
+      ahkCall('DiagReadFile', rel);
+    }
+    function diagDelete(rel) {
+      if (!confirm('Delete this diagnostic file?\n\n' + rel)) return;
+      if (rel === _diagSelectedRel) {
+        _diagSelectedRel = null;
+        const c = document.getElementById('diag-file-content');
+        if (c) c.textContent = '(select a file on the left)';
+        const cur = document.getElementById('diag-file-current');
+        if (cur) cur.textContent = '';
+      }
+      ahkCall('DiagDeleteFile', rel);
+    }
+    // Shows a file's content. Payload: {rel,ok,binary,truncated,size,err,content}.
+    function updateDiagFile(jsonStr) {
+      let d;
+      try { d = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr; } catch (e) { return; }
+      if (!d) return;
+      const c = document.getElementById('diag-file-content');
+      const cur = document.getElementById('diag-file-current');
+      if (!c) return;
+      if (cur) cur.textContent = (d.rel || '') + ' · ' + _diagFmtSize(d.size) + (d.truncated ? ' · showing last 256 KB' : '');
+      if (!d.ok) { c.textContent = '(error: ' + (d.err || 'unknown') + ')'; return; }
+      if (d.binary) { c.textContent = '(binary file — ' + _diagFmtSize(d.size) + ', not shown)'; return; }
+      c.textContent = (d.truncated ? '… [truncated — showing last 256 KB] …\n\n' : '') + (d.content || '(empty)');
     }
 
     function updateDebugPanels(jsonStr) {

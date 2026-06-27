@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.103`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.104`.
 
 ## Language
 
@@ -748,6 +748,41 @@ there; this is the persistent, all-at-once alternative.
   Values"** (toggle + min-ex), `ritualValueBadgesSyncFromHeader`.
 - **Verified in-game (2026-06-27):** badges render on the reward cells (small 1×1 and large
   2×3), correctly top-right, no clash with the game's own stack-count label.
+
+## Startup-timing trace + in-tool Diagnostic Files viewer (shipped 0.45.13.104)
+
+Two debug-tooling features. Motivation: occasionally (~1 in 4) startup is very slow before the
+tool becomes responsive; and diagnostic output is scattered across `logs/`, `debug/`, `data/`.
+
+- **`ahk/StartupTrace.ahk` (new):** opt-in per-step startup timing. `[Diagnostics] startupTrace`
+  toggle (PERSISTENT, not one-shot — keep it on across restarts to catch the intermittent slow
+  start). `StTraceInit()` runs early in the auto-exec (right after the logs dir is ensured);
+  `StTrace(label)` appends `label | +Δms | totalMs` IMMEDIATELY (crash/hang-safe) to
+  `logs\InGameStateMonitor.startup_trace.log` using QueryPerformanceCounter. Near-zero cost when
+  off (single global check). Marks punctuate the whole startup: every `Load*()` (per-feature),
+  hotkeys, `WebViewGui` create/show/navigate, `CheckPoePatchVersion` (PowerShell), error-log init,
+  and the first `EnsureConnected`; plus a bracket around `GetModuleSnapshot(true)` inside
+  `PoE2MemoryReader._FindStaticAddressesScan` (the 48 MB read is the prime suspect for the
+  intermittent stall). `SetStartupTrace`/`BuildStartupTraceHeaderJson`. NOTE: `InitializeErrorLog()`
+  (the `===== Start =====` header) runs LATE in startup, so the normal error log never bounded the
+  load sequence — that's why this trace starts from the true beginning.
+- **`ahk/DiagFiles.ahk` (new):** in-tool diagnostic-file browser. Enumerates `logs\*`, `debug\*`,
+  `data\*.tsv|*.txt` (shipped `.json` data intentionally excluded) → `BuildDiagFilesJson`
+  (`{name,rel,folder,size,mtime}`). `ReadDiagFile` tail-caps at 256 KB (logs: the recent end
+  matters), images report size only. `_DiagResolve` constrains ALL access to those three folders
+  (rejects `..` / drive-absolute / unknown folders). `PushDiagFilesToWebView` /
+  `PushDiagFileToWebView` (via `WebViewExec`), `DiagOpenFolder`, `DiagDeleteFile`. Reuses
+  `_JsStr`/`WebViewExec` from WebViewBridge.
+- **Wiring:** `InGameStateMonitor.ahk` `#Include`s both; `StTraceInit()` + the `StTrace` marks in
+  the auto-exec. `BridgeDispatch.ahk`: `SetStartupTrace`, `DiagListFiles`, `DiagReadFile`,
+  `DiagOpenFolder`, `DiagDeleteFile`. `WebViewBridge.ahk`: `startupTrace` in the header push.
+  `ui/index.html`: a "⏱ Startup timing trace" toggle in **Config → Debug → Diagnostic Actions**,
+  and a new **Config → Debug → "📂 Diagnostic Files"** section (`det-diagnostic-files`: file list +
+  content `<pre>`; refresh / open-folder / per-row delete; auto-lists on expand). JS
+  `updateDiagFiles` / `updateDiagFile` / `diagRead` / `diagDelete`; `startup-trace` synced in
+  `updateHeader` via `setChk`.
+- **Pending in-game verification:** enable the trace, restart until a slow start is captured, read
+  `startup_trace.log` via the viewer, and identify the spiking step.
 
 ## Reference
 
