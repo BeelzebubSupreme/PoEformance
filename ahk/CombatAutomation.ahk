@@ -1365,10 +1365,12 @@ _ApDiagFinish(out)
         wrote := true
     }
     if wrote
-        try MsgBox("AutoPilot diagnostic written to:`n" outPath
+    {
+        msg := "AutoPilot diagnostic written to:`n" outPath
             . "`n`nOpen it in Config -> Data & Logs (or paste it) so the projection"
             . " chain can be read.`n`n--- summary ---`n" SubStr(out, 1, 600)
-            , "AutoPilot Diagnose", 0x40)
+        try MsgBox(msg, "AutoPilot Diagnose", 0x40)
+    }
     else
         try MsgBox(out, "AutoPilot Diagnose", 0x40)
 }
