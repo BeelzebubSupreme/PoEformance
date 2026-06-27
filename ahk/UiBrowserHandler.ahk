@@ -386,6 +386,12 @@ PushUiBrowserState()
         dtxt := StrReplace(dtxt, "`n", "\n")
         dtxt := StrReplace(dtxt, "`t", "\t")
         scLabelJ := StrReplace(scLabel, '"', '\"')
+        ; Item at +0x4F8 (UiElementBase.ItemPtr) — if this element is an item slot,
+        ; resolve the held item entity's path/rarity (reuses the UiHoverProbe reader).
+        ; Lets the browser confirm item slots in any window (inventory / stash / ritual …).
+        itemInfo := ""
+        try itemInfo := _UiHoverItemAt(g_reader, g_uiBrowserCurrentPtr)
+        itemInfo := StrReplace(StrReplace(itemInfo, "\", "\\"), '"', '\"')
         propsJson := '{'
             . '"address":"' . Format("0x{:X}", g_uiBrowserCurrentPtr) . '"'
             . ',"stringId":"' . sid . '"'
@@ -417,6 +423,7 @@ PushUiBrowserState()
             . ',"vtable":"' . Format("0x{:X}", elem["vtable"]) . '"'
             . ',"parentPtr":"' . Format("0x{:X}", elem["parentPtr"]) . '"'
             . ',"bgColor":"' . Format("0x{:08X}", elem["bgColor"]) . '"'
+            . ',"itemInfo":"' . itemInfo . '"'
             . '}'
 
         payload := '{'

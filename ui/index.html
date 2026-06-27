@@ -11133,6 +11133,7 @@
     <div class="uib-prop-row"><span class="uib-prop-key">Displayed Text</span><span class="uib-prop-val" style="color:#7be07b">${p.text ? '"' + escHtml(p.text) + '"' : '<span style="color:#666">(none)</span>'}</span></div>
     <div class="uib-prop-row"><span class="uib-prop-key">Font Name</span><span class="uib-prop-val" style="color:#7be07b">${p.fontName ? '"' + escHtml(p.fontName) + '"' : '<span style="color:#666">(none)</span>'}</span></div>
     <div class="uib-prop-row"><span class="uib-prop-key">Text Style</span><span class="uib-prop-val" style="color:#7be07b">${p.textStyle ? '"' + escHtml(p.textStyle) + '"' : '<span style="color:#666">(none)</span>'}</span></div>
+    <div class="uib-prop-row"><span class="uib-prop-key">Item (+0x4F8)</span><span class="uib-prop-val" style="color:#f0d68a">${p.itemInfo ? escHtml(p.itemInfo) : '<span style="color:#666">(none)</span>'}</span></div>
     <div class="uib-prop-row"><span class="uib-prop-key">Vtable</span>${hv(p.vtable || '')}</div>`;
     }
 
@@ -11164,6 +11165,7 @@
         `Displayed Text: "${p.text || ''}"`,
         `Font Name:     "${p.fontName || ''}"`,
         `Text Style:    "${p.textStyle || ''}"`,
+        `Item (+0x4F8): ${p.itemInfo || '(none)'}`,
         `Vtable:        ${p.vtable || ''}`,
       ];
       const text = lines.join('\n');
