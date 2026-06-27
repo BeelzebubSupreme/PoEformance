@@ -126,7 +126,10 @@ LootLabelRectsRefresh(reader, gw, gh)
     _LlcPushChildren(reader, rg, stack)
 
     visited := Map(), nodes := 0
-    deadline := A_TickCount + 6
+    ; Safety net only — visibility pruning keeps the real cost a few ms. Must be well above
+    ; A_TickCount's ~15 ms granularity, or the check trips before the scan reaches any label
+    ; (that bug made the whole feature a no-op).
+    deadline := A_TickCount + 50
     while (stack.Length > 0 && nodes < 6000)
     {
         if (A_TickCount > deadline)
