@@ -350,9 +350,11 @@ class PoE2GameStateReader extends PoE2InventoryReader
         scanStart := A_TickCount
         scanDeadline := scanStart + 60000
 
+        try StTrace("connect: GetModuleSnapshot start")
         moduleBytes := this.Mem.GetModuleSnapshot(true)
         moduleSize := moduleBytes ? moduleBytes.Size : 0
         moduleBase := moduleBytes ? this.Mem.ModuleSnapshotBase : 0
+        try StTrace("connect: module snapshot read (" moduleSize " bytes)")
 
         ; ── Cache fast-path ───────────────────────────────────────────────
         ; Scan results depend only on the game binary; as long as the module

@@ -157,6 +157,7 @@ PushHeaderToWebView()
         . ',"lootLabelClear":' BuildLootLabelClearHeaderJson()
         . ',"lootTradePricing":' BuildLootTradePricingHeaderJson()
         . ',"overlayPlacement":' BuildOverlayPlacementHeaderJson()
+        . ',"startupTrace":' BuildStartupTraceHeaderJson()
         . "}"
     WebViewExec("updateHeader(" json ")")
 }
