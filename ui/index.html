@@ -11476,6 +11476,8 @@
     let _diagSelectedRel = null;
     let _diagFilesArr = [];
     let _diagListFilter = '';
+    let _diagSortKey = 'mtime';   // 'name' | 'folder' | 'size' | 'mtime'
+    let _diagSortAsc = false;     // default: newest first
     let _dataMode = 'table';
     let _dataRaw = null;        // cached raw content of the loaded file (for Table⇄Text re-render)
     let _dataTruncated = false;
@@ -11494,33 +11496,58 @@
       let arr;
       try { arr = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr; } catch (e) { return; }
       if (!Array.isArray(arr)) return;
-      arr.sort((a, b) => String(b.mtime || '').localeCompare(String(a.mtime || '')));
       _diagFilesArr = arr;
       _diagRenderList();
     }
     function dataFilterList(q) { _diagListFilter = (q || '').toLowerCase(); _diagRenderList(); }
+    // Click a column header to sort by it (toggles direction; size/date default desc, name/folder asc).
+    function diagSortBy(key) {
+      if (_diagSortKey === key) _diagSortAsc = !_diagSortAsc;
+      else { _diagSortKey = key; _diagSortAsc = (key === 'name' || key === 'folder'); }
+      _diagRenderList();
+    }
     function _diagRenderList() {
       const host = document.getElementById('data-file-list');
       if (!host) return;
       const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-      const q = _diagListFilter;
-      let html = '', shown = 0;
-      _diagFilesArr.forEach((f, i) => {
-        if (q && !((f.folder + '\\' + f.name).toLowerCase().includes(q))) return;
-        shown++;
+      const q = _diagListFilter, k = _diagSortKey, asc = _diagSortAsc;
+      // Filtered indices into _diagFilesArr (rows keep the ORIGINAL index for click/delete mapping).
+      const idxs = [];
+      _diagFilesArr.forEach((f, i) => { if (!q || (f.folder + '\\' + f.name).toLowerCase().includes(q)) idxs.push(i); });
+      idxs.sort((ia, ib) => {
+        const a = _diagFilesArr[ia], b = _diagFilesArr[ib];
+        if (k === 'size') return asc ? (+a.size || 0) - (+b.size || 0) : (+b.size || 0) - (+a.size || 0);
+        let va, vb;
+        if (k === 'mtime') { va = String(a.mtime || ''); vb = String(b.mtime || ''); }
+        else if (k === 'folder') { va = (a.folder + '\\' + a.name).toLowerCase(); vb = (b.folder + '\\' + b.name).toLowerCase(); }
+        else { va = String(a.name || '').toLowerCase(); vb = String(b.name || '').toLowerCase(); }
+        return asc ? va.localeCompare(vb) : vb.localeCompare(va);
+      });
+      const ind = key => _diagSortKey === key ? (_diagSortAsc ? ' ▲' : ' ▼') : '';
+      let html = '<div style="display:flex;gap:6px;align-items:center;padding:4px 6px;border-bottom:1px solid #333;position:sticky;top:0;background:#1c1c1c;font-size:10px;color:var(--accent);cursor:pointer;user-select:none;z-index:1">'
+        + '<span class="diag-sort" data-k="name" style="flex:1;min-width:0">File' + ind('name') + '</span>'
+        + '<span class="diag-sort" data-k="size" style="width:54px;text-align:right">Size' + ind('size') + '</span>'
+        + '<span class="diag-sort" data-k="mtime" style="width:78px">Date' + ind('mtime') + '</span>'
+        + '<span style="width:14px"></span>'
+        + '</div>';
+      let rowsHtml = '';
+      idxs.forEach(i => {
+        const f = _diagFilesArr[i];
         const sel = (f.rel === _diagSelectedRel) ? 'background:#2a2f3a;' : '';
-        html += '<div class="diag-file-row" data-idx="' + i + '" style="display:flex;gap:6px;align-items:center;padding:4px 6px;border-bottom:1px solid #222;cursor:pointer;' + sel + '">'
+        rowsHtml += '<div class="diag-file-row" data-idx="' + i + '" style="display:flex;gap:6px;align-items:center;padding:4px 6px;border-bottom:1px solid #222;cursor:pointer;' + sel + '">'
           + '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + esc(f.rel) + '">'
           + '<span style="color:#7a8aa0">' + esc(f.folder) + '\\</span>' + esc(f.name) + '</span>'
-          + '<span style="color:var(--subtext);font-size:10px;white-space:nowrap">' + _diagFmtSize(f.size) + '</span>'
-          + '<span style="color:var(--subtext);font-size:10px;white-space:nowrap">' + esc((f.mtime || '').slice(5, 16)) + '</span>'
-          + '<span class="diag-del" data-idx="' + i + '" title="Delete" style="cursor:pointer;color:#c06a6a">🗑</span>'
+          + '<span style="color:var(--subtext);font-size:10px;white-space:nowrap;width:54px;text-align:right">' + _diagFmtSize(f.size) + '</span>'
+          + '<span style="color:var(--subtext);font-size:10px;white-space:nowrap;width:78px">' + esc((f.mtime || '').slice(5, 16)) + '</span>'
+          + '<span class="diag-del" data-idx="' + i + '" title="Delete" style="cursor:pointer;color:#c06a6a;width:14px;text-align:center">🗑</span>'
           + '</div>';
       });
-      host.innerHTML = (shown ? html : '<div class="no-data-msg">' + (_diagFilesArr.length ? 'No files match.' : 'No files found.') + '</div>');
+      host.innerHTML = html + (idxs.length ? rowsHtml : '<div class="no-data-msg">' + (_diagFilesArr.length ? 'No files match.' : 'No files found.') + '</div>');
       if (!host._diagBound) {
         host._diagBound = true;
         host.addEventListener('click', (ev) => {
+          const sort = ev.target.closest('.diag-sort');
+          if (sort) { diagSortBy(sort.getAttribute('data-k')); return; }
           const del = ev.target.closest('.diag-del');
           if (del) { ev.stopPropagation(); const f = _diagFilesArr[+del.getAttribute('data-idx')]; if (f) diagDelete(f.rel); return; }
           const row = ev.target.closest('.diag-file-row');
