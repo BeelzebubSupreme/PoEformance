@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.112`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.113`.
 
 ## Language
 
@@ -834,6 +834,30 @@ no click → no movement).
   multi-line `try MsgBox(...)` followed by `else` → AHK v2 load error "Unexpected Else".
   Braced the `if` body and pre-built the message string (the `StashMoverDiagnose` pattern).
   Lesson: never give an unbraced `if`/`else` a body that is a continued `try` statement.
+- **Diagnostic result + root cause (0.45.13.113):** the owner ran `AutoPilotDiagnose` and it
+  proved the matrix is NOT empty — it is PRESENT (len 16) and projects the player to dead centre
+  (1722,719 vs centre 1720,720), BUT a real enemy 637 world units away projected onto the SAME
+  pixel as the player. The matrix's z→w coefficient (M34) read as **-24951** instead of ~±1, so
+  `NavProjW≈1.8M` and every nearby world point collapses onto screen centre. That is the true
+  cause of BOTH symptoms and it is a **matrix the projection can no longer use** — i.e. the
+  camera-matrix offset DID drift with a recent patch (consistent with the +0x18 `AreaInstance`
+  drifts already noted in `PoE2Offsets`), despite the initial "not an offset" expectation. The
+  mandatory combat gate does NOT catch this (matrix is "valid" len-16 and the player anchors at
+  centre), so the next step is finding the corrected offset.
+- **`ahk/CombatAutomation.ahk` — `AutoPilotMatrixScan()` (+ `_ApScanRange`/`_ApMatProj`/
+  `_ApScanSort`/`_ApDiagFinish2`):** sweeps candidate W2S-matrix offsets to locate the real one.
+  Resolves `WorldData` (`g_reader._radarInGameStateCache` → `+0x368`), reads the live player +
+  nearest enemy (or a player+500 test point) via `_DetectCombat`, then for every 4-byte offset in
+  `WorldData[0x100..0x300]` AND the camera pointer at `WorldData+0xA0` (`[0x00..0x200]`), in BOTH
+  row-major and transposed layouts, projects the player and the test point. A hit = player ≤30%
+  off centre AND test point >50 px from the player (a non-degenerate matrix). Sorted by screen
+  separation; marks the CURRENT `0x1A8` and the `+0x18` (`0x1C0`) candidate. Writes
+  `debug\autopilot_matrixscan_*.txt`. Bridge `AutoPilotMatrixScan`; UI "🧭 Scan matrix offset"
+  button next to "🔍 Diagnose projection" in Config → AutoPilot → Live Status.
+- **Pending (needs the owner):** run "🧭 Scan matrix offset" near a monster and read
+  `autopilot_matrixscan_*.txt`. The winning `base+0xOFF [layout]` gives the corrected
+  `PoE2Offsets.WorldData["W2SMatrix"]` (and whether a pointer-deref / transpose is needed); apply
+  that, then AutoPilot projection is fixed.
 
 ## Reference
 

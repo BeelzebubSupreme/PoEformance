@@ -5290,10 +5290,14 @@
                   <div class="cfg-row">
                     <span class="cfg-label">Diagnose</span>
                     <button class="hk-btn" onclick="ahkCall('AutoPilotDiag')">🔍 Diagnose projection</button>
+                    <button class="hk-btn" onclick="ahkCall('AutoPilotMatrixScan')" style="margin-left:6px">🧭 Scan matrix offset</button>
                   </div>
                   <div class="cfg-help">If AutoPilot won't move or fires skills at the middle of the screen,
-                    turn it on, stand near a monster, then click this. It writes the camera-matrix / projection
-                    chain to <code>debug\autopilot_diag_*.txt</code> (readable under Data &amp; Logs).</div>
+                    turn it on, stand near a monster, then click <b>Diagnose projection</b>. It writes the
+                    camera-matrix / projection chain to <code>debug\autopilot_diag_*.txt</code> (readable under
+                    Data &amp; Logs). If that report shows the matrix is present but a far enemy projects onto the
+                    same pixel as you, click <b>Scan matrix offset</b> — it searches for the correct camera-matrix
+                    offset and writes <code>debug\autopilot_matrixscan_*.txt</code>.</div>
                 </div>
               </details>
 
