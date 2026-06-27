@@ -1,23 +1,44 @@
 ; RitualProbe.ahk
-; RE diagnostic for the Ritual ("Favours") reward window. The generic cursor hit-test
-; (UiTree_HitTest) follows only the single top-most child per level, so it dead-ends on the
-; full-screen "notification_display" layer and never reaches the ritual reward slots. This
-; probe takes a direct route instead: find the RitualWindow UiElement by StringId, BFS its
-; subtree and report every node (StringId / rect / kids / item at +0x4F8), PLUS a raw
-; pointer-scan of the window struct for any Metadata/Items entity pointers (in case the
-; rewards are a struct item-list rather than child item slots). Output -> a log + a MsgBox.
+; RE diagnostic for item slots in non-inventory windows (Ritual "Favours" rewards in
+; particular). The generic cursor hit-test dead-ends on the full-screen notification
+; layer, and searching by a "ritual" StringId matches the wrong element (the
+; RitualRuneInteractable tooltip), so this takes the robust route: a TREE-WIDE sweep of
+; the whole GameUI that tests every element's +0x4F8 (UiElementBase.ItemPtr) and reports
+; each one that resolves to a real Metadata/Items entity, with its screen position + size
+; + StringId. The ritual reward cells (a left-of-centre cluster, ~78x78) are then obvious
+; by position vs. the inventory/stash slots on the right. Output -> a log + a MsgBox.
 ; Open the Ritual (Favours) window first, then trigger (bridge: RitualProbeRun).
 ; Included by InGameStateMonitor.ahk.
 
-; Finds the best "ritual"-named UiElement under the GameUI root (most children wins, so a
-; container beats a label). Breadth-first, capped by node count + time. Returns the element
-; ptr or 0. Params: reader (g_reader), root (GameUI root ptr).
-_RitualFindWindow(reader, root)
+; Returns "rarity=<id> path=<...>" when <entPtr> resolves to a Metadata/Items entity, else
+; "". Params: reader (g_reader), entPtr (candidate item-entity pointer).
+_RitualItemPathAt(reader, entPtr)
 {
-    best := 0, bestKids := -1
-    queue := [root], visited := Map(), seen := 0
-    deadline := A_TickCount + 4000
-    while (queue.Length > 0 && seen < 6000)
+    det := 0
+    try det := reader.Mem.ReadPtr(entPtr + PoE2Offsets.Entity["EntityDetailsPtr"])
+    if !(det && reader.IsProbablyValidPointer(det))
+        return ""
+    p := ""
+    try p := reader.ReadStdWStringAt(det + PoE2Offsets.EntityDetails["Path"])
+    if (SubStr(p, 1, 14) != "Metadata/Items")
+        return ""
+    rar := -1
+    try rar := reader.ReadItemRarity(entPtr)
+    return "rarity=" rar " path=" p
+}
+
+; Sweeps the whole UI tree under <root>, collecting every element that holds a Metadata/
+; Items entity at +0x4F8. Cheap per node (one header read + one pointer read); the parent-
+; walk for screen position only runs for hits. Capped by node count + time. Returns
+; Map("hits", [ Map(addr,x,y,w,h,sid,item) … ], "nodes", scannedCount). Params: reader, root.
+_RitualSweepItemSlots(reader, root)
+{
+    hits := []
+    itemOff := PoE2Offsets.UiElementBase["ItemPtr"]
+    sidOff  := PoE2Offsets.UiElementBase["StringIdPtr"]
+    queue := [root], visited := Map(), nodes := 0
+    deadline := A_TickCount + 8000
+    while (queue.Length > 0 && nodes < 9000)
     {
         if (A_TickCount > deadline)
             break
@@ -25,20 +46,27 @@ _RitualFindWindow(reader, root)
         if (visited.Has(ptr))
             continue
         visited[ptr] := true
-        seen += 1
-        el := UiTree_ReadElement(reader, ptr)
-        if !IsObject(el)
+        nodes += 1
+        g := _UiHitGeom(reader, ptr)
+        if !IsObject(g)
             continue
-        sid := el["stringId"]
-        if (sid != "" && InStr(sid, "ritual"))   ; InStr is case-insensitive by default
+
+        ip := 0
+        try ip := reader.Mem.ReadPtr(ptr + itemOff)
+        if (ip && reader.IsProbablyValidPointer(ip))
         {
-            if (el["childCount"] > bestKids)
+            pth := _RitualItemPathAt(reader, ip)
+            if (pth != "")
             {
-                best := ptr
-                bestKids := el["childCount"]
+                sp  := UiTree_GetScreenPos(reader, ptr)
+                sid := ""
+                try sid := reader.ReadStdWStringAt(ptr + sidOff)
+                hits.Push(Map("addr", ptr, "x", sp["x"], "y", sp["y"]
+                            , "w", g["sizeW"], "h", g["sizeH"], "sid", sid, "item", pth))
             }
         }
-        cf := el["childFirst"], cl := el["childLast"]
+
+        cf := g["childFirst"], cl := g["childLast"]
         if (reader.IsProbablyValidPointer(cf) && cl > cf)
         {
             n := Min((cl - cf) // A_PtrSize, 512)
@@ -54,24 +82,7 @@ _RitualFindWindow(reader, root)
             }
         }
     }
-    return best
-}
-
-; Returns "rarity=<id> path=<...>" when <entPtr> resolves to a Metadata/Items entity, else
-; "". Params: reader, entPtr (candidate item-entity pointer).
-_RitualItemPathAt(reader, entPtr)
-{
-    det := 0
-    try det := reader.Mem.ReadPtr(entPtr + PoE2Offsets.Entity["EntityDetailsPtr"])
-    if !(det && reader.IsProbablyValidPointer(det))
-        return ""
-    p := ""
-    try p := reader.ReadStdWStringAt(det + PoE2Offsets.EntityDetails["Path"])
-    if (SubStr(p, 1, 14) != "Metadata/Items")
-        return ""
-    rar := -1
-    try rar := reader.ReadItemRarity(entPtr)
-    return "rarity=" rar " path=" p
+    return Map("hits", hits, "nodes", nodes)
 }
 
 ; Writes the report to logs\InGameStateMonitor.ritual_probe.log (UTF-8, overwrite).
@@ -90,8 +101,8 @@ _RitualWriteLog(text)
     }
 }
 
-; One-shot Ritual reward-window probe (see file header). No params / no return; reports via
-; a log file + MsgBox. Open the Favours window first, then run.
+; One-shot item-slot sweep (see file header). No params / no return; reports via a log file
+; + MsgBox. Open the Favours window first so the reward cells are live.
 RitualProbeRun()
 {
     global g_reader
@@ -109,115 +120,72 @@ RitualProbeRun()
     }
 
     nl := "`r`n"
-    rw := _RitualFindWindow(reader, root)
-    rpt := "=== Ritual reward window probe ===" nl
+    res := _RitualSweepItemSlots(reader, root)
+    hits := res["hits"]
+
+    ; Sort hits left-to-right then top-to-bottom so the ritual reward cluster (left of
+    ; centre) groups together, away from the right-side inventory/stash slots.
+    _RitualSortHits(hits)
+
+    rpt := "=== Item-slot sweep (+0x4F8 across the whole GameUI) ===" nl
     rpt .= "GameUI root=0x" Format("{:X}", root) nl
-    if !rw
+    rpt .= "Nodes scanned=" res["nodes"] "   item-slots found=" hits.Length nl nl
+    rpt .= "Open the Favours window before running. Reward cells are a left-of-centre" nl
+    rpt .= "cluster (~78x78); inventory/stash slots sit far right. Identify by pos." nl nl
+    rpt .= "--- ITEM SLOTS (sorted by x, then y) ---" nl
+    cap := 200
+    shown := 0
+    for _, h in hits
     {
-        rpt .= nl "No UiElement with a 'ritual' StringId found under the root." nl
-            . "Open the Ritual (Favours) window, then run again. If it IS open and still" nl
-            . "not found, the StringId differs — tell me and I'll widen the search." nl
-        _RitualWriteLog(rpt)
-        try MsgBox("Ritual window not found by StringId. Is the Favours window open? See log.", "Ritual Probe", "Iconx")
-        return
-    }
-
-    rwEl := UiTree_ReadElement(reader, rw)
-    rpt .= "RitualWindow=0x" Format("{:X}", rw) "  id=" rwEl["stringId"]
-        . "  vis=" (rwEl["isVisible"] ? 1 : 0) "  kids=" rwEl["childCount"] nl nl
-
-    ; --- (A) subtree BFS: report nodes; mark any with an item entity at +0x4F8 ---
-    rpt .= "--- SUBTREE (depth<=8) — slots with an item at +0x4F8 are marked <<ITEM ---" nl
-    itemCount := 0
-    queue := [{ptr: rw, depth: 0}], visited := Map(), nodes := 0
-    deadline := A_TickCount + 6000
-    while (queue.Length > 0 && nodes < 600)
-    {
-        if (A_TickCount > deadline)
+        if (shown >= cap)
+        {
+            rpt .= "  … (" (hits.Length - cap) " more omitted)" nl
             break
-        cur := queue.RemoveAt(1)
-        ptr := cur.ptr, depth := cur.depth
-        if (visited.Has(ptr))
-            continue
-        visited[ptr] := true
-        nodes += 1
-        el := UiTree_ReadElement(reader, ptr)
-        if !IsObject(el)
-            continue
-        sp := UiTree_GetScreenPos(reader, ptr)
-        indent := ""
-        Loop depth
-            indent .= "  "
-        rpt .= indent "[" depth "] 0x" Format("{:X}", ptr)
-            . " id=" (el["stringId"] != "" ? el["stringId"] : "-")
-            . " pos=" Round(sp["x"]) "," Round(sp["y"]) " size=" Round(el["sizeW"]) "x" Round(el["sizeH"])
-            . " vis=" (el["isVisible"] ? 1 : 0) " kids=" el["childCount"]
-        itemLine := _UiHoverItemAt(reader, ptr)   ; reuses the +0x4F8 reader from UiHoverProbe
-        if (itemLine != "")
-        {
-            rpt .= "  <<ITEM " itemLine
-            itemCount += 1
         }
-        rpt .= nl
-        if (depth < 8 && el["childCount"] > 0)
-        {
-            cf := el["childFirst"], cl := el["childLast"]
-            if (reader.IsProbablyValidPointer(cf) && cl > cf)
-            {
-                n := Min((cl - cf) // A_PtrSize, 256)
-                buf := reader.Mem.ReadBytes(cf, n * A_PtrSize)
-                if buf
-                {
-                    Loop n
-                    {
-                        cp := NumGet(buf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
-                        if (reader.IsProbablyValidPointer(cp) && !visited.Has(cp))
-                            queue.Push({ptr: cp, depth: depth + 1})
-                    }
-                }
-            }
-        }
+        shown += 1
+        rpt .= "  0x" Format("{:X}", h["addr"])
+            . "  pos=" Round(h["x"]) "," Round(h["y"]) " size=" Round(h["w"]) "x" Round(h["h"])
+            . "  id=" (h["sid"] != "" ? h["sid"] : "-")
+            . "  " h["item"] nl
     }
-    rpt .= nl "Subtree item-slots (+0x4F8) found: " itemCount "  (nodes scanned: " nodes ")" nl
-
-    ; --- (B) raw struct pointer scan: any Metadata/Items entity pointer in the window struct
-    ; (covers the case where rewards are a struct item-list, not child item slots) ---
-    rpt .= nl "--- STRUCT POINTER SCAN (RitualWindow +0x000..+0x800, 8-byte stride) ---" nl
-    structHits := 0
-    sbuf := 0
-    try sbuf := reader.Mem.ReadBytes(rw, 0x800)
-    if sbuf
-    {
-        off := 0
-        while (off < 0x800)
-        {
-            cand := NumGet(sbuf.Ptr, off, "Ptr")
-            if (reader.IsProbablyValidPointer(cand))
-            {
-                p := _RitualItemPathAt(reader, cand)
-                if (p != "")
-                {
-                    rpt .= "  +0x" Format("{:X}", off) " -> " p nl
-                    structHits += 1
-                }
-            }
-            off += 0x08
-        }
-    }
-    if (structHits = 0)
-        rpt .= "  (no direct Metadata/Items entity pointer in the first 0x800 bytes)" nl
-    rpt .= nl "Struct item-pointer hits: " structHits nl
+    if (hits.Length = 0)
+        rpt .= "  (none — no element in the tree holds a Metadata/Items entity at +0x4F8;" nl
+            . "   ritual rewards may use a different reference. Tell me and I'll dig further.)" nl
 
     _RitualWriteLog(rpt)
-    summary := "Ritual probe done." nl nl
-        . "RitualWindow: 0x" Format("{:X}", rw) " (id=" rwEl["stringId"] ", kids=" rwEl["childCount"] ")" nl
-        . "Subtree item-slots (+0x4F8): " itemCount nl
-        . "Struct item-pointers: " structHits nl nl
+    summary := "Item-slot sweep done." nl nl
+        . "Nodes scanned: " res["nodes"] nl
+        . "Item-slots (+0x4F8) found: " hits.Length nl nl
         . "Log: logs\InGameStateMonitor.ritual_probe.log" nl nl
-        . (itemCount > 0
-            ? "-> Rewards are child item-slots; I can enumerate them for badges."
-            : (structHits > 0
-                ? "-> Rewards are a struct item-list; I'll read them from the window struct."
-                : "-> Neither route hit; paste the log and I'll widen the search."))
+        . (hits.Length > 0
+            ? "→ Paste the log; I'll pick out the ritual reward cluster by position."
+            : "→ No +0x4F8 item slots anywhere — ritual rewards use another mechanism; I'll dig deeper.")
     try MsgBox(summary, "Ritual Probe - result", "Iconi")
+}
+
+; In-place sort of the sweep hits by x (then y), so spatial clusters group together.
+; Simple insertion sort (hit counts are small). Param: hits (Array of Maps). No return.
+_RitualSortHits(hits)
+{
+    i := 2
+    while (i <= hits.Length)
+    {
+        cur := hits[i]
+        j := i - 1
+        while (j >= 1 && _RitualHitAfter(hits[j], cur))
+        {
+            hits[j + 1] := hits[j]
+            j -= 1
+        }
+        hits[j + 1] := cur
+        i += 1
+    }
+}
+
+; True when hit a should sort AFTER hit b (x major, y minor). Params: a, b (hit Maps).
+_RitualHitAfter(a, b)
+{
+    if (Round(a["x"]) != Round(b["x"]))
+        return (a["x"] > b["x"])
+    return (a["y"] > b["y"])
 }
