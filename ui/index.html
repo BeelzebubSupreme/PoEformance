@@ -11441,6 +11441,7 @@
 
     // ── Diagnostic Files viewer (Config > Debug) ──────────────────────────
     let _diagSelectedRel = null;
+    let _diagFilesArr = [];
     function _diagFmtSize(n) {
       n = +n || 0;
       if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
@@ -11448,30 +11449,50 @@
       return n + ' B';
     }
     // Renders the file list (sorted newest-first). Payload: JSON array of {name,rel,folder,size,mtime}.
+    // Rows carry data-idx into _diagFilesArr and use one delegated click handler (no inline onclick —
+    // rel contains backslashes/quotes that break attribute strings).
     function updateDiagFiles(jsonStr) {
       let arr;
       try { arr = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr; } catch (e) { return; }
       const host = document.getElementById('diag-files-list');
       if (!host) return;
       if (!Array.isArray(arr) || arr.length === 0) {
+        _diagFilesArr = [];
         host.innerHTML = '<div class="no-data-msg">No diagnostic files found</div>';
         return;
       }
       arr.sort((a, b) => String(b.mtime || '').localeCompare(String(a.mtime || '')));
+      _diagFilesArr = arr;
       const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       let html = '';
-      for (const f of arr) {
+      arr.forEach((f, i) => {
         const sel = (f.rel === _diagSelectedRel) ? 'background:#2a2f3a;' : '';
-        html += '<div class="diag-file-row" style="display:flex;gap:6px;align-items:center;padding:4px 6px;border-bottom:1px solid #222;cursor:pointer;' + sel + '" '
-          + 'onclick="diagRead(' + JSON.stringify(f.rel) + ')">'
+        html += '<div class="diag-file-row" data-idx="' + i + '" style="display:flex;gap:6px;align-items:center;padding:4px 6px;border-bottom:1px solid #222;cursor:pointer;' + sel + '">'
           + '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + esc(f.rel) + '">'
           + '<span style="color:#7a8aa0">' + esc(f.folder) + '\\</span>' + esc(f.name) + '</span>'
           + '<span style="color:var(--subtext);font-size:10px;white-space:nowrap">' + _diagFmtSize(f.size) + '</span>'
           + '<span style="color:var(--subtext);font-size:10px;white-space:nowrap">' + esc((f.mtime || '').slice(5, 16)) + '</span>'
-          + '<span title="Delete" style="cursor:pointer;color:#c06a6a" onclick="event.stopPropagation();diagDelete(' + JSON.stringify(f.rel) + ')">🗑</span>'
+          + '<span class="diag-del" data-idx="' + i + '" title="Delete" style="cursor:pointer;color:#c06a6a">🗑</span>'
           + '</div>';
-      }
+      });
       host.innerHTML = html;
+      if (!host._diagBound) {
+        host._diagBound = true;
+        host.addEventListener('click', (ev) => {
+          const del = ev.target.closest('.diag-del');
+          if (del) {
+            ev.stopPropagation();
+            const f = _diagFilesArr[+del.getAttribute('data-idx')];
+            if (f) diagDelete(f.rel);
+            return;
+          }
+          const row = ev.target.closest('.diag-file-row');
+          if (row) {
+            const f = _diagFilesArr[+row.getAttribute('data-idx')];
+            if (f) diagRead(f.rel);
+          }
+        });
+      }
     }
     function diagRead(rel) {
       _diagSelectedRel = rel;
