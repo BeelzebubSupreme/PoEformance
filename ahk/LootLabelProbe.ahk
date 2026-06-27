@@ -53,14 +53,15 @@ LootLabelProbeRun()
 
     nl := "`r`n"
     rows := []
-    itemOff := PoE2Offsets.UiElementBase["ItemPtr"]
-    queue := [root], visited := Map(), nodes := 0
+    ; Index-based queue (qIdx) — avoids O(n) array shifting that queue.RemoveAt(1) costs per pop.
+    queue := [root], qIdx := 1, visited := Map(), nodes := 0
     deadline := A_TickCount + 9000
-    while (queue.Length > 0 && nodes < 12000)
+    while (qIdx <= queue.Length && nodes < 12000)
     {
         if (A_TickCount > deadline)
             break
-        ptr := queue.RemoveAt(1)
+        ptr := queue[qIdx]
+        qIdx += 1
         if (visited.Has(ptr))
             continue
         visited[ptr] := true

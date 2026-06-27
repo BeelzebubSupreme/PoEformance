@@ -12965,9 +12965,14 @@
           if (colgrp && colgrp.children[ci]) colgrp.children[ci].style.width = w + 'px';
           if (tbl) tbl.style.width = _tsvColWidths.reduce((a, b) => a + (b || 0), 0) + 'px';
         };
-        const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+        const onUp = () => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          window.removeEventListener('blur', onUp);
+        };
         document.addEventListener('mousemove', onMove);
         document.addEventListener('mouseup', onUp);
+        window.addEventListener('blur', onUp);   // Alt-Tab mid-drag: cancel so listeners never linger
       });
     }
 
