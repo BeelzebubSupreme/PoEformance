@@ -175,6 +175,12 @@ _DispatchBridgeCall(method, args)
                 _UhpApplySetting(args[1], args[2])
             SaveUiHoverPrice()
             SetTimer(PushHeaderToWebView, -50)
+        case "SetRitualValueBadges":
+            ; Persistent value badges on Ritual reward cells. args[1]=key, args[2]=value.
+            if (args.Length >= 2)
+                _RvbApplySetting(args[1], args[2])
+            SaveRitualValueBadges()
+            SetTimer(PushHeaderToWebView, -50)
         case "SetLootTradePricing":
             ; Official PoE2 trade-API unique pricing. args[1]=key, args[2]=value.
             if (args.Length >= 2)
@@ -822,6 +828,9 @@ _DispatchBridgeCall(method, args)
         case "UiHoverProbeRun":
             ; RE diagnostic: find the UIHover pointer (hovered UI/inventory element).
             SetTimer(() => UiHoverProbeRun(), -1)
+        case "RitualProbeRun":
+            ; RE diagnostic: dump the Ritual (Favours) reward window subtree + item slots.
+            SetTimer(() => RitualProbeRun(), -1)
         case "SkillProbeRun":
             ; TEMP post-patch diagnostic: trace the skill-name DAT chain.
             SetTimer(() => SkillProbeRun(), -1)

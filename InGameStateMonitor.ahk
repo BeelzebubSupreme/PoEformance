@@ -32,6 +32,7 @@ SetWorkingDir(A_ScriptDir)
 #Include ahk/LootTrackerOverlay.ahk
 #Include ahk/LootValueOverlay.ahk
 #Include ahk/UiHoverPrice.ahk
+#Include ahk/RitualValueBadges.ahk
 #Include ahk/OverlayContext.ahk
 #Include ahk/PlayOverlayPolicy.ahk
 #Include ahk/OverlayManager.ahk
@@ -50,7 +51,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.87"
+POEFORMANCE_VERSION := "0.45.13.92"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -334,6 +335,7 @@ LoadLootTracker()         ; map-run / session loot tracker state + [LootTracker]
 LoadLootPricing()         ; poe.ninja price layer (loads cache, kicks refresh if stale)
 LoadLootRadarValue()      ; value-aware loot radar (price ground drops) + [LootRadarValue] config
 LoadUiHoverPrice()        ; price-on-hover for inventory/stash items + [UiHoverPrice] config
+LoadRitualValueBadges()   ; persistent value badges on Ritual (Favours) reward cells + [RitualValueBadges]
 LoadPoeTradeSession()     ; WebView2 trade-session transport (in-browser, no secrets leave it)
 LoadLootTradePricing()    ; official PoE2 trade-API unique pricing (off by default) + [LootTradePricing]
 LoadStashMover()          ; "dump backpack to open stash" feature + [StashMover] config
@@ -984,6 +986,7 @@ OnTreeTabChanged(*)
 #Include ahk/MemoryDissect.ahk
 #Include ahk/AreaInstanceProbe.ahk
 #Include ahk/UiHoverProbe.ahk
+#Include ahk/RitualProbe.ahk
 #Include ahk/PathfindingProbe.ahk
 #Include ahk/OffsetCompare.ahk
 #Include ahk/PatchMaintenance.ahk

@@ -26,6 +26,7 @@ class OverlayManager
         this.Register(LootCompactBarOverlay())
         this.Register(LootValueOverlay())
         this.Register(UiHoverPriceOverlay())
+        this.Register(RitualValueBadgeOverlay())
         this.Register(DebugOverlay())
     }
 
