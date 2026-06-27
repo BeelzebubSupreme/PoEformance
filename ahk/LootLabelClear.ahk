@@ -105,14 +105,15 @@ LootLabelRectsRefresh(reader, gw, gh)
     if !(root && reader.IsProbablyValidPointer(root))
         return
 
-    ; UI element positions/sizes are in the game's 2560×1600 base coords (see PoE2MemoryReader
-    ; "apply GameWindowScale"): X scales by gw/2560, Y by gh/1600. They differ on any non-16:10
-    ; window — using the Y scale for X left-shifts the rects ~10% on 16:9, so scale each axis on
-    ; its own factor.
-    sX  := gw / 2560.0
+    ; UI positions/sizes from UiTree_GetScreenPos are height-normalized: the base space is
+    ; 1600 tall and its WIDTH grows with the aspect ratio (e.g. on a 3840×1600 ultrawide the
+    ; right-edge UI x reaches ~3840, far past 2560). So BOTH axes convert to pixels with the
+    ; same factor gh/1600 — verified against the probe (the Mana label at UI x=3519 only lands
+    ; on screen with gh/1600; gw/2560 would push it off the right edge).
     sY  := gh / 1600.0
     maxW := gw * 0.6, maxH := gh * 0.5   ; a label is never this big → skip (anti whole-map clear)
     sidOff := PoE2Offsets.UiElementBase["StringIdPtr"]
+    txtOff := PoE2Offsets.UiElementBase["TextPtr"]
     rects := []
 
     ; Seed the stack with the root's children so the root's own visible flag never blocks us.
@@ -144,18 +145,26 @@ LootLabelRectsRefresh(reader, gw, gh)
             continue
         if !g["visible"]            ; hidden → skip this node AND its whole subtree
             continue
-        if (g["sizeW"] > 0 && g["sizeH"] > 0 && g["sizeW"] * sX <= maxW && g["sizeH"] * sY <= maxH)
+        if (g["sizeW"] > 0 && g["sizeH"] > 0 && g["sizeW"] * sY <= maxW && g["sizeH"] * sY <= maxH)
         {
             sid := ""
             try sid := reader.ReadStdWStringAt(ptr + sidOff)
             if (_LlcIsLabelSid(sid))
             {
-                sp := UiTree_GetScreenPos(reader, ptr)
-                x := Round(sp["x"] * sX), y := Round(sp["y"] * sY)
-                w := Round(g["sizeW"] * sX), h := Round(g["sizeH"] * sY)
-                ; Keep only labels that land on screen.
-                if (w > 0 && h > 0 && x < gw && y < gh && x + w > 0 && y + h > 0)
-                    rects.Push([x, y, w, h])
+                ; Require displayed text so we only punch holes for the actual on-screen labels
+                ; (item names, gold, checkpoint, monolith) — not the empty Metadata/ wrappers /
+                ; sub-elements that otherwise scatter stray holes across the map.
+                txt := ""
+                try txt := reader.ReadStdWStringAt(ptr + txtOff, 64)
+                if (Trim(txt) != "")
+                {
+                    sp := UiTree_GetScreenPos(reader, ptr)
+                    x := Round(sp["x"] * sY), y := Round(sp["y"] * sY)
+                    w := Round(g["sizeW"] * sY), h := Round(g["sizeH"] * sY)
+                    ; Keep only labels that land on screen.
+                    if (w > 0 && h > 0 && x < gw && y < gh && x + w > 0 && y + h > 0)
+                        rects.Push([x, y, w, h])
+                }
             }
         }
         _LlcPushChildren(reader, g, stack)
