@@ -503,6 +503,22 @@ class PoE2GameStateReader extends PoE2InventoryReader
     ; absent ones as the literal "miss". Returns Map("result", Map of
     ; name → absolute address, "missing", [names]), or 0 when the cache is
     ; stale/incomplete.
+    ; Compact signature (DJB2 hash, hex) of the pattern set — name + bytes of every pattern.
+    ; Stored in the cache so the cache invalidates whenever a pattern's NAME or BYTES change,
+    ; not just on a module-size change. Without it a corrected/edited signature is silently
+    ; ignored: the stale cached "miss"/offset is replayed until the next game patch.
+    _PatternsSignature(patterns)
+    {
+        h := 5381
+        for _, p in patterns
+        {
+            s := p["name"] "|" p["pattern"] ";"
+            Loop Parse, s
+                h := ((h * 33) + Ord(A_LoopField)) & 0xFFFFFFFF
+        }
+        return Format("{:08X}", h)
+    }
+
     _LoadPatternCache(patterns, moduleSize, moduleBase)
     {
         if (!moduleSize || !moduleBase)
@@ -511,6 +527,11 @@ class PoE2GameStateReader extends PoE2InventoryReader
         cachedSize := 0
         try cachedSize := Integer(IniRead(ini, "PatternCache", "ModuleSize", "0"))
         if (cachedSize = 0 || cachedSize != moduleSize)
+            return 0
+        ; Re-scan when the pattern definitions changed (or an older cache without the signature).
+        cachedSig := ""
+        try cachedSig := IniRead(ini, "PatternCache", "PatternsSig", "")
+        if (cachedSig != this._PatternsSignature(patterns))
             return 0
         resultMap := Map()
         missing := []
@@ -543,6 +564,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
         {
             try IniDelete(ini, "PatternCache")
             IniWrite(moduleSize, ini, "PatternCache", "ModuleSize")
+            IniWrite(this._PatternsSignature(patterns), ini, "PatternCache", "PatternsSig")
             for patternInfo in patterns
             {
                 name := patternInfo["name"]
