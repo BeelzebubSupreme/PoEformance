@@ -9,7 +9,13 @@ class PoE2StaticOffsetsPatterns
         return [
             Map("name", "Game States", "pattern", "48 39 2D ^ ?? ?? ?? ?? 0F 85 ?? ?? ?? ?? B9 40 01 00 00"),
             Map("name", "File Root", "pattern", "48 8D 0D ?? ?? ?? ?? E8 ?? ?? ?? ?? 48 8B 05 ^ ?? ?? ?? ?? 48 83 C4 28"),
-            Map("name", "AreaChangeCounter", "pattern", "FF 05 ^ ?? ?? ?? ?? 4D 8B 06"),
+            ; AreaChangeCounter: the `lock inc [counter]` inside the area/instance-load function
+            ; (the one referencing "Got Instance Details from login server"). The old
+            ; "FF 05 ^ ?? ?? ?? ?? 4D 8B 06" form did NOT match the real counter — that is a LOCK
+            ; inc (F0 FF 05 …) — it matched two coincidental mid-instruction byte runs elsewhere
+            ; (2 hits → ambiguous → miss). Anchor on the surrounding instructions
+            ; (mov [r14+10],rax / lock inc / mov rcx,rbp / call) for uniqueness; ^ on the disp32.
+            Map("name", "AreaChangeCounter", "pattern", "49 89 46 10 F0 FF 05 ^ ?? ?? ?? ?? 48 8B CD E8"),
             ; Terrain Rotator Helper resolves the larger terrain-rotation array.
             Map("name", "Terrain Rotator Helper", "pattern", "48 83 EC 38 41 0F B6 C0 4C 8B D1 4C 8B CA 48 8D 0D ?? ?? ?? ?? 44 0F B6 04 08 B8 08 00 00 00 8B 0A 44 3B C0 89 4C 24 24 BA 16 00 00 00 44 0F 47 C0 48 8D 05 ^ ?? ?? ?? ??"),
             ; Terrain Rotation Selector resolves the rotation lookup table (e.g. 00 03 02 01 04 05 06 07 08).
