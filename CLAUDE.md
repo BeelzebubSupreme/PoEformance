@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.108`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.111`.
 
 ## Language
 
@@ -749,7 +749,7 @@ there; this is the persistent, all-at-once alternative.
 - **Verified in-game (2026-06-27):** badges render on the reward cells (small 1×1 and large
   2×3), correctly top-right, no clash with the game's own stack-count label.
 
-## Startup-timing trace + in-tool Diagnostic Files viewer (shipped 0.45.13.108)
+## Startup-timing trace + in-tool Diagnostic Files viewer (shipped 0.45.13.110)
 
 Two debug-tooling features. Motivation: occasionally (~1 in 4) startup is very slow before the
 tool becomes responsive; and diagnostic output is scattered across `logs/`, `debug/`, `data/`.
@@ -791,6 +791,45 @@ tool becomes responsive; and diagnostic output is scattered across `logs/`, `deb
 - **Pending in-game verification:** enable the trace, restart until a slow start is captured, read
   `startup_trace.log` in **Data & Logs**, and identify the spiking step; verify Table/Text auto-mode,
   the per-line text search/pagination, and column drag-resize.
+
+## AutoPilot fix + projection diagnostic (issue #158, shipped 0.45.13.111)
+
+Ticket #158 (a non-owner reporter): with AutoPilot on the character "doesn't move" AND on
+enemies it "locks up and spams skills on the middle of the screen, not even aimed." Both
+symptoms have ONE cause — an empty/invalid `w2sMatrix` reaching the nav consumers. With a
+valid matrix `_WorldToScreen` always uses the matrix path (`NavProject`); only an EMPTY
+matrix fell through to the **isometric screen-CENTRE fallback** (`winX+winW/2 + …`) → blind
+skill-spam at centre. Exploration already fails safe (empty matrix → `NavAnchor` no-proj →
+no click → no movement).
+
+- **`ahk/CombatAutomation.ahk` — mandatory projection gate (the fix):** the per-tick combat
+  anchor gate (~line 152) USED to be conditional (run `NavAnchor` only when matrix/rect/player
+  were present, else fall through to the skill-fire path). Now it is MANDATORY: if
+  `navRect && matrix.Length=16 && playerWorldX!=0` is not ALL true, combat sets
+  `g_combatLastReason := "cam-bad(no-proj rect=N matLen=N pwx=N)"` and `return true` (holds
+  engagement, fires/clicks NOTHING). The dangerous centre-spam is gone regardless of root
+  cause; the reason string self-reports which input is missing. `_WorldToScreen`'s iso
+  fallback is KEPT (RadarOverlay + CustomHotkeys still call it without an anchor) but is now
+  unreachable from combat with a bad matrix.
+- **`ahk/CombatAutomation.ahk` — `AutoPilotDiagnose()` + `_ApDiagFinish()` (triage aid):**
+  one-shot dump of the whole world→screen chain so the "doesn't move / fires at centre"
+  failure can be root-caused WITHOUT reading the live overlay. Reuses `_DetectCombat(snap)`
+  for matrix + player + nearest enemy; reports matrix length (0 = read failed → bad pointer /
+  version offset shift / camera not ready) / all-zero / the 4×4 values, the player world pos,
+  client rect, `NavProjW` (camera w sign), the player's projected screen pos + % offset from
+  centre, the `NavAnchor` ok/why/visSign, and the enemy projection. Writes
+  `debug\autopilot_diag_*.txt` (readable in **Data & Logs**) + a MsgBox summary. Distinguishes
+  the two failure classes: `matLen=0` / no-proj = no matrix (pointer/offset/version), vs.
+  `off-center` = matrix present but projecting the player wrong (garbage matrix / wrong player
+  pos).
+- **Wiring:** `BridgeDispatch.ahk` case `AutoPilotDiag` → `SetTimer(AutoPilotDiagnose, -1)`.
+  `ui/index.html`: a "🔍 Diagnose projection" button in **Config → AutoPilot → Live Status**
+  (next to the live combat/explore reason readout).
+- **Pending in-game verification (needs the reporter):** with AutoPilot on near a monster,
+  click "Diagnose projection" and read `autopilot_diag_*.txt` — the matrix length + anchor
+  why localize the root cause so the targeted read/offset fix can follow. Confirm the
+  centre-spam is gone (combat now idles with `cam-bad(...)` instead of firing) when the
+  matrix is bad.
 
 ## Reference
 

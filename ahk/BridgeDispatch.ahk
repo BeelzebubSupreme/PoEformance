@@ -163,6 +163,9 @@ _DispatchBridgeCall(method, args)
         case "LootValueDiag":
             ; RE aid (value-aware loot radar step 0): can we price ground items/uniques?
             SetTimer(LootValueDiagnose, -1)
+        case "AutoPilotDiag":
+            ; Triage aid (issue #158): dump the world->screen projection chain.
+            SetTimer(AutoPilotDiagnose, -1)
         case "SetLootRadarValue":
             ; args[1] = setting key, args[2] = value. Apply -> persist -> refresh header.
             if (args.Length >= 2)
