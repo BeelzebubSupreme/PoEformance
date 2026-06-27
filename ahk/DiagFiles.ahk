@@ -6,11 +6,34 @@
 ; delete; all access is constrained to those three folders (no traversal / absolute paths).
 ; Included by InGameStateMonitor.ahk. JS side: updateDiagFiles(...) / updateDiagFile(...).
 
-; Folders + glob patterns scanned for diagnostic files. logs/debug = everything; data = the
-; generated TSV/TXT diagnostics (shipped .json data is intentionally not listed).
+; Folders + glob patterns scanned for the unified "Data & Logs" browser. data = the reference
+; TSVs (the old Data-tab source, listed here ONCE); logs/debug = everything. Shipped .json data
+; is intentionally not listed.
 _DiagScanList()
 {
-    return [ ["logs", "*"], ["debug", "*"], ["data", "*.tsv"], ["data", "*.txt"] ]
+    return [ ["data", "*.tsv"], ["logs", "*"], ["debug", "*"] ]
+}
+
+; True when a file should default to the TABLE view: a .tsv, or a text file whose sampled lines
+; are mostly tab-delimited. Free-form reports (.log / *_diag_*.txt) fall through to text mode.
+; Params: ext (lowercase extension), content (file text). Returns bool.
+_DiagIsTabular(ext, content)
+{
+    if (ext = "tsv")
+        return true
+    checked := 0, tabbed := 0
+    for _, ln in StrSplit(content, "`n", "`r")
+    {
+        t := Trim(ln)
+        if (t = "" || SubStr(t, 1, 1) = "#")
+            continue
+        checked += 1
+        if InStr(ln, "`t")
+            tabbed += 1
+        if (checked >= 30)
+            break
+    }
+    return (checked > 0 && tabbed * 2 >= checked)
 }
 
 ; Resolves a relative path (folder\name) to an absolute path, but ONLY inside logs/debug/data and
@@ -101,7 +124,8 @@ ReadDiagFile(rel)
     }
     catch
         return Map("ok", false, "err", "read error")
-    return Map("ok", true, "binary", false, "size", total, "truncated", truncated, "content", content)
+    return Map("ok", true, "binary", false, "size", total, "truncated", truncated, "content", content
+        , "tabular", _DiagIsTabular(ext, content))
 }
 
 ; Reads a diagnostic file and pushes its content to the WebView (JS updateDiagFile). Param: rel.
@@ -112,6 +136,7 @@ PushDiagFileToWebView(rel)
         . '"rel":' _JsStr(rel) ','
         . '"ok":' (r["ok"] ? "true" : "false") ','
         . '"binary":' ((r.Has("binary") && r["binary"]) ? "true" : "false") ','
+        . '"tabular":' ((r.Has("tabular") && r["tabular"]) ? "true" : "false") ','
         . '"truncated":' ((r.Has("truncated") && r["truncated"]) ? "true" : "false") ','
         . '"size":' ((r.Has("size") ? r["size"] : 0) + 0) ','
         . '"err":' _JsStr(r.Has("err") ? r["err"] : "") ','
