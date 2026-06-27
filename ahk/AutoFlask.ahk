@@ -103,6 +103,9 @@ UpdateRadarFast()
         ; ── Price-on-hover for inventory/stash items (self-throttled, panel+focus gated) ──
         TryUiHoverPrice(radarSnap)
 
+        ; ── Persistent value badges on Ritual (Favours) reward cells (self-throttled) ──
+        TryRitualValueBadges(radarSnap)
+
         ; ── Stash Mover overlay button — position/show next to the inventory grid ──
         StashMoverTick(radarSnap)
 

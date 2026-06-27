@@ -153,6 +153,7 @@ PushHeaderToWebView()
         . ',"stashMover":' BuildStashMoverHeaderJson()
         . ',"lootRadarValue":' BuildLootRadarValueHeaderJson()
         . ',"uiHoverPrice":' BuildUiHoverPriceHeaderJson()
+        . ',"ritualValueBadges":' BuildRitualValueBadgesHeaderJson()
         . ',"lootTradePricing":' BuildLootTradePricingHeaderJson()
         . ',"overlayPlacement":' BuildOverlayPlacementHeaderJson()
         . "}"

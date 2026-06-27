@@ -5764,6 +5764,30 @@
           </details>
         </div>
 
+        <div class="cfg-section">
+          <details id="det-ritualvalue" ontoggle="syncCfgSections()">
+            <summary>
+              <div class="cfg-header">💎 Ritual Reward Values</div>
+            </summary>
+            <div class="cfg-subsection">
+              <div class="cfg-help">
+                Shows a value badge on <em>every</em> reward in the Ritual (Favours) shop at once —
+                no hovering needed — so you can compare them at a glance. Priced with the same
+                poe.ninja / trade data as the Loot Value Radar; unpriceable items (most rares /
+                magics) show no badge. Enable Loot pricing in the Loot tab first, or values stay 0.
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Enable ritual reward values</span>
+                <label class="toggle"><input type="checkbox" id="rvb-enabled"
+                    onchange="ahkCall('SetRitualValueBadges','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row">
+                <span class="cfg-label">Min. value to show (ex)</span>
+                <span class="hk-num"><input type="number" id="rvb-minEx" min="0" max="100000" step="0.5" onchange="ahkCall('SetRitualValueBadges','minEx',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+              </div>
+            </div>
+          </details>
+        </div>
+
         <!-- Overlay Placement — free positioning for the info overlays (Debug, the
              Valuable-loot list, the two Loot bars and the Alert banner). Rows are
              rendered by overlayPlaceRender() from the header's overlayPlacement data.
@@ -6722,7 +6746,7 @@
       "tab:ui":"ChannellingAttacksNotable2","tab:gamestate":"auraeffect","tab:memdiff":"flaskstr","tab:dissect":"flaskint","tab:hotkeys":"KeystoneResoluteTechnique",
       "cfgtab:general":"blankStr","cfgtab:automation":"PhysicalDamageOverTimeNode","cfgtab:overlay":"LifeandMana","cfgtab:vitals":"BloodMageNode","cfgtab:debug":"tempint","cfgtab:data":"ChannellingSpeed",
       "sec:det-status":"HollowPalmTechniqueKeystone","sec:det-integrations":"KeystoneAvatarOfFire","sec:det-stashmover":"KeystonePainAttunement","sec:sm-stash":"AzmeriPrimalMonkey","sec:sm-stash-ignore":"shieldblock","sec:sm-stash-rnd":"criticalstrikechance","sec:sm-sell":"AzmeriWildBear","sec:sm-sell-ignore":"shieldblock","sec:sm-sell-rnd":"criticalstrikechance","sec:sm-shared":"TemporalistNearbyEnemiesProjectilesSlowed","sec:det-autopilot":"KeystoneAvatarOfFire","sec:ap-status":"WarbringerEncasedInJade","sec:ap-combat":"LightningDamagenode","sec:ap-explore":"MiracleMaker","sec:ap-loot":"energyshield",
-      "sec:det-maphack":"ColdAndFireHybridNotable","sec:det-radar":"PressurePoints","sec:det-entitymarkers":"TacticianNode","sec:det-rangecircles":"TemporalistNode","sec:det-lootvalue":"ShieldNodeOffensive","sec:lrv-detection":"Rage","sec:lrv-list":"SpellSuppresionNode","sec:lrv-onmap":"RangedTotemDamage","sec:lrv-trade":"ClawsOfTheMagpie","sec:det-uihoverprice":"projectilespeed","sec:det-overlay-placement":"MiracleMaker",
+      "sec:det-maphack":"ColdAndFireHybridNotable","sec:det-radar":"PressurePoints","sec:det-entitymarkers":"TacticianNode","sec:det-rangecircles":"TemporalistNode","sec:det-lootvalue":"ShieldNodeOffensive","sec:lrv-detection":"Rage","sec:lrv-list":"SpellSuppresionNode","sec:lrv-onmap":"RangedTotemDamage","sec:lrv-trade":"ClawsOfTheMagpie","sec:det-uihoverprice":"projectilespeed","sec:det-ritualvalue":"FlaskNotableCritStrikeRecharge","sec:det-overlay-placement":"MiracleMaker",
       "sec:det-vitals-general":"CorpseDamage","sec:det-debug-actions":"axedmgspeed","sec:det-radar-debug":"PathfinderPathoftheWarrior","sec:det-debug-panels":"ColdDamagenode","sec:det-debug-discovery":"LightningDamagenode","sec:det-debug-diff":"ManaLeechThemedNode","sec:det-debug-overlay":"ElementalDamagenode","sec:det-offset-compare":"plusstrengthdexterity",
       "sec:det-al-conditions":"blankDex","sec:det-al-timing":"blankInt","sec:det-al-output":"blankStr","sec:det-lt-settings":"KeystoneWhispersOfDoom","sec:det-blacklist":"ArmourAndEvasionNode",
       "sec:det-vitals-life":"IncreasedMaximumLifeNotable","sec:det-vitals-mana":"MineManaReservationNotable","sec:det-vitals-es":"EnergyShieldNode",
@@ -7481,6 +7505,14 @@
       const val = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
       chk('uhp-enabled', s.enabled);
       val('uhp-minEx', s.minEx);
+    }
+
+    function ritualValueBadgesSyncFromHeader(s) {
+      if (!s) return;
+      const chk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = v === true || v === 1 || v === '1' || v === 'true'; };
+      const val = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
+      chk('rvb-enabled', s.enabled);
+      val('rvb-minEx', s.minEx);
     }
 
     // Map loot-value label color → shared GGPK color picker → SetLootRadarValue mapColor.
@@ -9708,6 +9740,7 @@
       if (d.stashMover !== undefined) stashMoverSyncFromHeader(d.stashMover);
       if (d.lootRadarValue !== undefined) lootRadarValueSyncFromHeader(d.lootRadarValue);
       if (d.uiHoverPrice !== undefined) uiHoverPriceSyncFromHeader(d.uiHoverPrice);
+      if (d.ritualValueBadges !== undefined) ritualValueBadgesSyncFromHeader(d.ritualValueBadges);
       if (d.lootTradePricing !== undefined) lootTradePricingSyncFromHeader(d.lootTradePricing);
       if (d.overlayPlacement !== undefined) overlayPlaceSync(d.overlayPlacement);
 
