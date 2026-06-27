@@ -172,6 +172,128 @@ LootLabelRectsRefresh(reader, gw, gh)
     g_llcRects := rects
 }
 
+; One-shot diagnostic: logs the live window/client geometry and, for every matched loot label,
+; its raw UI position/size plus the overlay-local px rect computed two ways — the current method
+; (window rect from WinGetPos, the same source RadarOverlay uses) and a client-rect method
+; (NavClientRect origin + client-height scale, the convention the verified hover badge uses).
+; Comparing the two against where the labels actually are pins the correct conversion. Writes
+; logs\InGameStateMonitor.lootlabelclear_diag.log. Bridge: LootLabelClearDiag. No params/return.
+LootLabelClearDiag()
+{
+    global g_reader
+    if !(IsObject(g_reader) && IsObject(g_reader.Mem) && g_reader.Mem.Handle)
+    {
+        try MsgBox("Loot-label diag: not connected to PoE2.", "Loot Label Clear Diag", "Iconx")
+        return
+    }
+    reader := g_reader
+    root := _UiBrowser_GetGameUiPtr()
+    if !(root && reader.IsProbablyValidPointer(root))
+    {
+        try MsgBox("No GameUI root yet — open the game / let the radar run, then retry.", "Loot Label Clear Diag", "Iconx")
+        return
+    }
+
+    ; Window rect (what the overlay context uses via WinGetPos) and client rect (UI-coord basis).
+    hwnd := 0
+    try hwnd := ResolvePoEWindow()
+    wx := 0, wy := 0, ww := 0, wh := 0
+    if hwnd
+        try WinGetPos(&wx, &wy, &ww, &wh, "ahk_id " hwnd)
+    cr := hwnd ? NavClientRect(hwnd) : 0
+    crx := IsObject(cr) ? cr["x"] : 0,  cry := IsObject(cr) ? cr["y"] : 0
+    crw := IsObject(cr) ? cr["w"] : 0,  crh := IsObject(cr) ? cr["h"] : 0
+
+    sidOff := PoE2Offsets.UiElementBase["StringIdPtr"]
+    txtOff := PoE2Offsets.UiElementBase["TextPtr"]
+    rows := []
+    stack := []
+    rg := _UiHitGeom(reader, root)
+    if IsObject(rg)
+        _LlcPushChildren(reader, rg, stack)
+    visited := Map(), nodes := 0
+    deadline := A_TickCount + 2000
+    while (stack.Length > 0 && nodes < 12000)
+    {
+        if (A_TickCount > deadline)
+            break
+        ptr := stack.Pop()
+        if (visited.Has(ptr))
+            continue
+        visited[ptr] := true
+        nodes += 1
+        g := _UiHitGeom(reader, ptr)
+        if !IsObject(g)
+            continue
+        if !g["visible"]
+            continue
+        if (g["sizeW"] > 0 && g["sizeH"] > 0)
+        {
+            sid := ""
+            try sid := reader.ReadStdWStringAt(ptr + sidOff)
+            if (_LlcIsLabelSid(sid))
+            {
+                txt := ""
+                try txt := reader.ReadStdWStringAt(ptr + txtOff, 64)
+                if (Trim(txt) != "")
+                {
+                    sp := UiTree_GetScreenPos(reader, ptr)
+                    rows.Push(Map("t", SubStr(Trim(txt), 1, 32), "sx", sp["x"], "sy", sp["y"],
+                        "w", g["sizeW"], "h", g["sizeH"], "sid", sid))
+                }
+            }
+        }
+        _LlcPushChildren(reader, g, stack)
+    }
+
+    nl := "`r`n"
+    sYwin := (wh > 0) ? (wh / 1600.0) : 0.0     ; current method scale (window height)
+    sYcli := (crh > 0) ? (crh / 1600.0) : 0.0   ; client-height scale
+    offX := crx - wx, offY := cry - wy          ; client origin relative to the window top-left
+    rpt := "=== Loot-label-clear conversion diag ===" nl
+    rpt .= "WinGetPos (overlay basis): x=" wx " y=" wy " w=" ww " h=" wh nl
+    rpt .= "NavClientRect:             x=" crx " y=" cry " w=" crw " h=" crh nl
+    rpt .= "client-origin offset in window: dx=" offX " dy=" offY
+        . "   sY(win)=" Round(sYwin, 4) "  sY(client)=" Round(sYcli, 4) nl
+    rpt .= "matched labels=" rows.Length "  (nodes " nodes ")" nl nl
+    rpt .= "For each: raw UI (sx,sy,w,h) | CUR=overlay px now (sx*sYwin,...) | CLI=client-corrected"
+        . " ((sx*sYcli)+offX, (sy*sYcli)+offY, w*sYcli, h*sYcli)" nl nl
+    cap := 40, shown := 0
+    for _, r in rows
+    {
+        if (shown >= cap)
+        {
+            rpt .= "  … (" (rows.Length - cap) " more)" nl
+            break
+        }
+        shown += 1
+        curX := Round(r["sx"] * sYwin), curY := Round(r["sy"] * sYwin)
+        curW := Round(r["w"] * sYwin),  curH := Round(r["h"] * sYwin)
+        cliX := Round(r["sx"] * sYcli + offX), cliY := Round(r["sy"] * sYcli + offY)
+        cliW := Round(r["w"] * sYcli),  cliH := Round(r["h"] * sYcli)
+        rpt .= "  " r["t"] nl
+        rpt .= "      raw=" Round(r["sx"]) "," Round(r["sy"]) " " Round(r["w"]) "x" Round(r["h"])
+            . "  CUR=" curX "," curY " " curW "x" curH
+            . "  CLI=" cliX "," cliY " " cliW "x" cliH nl
+    }
+
+    p := A_ScriptDir "\logs\InGameStateMonitor.lootlabelclear_diag.log"
+    try
+    {
+        f := FileOpen(p, "w", "UTF-8")
+        if IsObject(f)
+        {
+            f.Write(rpt)
+            f.Close()
+        }
+    }
+    try MsgBox("Loot-label-clear diag done." nl nl
+        . "Window " ww "x" wh "  Client " crw "x" crh "  (offset dx=" offX " dy=" offY ")" nl
+        . "Matched labels: " rows.Length nl nl
+        . "Log: logs\InGameStateMonitor.lootlabelclear_diag.log" nl nl
+        . "Open the large map over loot first, then paste the log.", "Loot Label Clear Diag", "Iconi")
+}
+
 ; Pushes a node's child element pointers onto <stack> (capped). Params: reader, g (the node's
 ; _UiHitGeom map), stack (array). No return.
 _LlcPushChildren(reader, g, stack)

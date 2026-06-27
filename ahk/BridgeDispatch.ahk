@@ -840,6 +840,9 @@ _DispatchBridgeCall(method, args)
         case "LootLabelProbeRun":
             ; RE diagnostic: dump on-screen loot-label text elements (rects) to exclude from the maphack.
             SetTimer(() => LootLabelProbeRun(), -1)
+        case "LootLabelClearDiag":
+            ; Diagnostic: log window/client geometry + per-label raw vs computed overlay px rects.
+            SetTimer(() => LootLabelClearDiag(), -1)
         case "SkillProbeRun":
             ; TEMP post-patch diagnostic: trace the skill-name DAT chain.
             SetTimer(() => SkillProbeRun(), -1)
