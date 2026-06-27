@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.91`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.93`.
 
 ## Language
 
@@ -714,6 +714,40 @@ overlay can be positioned freely (the Vitals bars keep their own, unchanged syst
 - **Pending in-game verification:** drag + click-through flip per overlay; the
   X/Y % round-trip + persistence across restart; that the old focus one-liner is gone;
   banner placeholder grab-size while no banner is active.
+
+## Ritual reward value badges (shipped 0.45.13.91)
+
+Persistent currency-orb value badges on every Ritual ("Favours") reward cell at once, so
+the worth of each reward is visible without hovering. The reward cells carry the item entity
+at **+0x4F8** (`UiElementBase.ItemPtr`) exactly like inventory/stash slots (confirmed
+in-game via the UI-browser readout below) — but the cursor hit-test can't reach them (it
+dead-ends on the full-screen `notification_display` layer), so price-on-hover never fires
+there; this is the persistent, all-at-once alternative.
+
+- **`ahk/UiBrowserHandler.ahk` + `ui/index.html`:** the UI Browser element-properties panel
+  now shows an **"Item (+0x4F8)"** line (resolves the slot's item entity via the existing
+  `_UiHoverItemAt`; "(none)" otherwise) — the RE aid that confirmed the ritual cells (and
+  works for any window's item slots). Also in Copy Info.
+- **`ahk/RitualProbe.ahk` (new, RE diagnostic):** `RitualProbeRun()` does a tree-wide +0x4F8
+  item-slot sweep (StringId search was unreliable — it matched the `RitualRuneInteractable`
+  tooltip, not the reward grid) and logs every item slot with screen pos/size. Bridge
+  `RitualProbeRun`; "🎲 Probe Ritual" button in the RE-tools row.
+- **`ahk/RitualValueBadges.ahk` (new, the feature):** the Favours window has no StringId, but
+  its child buttons **`tribute_button` / `layby_pay_button`** are unique to it —
+  `_RvbFindRitualWindow()` finds either and returns its PARENT (the window).
+  `TryRitualValueBadges(radarSnap)` (in `UpdateRadarFast` after `TryUiHoverPrice`, ~4.5 Hz,
+  gated on enabled + panel-open + foreground) re-finds the window (cached ~1 s), BFS its
+  subtree for +0x4F8 cells, prices each via `_LrvPriceInner` (× stack, cached by itemPtr),
+  fills `g_rvbBadges`. `RitualValueBadgeOverlay` (registered in `OverlayManager`) draws an
+  orb+amount badge at each valuable cell's top-right within one bounding-box window
+  (reuses `OverlayImage` / the value layer). Self-persists `[RitualValueBadges]`
+  (`enabled`, `minEx`); **default OFF**; needs Loot pricing enabled or values stay 0.
+- **Wiring:** `InGameStateMonitor.ahk` includes both modules + `LoadRitualValueBadges()`;
+  `OverlayManager` registers the overlay; `BridgeDispatch` `SetRitualValueBadges`;
+  `WebViewBridge` pushes `ritualValueBadges`; UI **Config → Overlay → "💎 Ritual Reward
+  Values"** (toggle + min-ex), `ritualValueBadgesSyncFromHeader`.
+- **Verified in-game (2026-06-27):** badges render on the reward cells (small 1×1 and large
+  2×3), correctly top-right, no clash with the game's own stack-count label.
 
 ## Reference
 
