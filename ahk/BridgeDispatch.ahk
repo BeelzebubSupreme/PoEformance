@@ -831,6 +831,9 @@ _DispatchBridgeCall(method, args)
         case "RitualProbeRun":
             ; RE diagnostic: dump the Ritual (Favours) reward window subtree + item slots.
             SetTimer(() => RitualProbeRun(), -1)
+        case "LootLabelProbeRun":
+            ; RE diagnostic: dump on-screen loot-label text elements (rects) to exclude from the maphack.
+            SetTimer(() => LootLabelProbeRun(), -1)
         case "SkillProbeRun":
             ; TEMP post-patch diagnostic: trace the skill-name DAT chain.
             SetTimer(() => SkillProbeRun(), -1)
