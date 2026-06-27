@@ -1008,6 +1008,22 @@
       background: var(--border)
     }
 
+    /* Drag-to-resize handle on the right edge of each column header. */
+    .tsv-colsz {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 6px;
+      height: 100%;
+      cursor: col-resize;
+      user-select: none
+    }
+
+    .tsv-colsz:hover {
+      background: var(--codex-gold, #c8a85a);
+      opacity: .55
+    }
+
     .tsv-table th .sort-ind {
       font-size: 9px;
       margin-left: 3px;
@@ -4634,7 +4650,7 @@
           <polyline points="14 2 14 8 20 8" />
           <line x1="16" y1="13" x2="8" y2="13" />
           <line x1="16" y1="17" x2="8" y2="17" />
-        </svg><span class="nav-label">Data</span></div>
+        </svg><span class="nav-label">Data &amp; Logs</span></div>
       <div class="bar-marker tab-marker"></div>
     </div>
 
@@ -5493,6 +5509,16 @@
                 <button class="cfg-btn" id="ggpk-maphack-revert" onclick="ggpkMaphackRun('revert')"
                   style="display:none">Revert</button>
               </div>
+
+              <!-- Keep the game's on-screen loot labels readable: exclude their rects from
+                   the large-map maphack wall bitmap (LootLabelClear.ahk). -->
+              <div class="cfg-row"><span class="cfg-label">Keep loot labels readable</span>
+                <label class="toggle"><input type="checkbox" id="llc-enabled"
+                    onchange="ahkCall('SetLootLabelClear','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">On the large map, don't paint the map-reveal walls over the game's on-screen
+                loot labels — so loot stays readable in drop-heavy areas. Only affects the large map; the reveal
+                everywhere else is unchanged.</div>
             </div>
           </details>
         </div>
@@ -5877,6 +5903,10 @@
                 <label class="toggle"><input type="checkbox" id="inv-chain-dump" onchange="ahkCall('ToggleInventoryChainDump')"><span class="toggle-slider"></span></label>
               </div>
               <div class="cfg-help">Writes the full ServerData → PlayerInventories → items pointer chain to <code>InGameStateMonitor.inventory_chain.log</code> on every inventory refresh. Diagnostic / RE only — leave off in normal use.</div>
+              <div class="cfg-row"><span class="cfg-label">⏱ Startup timing trace</span>
+                <label class="toggle"><input type="checkbox" id="startup-trace" onchange="ahkCall('SetStartupTrace', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Times every startup step (QueryPerformanceCounter) into <code>logs\InGameStateMonitor.startup_trace.log</code>. Most starts are fast — leave this <b>ON across several restarts</b> to catch the occasional slow one, then turn it off. Read the result in <b>Config → Data &amp; Logs</b> (open <code>startup_trace.log</code>).</div>
             </div>
           </details>
         </div>
@@ -5986,6 +6016,8 @@
               <button class="tree-tbtn" onclick="ahkCall('ComponentDumpProbeRun')" style="font-size:11px" title="Diagnostic: dump ALL components + raw field bytes of the currently highlighted entity (highlight one in the tree first). Basis for the systematic component-offset pass. Also Ctrl+Alt+Shift+D. Writes logs\InGameStateMonitor.component_dump.log">🧩 Dump Components</button>
               <button class="tree-tbtn" onclick="ahkCall('PathfindingProbeRun')" style="font-size:11px" title="Diagnostic: enumerate awake monsters, resolve their Pathfinding component and dump the candidate Flying (0xE5) / BaseSpeed (0xEC) fields plus raw hex, to verify the hypothesis offsets cross-referenced from Sikaka/POE2Radar. Stand in a populated area. Writes logs\InGameStateMonitor.pathfinding_probe.log">🏃 Probe Pathfinding</button>
               <button class="tree-tbtn" onclick="ahkCall('RitualProbeRun')" style="font-size:11px" title="RE diagnostic for the Ritual (Favours) reward window: finds the RitualWindow element by StringId, walks its subtree and reports every reward slot (StringId / rect / item at +0x4F8), plus a struct pointer-scan fallback. OPEN THE FAVOURS WINDOW FIRST, then click. Basis for value badges on ritual rewards. Writes logs\InGameStateMonitor.ritual_probe.log">🎲 Probe Ritual</button>
+              <button class="tree-tbtn" onclick="ahkCall('LootLabelProbeRun')" style="font-size:11px" title="RE diagnostic for ground-item (loot) labels: sweeps the UI for effectively-visible text elements and reports StringId / parent StringId / text / screen rect (+ any item at +0x4F8). STAND NEAR SEVERAL GROUND DROPS so their labels show, then click. Basis for keeping loot labels clear of the large-map maphack walls. Writes logs\InGameStateMonitor.lootlabel_probe.log">🏷 Probe Loot Labels</button>
+              <button class="tree-tbtn" onclick="ahkCall('LootLabelClearDiag')" style="font-size:11px" title="Diagnostic for the 'Keep loot labels readable' feature: logs the live window vs client geometry and, per matched label, its raw UI position/size next to the overlay-px rect computed the current way and a client-corrected way. OPEN THE LARGE MAP OVER LOOT, then click. Writes logs\InGameStateMonitor.lootlabelclear_diag.log">📐 Diag Label Rects</button>
               <button class="tree-tbtn" onclick="ahkCall('OffsetCompareShowHistory')" style="font-size:11px">🕑 History</button>
               <button class="tree-tbtn" onclick="ahkCall('OffsetComparePredict')" style="font-size:11px">🔮 Predict</button>
             </div>
@@ -6031,20 +6063,58 @@
             <span id="ggpk-refresh-status" class="tsv-gen-status"></span>
           </div>
           <div id="tsv-gen-log" class="tsv-gen-log" style="display:none"></div>
-          <div class="tsv-toolbar">
-            <select id="tsv-file-select" onchange="onTsvFileSelected(this.value)">
-              <option value="">— Select a TSV file —</option>
-            </select>
-            <input id="tsv-search" type="text" placeholder="Filter rows…" oninput="filterTsvRows(this.value)" disabled>
-            <div id="tsv-pager" class="tsv-pager" style="display:none">
-              <button class="tsv-pg-btn" onclick="tsvPageNav(-1)" id="tsv-prev" data-tip="Previous page">◀</button>
-              <span id="tsv-page-info" class="tsv-page-info"></span>
-              <button class="tsv-pg-btn" onclick="tsvPageNav(1)" id="tsv-next" data-tip="Next page">▶</button>
+          <!-- Unified file browser: data TSVs + logs + debug in one list (left), a dual-mode
+               viewer (right) — Table for tab-delimited files, Text for free-form reports. -->
+          <div class="data-browser" style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;align-items:flex-start">
+            <div style="flex:0 0 300px;display:flex;flex-direction:column;gap:6px">
+              <div style="display:flex;gap:6px;align-items:center;font-size:11px">
+                <button class="tree-tbtn" onclick="ahkCall('DiagListFiles')" style="font-size:11px" data-tip="Re-scan data / logs / debug">🔄</button>
+                <input id="data-list-filter" type="text" placeholder="Filter files…" oninput="dataFilterList(this.value)" style="flex:1;min-width:60px">
+              </div>
+              <div id="data-file-list" style="min-height:220px;max-height:62vh;overflow:auto;border:1px solid var(--border);border-radius:4px;background:#161616">
+                <div class="no-data-msg">Loading…</div>
+              </div>
+              <div style="display:flex;gap:6px;font-size:11px">
+                <button class="tree-tbtn" onclick="ahkCall('DiagOpenFolder','data')" style="font-size:11px">📁 data</button>
+                <button class="tree-tbtn" onclick="ahkCall('DiagOpenFolder','logs')" style="font-size:11px">📁 logs</button>
+                <button class="tree-tbtn" onclick="ahkCall('DiagOpenFolder','debug')" style="font-size:11px">📁 debug</button>
+              </div>
             </div>
-            <span id="tsv-info" class="tsv-info"></span>
-          </div>
-          <div id="tsv-table-wrap" class="tsv-table-wrap">
-            <div class="no-data-msg">Select a TSV file above to view its contents.</div>
+            <div style="flex:1;min-width:320px;display:flex;flex-direction:column;gap:6px">
+              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:11px">
+                <span id="data-view-current" style="color:var(--codex-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">(no file selected)</span>
+                <span style="margin-left:auto;display:inline-flex;gap:4px">
+                  <button class="tsv-pg-btn" id="data-mode-table" onclick="dataSetMode('table')">▦ Table</button>
+                  <button class="tsv-pg-btn" id="data-mode-text" onclick="dataSetMode('text')">≣ Text</button>
+                </span>
+              </div>
+              <div id="data-table-block" style="display:flex;flex-direction:column;border:1px solid var(--border);border-radius:4px;overflow:hidden">
+                <div class="tsv-toolbar">
+                  <input id="tsv-search" type="text" placeholder="Filter rows…" oninput="filterTsvRows(this.value)" disabled>
+                  <div id="tsv-pager" class="tsv-pager" style="display:none">
+                    <button class="tsv-pg-btn" onclick="tsvPageNav(-1)" id="tsv-prev" data-tip="Previous page">◀</button>
+                    <span id="tsv-page-info" class="tsv-page-info"></span>
+                    <button class="tsv-pg-btn" onclick="tsvPageNav(1)" id="tsv-next" data-tip="Next page">▶</button>
+                  </div>
+                  <span id="tsv-info" class="tsv-info"></span>
+                </div>
+                <div id="tsv-table-wrap" class="tsv-table-wrap" style="max-height:62vh">
+                  <div class="no-data-msg">Select a file on the left.</div>
+                </div>
+              </div>
+              <div id="data-text-block" style="display:none;flex-direction:column;border:1px solid var(--border);border-radius:4px;overflow:hidden">
+                <div class="tsv-toolbar">
+                  <input id="data-text-search" type="text" placeholder="Filter lines…" oninput="dataTextFilter(this.value)">
+                  <div id="data-text-pager" class="tsv-pager" style="display:none">
+                    <button class="tsv-pg-btn" onclick="dataTextPage(-1)" id="data-text-prev" data-tip="Previous page">◀</button>
+                    <span id="data-text-page-info" class="tsv-page-info"></span>
+                    <button class="tsv-pg-btn" onclick="dataTextPage(1)" id="data-text-next" data-tip="Next page">▶</button>
+                  </div>
+                  <span id="data-text-info" class="tsv-info"></span>
+                </div>
+                <pre id="data-text-wrap" style="margin:0;padding:8px;max-height:62vh;overflow:auto;font-family:Consolas,monospace;font-size:11px;color:#d8d8d8;white-space:pre-wrap;word-break:break-all;user-select:text">(select a file on the left)</pre>
+              </div>
+            </div>
           </div>
         </div><!-- /cfg-subpanel data -->
 
@@ -6976,10 +7046,9 @@
       document.querySelectorAll('.cfg-subpanel').forEach(p =>
         p.classList.toggle('active', p.dataset.cfgtab === name));
       scheduleMarkerUpdate();
-      // Data sub-tab: lazy-load the TSV file list the first time it's shown
-      // (was a switchTab side-effect back when Data was its own top-level tab).
-      if (name === 'data' && !_tsvFilesLoaded)
-        ahkCall('ListTsvFiles');
+      // Data & Logs sub-tab: refresh the unified file list (data TSVs + logs + debug).
+      if (name === 'data')
+        ahkCall('DiagListFiles');
       // Tell AHK so the choice survives a restart. Bridge is a no-op if
       // the handler doesn't exist yet (graceful degradation during dev).
       try { ahkCall('SetConfigSubTab', name); } catch (e) {}
@@ -7513,6 +7582,12 @@
       const val = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
       chk('rvb-enabled', s.enabled);
       val('rvb-minEx', s.minEx);
+    }
+
+    function lootLabelClearSyncFromHeader(s) {
+      if (!s) return;
+      const e = document.getElementById('llc-enabled');
+      if (e) e.checked = s.enabled === true || s.enabled === 1 || s.enabled === '1' || s.enabled === 'true';
     }
 
     // Map loot-value label color → shared GGPK color picker → SetLootRadarValue mapColor.
@@ -9741,6 +9816,7 @@
       if (d.lootRadarValue !== undefined) lootRadarValueSyncFromHeader(d.lootRadarValue);
       if (d.uiHoverPrice !== undefined) uiHoverPriceSyncFromHeader(d.uiHoverPrice);
       if (d.ritualValueBadges !== undefined) ritualValueBadgesSyncFromHeader(d.ritualValueBadges);
+      if (d.lootLabelClear !== undefined) lootLabelClearSyncFromHeader(d.lootLabelClear);
       if (d.lootTradePricing !== undefined) lootTradePricingSyncFromHeader(d.lootTradePricing);
       if (d.overlayPlacement !== undefined) overlayPlaceSync(d.overlayPlacement);
 
@@ -10064,6 +10140,8 @@
 
       // Inventory diagnostics — pointer-chain logging toggle (Config > Debug).
       if (d.invChainDump !== undefined) setChk('inv-chain-dump', d.invChainDump);
+      // Startup timing trace toggle (Config > Debug > Diagnostic Actions).
+      if (d.startupTrace !== undefined) setChk('startup-trace', d.startupTrace);
 
       // Combat Automation config sync
       const prevCombatEnabled = document.getElementById('tog-combat')?.checked || false;
@@ -11394,6 +11472,187 @@
       }
     }
 
+    // ── Unified Data & Logs file browser (Config > Data) ──────────────────
+    let _diagSelectedRel = null;
+    let _diagFilesArr = [];
+    let _diagListFilter = '';
+    let _diagSortKey = 'mtime';   // 'name' | 'folder' | 'size' | 'mtime'
+    let _diagSortAsc = false;     // default: newest first
+    let _dataMode = 'table';
+    let _dataRaw = null;        // cached raw content of the loaded file (for Table⇄Text re-render)
+    let _dataTruncated = false;
+    let _txtLines = [], _txtFiltered = null, _txtPage = 0;
+    const TXT_PAGE_SIZE = 2000;
+    function _diagFmtSize(n) {
+      n = +n || 0;
+      if (n >= 1048576) return (n / 1048576).toFixed(1) + ' MB';
+      if (n >= 1024) return (n / 1024).toFixed(1) + ' KB';
+      return n + ' B';
+    }
+    // Renders the file list into #data-file-list (data TSVs + logs + debug, newest first), honoring
+    // the list filter. Rows carry data-idx into _diagFilesArr + one delegated click handler (no
+    // inline onclick — rel has backslashes/quotes that break attribute strings).
+    function updateDiagFiles(jsonStr) {
+      let arr;
+      try { arr = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr; } catch (e) { return; }
+      if (!Array.isArray(arr)) return;
+      _diagFilesArr = arr;
+      _diagRenderList();
+    }
+    function dataFilterList(q) { _diagListFilter = (q || '').toLowerCase(); _diagRenderList(); }
+    // Click a column header to sort by it (toggles direction; size/date default desc, name/folder asc).
+    function diagSortBy(key) {
+      if (_diagSortKey === key) _diagSortAsc = !_diagSortAsc;
+      else { _diagSortKey = key; _diagSortAsc = (key === 'name' || key === 'folder'); }
+      _diagRenderList();
+    }
+    function _diagRenderList() {
+      const host = document.getElementById('data-file-list');
+      if (!host) return;
+      const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      const q = _diagListFilter, k = _diagSortKey, asc = _diagSortAsc;
+      // Filtered indices into _diagFilesArr (rows keep the ORIGINAL index for click/delete mapping).
+      const idxs = [];
+      _diagFilesArr.forEach((f, i) => { if (!q || (f.folder + '\\' + f.name).toLowerCase().includes(q)) idxs.push(i); });
+      idxs.sort((ia, ib) => {
+        const a = _diagFilesArr[ia], b = _diagFilesArr[ib];
+        if (k === 'size') return asc ? (+a.size || 0) - (+b.size || 0) : (+b.size || 0) - (+a.size || 0);
+        let va, vb;
+        if (k === 'mtime') { va = String(a.mtime || ''); vb = String(b.mtime || ''); }
+        else if (k === 'folder') { va = (a.folder + '\\' + a.name).toLowerCase(); vb = (b.folder + '\\' + b.name).toLowerCase(); }
+        else { va = String(a.name || '').toLowerCase(); vb = String(b.name || '').toLowerCase(); }
+        return asc ? va.localeCompare(vb) : vb.localeCompare(va);
+      });
+      const ind = key => _diagSortKey === key ? (_diagSortAsc ? ' ▲' : ' ▼') : '';
+      let html = '<div style="display:flex;gap:6px;align-items:center;padding:4px 6px;border-bottom:1px solid #333;position:sticky;top:0;background:#1c1c1c;font-size:10px;color:var(--accent);cursor:pointer;user-select:none;z-index:1">'
+        + '<span class="diag-sort" data-k="name" style="flex:1;min-width:0">File' + ind('name') + '</span>'
+        + '<span class="diag-sort" data-k="size" style="width:54px;text-align:right">Size' + ind('size') + '</span>'
+        + '<span class="diag-sort" data-k="mtime" style="width:78px">Date' + ind('mtime') + '</span>'
+        + '<span style="width:14px"></span>'
+        + '</div>';
+      let rowsHtml = '';
+      idxs.forEach(i => {
+        const f = _diagFilesArr[i];
+        const sel = (f.rel === _diagSelectedRel) ? 'background:#2a2f3a;' : '';
+        rowsHtml += '<div class="diag-file-row" data-idx="' + i + '" style="display:flex;gap:6px;align-items:center;padding:4px 6px;border-bottom:1px solid #222;cursor:pointer;' + sel + '">'
+          + '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + esc(f.rel) + '">'
+          + '<span style="color:#7a8aa0">' + esc(f.folder) + '\\</span>' + esc(f.name) + '</span>'
+          + '<span style="color:var(--subtext);font-size:10px;white-space:nowrap;width:54px;text-align:right">' + _diagFmtSize(f.size) + '</span>'
+          + '<span style="color:var(--subtext);font-size:10px;white-space:nowrap;width:78px">' + esc((f.mtime || '').slice(5, 16)) + '</span>'
+          + '<span class="diag-del" data-idx="' + i + '" title="Delete" style="cursor:pointer;color:#c06a6a;width:14px;text-align:center">🗑</span>'
+          + '</div>';
+      });
+      host.innerHTML = html + (idxs.length ? rowsHtml : '<div class="no-data-msg">' + (_diagFilesArr.length ? 'No files match.' : 'No files found.') + '</div>');
+      if (!host._diagBound) {
+        host._diagBound = true;
+        host.addEventListener('click', (ev) => {
+          const sort = ev.target.closest('.diag-sort');
+          if (sort) { diagSortBy(sort.getAttribute('data-k')); return; }
+          const del = ev.target.closest('.diag-del');
+          if (del) { ev.stopPropagation(); const f = _diagFilesArr[+del.getAttribute('data-idx')]; if (f) diagDelete(f.rel); return; }
+          const row = ev.target.closest('.diag-file-row');
+          if (row) { const f = _diagFilesArr[+row.getAttribute('data-idx')]; if (f) diagRead(f.rel); }
+        });
+      }
+    }
+    function diagRead(rel) {
+      _diagSelectedRel = rel;
+      _diagRenderList();
+      const cur = document.getElementById('data-view-current');
+      if (cur) cur.textContent = rel + ' — loading…';
+      ahkCall('DiagReadFile', rel);
+    }
+    function diagDelete(rel) {
+      if (!confirm('Delete this file?\n\n' + rel)) return;
+      if (rel === _diagSelectedRel) { _diagSelectedRel = null; _dataRaw = null; }
+      ahkCall('DiagDeleteFile', rel);
+    }
+    // Receives one file's content. Payload: {rel,ok,binary,tabular,truncated,size,err,content}.
+    // Picks Table vs Text by the AHK 'tabular' hint; caches raw content for the manual Table⇄Text toggle.
+    function updateDiagFile(jsonStr) {
+      let d;
+      try { d = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr; } catch (e) { return; }
+      if (!d) return;
+      const cur = document.getElementById('data-view-current');
+      if (cur) cur.textContent = (d.rel || '') + ' · ' + _diagFmtSize(d.size) + (d.truncated ? ' · last 256 KB' : '');
+      if (!d.ok || d.binary) {
+        _dataRaw = null;
+        _dataShowTextOnly(!d.ok ? '(error: ' + (d.err || 'unknown') + ')' : '(binary file — ' + _diagFmtSize(d.size) + ', not shown)');
+        return;
+      }
+      _dataRaw = d.content || '';
+      _dataTruncated = !!d.truncated;
+      dataSetMode(d.tabular ? 'table' : 'text');
+    }
+    // Switches the viewer between the table renderer and the text renderer, re-rendering the cached file.
+    function dataSetMode(mode) {
+      _dataMode = mode;
+      const tb = document.getElementById('data-table-block'), tx = document.getElementById('data-text-block');
+      if (tb) tb.style.display = (mode === 'table') ? 'flex' : 'none';
+      if (tx) tx.style.display = (mode === 'text') ? 'flex' : 'none';
+      const bt = document.getElementById('data-mode-table'), bx = document.getElementById('data-mode-text');
+      if (bt) bt.style.opacity = (mode === 'table') ? '1' : '0.45';
+      if (bx) bx.style.opacity = (mode === 'text') ? '1' : '0.45';
+      if (_dataRaw == null) return;
+      if (mode === 'table') dataRenderTable(); else dataRenderText();
+    }
+    function _dataShowTextOnly(msg) {
+      const tb = document.getElementById('data-table-block'), tx = document.getElementById('data-text-block');
+      if (tb) tb.style.display = 'none';
+      if (tx) tx.style.display = 'flex';
+      const pager = document.getElementById('data-text-pager'); if (pager) pager.style.display = 'none';
+      const wrap = document.getElementById('data-text-wrap'); if (wrap) wrap.textContent = msg;
+    }
+    // Parses tab-delimited content into {headers, rows}, mirroring the AHK TSV reader (skips #-comments
+    // and blank lines; first row is headers unless it is ≥2 purely-numeric columns).
+    function _dataParseTsv(content) {
+      const lines = String(content).split(/\r?\n/).filter(l => l.trim() !== '' && l[0] !== '#');
+      if (!lines.length) return { headers: [], rows: [] };
+      const cells = lines.map(l => l.split('\t'));
+      const first = cells[0];
+      const allNumeric = first.length >= 2 && first.every(c => c.trim() !== '' && !isNaN(Number(c)));
+      let headers, rows;
+      if (first.length >= 2 && !allNumeric) { headers = first; rows = cells.slice(1); }
+      else { headers = first.map((_, i) => 'col_' + (i + 1)); rows = cells; }
+      rows.forEach(r => { while (r.length < headers.length) r.push(''); });
+      return { headers, rows };
+    }
+    function dataRenderTable() { renderTsvData(_dataParseTsv(_dataRaw || '')); }
+    function dataRenderText() {
+      _txtLines = String(_dataRaw || '').split(/\r?\n/);
+      _txtFiltered = null; _txtPage = 0;
+      const s = document.getElementById('data-text-search'); if (s) s.value = '';
+      _txtRender();
+    }
+    function dataTextFilter(q) {
+      q = (q || '').trim().toLowerCase();
+      _txtFiltered = q ? _txtLines.filter(l => l.toLowerCase().includes(q)) : null;
+      _txtPage = 0; _txtRender();
+    }
+    function dataTextPage(delta) { _txtPage += delta; _txtRender(); }
+    function _txtRender() {
+      const rows = _txtFiltered || _txtLines;
+      const totalPages = Math.max(1, Math.ceil(rows.length / TXT_PAGE_SIZE));
+      _txtPage = Math.max(0, Math.min(_txtPage, totalPages - 1));
+      const info = document.getElementById('data-text-info');
+      if (info) info.textContent = (_txtFiltered ? rows.length.toLocaleString() + ' / ' + _txtLines.length.toLocaleString() : _txtLines.length.toLocaleString()) + ' lines';
+      const pager = document.getElementById('data-text-pager');
+      if (pager) {
+        if (totalPages > 1) {
+          pager.style.display = 'flex';
+          document.getElementById('data-text-page-info').textContent = (_txtPage + 1) + ' / ' + totalPages;
+          document.getElementById('data-text-prev').disabled = _txtPage === 0;
+          document.getElementById('data-text-next').disabled = _txtPage >= totalPages - 1;
+        } else pager.style.display = 'none';
+      }
+      const wrap = document.getElementById('data-text-wrap');
+      if (!wrap) return;
+      const start = _txtPage * TXT_PAGE_SIZE, end = Math.min(start + TXT_PAGE_SIZE, rows.length);
+      const note = (_dataTruncated && _txtPage === 0 && !_txtFiltered) ? '… [truncated — showing last 256 KB] …\n\n' : '';
+      wrap.textContent = note + rows.slice(start, end).join('\n');
+      wrap.scrollTop = 0;
+    }
+
     function updateDebugPanels(jsonStr) {
       let data; try { data = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr; } catch (e) { return; }
       if (!data) return;
@@ -11936,7 +12195,7 @@
       setTimeout(() => toggleTsvLog(true), 1500);
       if (success) {
         _tsvFilesLoaded = false;
-        ahkCall('ListTsvFiles');
+        ahkCall('DiagListFiles');
       }
     }
 
@@ -12543,7 +12802,7 @@
       // the new file size + mtime show up.
       if (r.ok) {
         _tsvFilesLoaded = false;
-        if (activeTab === 'config' && activeConfigSubTab === 'data') ahkCall('ListTsvFiles');
+        if (activeTab === 'config' && activeConfigSubTab === 'data') ahkCall('DiagListFiles');
       }
     }
 
@@ -12568,6 +12827,7 @@
     let _tsvFilesLoaded = false;
     const TSV_PAGE_SIZE = 1000;
     let _tsvPage = 0;
+    let _tsvColWidths = [];   // px per column (idx 0 = row-number col); persists across sort/page/filter
 
     function _tsvRows() { return _tsvFiltered || _tsvData; }
     function _tsvTotalPages() { return Math.max(1, Math.ceil(_tsvRows().length / TSV_PAGE_SIZE)); }
@@ -12609,6 +12869,7 @@
       _tsvSortCol = -1;
       _tsvSortAsc = true;
       _tsvPage = 0;
+      _tsvColWidths = [];   // recompute default widths for the new file
 
       const searchEl = document.getElementById('tsv-search');
       searchEl.disabled = false;
@@ -12649,11 +12910,23 @@
       const start = _tsvPage * TSV_PAGE_SIZE;
       const end = Math.min(start + TSV_PAGE_SIZE, rows.length);
 
-      let html = '<table class="tsv-table"><thead><tr>';
+      // Default column widths once per file (idx 0 = row-number col); user drags persist after.
+      if (!_tsvColWidths.length) {
+        _tsvColWidths = [46];
+        _tsvHeaders.forEach(h => _tsvColWidths.push(Math.max(70, Math.min(320, String(h).length * 8 + 28))));
+      }
+      const colTags = _tsvColWidths.map(w => `<col style="width:${w}px">`).join('');
+      // Size the table to the SUM of its column widths (NOT width:100%). With table-layout:fixed,
+      // width:100% makes the browser scale columns to fill the wrap whenever they don't overflow it
+      // — which silently defeats per-column resizing on narrow / few-column tables. An exact total
+      // makes each column honor its px width, so drags take effect precisely (and the wrap scrolls).
+      const totalW = _tsvColWidths.reduce((a, b) => a + (b || 0), 0);
+
+      let html = `<table class="tsv-table" style="table-layout:fixed;width:${totalW}px"><colgroup>${colTags}</colgroup><thead><tr>`;
       html += '<th class="tsv-rownum">#</th>';
       _tsvHeaders.forEach((h, i) => {
         const ind = _tsvSortCol === i ? (_tsvSortAsc ? '▲' : '▼') : '';
-        html += `<th onclick="sortTsvBy(${i})">${escHtml(h)}<span class="sort-ind">${ind}</span></th>`;
+        html += `<th onclick="sortTsvBy(${i})" style="position:relative">${escHtml(h)}<span class="sort-ind">${ind}</span><span class="tsv-colsz" data-ci="${i + 1}"></span></th>`;
       });
       html += '</tr></thead><tbody>';
 
@@ -12662,13 +12935,45 @@
         html += `<td style="color:var(--subtext);font-size:10px">${r + 1}</td>`;
         const row = rows[r];
         for (let c = 0; c < _tsvHeaders.length; c++) {
-          html += `<td>${escHtml(row[c] ?? '')}</td>`;
+          const v = escHtml(row[c] ?? '');
+          html += `<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${v}">${v}</td>`;
         }
         html += '</tr>';
       }
       html += '</tbody></table>';
       wrap.innerHTML = html;
       wrap.scrollTop = 0;
+      _tsvBindColResize(wrap);
+    }
+    // Drag-to-resize table columns. One delegated mousedown (drag) + one capture-phase click
+    // (swallow the click so the column's sort handler doesn't fire) bound once on the wrap.
+    function _tsvBindColResize(wrap) {
+      if (wrap._tsvResizeBound) return;
+      wrap._tsvResizeBound = true;
+      wrap.addEventListener('click', (ev) => { if (ev.target.closest('.tsv-colsz')) ev.stopPropagation(); }, true);
+      wrap.addEventListener('mousedown', (ev) => {
+        const h = ev.target.closest('.tsv-colsz');
+        if (!h) return;
+        ev.preventDefault(); ev.stopPropagation();
+        const ci = +h.getAttribute('data-ci');
+        const startX = ev.clientX, startW = _tsvColWidths[ci] || 120;
+        const tbl = wrap.querySelector('table.tsv-table');
+        const colgrp = tbl ? tbl.querySelector('colgroup') : null;
+        const onMove = (e) => {
+          const w = Math.max(40, startW + (e.clientX - startX));
+          _tsvColWidths[ci] = w;
+          if (colgrp && colgrp.children[ci]) colgrp.children[ci].style.width = w + 'px';
+          if (tbl) tbl.style.width = _tsvColWidths.reduce((a, b) => a + (b || 0), 0) + 'px';
+        };
+        const onUp = () => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          window.removeEventListener('blur', onUp);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        window.addEventListener('blur', onUp);   // Alt-Tab mid-drag: cancel so listeners never linger
+      });
     }
 
     function tsvPageNav(delta) {

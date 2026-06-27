@@ -181,6 +181,33 @@ _DispatchBridgeCall(method, args)
                 _RvbApplySetting(args[1], args[2])
             SaveRitualValueBadges()
             SetTimer(PushHeaderToWebView, -50)
+        case "SetLootLabelClear":
+            ; Keep loot labels clear of the large-map maphack. args[1]=key, args[2]=value.
+            if (args.Length >= 2)
+                _LlcApplySetting(args[1], args[2])
+            SaveLootLabelClear()
+            SetTimer(PushHeaderToWebView, -50)
+        case "SetStartupTrace":
+            ; Persistent startup-timing diagnostic toggle ([Diagnostics] startupTrace). args[1]=on.
+            if (args.Length >= 1)
+                SetStartupTrace(args[1])
+            SetTimer(PushHeaderToWebView, -50)
+        case "DiagListFiles":
+            ; Enumerate all diagnostic files (logs/debug/data) and push the list to the WebView.
+            SetTimer(PushDiagFilesToWebView, -1)
+        case "DiagReadFile":
+            ; Read one diagnostic file (relative path under logs/debug/data) and push its content.
+            diagRel := (args.Length >= 1) ? args[1] : ""
+            if (diagRel != "")
+                SetTimer(() => PushDiagFileToWebView(diagRel), -1)
+        case "DiagOpenFolder":
+            ; Open a diagnostic folder in Explorer. args[1]=folder (logs/debug/data).
+            SetTimer(() => DiagOpenFolder((args.Length >= 1) ? args[1] : "logs"), -1)
+        case "DiagDeleteFile":
+            ; Delete one diagnostic file (relative path), then refresh the list.
+            diagDel := (args.Length >= 1) ? args[1] : ""
+            if (diagDel != "")
+                SetTimer(() => DiagDeleteFile(diagDel), -1)
         case "SetLootTradePricing":
             ; Official PoE2 trade-API unique pricing. args[1]=key, args[2]=value.
             if (args.Length >= 2)
@@ -831,6 +858,12 @@ _DispatchBridgeCall(method, args)
         case "RitualProbeRun":
             ; RE diagnostic: dump the Ritual (Favours) reward window subtree + item slots.
             SetTimer(() => RitualProbeRun(), -1)
+        case "LootLabelProbeRun":
+            ; RE diagnostic: dump on-screen loot-label text elements (rects) to exclude from the maphack.
+            SetTimer(() => LootLabelProbeRun(), -1)
+        case "LootLabelClearDiag":
+            ; Diagnostic: log window/client geometry + per-label raw vs computed overlay px rects.
+            SetTimer(() => LootLabelClearDiag(), -1)
         case "SkillProbeRun":
             ; TEMP post-patch diagnostic: trace the skill-name DAT chain.
             SetTimer(() => SkillProbeRun(), -1)

@@ -38,6 +38,9 @@ SetWorkingDir(A_ScriptDir)
 #Include ahk/OverlayManager.ahk
 #Include ahk/UiTreeBrowser.ahk
 #Include ahk/UiBrowserHandler.ahk
+#Include ahk/LootLabelClear.ahk
+#Include ahk/StartupTrace.ahk
+#Include ahk/DiagFiles.ahk
 
 /*
 The project and all the files I develop in are located locally at "E:\PoEformance\"
@@ -51,7 +54,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.92"
+POEFORMANCE_VERSION := "0.45.13.110"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -301,6 +304,11 @@ try DirCreate(A_ScriptDir "\logs")
 g_errorLogPath := A_ScriptDir "\logs\InGameStateMonitor.error.log"
 g_errorLogMaxBytes := 1024 * 512
 
+; Startup-timing diagnostic (opt-in via [Diagnostics] startupTrace). Init as early as possible so
+; every step below is timed; near-zero cost when disabled. See StartupTrace.ahk.
+StTraceInit()
+StTrace("startup begin (logs ready)")
+
 ; ── Hidden data GUI: holds the 5 TreeView controls for data building ────────
 g_dataGui := Gui()
 g_treeControlsByTab := Map()
@@ -324,28 +332,53 @@ g_offsetTableSortDesc := false
 
 ; Load persisted settings before showing the window
 LoadConfig()
+StTrace("LoadConfig")
 LoadCombatAutoConfig()
+StTrace("LoadCombatAutoConfig")
 LoadExplorationConfig()
+StTrace("LoadExplorationConfig")
 LoadLootPickupConfig()
+StTrace("LoadLootPickupConfig")
 LoadEntityGroups()
+StTrace("LoadEntityGroups")
 LoadEntityAlertsConfig()
+StTrace("LoadEntityAlertsConfig")
 LoadEntityJunkFilter()    ; global path-based junk entity suppressor + [JunkFilter] state
+StTrace("LoadEntityJunkFilter")
 LoadLocalApiConfig()      ; local HTTP API (MCP backend) settings + Winsock constants
+StTrace("LoadLocalApiConfig")
 LoadLootTracker()         ; map-run / session loot tracker state + [LootTracker] config
+StTrace("LoadLootTracker")
 LoadLootPricing()         ; poe.ninja price layer (loads cache, kicks refresh if stale)
+StTrace("LoadLootPricing")
 LoadLootRadarValue()      ; value-aware loot radar (price ground drops) + [LootRadarValue] config
+StTrace("LoadLootRadarValue")
 LoadUiHoverPrice()        ; price-on-hover for inventory/stash items + [UiHoverPrice] config
+StTrace("LoadUiHoverPrice")
 LoadRitualValueBadges()   ; persistent value badges on Ritual (Favours) reward cells + [RitualValueBadges]
+StTrace("LoadRitualValueBadges")
+LoadLootLabelClear()      ; keep loot labels clear of the large-map maphack + [LootLabelClear]
+StTrace("LoadLootLabelClear")
 LoadPoeTradeSession()     ; WebView2 trade-session transport (in-browser, no secrets leave it)
+StTrace("LoadPoeTradeSession")
 LoadLootTradePricing()    ; official PoE2 trade-API unique pricing (off by default) + [LootTradePricing]
+StTrace("LoadLootTradePricing")
 LoadStashMover()          ; "dump backpack to open stash" feature + [StashMover] config
+StTrace("LoadStashMover")
 LoadOverlayIcons()        ; GDI+ currency orb icons for the value-aware loot radar
+StTrace("LoadOverlayIcons")
 LoadOverlayPlacement()    ; per-overlay free-position overrides ([OverlayPlacement])
+StTrace("LoadOverlayPlacement")
 LoadOverlaySystem()       ; build the OverlayManager + all overlays; wire legacy globals
+StTrace("LoadOverlaySystem")
 InitProfiler()            ; QPC profiler singleton (disabled until Shift+F3 enables it)
+StTrace("InitProfiler")
 ItemSizeRegistry.Load()   ; ~4000-entry path→(w,h) map used by loot fit-check
+StTrace("ItemSizeRegistry.Load")
 AtlasData_Load()          ; Atlas biome/content lookup tables for the map overlay
+StTrace("AtlasData_Load")
 LoadAtlasOffsets()        ; confirmed GameHelper2 atlas node offsets (init gotcha)
+StTrace("LoadAtlasOffsets")
 try g_atlasOverlayEnabled := (IniRead(A_ScriptDir "\poeformance_config.ini", "Atlas", "overlayEnabled", "0") = "1")
 
 ; Custom hotkey / macro engine — init defaults then load persisted hotkeys.json
@@ -378,9 +411,11 @@ _AIP_RegisterProbeHotkeys()   ; TEMP: Ctrl+Alt+Shift+T triggers the Targetable p
 ; Custom hotkeys: bind user-defined hotkeys and start the condition evaluator.
 HotkeysRegisterAll()
 SetTimer(HotkeysEvaluateTick, g_hkEvalInterval)
+StTrace("hotkeys (init + register + evaluator)")
 
 ; ── WebViewGui ────────────────────────────────────────────────────────────────
 g_webGui := WebViewGui("+AlwaysOnTop +Resize -Caption +Border", "PoEformance", , { DefaultWidth: g_winW, DefaultHeight: g_winH })
+StTrace("WebViewGui created")
 
 ; Override WebViewToo's compiled-mode behaviour.
 ; The library auto-calls BrowseExe() when A_IsCompiled is true, which sets
@@ -465,12 +500,15 @@ g_webGui.Control.WebMessageReceived(OnWebMessage)
 g_webGui.Control.NavigationCompleted(OnNavigationCompleted)
 
 g_webGui.Navigate("ui/index.html")
+StTrace("WebView shown + navigate")
 
 LoadFlaskHotkeysFromConfig(g_flaskConfigPath)
 LoadSkillHotkeysFromConfig(g_flaskConfigPath)
+StTrace("flask/skill hotkeys from config")
 
 ; Check for PoE2 patch updates (async-like: runs PowerShell hidden, max ~5s)
 CheckPoePatchVersion()
+StTrace("CheckPoePatchVersion (PowerShell)")
 UpdateStatusBar()
 
 ; ── Connection state machine ─────────────────────────────────────────────
@@ -486,6 +524,7 @@ UpdateStatusBar()
 ;   - GGPK-maphack apply/revert: the user closes the game to patch, then
 ;     starts it again — the helper auto-reconnects to the fresh PID.
 InitializeErrorLog()
+StTrace("InitializeErrorLog")
 g_isConnected := false
 ; Show a friendly placeholder until EnsureConnected attaches.
 try
@@ -499,7 +538,9 @@ try
 SetTimer(UpdateRadarFast, 50)
 SetTimer(ReadAndShow, 2000)
 SetTimer(EnsureConnected, 2000)
+StTrace("timers scheduled (pre first connect)")
 EnsureConnected()  ; immediate first attempt
+StTrace("EnsureConnected (first attempt) — startup complete")
 return
 
 ; Drives the PoE2 connection state machine. Called every 2 s by a
@@ -987,6 +1028,7 @@ OnTreeTabChanged(*)
 #Include ahk/AreaInstanceProbe.ahk
 #Include ahk/UiHoverProbe.ahk
 #Include ahk/RitualProbe.ahk
+#Include ahk/LootLabelProbe.ahk
 #Include ahk/PathfindingProbe.ahk
 #Include ahk/OffsetCompare.ahk
 #Include ahk/PatchMaintenance.ahk

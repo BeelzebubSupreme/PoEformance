@@ -666,7 +666,7 @@ class RadarOverlay extends GdiOverlayBase
     _RenderMapLayer(mapData, playerWorldX, playerWorldY, playerTerrainHeight,
                     areaInstance, gameWindowWidth, gameWindowHeight, isLargeMap)
     {
-        global Profiler
+        global Profiler, g_reader, g_llcEnabled, g_llcRects, g_llcPad
         ; ── Compute UI scaling (per GameWindowScale.cs) ──────────────────────────────────
         ; The game uses 2560×1600 as the design reference resolution for all UI positions.
         ; scaleFactorX/Y convert unscaled UI coordinates into real pixel coordinates.
@@ -772,6 +772,21 @@ class RadarOverlay extends GdiOverlayBase
                     continue
                 DllCall("ExcludeClipRect", "Ptr", this.memDC,
                     "Int", r[1], "Int", r[2], "Int", r[1] + r[3], "Int", r[2] + r[4])
+            }
+            ; Keep the game's on-screen loot labels readable: refresh their rects (throttled,
+            ; LootLabelClear.ahk) and exclude each from the maphack blit, just like the HUD
+            ; masks above — so the wall bitmap never paints over the loot text.
+            if (IsSet(g_llcEnabled) && g_llcEnabled)
+            {
+                try LootLabelRectsRefresh(g_reader, gameWindowWidth, gameWindowHeight)
+                if (IsObject(g_llcRects))
+                {
+                    pad := IsSet(g_llcPad) ? g_llcPad : 5
+                    for _, lr in g_llcRects
+                        DllCall("ExcludeClipRect", "Ptr", this.memDC,
+                            "Int", lr[1] - pad, "Int", lr[2] - pad,
+                            "Int", lr[1] + lr[3] + pad, "Int", lr[2] + lr[4] + pad)
+                }
             }
         }
 
