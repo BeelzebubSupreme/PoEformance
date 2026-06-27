@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.107`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.108`.
 
 ## Language
 
@@ -749,7 +749,7 @@ there; this is the persistent, all-at-once alternative.
 - **Verified in-game (2026-06-27):** badges render on the reward cells (small 1×1 and large
   2×3), correctly top-right, no clash with the game's own stack-count label.
 
-## Startup-timing trace + in-tool Diagnostic Files viewer (shipped 0.45.13.107)
+## Startup-timing trace + in-tool Diagnostic Files viewer (shipped 0.45.13.108)
 
 Two debug-tooling features. Motivation: occasionally (~1 in 4) startup is very slow before the
 tool becomes responsive; and diagnostic output is scattered across `logs/`, `debug/`, `data/`.
