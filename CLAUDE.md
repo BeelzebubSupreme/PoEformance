@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.111`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.112`.
 
 ## Language
 
@@ -830,6 +830,10 @@ no click → no movement).
   why localize the root cause so the targeted read/offset fix can follow. Confirm the
   centre-spam is gone (combat now idles with `cam-bad(...)` instead of firing) when the
   matrix is bad.
+- **Hotfix 0.45.13.112:** `_ApDiagFinish` had an unbraced `if wrote` whose body was a
+  multi-line `try MsgBox(...)` followed by `else` → AHK v2 load error "Unexpected Else".
+  Braced the `if` body and pre-built the message string (the `StashMoverDiagnose` pattern).
+  Lesson: never give an unbraced `if`/`else` a body that is a continued `try` statement.
 
 ## Reference
 
