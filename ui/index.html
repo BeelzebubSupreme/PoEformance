@@ -5493,6 +5493,16 @@
                 <button class="cfg-btn" id="ggpk-maphack-revert" onclick="ggpkMaphackRun('revert')"
                   style="display:none">Revert</button>
               </div>
+
+              <!-- Keep the game's on-screen loot labels readable: exclude their rects from
+                   the large-map maphack wall bitmap (LootLabelClear.ahk). -->
+              <div class="cfg-row"><span class="cfg-label">Keep loot labels readable</span>
+                <label class="toggle"><input type="checkbox" id="llc-enabled"
+                    onchange="ahkCall('SetLootLabelClear','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">On the large map, don't paint the map-reveal walls over the game's on-screen
+                loot labels — so loot stays readable in drop-heavy areas. Only affects the large map; the reveal
+                everywhere else is unchanged.</div>
             </div>
           </details>
         </div>
@@ -7514,6 +7524,12 @@
       const val = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
       chk('rvb-enabled', s.enabled);
       val('rvb-minEx', s.minEx);
+    }
+
+    function lootLabelClearSyncFromHeader(s) {
+      if (!s) return;
+      const e = document.getElementById('llc-enabled');
+      if (e) e.checked = s.enabled === true || s.enabled === 1 || s.enabled === '1' || s.enabled === 'true';
     }
 
     // Map loot-value label color → shared GGPK color picker → SetLootRadarValue mapColor.
@@ -9742,6 +9758,7 @@
       if (d.lootRadarValue !== undefined) lootRadarValueSyncFromHeader(d.lootRadarValue);
       if (d.uiHoverPrice !== undefined) uiHoverPriceSyncFromHeader(d.uiHoverPrice);
       if (d.ritualValueBadges !== undefined) ritualValueBadgesSyncFromHeader(d.ritualValueBadges);
+      if (d.lootLabelClear !== undefined) lootLabelClearSyncFromHeader(d.lootLabelClear);
       if (d.lootTradePricing !== undefined) lootTradePricingSyncFromHeader(d.lootTradePricing);
       if (d.overlayPlacement !== undefined) overlayPlaceSync(d.overlayPlacement);
 

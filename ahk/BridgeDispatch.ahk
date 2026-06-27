@@ -181,6 +181,12 @@ _DispatchBridgeCall(method, args)
                 _RvbApplySetting(args[1], args[2])
             SaveRitualValueBadges()
             SetTimer(PushHeaderToWebView, -50)
+        case "SetLootLabelClear":
+            ; Keep loot labels clear of the large-map maphack. args[1]=key, args[2]=value.
+            if (args.Length >= 2)
+                _LlcApplySetting(args[1], args[2])
+            SaveLootLabelClear()
+            SetTimer(PushHeaderToWebView, -50)
         case "SetLootTradePricing":
             ; Official PoE2 trade-API unique pricing. args[1]=key, args[2]=value.
             if (args.Length >= 2)

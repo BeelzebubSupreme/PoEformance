@@ -154,6 +154,7 @@ PushHeaderToWebView()
         . ',"lootRadarValue":' BuildLootRadarValueHeaderJson()
         . ',"uiHoverPrice":' BuildUiHoverPriceHeaderJson()
         . ',"ritualValueBadges":' BuildRitualValueBadgesHeaderJson()
+        . ',"lootLabelClear":' BuildLootLabelClearHeaderJson()
         . ',"lootTradePricing":' BuildLootTradePricingHeaderJson()
         . ',"overlayPlacement":' BuildOverlayPlacementHeaderJson()
         . "}"
