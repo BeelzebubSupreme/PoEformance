@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.110`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.114`.
 
 ## Language
 
@@ -791,6 +791,87 @@ tool becomes responsive; and diagnostic output is scattered across `logs/`, `deb
 - **Pending in-game verification:** enable the trace, restart until a slow start is captured, read
   `startup_trace.log` in **Data & Logs**, and identify the spiking step; verify Table/Text auto-mode,
   the per-line text search/pagination, and column drag-resize.
+
+## AutoPilot fix + projection diagnostic (issue #158, shipped 0.45.13.111)
+
+Ticket #158 (a non-owner reporter): with AutoPilot on the character "doesn't move" AND on
+enemies it "locks up and spams skills on the middle of the screen, not even aimed." Both
+symptoms have ONE cause — an empty/invalid `w2sMatrix` reaching the nav consumers. With a
+valid matrix `_WorldToScreen` always uses the matrix path (`NavProject`); only an EMPTY
+matrix fell through to the **isometric screen-CENTRE fallback** (`winX+winW/2 + …`) → blind
+skill-spam at centre. Exploration already fails safe (empty matrix → `NavAnchor` no-proj →
+no click → no movement).
+
+- **`ahk/CombatAutomation.ahk` — mandatory projection gate (the fix):** the per-tick combat
+  anchor gate (~line 152) USED to be conditional (run `NavAnchor` only when matrix/rect/player
+  were present, else fall through to the skill-fire path). Now it is MANDATORY: if
+  `navRect && matrix.Length=16 && playerWorldX!=0` is not ALL true, combat sets
+  `g_combatLastReason := "cam-bad(no-proj rect=N matLen=N pwx=N)"` and `return true` (holds
+  engagement, fires/clicks NOTHING). The dangerous centre-spam is gone regardless of root
+  cause; the reason string self-reports which input is missing. `_WorldToScreen`'s iso
+  fallback is KEPT (RadarOverlay + CustomHotkeys still call it without an anchor) but is now
+  unreachable from combat with a bad matrix.
+- **`ahk/CombatAutomation.ahk` — `AutoPilotDiagnose()` + `_ApDiagFinish()` (triage aid):**
+  one-shot dump of the whole world→screen chain so the "doesn't move / fires at centre"
+  failure can be root-caused WITHOUT reading the live overlay. Reuses `_DetectCombat(snap)`
+  for matrix + player + nearest enemy; reports matrix length (0 = read failed → bad pointer /
+  version offset shift / camera not ready) / all-zero / the 4×4 values, the player world pos,
+  client rect, `NavProjW` (camera w sign), the player's projected screen pos + % offset from
+  centre, the `NavAnchor` ok/why/visSign, and the enemy projection. Writes
+  `debug\autopilot_diag_*.txt` (readable in **Data & Logs**) + a MsgBox summary. Distinguishes
+  the two failure classes: `matLen=0` / no-proj = no matrix (pointer/offset/version), vs.
+  `off-center` = matrix present but projecting the player wrong (garbage matrix / wrong player
+  pos).
+- **Wiring:** `BridgeDispatch.ahk` case `AutoPilotDiag` → `SetTimer(AutoPilotDiagnose, -1)`.
+  `ui/index.html`: a "🔍 Diagnose projection" button in **Config → AutoPilot → Live Status**
+  (next to the live combat/explore reason readout).
+- **Pending in-game verification (needs the reporter):** with AutoPilot on near a monster,
+  click "Diagnose projection" and read `autopilot_diag_*.txt` — the matrix length + anchor
+  why localize the root cause so the targeted read/offset fix can follow. Confirm the
+  centre-spam is gone (combat now idles with `cam-bad(...)` instead of firing) when the
+  matrix is bad.
+- **Hotfix 0.45.13.112:** `_ApDiagFinish` had an unbraced `if wrote` whose body was a
+  multi-line `try MsgBox(...)` followed by `else` → AHK v2 load error "Unexpected Else".
+  Braced the `if` body and pre-built the message string (the `StashMoverDiagnose` pattern).
+  Lesson: never give an unbraced `if`/`else` a body that is a continued `try` statement.
+- **Diagnostic result + root cause (0.45.13.113):** the owner ran `AutoPilotDiagnose` and it
+  proved the matrix is NOT empty — it is PRESENT (len 16) and projects the player to dead centre
+  (1722,719 vs centre 1720,720), BUT a real enemy 637 world units away projected onto the SAME
+  pixel as the player. The matrix's z→w coefficient (M34) read as **-24951** instead of ~±1, so
+  `NavProjW≈1.8M` and every nearby world point collapses onto screen centre. That is the true
+  cause of BOTH symptoms and it is a **matrix the projection can no longer use** — i.e. the
+  camera-matrix offset DID drift with a recent patch (consistent with the +0x18 `AreaInstance`
+  drifts already noted in `PoE2Offsets`), despite the initial "not an offset" expectation. The
+  mandatory combat gate does NOT catch this (matrix is "valid" len-16 and the player anchors at
+  centre), so the next step is finding the corrected offset.
+- **`ahk/CombatAutomation.ahk` — `AutoPilotMatrixScan()` (+ `_ApScanRange`/`_ApMatProj`/
+  `_ApScanSort`/`_ApDiagFinish2`):** sweeps candidate W2S-matrix offsets to locate the real one.
+  Resolves `WorldData` (`g_reader._radarInGameStateCache` → `+0x368`), reads the live player +
+  nearest enemy (or a player+500 test point) via `_DetectCombat`, then for every 4-byte offset in
+  `WorldData[0x100..0x300]` AND the camera pointer at `WorldData+0xA0` (`[0x00..0x200]`), in BOTH
+  row-major and transposed layouts, projects the player and the test point. A hit = player ≤30%
+  off centre AND test point >50 px from the player (a non-degenerate matrix). Sorted by screen
+  separation; marks the CURRENT `0x1A8` and the `+0x18` (`0x1C0`) candidate. Writes
+  `debug\autopilot_matrixscan_*.txt`. Bridge `AutoPilotMatrixScan`; UI "🧭 Scan matrix offset"
+  button next to "🔍 Diagnose projection" in Config → AutoPilot → Live Status.
+- **FIXED — corrected offset `0x1A8` → `0x1A0` (0.45.13.114):** the scan's clear winner was
+  `WorldData+0x1A0 [row]` (sep=1968 px, the highest by far; player projects to x=1720 = dead
+  centre; duplicated at `0x1E0`). Reconstructing it confirmed it: at `0x1A0` the W2S w-row
+  direction `(0.467, 0.467, 0.751)` is a **unit vector** (0.467²+0.467²+0.751² = 1.0) — a real
+  camera forward axis. The old `0x1A8` read was misaligned by 2 floats (−8 bytes), so the large
+  translation value `-24951` landed in the w-row's z-slot, blowing `w` up to ~1.8M and collapsing
+  every projection onto screen centre. A recent game patch shifted the camera matrix −8 bytes
+  (matrix moved from CameraStructure+0x108 to +0x100), so `0x1A8` was correct before the patch and
+  wrong after — i.e. it WAS an offset drift after all (same class as the `+0x18` `AreaInstance`
+  drifts). Fix: `PoE2Offsets.WorldData["W2SMatrix"] := 0x1A0`; the existing `[row]` layout is
+  correct (no transpose / no pointer-deref). Both matrix reads (`PoE2MemoryReader` lines ~1322 and
+  ~3075) go through that constant, so the one-line change fixes the whole projection chain. The
+  diagnostic tools (`AutoPilotDiagnose` / `AutoPilotMatrixScan`) now read the offset dynamically so
+  they stay useful for the next drift; the mandatory combat gate stays as defence-in-depth.
+- **Pending in-game verification (owner):** turn AutoPilot on near monsters — the character should
+  move along the explored route and skills should aim at enemies (no more centre-fire / standing
+  still). Re-run "🔍 Diagnose projection" to confirm an enemy now projects to a DIFFERENT pixel
+  than the player.
 
 ## Reference
 

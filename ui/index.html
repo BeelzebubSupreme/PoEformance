@@ -5282,6 +5282,22 @@
                   <div class="cfg-row"><span class="cfg-label">Loot</span><span id="cfg-loot-status"
                       class="cfg-status idle">idle</span><span style="margin-left:8px;color:var(--subtext);font-size:11px">
                       pickup • cache <span id="cfg-loot-cache-count">0</span></span></div>
+                  <!-- One-click projection triage (issue #158): dumps the full
+                       world→screen chain (matrix, player projection, anchor,
+                       enemy aim) to debug\autopilot_diag_*.txt so a
+                       "doesn't move / fires at screen centre" report can be
+                       root-caused without reading the live overlay. -->
+                  <div class="cfg-row">
+                    <span class="cfg-label">Diagnose</span>
+                    <button class="hk-btn" onclick="ahkCall('AutoPilotDiag')">🔍 Diagnose projection</button>
+                    <button class="hk-btn" onclick="ahkCall('AutoPilotMatrixScan')" style="margin-left:6px">🧭 Scan matrix offset</button>
+                  </div>
+                  <div class="cfg-help">If AutoPilot won't move or fires skills at the middle of the screen,
+                    turn it on, stand near a monster, then click <b>Diagnose projection</b>. It writes the
+                    camera-matrix / projection chain to <code>debug\autopilot_diag_*.txt</code> (readable under
+                    Data &amp; Logs). If that report shows the matrix is present but a far enemy projects onto the
+                    same pixel as you, click <b>Scan matrix offset</b> — it searches for the correct camera-matrix
+                    offset and writes <code>debug\autopilot_matrixscan_*.txt</code>.</div>
                 </div>
               </details>
 

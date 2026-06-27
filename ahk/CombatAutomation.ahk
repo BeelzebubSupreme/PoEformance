@@ -150,18 +150,27 @@ TryCombatAutomation(radarSnap, gameHwnd)
         ; the move-click walks the character in exactly the wrong direction
         ; (the "runs away from the enemy in stutter steps" bug).
         navRect := NavClientRect(gameHwnd)
-        camAnchor := 0
         mat0 := combatInfo["w2sMatrix"]
-        if (navRect && mat0 && Type(mat0) = "Array" && mat0.Length = 16
+        ; MANDATORY projection gate (issue #158). This gate USED to be conditional — it only ran
+        ; NavAnchor when the matrix/rect/player were present, and otherwise fell through. With no
+        ; matrix the code then reached _WorldToScreen's screen-CENTRE isometric approximation and
+        ; the grace-fire path blind-spammed skills at the middle of the screen, un-aimed. Never do
+        ; that: if we cannot project properly we hold the engagement but click/fire NOTHING. The
+        ; reason string reports exactly which input is missing so the Debug Overlay localizes it.
+        if !(navRect && IsObject(mat0) && Type(mat0) = "Array" && mat0.Length = 16
             && combatInfo["playerWorldX"] != 0)
         {
-            camAnchor := NavAnchor(combatInfo["playerWorldX"], combatInfo["playerWorldY"]
-                , combatInfo["playerWorldZ"], mat0, navRect)
-            if !camAnchor["ok"]
-            {
-                g_combatLastReason := "cam-bad(" camAnchor["why"] ")"
-                return true   ; engaged — skip the tick rather than click blind
-            }
+            g_combatLastReason := "cam-bad(no-proj rect=" (navRect ? 1 : 0)
+                . " matLen=" (IsObject(mat0) ? mat0.Length : 0)
+                . " pwx=" Round(combatInfo["playerWorldX"]) ")"
+            return true   ; engaged but cannot aim — do NOT fall back to a screen-centre guess
+        }
+        camAnchor := NavAnchor(combatInfo["playerWorldX"], combatInfo["playerWorldY"]
+            , combatInfo["playerWorldZ"], mat0, navRect)
+        if !camAnchor["ok"]
+        {
+            g_combatLastReason := "cam-bad(" camAnchor["why"] ")"
+            return true   ; engaged — skip the tick rather than click blind
         }
 
         ; ── Aim selection (LoS-aware) ──────────────────────────────────────
@@ -1208,4 +1217,391 @@ _OnCombatHotkeyPressed(*)
     SetTimer(() => SaveCombatAutoConfig(), -100)
     SetTimer(() => SaveExplorationConfig(), -100)
     SetTimer(PushHeaderToWebView, -50)
+}
+
+; ── AutoPilot projection diagnostic (issue #158) ───────────────────────────
+; One-shot RE/triage aid that dumps the entire world→screen projection chain so
+; the "doesn't move / spams skills at screen centre" failure can be root-caused
+; WITHOUT the user reading the live debug overlay. Both AutoPilot symptoms come
+; from a bad camera matrix at the consumer: an empty matrix makes NavAnchor fail
+; (exploration never clicks → no movement) and used to drop combat into the
+; isometric screen-CENTRE fallback (the blind skill-spam). This reports whether
+; the matrix is present/zeroed/garbage, whether the player projects near the
+; screen centre, and the live combat/explore reasons. No params / no return;
+; shows a MsgBox and writes the full report to debug\.
+AutoPilotDiagnose()
+{
+    global g_reader, g_radarLastSnap
+    global g_autoPilotEnabled, g_combatState, g_combatLastReason, g_exploreLastReason
+
+    if !IsObject(g_reader)
+    {
+        try MsgBox("AutoPilot Diagnose: game not connected.", "AutoPilot Diagnose", 0x40)
+        return
+    }
+
+    nl := "`n"
+    out := "=== AutoPilot projection diagnostic  (" FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") ") ===" nl nl
+    out .= "AutoPilot enabled: " (g_autoPilotEnabled ? "yes" : "no")
+        . "    combatState: " g_combatState nl
+    out .= "live combat reason : " (g_combatLastReason  != "" ? g_combatLastReason  : "(none)") nl
+    out .= "live explore reason: " (g_exploreLastReason != "" ? g_exploreLastReason : "(none)") nl nl
+
+    snap := (IsObject(g_radarLastSnap) && g_radarLastSnap is Map) ? g_radarLastSnap : 0
+    if !snap
+    {
+        out .= "No radar snapshot yet — let the radar run (enter an area), then retry." nl
+        _ApDiagFinish(out)
+        return
+    }
+
+    ; Reuse the exact extraction the combat tick uses (matrix + player + nearest enemy).
+    info := _DetectCombat(snap)
+    mat  := info["w2sMatrix"]
+    pwx  := info["playerWorldX"], pwy := info["playerWorldY"], pwz := info["playerWorldZ"]
+
+    ; ── Camera matrix ──────────────────────────────────────────────────────
+    matLen := (IsObject(mat) && Type(mat) = "Array") ? mat.Length : 0
+    out .= "W2S matrix length: " matLen
+    if (matLen != 16)
+        out .= "   <<< NOT 16 — the reader returned NO matrix this tick."
+            . nl . "      => InGameState.WorldData (0x" Format("{:X}", PoE2Offsets.InGameState["WorldData"])
+            . ") or WorldData.W2SMatrix (0x" Format("{:X}", PoE2Offsets.WorldData["W2SMatrix"]) ") did not"
+            . nl . "         resolve: bad pointer, a game-version offset shift, or the camera was"
+            . nl . "         not ready. This is the cause of BOTH symptoms."
+    out .= nl
+    if (matLen = 16)
+    {
+        allZero := true
+        Loop 16
+            if (mat[A_Index] != 0)
+                allZero := false
+        out .= (allZero
+            ? "   <<< all 16 values are ZERO — matrix memory is blank (wrong location / camera off)."
+            : "   matrix (row-major 4x4):") nl
+        if !allZero
+        {
+            Loop 4
+            {
+                r := A_Index
+                out .= "     " Format("{:.3f}  {:.3f}  {:.3f}  {:.3f}"
+                    , mat[(r-1)*4+1], mat[(r-1)*4+2], mat[(r-1)*4+3], mat[(r-1)*4+4]) nl
+            }
+        }
+    }
+    out .= nl
+
+    ; ── Player world position ──────────────────────────────────────────────
+    out .= "Player world pos: " Round(pwx) ", " Round(pwy) ", " Round(pwz)
+    if (pwx = 0 && pwy = 0)
+        out .= "   <<< origin (0,0) — player position not readable; projection cannot run."
+    out .= nl nl
+
+    ; ── Window / client rect ───────────────────────────────────────────────
+    gHwnd := ResolvePoEWindow()
+    rect := gHwnd ? NavClientRect(gHwnd) : 0
+    if IsObject(rect)
+        out .= "Client rect: x=" rect["x"] " y=" rect["y"] " w=" rect["w"] " h=" rect["h"] nl
+    else
+        out .= "Client rect: (unavailable — PoE window not resolved)" nl
+    out .= nl
+
+    ; ── Project the player + run the camera anchor ─────────────────────────
+    if (matLen = 16 && IsObject(rect) && !(pwx = 0 && pwy = 0))
+    {
+        w := NavProjW(pwx, pwy, pwz, mat)
+        out .= "Player NavProjW (camera w): " Format("{:.4f}", w)
+            . "   (sign defines 'in front of camera')" nl
+        psp := NavProject(pwx, pwy, pwz, mat, rect, 0)
+        if psp
+        {
+            cxm := rect["x"] + rect["w"] / 2
+            cym := rect["y"] + rect["h"] / 2
+            pctX := Round(Abs(psp["x"] - cxm) / rect["w"] * 100)
+            pctY := Round(Abs(psp["y"] - cym) / rect["h"] * 100)
+            out .= "Player projects to: " psp["x"] ", " psp["y"]
+                . "   (screen centre " Round(cxm) ", " Round(cym) ")" nl
+            out .= "Offset from centre: " pctX "% x, " pctY "% y"
+                . "   (anchor needs BOTH <= 30%)" nl
+        }
+        else
+            out .= "Player projection FAILED (degenerate w) — matrix present but unusable." nl
+
+        anchor := NavAnchor(pwx, pwy, pwz, mat, rect)
+        out .= "NavAnchor: ok=" (anchor["ok"] ? "YES" : "no")
+            . "   why=" (anchor["why"] != "" ? anchor["why"] : "(ok)")
+            . "   visSign=" anchor["visSign"] nl
+
+        ; Project the nearest enemy too, when one is in range.
+        if (info["hostileCount"] > 0 && info["nearestWorldX"] != 0)
+        {
+            ; Project with the PLAYER's Z (grid heights unreliable), matching ClickNav.
+            ex := info["nearestWorldX"], ey := info["nearestWorldY"]
+            out .= nl . "Nearest enemy: " info["hostileCount"] " hostile(s), dist="
+                . Round(info["nearestDist"]) "  world=" Round(ex) "," Round(ey) nl
+            esp := NavProject(ex, ey, pwz, mat, rect, anchor["visSign"])
+            out .= "Enemy projects to: " (esp ? esp["x"] "," esp["y"]
+                : "REJECTED (behind camera / degenerate w)") nl
+        }
+        else
+            out .= nl . "Nearest enemy: none in range (move next to a monster to test combat aim)." nl
+    }
+    else
+        out .= "Projection skipped — need matrix(16) + client rect + non-origin player." nl
+
+    _ApDiagFinish(out)
+}
+
+; Writes the AutoPilot diagnostic report to debug\ and shows a short MsgBox.
+; Param: out (the full report text). No return.
+_ApDiagFinish(out)
+{
+    outDir := A_ScriptDir "\debug"
+    if !DirExist(outDir)
+        try DirCreate(outDir)
+    outPath := outDir "\autopilot_diag_" FormatTime(A_Now, "yyyyMMdd_HHmmss") ".txt"
+    wrote := false
+    try {
+        FileAppend(out, outPath, "UTF-8")
+        wrote := true
+    }
+    if wrote
+    {
+        msg := "AutoPilot diagnostic written to:`n" outPath
+            . "`n`nOpen it in Config -> Data & Logs (or paste it) so the projection"
+            . " chain can be read.`n`n--- summary ---`n" SubStr(out, 1, 600)
+        try MsgBox(msg, "AutoPilot Diagnose", 0x40)
+    }
+    else
+        try MsgBox(out, "AutoPilot Diagnose", 0x40)
+}
+
+; ── AutoPilot W2S-matrix offset scan (issue #158) ──────────────────────────
+; When AutoPilotDiagnose shows the matrix is PRESENT but degenerate (the player
+; projects to centre yet a far enemy collapses onto the SAME pixel — w hugely
+; inflated), the matrix at the current offset is no longer the real camera
+; matrix on this build (a game patch shifted the camera struct — see the +0x18
+; AreaInstance drifts in PoE2Offsets). This sweeps candidate matrix offsets and
+; reports which one projects the player near centre AND a 500-unit test point
+; FAR from the player (the signature of a usable W2S matrix). It scans the
+; WorldData struct directly and the camera pointer at WorldData+0xA0, in both
+; row-major and transposed layouts. No params / no return; MsgBox + debug\ file.
+AutoPilotMatrixScan()
+{
+    global g_reader, g_radarLastSnap
+
+    if !(IsObject(g_reader) && IsObject(g_reader.Mem) && g_reader.Mem.Handle)
+    {
+        try MsgBox("Matrix scan: game not connected.", "AutoPilot Matrix Scan", 0x40)
+        return
+    }
+
+    nl := "`n"
+    out := "=== AutoPilot W2S-matrix offset scan  (" FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") ") ===" nl nl
+
+    inGs := 0
+    try inGs := g_reader._radarInGameStateCache
+    if !g_reader.IsProbablyValidPointer(inGs)
+    {
+        out .= "InGameState not resolved yet — enter an area and let the radar run, then retry." nl
+        _ApDiagFinish2(out)
+        return
+    }
+    worldData := g_reader.Mem.ReadPtr(inGs + PoE2Offsets.InGameState["WorldData"])
+    if !g_reader.IsProbablyValidPointer(worldData)
+    {
+        out .= "WorldData pointer invalid (InGameState+0x" Format("{:X}", PoE2Offsets.InGameState["WorldData"]) ")." nl
+        _ApDiagFinish2(out)
+        return
+    }
+
+    ; Need the live player + a far test point. Reuse the combat extraction.
+    snap := (IsObject(g_radarLastSnap) && g_radarLastSnap is Map) ? g_radarLastSnap : 0
+    if !snap
+    {
+        out .= "No radar snapshot yet." nl
+        _ApDiagFinish2(out)
+        return
+    }
+    info := _DetectCombat(snap)
+    pwx := info["playerWorldX"], pwy := info["playerWorldY"], pwz := info["playerWorldZ"]
+    if (pwx = 0 && pwy = 0)
+    {
+        out .= "Player world pos is (0,0) — cannot test projection." nl
+        _ApDiagFinish2(out)
+        return
+    }
+    gHwnd := ResolvePoEWindow()
+    rect := gHwnd ? NavClientRect(gHwnd) : 0
+    if !IsObject(rect)
+    {
+        out .= "PoE window / client rect unavailable." nl
+        _ApDiagFinish2(out)
+        return
+    }
+
+    ; A far test point in front of the player (500 world units in +x and +y). A
+    ; usable matrix moves it well away from the player on screen; the degenerate
+    ; matrix keeps it on top of the player.
+    haveEnemy := (info["hostileCount"] > 0 && info["nearestWorldX"] != 0)
+    enX := haveEnemy ? info["nearestWorldX"] : (pwx + 500)
+    enY := haveEnemy ? info["nearestWorldY"] : pwy
+
+    out .= "WorldData=0x" Format("{:X}", worldData)
+        . "   player=" Round(pwx) "," Round(pwy) "," Round(pwz)
+        . "   testPt=" Round(enX) "," Round(enY) (haveEnemy ? " (enemy)" : " (+500)") nl
+    out .= "client=" rect["w"] "x" rect["h"] "   scanning for: player near centre + testPt >50px away" nl nl
+
+    cands := []
+    curW2S := PoE2Offsets.WorldData["W2SMatrix"]   ; the offset currently in use (mark it below)
+    ; Direct sweep of WorldData offsets around the current matrix offset.
+    _ApScanRange(g_reader, worldData, 0x100, 0x300, "WorldData", pwx, pwy, pwz, enX, enY, rect, cands)
+    ; Camera pointer at WorldData+0xA0 (in case the struct became a pointer on this build).
+    camPtr := g_reader.Mem.ReadPtr(worldData + PoE2Offsets.WorldData["CameraStructure"])
+    if g_reader.IsProbablyValidPointer(camPtr)
+    {
+        out .= "Camera pointer @WorldData+0xA0 = 0x" Format("{:X}", camPtr) " (also scanning it)" nl nl
+        _ApScanRange(g_reader, camPtr, 0x00, 0x200, "CamPtr", pwx, pwy, pwz, enX, enY, rect, cands)
+    }
+
+    ; Sort candidates by screen-distance of the test point from the player (desc).
+    _ApScanSort(cands)
+
+    out .= "GOOD candidates (player <=30% off centre, testPt moved): " cands.Length nl
+    out .= "fmt: base+0xOFF [layout]  player->(x,y)  testPt->(x,y)  sep=PX" nl
+    shown := 0
+    for _, c in cands
+    {
+        if (shown >= 24)
+        {
+            out .= "  … more omitted" nl
+            break
+        }
+        shown += 1
+        mark := (c["who"] = "WorldData" && c["off"] = curW2S) ? "  <== CURRENT (in use)" : ""
+        out .= "  " c["who"] "+0x" Format("{:X}", c["off"]) " [" c["layout"] "]"
+            . "  P->" c["px"] "," c["py"]
+            . "  T->" c["tx"] "," c["ty"]
+            . "  sep=" Round(c["sep"]) mark nl
+    }
+    if (cands.Length = 0)
+        out .= "  (none — no offset in the scanned range yields a usable projection;"
+            . " the camera struct may live elsewhere / behind another pointer)" nl
+
+    _ApDiagFinish2(out)
+}
+
+; Scans byte offsets lo..hi from base in 4-byte steps, reading a 4x4 float
+; matrix at each and testing whether it projects the player near screen centre
+; and the test point away from the player (both row-major and transposed
+; layouts). Appends GOOD hits to `cands`. Params as named; no return.
+_ApScanRange(reader, base, lo, hi, who, pwx, pwy, pwz, enX, enY, rect, cands)
+{
+    cxm := rect["x"] + rect["w"] / 2
+    cym := rect["y"] + rect["h"] / 2
+    margX := rect["w"] * 0.30
+    margY := rect["h"] * 0.30
+    off := lo
+    while (off < hi)
+    {
+        buf := reader.Mem.ReadBytes(base + off, 64)
+        off += 4
+        if !(buf && buf.Size >= 64)
+            continue
+        m := []
+        bad := false
+        Loop 16
+        {
+            v := NumGet(buf.Ptr, (A_Index - 1) * 4, "Float")
+            if (v != v || Abs(v) > 1.0e12)   ; NaN or absurd magnitude
+            {
+                bad := true
+                break
+            }
+            m.Push(v)
+        }
+        if bad
+            continue
+        ; Try both layouts; keep whichever projects the player nearest centre.
+        for _, layout in ["row", "T"]
+        {
+            pSp := _ApMatProj(m, pwx, pwy, pwz, rect, layout)
+            if !pSp
+                continue
+            if (Abs(pSp["x"] - cxm) > margX || Abs(pSp["y"] - cym) > margY)
+                continue
+            tSp := _ApMatProj(m, enX, enY, pwz, rect, layout)
+            if !tSp
+                continue
+            dx := tSp["x"] - pSp["x"], dy := tSp["y"] - pSp["y"]
+            sep := Sqrt(dx * dx + dy * dy)
+            if (sep < 50)
+                continue
+            cands.Push(Map("who", who, "off", off - 4, "layout", layout
+                , "px", pSp["x"], "py", pSp["y"], "tx", tSp["x"], "ty", tSp["y"], "sep", sep))
+        }
+    }
+}
+
+; Projects a world point through a 16-float matrix `m` (1-based Array). layout
+; "row" = NavProject's column-dot convention; "T" = transposed (row-dot).
+; Returns Map("x","y") or 0 (degenerate w). Param: m, wx, wy, wz, rect, layout.
+_ApMatProj(m, wx, wy, wz, rect, layout)
+{
+    if (layout = "row")
+    {
+        r1 := m[1]*wx + m[5]*wy + m[9]*wz  + m[13]
+        r2 := m[2]*wx + m[6]*wy + m[10]*wz + m[14]
+        r4 := m[4]*wx + m[8]*wy + m[12]*wz + m[16]
+    }
+    else
+    {
+        r1 := m[1]*wx + m[2]*wy + m[3]*wz  + m[4]
+        r2 := m[5]*wx + m[6]*wy + m[7]*wz  + m[8]
+        r4 := m[13]*wx + m[14]*wy + m[15]*wz + m[16]
+    }
+    if (Abs(r4) < 0.0001)
+        return 0
+    return Map("x", Round(rect["x"] + (r1 / r4 + 1) * rect["w"] / 2)
+             , "y", Round(rect["y"] + (1 - r2 / r4) * rect["h"] / 2))
+}
+
+; Insertion-sort cands by screen separation desc (best candidate first).
+; Param: cands (Array of Maps). No return.
+_ApScanSort(cands)
+{
+    i := 2
+    while (i <= cands.Length)
+    {
+        cur := cands[i], j := i - 1
+        while (j >= 1 && cands[j]["sep"] < cur["sep"])
+        {
+            cands[j + 1] := cands[j]
+            j -= 1
+        }
+        cands[j + 1] := cur
+        i += 1
+    }
+}
+
+; Writes a matrix-scan report to debug\ and shows a short MsgBox. Param: out.
+_ApDiagFinish2(out)
+{
+    outDir := A_ScriptDir "\debug"
+    if !DirExist(outDir)
+        try DirCreate(outDir)
+    outPath := outDir "\autopilot_matrixscan_" FormatTime(A_Now, "yyyyMMdd_HHmmss") ".txt"
+    wrote := false
+    try {
+        FileAppend(out, outPath, "UTF-8")
+        wrote := true
+    }
+    if wrote
+    {
+        msg := "Matrix scan written to:`n" outPath
+            . "`n`nOpen it in Config -> Data & Logs (or paste it).`n`n--- summary ---`n" SubStr(out, 1, 700)
+        try MsgBox(msg, "AutoPilot Matrix Scan", 0x40)
+    }
+    else
+        try MsgBox(out, "AutoPilot Matrix Scan", 0x40)
 }
