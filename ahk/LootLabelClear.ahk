@@ -5,14 +5,16 @@
 ; rectangles from the maphack blit via ExcludeClipRect; this module supplies the on-screen
 ; LOOT-LABEL rectangles to exclude too, so the walls simply aren't drawn over the labels.
 ;
-; RE finding (loot-label probe, 2026-06-27): a ground/loot label is a UI text element whose
-; StringId is the world object's metadata PATH (e.g. "Metadata/MiscellaneousObjects/WorldItem")
-; with the item name as displayed text; chat lines have an empty StringId. So the labels are
-; the visible text elements whose StringId starts with "Metadata/". They live under one
-; "ground labels" container (the parent of any such label) — we find it once, cache it, and
-; rescan only its subtree (cheap) for the live label rects. Rects are produced in the radar
-; overlay's coordinate space (overlay-local px = UI-space × scaleFactorY) so RadarOverlay can
-; ExcludeClipRect them directly. Self-persists [LootLabelClear]. Default ON.
+; RE finding (loot-label probe, 2026-06-27): a ground/loot label is a UI element whose StringId
+; is the world object's metadata PATH (e.g. "Metadata/MiscellaneousObjects/WorldItem"); chat
+; lines have an empty StringId. ALL world labels share this — item drops, gold, checkpoints,
+; chests, monoliths, and the ritual/interaction banners. They do NOT share a single parent:
+; each drop label sits in its own wrapper and the checkpoint / ritual banner live in separate
+; UI subtrees. So instead of scoping to one container we do a single visibility-pruned BFS from
+; the GameUI root each refresh and collect EVERY visible "Metadata/" label wherever it lives.
+; Pruning hidden subtrees (most of the HUD is hidden) keeps it cheap. Rects are produced in the
+; radar overlay's coordinate space (overlay-local px = UI-space × scaleFactorY) so RadarOverlay
+; can ExcludeClipRect them directly. Self-persists [LootLabelClear]. Default ON.
 ; Included by InGameStateMonitor.ahk (before OverlayManager / RadarOverlay use g_llcRects).
 
 ; Seeds all LootLabelClear globals (defaults first), then overlays the persisted INI section.
@@ -25,8 +27,6 @@ LoadLootLabelClear()
 
     ; Runtime (never persisted)
     global g_llcRects := []             ; [ [x,y,w,h] ] overlay-local px rects to exclude
-    global g_llcContainer := 0          ; cached ground-labels container element ptr
-    global g_llcContainerTick := 0      ; last container (re)find stamp
     global g_llcLastTick := 0           ; refresh throttle stamp
 
     f := g_llcConfigFile
@@ -55,15 +55,13 @@ SaveLootLabelClear()
 ; Applies one setting from the UI/bridge; clears the cache when disabled. No return.
 _LlcApplySetting(key, val)
 {
-    global g_llcEnabled, g_llcPad, g_llcRects, g_llcContainer
+    global g_llcEnabled, g_llcPad, g_llcRects
     switch key
     {
         case "enabled":
             g_llcEnabled := _LrvTruthy(val)
             if !g_llcEnabled
-            {
-                g_llcRects := [], g_llcContainer := 0
-            }
+                g_llcRects := []
         case "pad":
             g_llcPad := Min(40, Max(0, Integer(val)))
     }
@@ -83,73 +81,16 @@ _LlcIsLabelSid(sid)
     return (StrLen(sid) > 9 && SubStr(sid, 1, 9) = "Metadata/")
 }
 
-; Finds the ground-labels container: a bounded BFS for the first VISIBLE text element whose
-; StringId starts with "Metadata/", returning its parent (the shared label container). Capped
-; by node count + time, short-circuits on match. Returns the container ptr or 0. Params:
-; reader, root (GameUI root ptr).
-_LlcFindContainer(reader, root)
-{
-    sidOff := PoE2Offsets.UiElementBase["StringIdPtr"]
-    parOff := PoE2Offsets.UiElementBase["ParentPtr"]
-    txtOff := PoE2Offsets.UiElementBase["TextPtr"]
-    queue := [root], visited := Map(), seen := 0
-    deadline := A_TickCount + 1200
-    while (queue.Length > 0 && seen < 4000)
-    {
-        if (A_TickCount > deadline)
-            break
-        ptr := queue.RemoveAt(1)
-        if (visited.Has(ptr))
-            continue
-        visited[ptr] := true
-        seen += 1
-        g := _UiHitGeom(reader, ptr)
-        if !IsObject(g)
-            continue
-        if (g["visible"])
-        {
-            sid := ""
-            try sid := reader.ReadStdWStringAt(ptr + sidOff)
-            if (_LlcIsLabelSid(sid))
-            {
-                txt := ""
-                try txt := reader.ReadStdWStringAt(ptr + txtOff, 64)
-                if (Trim(txt) != "")
-                {
-                    par := 0
-                    try par := reader.Mem.ReadPtr(ptr + parOff)
-                    if (par && reader.IsProbablyValidPointer(par))
-                        return par
-                }
-            }
-        }
-        cf := g["childFirst"], cl := g["childLast"]
-        if (reader.IsProbablyValidPointer(cf) && cl > cf)
-        {
-            n := Min((cl - cf) // A_PtrSize, 512)
-            buf := reader.Mem.ReadBytes(cf, n * A_PtrSize)
-            if buf
-            {
-                Loop n
-                {
-                    cp := NumGet(buf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
-                    if (reader.IsProbablyValidPointer(cp) && !visited.Has(cp))
-                        queue.Push(cp)
-                }
-            }
-        }
-    }
-    return 0
-}
-
 ; Refreshes g_llcRects with the current on-screen loot/world label rectangles (overlay-local
-; px). Throttled ~5 Hz; ensures the cached container (re-find ≤ ~1.5 s when missing), then
-; rescans only its subtree for visible "Metadata/" text labels and converts each to px via
-; scaleFactorY. Called by RadarOverlay.Render while the large map is open. Params: reader,
-; gw/gh (game-window size px). No return.
+; px). Throttled ~5 Hz. Does ONE visibility-pruned DFS from the GameUI root: a hidden element's
+; subtree is skipped entirely (so a node we reach is effectively visible — all ancestors were
+; visible too), and every visible "Metadata/"-StringId element of label size is collected. Each
+; rect is converted to px via scaleFactorY and kept only if it lands on screen and is not
+; absurdly large (a guard so an unexpected big container can never clear the whole map). Called
+; by RadarOverlay.Render while the large map is open. Params: reader, gw/gh (game-window px).
 LootLabelRectsRefresh(reader, gw, gh)
 {
-    global g_llcEnabled, g_llcRects, g_llcContainer, g_llcContainerTick, g_llcLastTick
+    global g_llcEnabled, g_llcRects, g_llcLastTick
     if !(IsSet(g_llcEnabled) && g_llcEnabled)
     {
         g_llcRects := []
@@ -164,31 +105,33 @@ LootLabelRectsRefresh(reader, gw, gh)
     if !(root && reader.IsProbablyValidPointer(root))
         return
 
-    ; Ensure a valid container; re-find at most every ~1.5 s when missing.
-    cont := g_llcContainer
-    if (!cont || !reader.IsProbablyValidPointer(cont))
-    {
-        if ((A_TickCount - g_llcContainerTick) > 1500)
-        {
-            g_llcContainer := _LlcFindContainer(reader, root)
-            g_llcContainerTick := A_TickCount
-            cont := g_llcContainer
-        }
-    }
-    if !(cont && reader.IsProbablyValidPointer(cont))
+    ; UI element positions/sizes are in the game's 2560×1600 base coords (see PoE2MemoryReader
+    ; "apply GameWindowScale"): X scales by gw/2560, Y by gh/1600. They differ on any non-16:10
+    ; window — using the Y scale for X left-shifts the rects ~10% on 16:9, so scale each axis on
+    ; its own factor.
+    sX  := gw / 2560.0
+    sY  := gh / 1600.0
+    maxW := gw * 0.6, maxH := gh * 0.5   ; a label is never this big → skip (anti whole-map clear)
+    sidOff := PoE2Offsets.UiElementBase["StringIdPtr"]
+    rects := []
+
+    ; Seed the stack with the root's children so the root's own visible flag never blocks us.
+    stack := []
+    rg := _UiHitGeom(reader, root)
+    if !IsObject(rg)
     {
         g_llcRects := []
         return
     }
+    _LlcPushChildren(reader, rg, stack)
 
-    sY  := gh / 1600.0
-    sidOff := PoE2Offsets.UiElementBase["StringIdPtr"]
-    txtOff := PoE2Offsets.UiElementBase["TextPtr"]
-    rects := []
-    queue := [cont], visited := Map(), nodes := 0
-    while (queue.Length > 0 && nodes < 400)
+    visited := Map(), nodes := 0
+    deadline := A_TickCount + 6
+    while (stack.Length > 0 && nodes < 6000)
     {
-        ptr := queue.RemoveAt(1)
+        if (A_TickCount > deadline)
+            break
+        ptr := stack.Pop()
         if (visited.Has(ptr))
             continue
         visited[ptr] := true
@@ -196,40 +139,42 @@ LootLabelRectsRefresh(reader, gw, gh)
         g := _UiHitGeom(reader, ptr)
         if !IsObject(g)
             continue
-        if (g["visible"] && g["sizeW"] > 0 && g["sizeH"] > 0)
+        if !g["visible"]            ; hidden → skip this node AND its whole subtree
+            continue
+        if (g["sizeW"] > 0 && g["sizeH"] > 0 && g["sizeW"] * sX <= maxW && g["sizeH"] * sY <= maxH)
         {
             sid := ""
             try sid := reader.ReadStdWStringAt(ptr + sidOff)
             if (_LlcIsLabelSid(sid))
             {
-                txt := ""
-                try txt := reader.ReadStdWStringAt(ptr + txtOff, 64)
-                if (Trim(txt) != "")
-                {
-                    sp := UiTree_GetScreenPos(reader, ptr)
-                    x := Round(sp["x"] * sY), y := Round(sp["y"] * sY)
-                    w := Round(g["sizeW"] * sY), h := Round(g["sizeH"] * sY)
-                    ; Keep only labels that land on screen.
-                    if (w > 0 && h > 0 && x < gw && y < gh && x + w > 0 && y + h > 0)
-                        rects.Push([x, y, w, h])
-                }
+                sp := UiTree_GetScreenPos(reader, ptr)
+                x := Round(sp["x"] * sX), y := Round(sp["y"] * sY)
+                w := Round(g["sizeW"] * sX), h := Round(g["sizeH"] * sY)
+                ; Keep only labels that land on screen.
+                if (w > 0 && h > 0 && x < gw && y < gh && x + w > 0 && y + h > 0)
+                    rects.Push([x, y, w, h])
             }
         }
-        cf := g["childFirst"], cl := g["childLast"]
-        if (reader.IsProbablyValidPointer(cf) && cl > cf)
-        {
-            n := Min((cl - cf) // A_PtrSize, 256)
-            buf := reader.Mem.ReadBytes(cf, n * A_PtrSize)
-            if buf
-            {
-                Loop n
-                {
-                    cp := NumGet(buf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
-                    if (reader.IsProbablyValidPointer(cp) && !visited.Has(cp))
-                        queue.Push(cp)
-                }
-            }
-        }
+        _LlcPushChildren(reader, g, stack)
     }
     g_llcRects := rects
+}
+
+; Pushes a node's child element pointers onto <stack> (capped). Params: reader, g (the node's
+; _UiHitGeom map), stack (array). No return.
+_LlcPushChildren(reader, g, stack)
+{
+    cf := g["childFirst"], cl := g["childLast"]
+    if !(reader.IsProbablyValidPointer(cf) && cl > cf)
+        return
+    n := Min((cl - cf) // A_PtrSize, 512)
+    buf := reader.Mem.ReadBytes(cf, n * A_PtrSize)
+    if !buf
+        return
+    Loop n
+    {
+        cp := NumGet(buf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
+        if (reader.IsProbablyValidPointer(cp))
+            stack.Push(cp)
+    }
 }
