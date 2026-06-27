@@ -822,6 +822,9 @@ _DispatchBridgeCall(method, args)
         case "UiHoverProbeRun":
             ; RE diagnostic: find the UIHover pointer (hovered UI/inventory element).
             SetTimer(() => UiHoverProbeRun(), -1)
+        case "RitualProbeRun":
+            ; RE diagnostic: dump the Ritual (Favours) reward window subtree + item slots.
+            SetTimer(() => RitualProbeRun(), -1)
         case "SkillProbeRun":
             ; TEMP post-patch diagnostic: trace the skill-name DAT chain.
             SetTimer(() => SkillProbeRun(), -1)
