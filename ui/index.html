@@ -12889,8 +12889,13 @@
         _tsvHeaders.forEach(h => _tsvColWidths.push(Math.max(70, Math.min(320, String(h).length * 8 + 28))));
       }
       const colTags = _tsvColWidths.map(w => `<col style="width:${w}px">`).join('');
+      // Size the table to the SUM of its column widths (NOT width:100%). With table-layout:fixed,
+      // width:100% makes the browser scale columns to fill the wrap whenever they don't overflow it
+      // — which silently defeats per-column resizing on narrow / few-column tables. An exact total
+      // makes each column honor its px width, so drags take effect precisely (and the wrap scrolls).
+      const totalW = _tsvColWidths.reduce((a, b) => a + (b || 0), 0);
 
-      let html = `<table class="tsv-table" style="table-layout:fixed"><colgroup>${colTags}</colgroup><thead><tr>`;
+      let html = `<table class="tsv-table" style="table-layout:fixed;width:${totalW}px"><colgroup>${colTags}</colgroup><thead><tr>`;
       html += '<th class="tsv-rownum">#</th>';
       _tsvHeaders.forEach((h, i) => {
         const ind = _tsvSortCol === i ? (_tsvSortAsc ? '▲' : '▼') : '';
@@ -12925,11 +12930,13 @@
         ev.preventDefault(); ev.stopPropagation();
         const ci = +h.getAttribute('data-ci');
         const startX = ev.clientX, startW = _tsvColWidths[ci] || 120;
-        const colgrp = wrap.querySelector('table.tsv-table > colgroup');
+        const tbl = wrap.querySelector('table.tsv-table');
+        const colgrp = tbl ? tbl.querySelector('colgroup') : null;
         const onMove = (e) => {
           const w = Math.max(40, startW + (e.clientX - startX));
           _tsvColWidths[ci] = w;
           if (colgrp && colgrp.children[ci]) colgrp.children[ci].style.width = w + 'px';
+          if (tbl) tbl.style.width = _tsvColWidths.reduce((a, b) => a + (b || 0), 0) + 'px';
         };
         const onUp = () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
         document.addEventListener('mousemove', onMove);
