@@ -85,9 +85,10 @@ _LlcIsLabelSid(sid)
 ; px). Throttled ~5 Hz. Does ONE visibility-pruned DFS from the GameUI root: a hidden element's
 ; subtree is skipped entirely (so a node we reach is effectively visible — all ancestors were
 ; visible too), and every visible "Metadata/"-StringId element of label size is collected. Each
-; rect is converted to px via scaleFactorY and kept only if it lands on screen and is not
-; absurdly large (a guard so an unexpected big container can never clear the whole map). Called
-; by RadarOverlay.Render while the large map is open. Params: reader, gw/gh (game-window px).
+; rect is converted to overlay-local px with the client-rect convention (same as Price-on-Hover
+; / Ritual badges) and kept only if it lands on screen and is not absurdly large (a guard so an
+; unexpected big container can never clear the whole map). Called by RadarOverlay.Render while
+; the large map is open. Params: reader, gw/gh (game-window px, for the on-screen bound check).
 LootLabelRectsRefresh(reader, gw, gh)
 {
     global g_llcEnabled, g_llcRects, g_llcLastTick
@@ -105,12 +106,23 @@ LootLabelRectsRefresh(reader, gw, gh)
     if !(root && reader.IsProbablyValidPointer(root))
         return
 
-    ; UI positions/sizes from UiTree_GetScreenPos are height-normalized: the base space is
-    ; 1600 tall and its WIDTH grows with the aspect ratio (e.g. on a 3840×1600 ultrawide the
-    ; right-edge UI x reaches ~3840, far past 2560). So BOTH axes convert to pixels with the
-    ; same factor gh/1600 — verified against the probe (the Mana label at UI x=3519 only lands
-    ; on screen with gh/1600; gw/2560 would push it off the right edge).
-    sY  := gh / 1600.0
+    ; Convert UI coords → overlay-local px EXACTLY like the verified Price-on-Hover / Ritual
+    ; badges (which sit perfectly on items of any size): the CLIENT rect (NavClientRect) gives
+    ; the origin + the scale (cr.h/1600, used for BOTH axes). RadarOverlay's memDC is
+    ; window-local, so subtract the window origin from the client origin (offX/offY) to land in
+    ; the same space as the maphack blit. This matters whenever the window rect != the client
+    ; rect (the overlay context's gw/gh come from WinGetPos = the window rect, not the client).
+    gameHwnd := ResolvePoEWindow()
+    cr := gameHwnd ? NavClientRect(gameHwnd) : 0
+    if !IsObject(cr)
+    {
+        g_llcRects := []
+        return
+    }
+    hScale := (cr["h"] > 0) ? (cr["h"] / 1600.0) : 1.0
+    wx := 0, wy := 0, ww := 0, wh := 0
+    try WinGetPos(&wx, &wy, &ww, &wh, "ahk_id " gameHwnd)
+    offX := cr["x"] - wx, offY := cr["y"] - wy
     maxW := gw * 0.6, maxH := gh * 0.5   ; a label is never this big → skip (anti whole-map clear)
     sidOff := PoE2Offsets.UiElementBase["StringIdPtr"]
     txtOff := PoE2Offsets.UiElementBase["TextPtr"]
@@ -145,7 +157,7 @@ LootLabelRectsRefresh(reader, gw, gh)
             continue
         if !g["visible"]            ; hidden → skip this node AND its whole subtree
             continue
-        if (g["sizeW"] > 0 && g["sizeH"] > 0 && g["sizeW"] * sY <= maxW && g["sizeH"] * sY <= maxH)
+        if (g["sizeW"] > 0 && g["sizeH"] > 0 && g["sizeW"] * hScale <= maxW && g["sizeH"] * hScale <= maxH)
         {
             sid := ""
             try sid := reader.ReadStdWStringAt(ptr + sidOff)
@@ -159,8 +171,8 @@ LootLabelRectsRefresh(reader, gw, gh)
                 if (Trim(txt) != "")
                 {
                     sp := UiTree_GetScreenPos(reader, ptr)
-                    x := Round(sp["x"] * sY), y := Round(sp["y"] * sY)
-                    w := Round(g["sizeW"] * sY), h := Round(g["sizeH"] * sY)
+                    x := Round(sp["x"] * hScale + offX), y := Round(sp["y"] * hScale + offY)
+                    w := Round(g["sizeW"] * hScale), h := Round(g["sizeH"] * hScale)
                     ; Keep only labels that land on screen.
                     if (w > 0 && h > 0 && x < gw && y < gh && x + w > 0 && y + h > 0)
                         rects.Push([x, y, w, h])
