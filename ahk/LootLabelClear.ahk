@@ -105,6 +105,11 @@ LootLabelRectsRefresh(reader, gw, gh)
     if !(root && reader.IsProbablyValidPointer(root))
         return
 
+    ; UI element positions/sizes are in the game's 2560×1600 base coords (see PoE2MemoryReader
+    ; "apply GameWindowScale"): X scales by gw/2560, Y by gh/1600. They differ on any non-16:10
+    ; window — using the Y scale for X left-shifts the rects ~10% on 16:9, so scale each axis on
+    ; its own factor.
+    sX  := gw / 2560.0
     sY  := gh / 1600.0
     maxW := gw * 0.6, maxH := gh * 0.5   ; a label is never this big → skip (anti whole-map clear)
     sidOff := PoE2Offsets.UiElementBase["StringIdPtr"]
@@ -136,15 +141,15 @@ LootLabelRectsRefresh(reader, gw, gh)
             continue
         if !g["visible"]            ; hidden → skip this node AND its whole subtree
             continue
-        if (g["sizeW"] > 0 && g["sizeH"] > 0 && g["sizeW"] * sY <= maxW && g["sizeH"] * sY <= maxH)
+        if (g["sizeW"] > 0 && g["sizeH"] > 0 && g["sizeW"] * sX <= maxW && g["sizeH"] * sY <= maxH)
         {
             sid := ""
             try sid := reader.ReadStdWStringAt(ptr + sidOff)
             if (_LlcIsLabelSid(sid))
             {
                 sp := UiTree_GetScreenPos(reader, ptr)
-                x := Round(sp["x"] * sY), y := Round(sp["y"] * sY)
-                w := Round(g["sizeW"] * sY), h := Round(g["sizeH"] * sY)
+                x := Round(sp["x"] * sX), y := Round(sp["y"] * sY)
+                w := Round(g["sizeW"] * sX), h := Round(g["sizeH"] * sY)
                 ; Keep only labels that land on screen.
                 if (w > 0 && h > 0 && x < gw && y < gh && x + w > 0 && y + h > 0)
                     rects.Push([x, y, w, h])
