@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.119`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.120`.
 
 ## Language
 
@@ -923,8 +923,19 @@ no click → no movement).
   common white drops aren't re-resolved every tick. Known gap: fragments / div-cards / essences also
   carry no rarity and aren't under `/currency/`, so they still classify as Normal — handle by path if
   reported.
-- **Pending in-game verification (owner):** with Currency ON, the status should now show
-  `filterPassed > 0` for currency drops and `pickup(Currency …)` / `picked-up(Currency)`.
+- **Verified in-game (owner's status log, 0.45.13.119):** currency is collected —
+  `pickup(Currency 1x1/reg …)` → `picked-up(Currency)` repeatedly.
+- **Follow-up — label-scan deadline 30→50 ms (0.45.13.120):** the same log showed the label click
+  (`lbl`) firing only intermittently (mostly `grnd` fallback, so an item took many walk-closer
+  ground clicks before it was grabbed) even though item labels were permanently visible. Cause:
+  `_LootFindLabelNear`'s 30 ms deadline vs `A_TickCount`'s ~15 ms granularity — the DFS was cut
+  short at random before reaching the labels (the same lesson as LootLabelClear's no-op bug).
+  Raised to the proven 50 ms (runs only ~once per click, so the cost is negligible).
+- **Observation (not yet addressed):** the log also shows combat `no-path(… hd=88 no-path:exh/tmo)`
+  loops — packs on an unreachable elevation (height delta ~88) keep re-engaging for minutes
+  (each entity burns 4 s before `no-path-giveup`, and big packs chain). Possible follow-up: skip
+  hostiles whose height delta exceeds a threshold when A* keeps failing, or shorten the give-up
+  for `exh` results.
 
 ## AutoPilot status file-log (shipped 0.45.13.118)
 

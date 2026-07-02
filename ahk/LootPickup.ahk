@@ -699,7 +699,11 @@ _LootFindLabelNear(reader, targetSx, targetSy, gameHwnd)
     bestD  := MAXDIST * MAXDIST
     bestPt := 0
     visited := Map(), nodes := 0
-    deadline := A_TickCount + 30
+    ; 50 ms, not less: A_TickCount has ~15 ms granularity, so a tighter deadline
+    ; trips at random before the DFS reaches the labels (the LootLabelClear
+    ; lesson). That intermittency showed as mostly-"grnd" fallbacks in the
+    ; status log even with item labels permanently visible.
+    deadline := A_TickCount + 50
     while (stack.Length > 0 && nodes < 5000)
     {
         if (A_TickCount > deadline)
