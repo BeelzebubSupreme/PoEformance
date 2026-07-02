@@ -234,15 +234,20 @@ _RunLootPickup(radarSnap, gameHwnd)
     clickPt  := labelPt ? labelPt : sp
     clickTag := labelPt ? "lbl" : "grnd"
 
+    ; Loot only truly needs to avoid INTERACTABLES ("ent": transitions / portals
+    ; / waypoints / NPCs / checkpoints) whose left-click changes zone or opens a
+    ; dialog. The HUD ("hud") and minimap ("map") boxes are display-only and
+    ; deliberately OVERSIZED — vetoing them just made the bot skip good clicks
+    ; and walk past loot (the reported avoid-zone(… grnd/hud)); clicking a globe
+    ; / skill-bar / minimap is harmless in PoE2. So for loot we block ONLY
+    ; "ent"; hud/map hits fall through to the click.
     avoidRects := GetAvoidZones(radarSnap, gameHwnd)
     azKind := AvoidZoneHitKind(clickPt["x"], clickPt["y"], avoidRects)
-    if (azKind != "")
+    if (azKind = "ent")
     {
-        ; The click point landed on a HUD element / minimap / interactable's
-        ; avoid box (e.g. an item next to a waypoint). Don't claim the tick —
-        ; let exploration nudge the camera so a later angle clears the box; the
-        ; cached item is retried then. The kind (hud/map/ent) is surfaced for
-        ; tuning.
+        ; Interactable in the way (e.g. an item next to a waypoint). Don't claim
+        ; the tick — let exploration nudge the camera so a later angle clears
+        ; the box; the cached item is retried then.
         g_lootLastReason := "avoid-zone(" target["rarity"] " " clickTag "/" azKind ")"
         return false
     }
@@ -663,7 +668,7 @@ _LootWorldToScreen(wx, wy, wz, w2sMat, gameHwnd)
 ; reader, targetSx/targetSy (absolute screen px), gameHwnd. Returns Map("x","y")|0.
 _LootFindLabelNear(reader, targetSx, targetSy, gameHwnd)
 {
-    static MAXDIST := 150
+    static MAXDIST := 220   ; labels float above the item and spread apart in dense loot
     if !(IsObject(reader) && IsObject(reader.Mem) && reader.Mem.Handle && gameHwnd)
         return 0
     root := _UiBrowser_GetGameUiPtr()

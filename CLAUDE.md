@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.116`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.117`.
 
 ## Language
 
@@ -897,11 +897,19 @@ no click → no movement).
   ~once per click, not every tick), clicks the LABEL when found (`clickTag=lbl`) and falls back to
   the ground point otherwise (`grnd`), and the avoid-zone reason now carries the kind
   (`avoid-zone(<rarity> <lbl|grnd>/<hud|map|ent>)`) for tuning. `pickup(...)` shows `lbl`/`grnd`.
-- **Pending in-game verification (owner):** with only Magic/Rare (Normal OFF), the bot should walk
-  to blue/yellow drops and actually collect them via the label click (status `pickup(... lbl ...)`),
-  far fewer `avoid-zone` skips, and no more accidental white grabs. If `avoid-zone(... lbl/hud)`
-  still shows often, the label is hitting the HUD box and the loot avoid-zone should drop hud/map
-  (keep only `ent`).
+- **Follow-up — loot avoid-zone = interactables only (0.45.13.117):** in-game it was better but the
+  bot still walked past some drops with `avoid-zone(Rare grnd/hud)` — the ground click was vetoed by
+  the (oversized, display-only) HUD box. For LOOT only `ent` zones (transitions / portals /
+  waypoints / NPCs / checkpoints, which change zone or open a dialog) are actually dangerous;
+  clicking a globe / skill-bar / minimap is harmless in PoE2. `_RunLootPickup` now blocks ONLY
+  `azKind = "ent"` and lets hud/map hits fall through to the click. Also widened `_LootFindLabelNear`
+  `MAXDIST` 150→220 px (labels float above the item and spread apart in dense loot, so 150 fell back
+  to `grnd` too often). Combat/exploration keep the full HUD/map/ent avoid set (a stray HUD click
+  there wastes a tick; for loot it doesn't).
+- **Pending in-game verification (owner):** with Normal OFF, the bot should now collect blue/yellow
+  drops with far fewer skips; `avoid-zone` should only appear as `.../ent` (next to a real portal /
+  waypoint). If `grnd` still dominates over `lbl`, the loot-label StringId may not match
+  `_IsWorldItemPath` — capture it with the "Loot Label Probe" and widen the predicate.
 
 ## Reference
 
