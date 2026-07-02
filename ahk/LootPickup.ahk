@@ -312,17 +312,23 @@ _RefreshLootCache(radarSnap)
         if !(decoded && IsObject(decoded))
             continue
 
-        ; Rarity decoding is round-robin in PoE2EntityReader — a freshly
-        ; spotted item may not have rarityId set yet. Treat that case as
-        ; Normal (id 0) instead of skipping the item; if the user has
-        ; Normal disabled, the filter will exclude it on this tick AND on
-        ; later ticks once a real rarityId is decoded, so the behaviour is
-        ; conservative. The previous "rarity = '' → continue" path silently
-        ; dropped every freshly-dropped item until a future decoder cycle.
-        rarityId := decoded.Has("rarityId") ? decoded["rarityId"] : 0
-        rarity := _RarityIdToFilterLabel(rarityId)
-        if (rarity = "")
-            rarity := "Normal"
+        addr := entity.Has("address") ? entity["address"] : 0
+        if !addr
+            continue
+
+        ; ── Real rarity + inner base-item path ─────────────────────────────
+        ; Ground drops are WorldItem WRAPPER entities (rarity 0, wrapper path);
+        ; the true rarity AND base-type path live on the INNER item, reached via
+        ; the WorldItem component (+0x28) exactly like the value radar. We
+        ; resolve it ONCE per drop (cached). Without this every drop read as
+        ; "Normal" (the rarity filter was dead — nothing was picked up unless
+        ; Normal was enabled) and item sizes fell back to a 2×2 guess because
+        ; the wrapper path never matches the base-item registry (issue #158
+        ; follow-up). A freshly-dropped item whose inner isn't decoded yet is
+        ; retried next tick; the wrapper's own decoded rarity is the fallback.
+        info     := _LootResolveItemInfo(addr, path, decoded)
+        rarity   := info["rarity"]
+        itemPath := info["path"]
         if !_IsRarityEnabled(rarity)
             continue
 
@@ -341,10 +347,6 @@ _RefreshLootCache(radarSnap)
         if (wx = 0 && wy = 0)
             continue
 
-        addr := entity.Has("address") ? entity["address"] : 0
-        if !addr
-            continue
-
         if g_lootCache.Has(addr)
         {
             cached := g_lootCache[addr]
@@ -357,15 +359,16 @@ _RefreshLootCache(radarSnap)
         else
         {
             ; Resolve actual footprint from the base-item registry on first
-            ; sighting. Stored in the cache entry so the per-tick fit check
-            ; doesn't need to repeat the lookup. Missing entries get 0/0 here
-            ; and fall back to the rarity heuristic at fit-check time.
-            sz := ItemSizeRegistry.Get(path)
+            ; sighting, using the INNER item path (the wrapper path never
+            ; matches the registry → 2×2 fallback). Stored in the cache entry so
+            ; the per-tick fit check doesn't repeat the lookup. Missing entries
+            ; get 0/0 here and fall back to the rarity heuristic at fit time.
+            sz := ItemSizeRegistry.Get(itemPath)
             sw := (sz && IsObject(sz)) ? sz["w"] : 0
             sh := (sz && IsObject(sz)) ? sz["h"] : 0
             g_lootCache[addr] := Map(
                 "addr",         addr,
-                "path",         path,
+                "path",         itemPath,
                 "rarity",       rarity,
                 "worldX",       wx,
                 "worldY",       wy,
@@ -419,6 +422,56 @@ _RarityIdToFilterLabel(rarityId)
     if (rarityId = 5)
         return "Currency"
     return ""
+}
+
+; Resolves a ground drop's TRUE rarity label + inner base-item path. Ground
+; drops are WorldItem WRAPPER entities whose rarity/path live on the inner item
+; (reached via the WorldItem component, same chain as the value radar). Resolved
+; once per wrapper address and cached; only CONFIRMED inner resolutions are
+; cached, so a freshly-dropped item whose inner item hasn't decoded yet is
+; retried on later ticks. Falls back to the wrapper's own decoded rarity, then
+; "Normal". Param: wrapperAddr, wrapperPath, decoded (wrapper decodedComponents).
+; Returns Map("rarity", label, "path", innerOrWrapperPath).
+_LootResolveItemInfo(wrapperAddr, wrapperPath, decoded)
+{
+    global g_reader
+    static _cache := Map()   ; wrapperAddr -> Map("rarity", label, "path", path)
+
+    if _cache.Has(wrapperAddr)
+        return _cache[wrapperAddr]
+    ; Bound the cache — entity addresses churn as areas change.
+    if (_cache.Count > 4096)
+        _cache := Map()
+
+    rarity   := ""
+    itemPath := wrapperPath
+    innerPtr := 0, innerPath := "", off := -1, compAddr := 0, compNames := ""
+    if _LrvResolveInnerItem(wrapperAddr, &innerPtr, &innerPath, &off, &compAddr, &compNames)
+    {
+        rid := -1
+        try rid := g_reader.ReadItemRarity(innerPtr)
+        if (rid >= 0)
+        {
+            rarity := _RarityIdToFilterLabel(rid)
+            if (innerPath != "")
+                itemPath := innerPath
+        }
+    }
+
+    if (rarity != "")
+    {
+        out := Map("rarity", rarity, "path", itemPath)
+        _cache[wrapperAddr] := out   ; cache only confirmed inner resolutions
+        return out
+    }
+
+    ; Fallback (NOT cached — retry next tick once the inner item decodes):
+    ; the wrapper's own decoded rarity, else Normal.
+    ridW := (decoded && IsObject(decoded) && decoded.Has("rarityId")) ? decoded["rarityId"] : 0
+    rarity := _RarityIdToFilterLabel(ridW)
+    if (rarity = "")
+        rarity := "Normal"
+    return Map("rarity", rarity, "path", itemPath)
 }
 
 ; Reads the per-rarity filter flag for the given label.

@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.114`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.115`.
 
 ## Language
 
@@ -872,6 +872,19 @@ no click → no movement).
   move along the explored route and skills should aim at enemies (no more centre-fire / standing
   still). Re-run "🔍 Diagnose projection" to confirm an enemy now projects to a DIFFERENT pixel
   than the player.
+- **Follow-up — Auto Loot rarity/size fix (0.45.13.115):** once movement worked, Auto Loot still
+  never fired unless "Normal" was enabled, and then it grabbed everything as Normal. Cause:
+  `LootPickup._RefreshLootCache` read rarity from `decoded["rarityId"]`, which is only set from a
+  `Mods`/`ObjectMagicProperties` component — but ground drops are `WorldItem` WRAPPER entities
+  (rarity 0, wrapper path); the real rarity + base-item path live on the INNER item. So every drop
+  classified as "Normal" (rarity filter dead) and the size lookup used the wrapper path (registry
+  miss → 2×2 guess). Fix: new `_LootResolveItemInfo(addr, path, decoded)` resolves the inner item
+  ONCE per drop (reusing the value radar's `_LrvResolveInnerItem` → `g_reader.ReadItemRarity`),
+  caching only confirmed resolutions (freshly-dropped items retry until the inner decodes), and
+  returns the real rarity label + inner path. `_RefreshLootCache` now filters on the true rarity
+  and sizes via `ItemSizeRegistry.Get(innerPath)`. Verified in-game: `pickup(...)` fires and the
+  per-rarity filter works, so "Normal" can go back OFF and Magic/Rare/Unique/Currency filter
+  correctly.
 
 ## Reference
 
