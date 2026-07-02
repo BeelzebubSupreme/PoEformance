@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.120`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.121`.
 
 ## Language
 
@@ -931,11 +931,20 @@ no click → no movement).
   `_LootFindLabelNear`'s 30 ms deadline vs `A_TickCount`'s ~15 ms granularity — the DFS was cut
   short at random before reaching the labels (the same lesson as LootLabelClear's no-op bug).
   Raised to the proven 50 ms (runs only ~once per click, so the cost is negligible).
-- **Observation (not yet addressed):** the log also shows combat `no-path(… hd=88 no-path:exh/tmo)`
-  loops — packs on an unreachable elevation (height delta ~88) keep re-engaging for minutes
-  (each entity burns 4 s before `no-path-giveup`, and big packs chain). Possible follow-up: skip
-  hostiles whose height delta exceeds a threshold when A* keeps failing, or shorten the give-up
-  for `exh` results.
+- **FIXED — pack-wide no-path give-up (0.45.13.121):** the log also showed combat
+  `no-path(… hd=88 no-path:exh/tmo)` loops — a 17-strong pack on an unreachable ledge occupied
+  combat for minutes. Two compounding flaws: the give-up blacklisted only the ONE nearest entity
+  (for 15 s), so the next packmate immediately became the target and burned its own 4 s — and by
+  pack member #4 the first blacklist had already expired, restarting the chain. Fix in
+  `CombatAutomation`: (a) new `_CombatBlacklistPackNear(radarSnap, cx, cy, radius, ms)` — on
+  give-up, EVERY NPC-like entity within 700 world units of the unreachable enemy is blacklisted
+  for 30 s (packmates stand together; radius is the tuning knob if a reachable neighbour pack
+  ever gets caught, the cost is only a ≤30 s engagement delay); used by BOTH the no-path give-up
+  and the immediate off-floor (`|hd|>200`) blacklist. (b) `static _noPathExhSeen` — once the
+  streak contains an EXHAUSTED A* result (`no-path:exh` = genuinely cut off, waiting cannot
+  help), the give-up fires after 1.5 s instead of 4 s (budget timeouts `tmo` keep the patient
+  4 s). Reason strings now carry `bl=N` (pack size blacklisted). Worst case for the log's pack:
+  ~68 s before → ~1.5 s now.
 
 ## AutoPilot status file-log (shipped 0.45.13.118)
 
