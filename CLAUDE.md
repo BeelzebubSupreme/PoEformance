@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.118`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.119`.
 
 ## Language
 
@@ -910,6 +910,21 @@ no click → no movement).
   drops with far fewer skips; `avoid-zone` should only appear as `.../ent` (next to a real portal /
   waypoint). If `grnd` still dominates over `lbl`, the loot-label StringId may not match
   `_IsWorldItemPath` — capture it with the "Loot Label Probe" and widen the predicate.
+- **Follow-up — currency classified by PATH (0.45.13.119):** the status log showed gear pickup
+  working (`pickup(Rare 2x3/reg …)` → `picked-up(Rare)`) but almost every scan was
+  `cache-empty (saw N, 0 passed filter)` and the owner confirmed CURRENCY was never picked up.
+  Cause: `_LootResolveItemInfo` classified only by `ReadItemRarity`, but **currency carries no real
+  rarity** (no Mods/ObjectMagicProperties → `ReadItemRarity` returns -1), so it fell through to
+  "Normal" and — Normal being off — was filtered out (the value-radar / `StashMover._SmItemCategory`
+  already knew this: "Currency / maps are matched by PATH first because those classes carry no real
+  rarity"). Fix: resolve the inner path FIRST (was nested inside the `rid>=0` branch — a second bug),
+  then if it contains `/currency/` classify as **Currency**, else use `ReadItemRarity` (`rid=-1` →
+  Normal, the white-gear case). Confirmed inner resolutions (incl. white gear) are now CACHED so the
+  common white drops aren't re-resolved every tick. Known gap: fragments / div-cards / essences also
+  carry no rarity and aren't under `/currency/`, so they still classify as Normal — handle by path if
+  reported.
+- **Pending in-game verification (owner):** with Currency ON, the status should now show
+  `filterPassed > 0` for currency drops and `pickup(Currency …)` / `picked-up(Currency)`.
 
 ## AutoPilot status file-log (shipped 0.45.13.118)
 
