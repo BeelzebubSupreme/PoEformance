@@ -459,30 +459,39 @@ _LootResolveItemInfo(wrapperAddr, wrapperPath, decoded)
     if (_cache.Count > 4096)
         _cache := Map()
 
-    rarity   := ""
     itemPath := wrapperPath
     innerPtr := 0, innerPath := "", off := -1, compAddr := 0, compNames := ""
     if _LrvResolveInnerItem(wrapperAddr, &innerPtr, &innerPath, &off, &compAddr, &compNames)
     {
-        rid := -1
-        try rid := g_reader.ReadItemRarity(innerPtr)
-        if (rid >= 0)
+        if (innerPath != "")
+            itemPath := innerPath
+        ; Currency (orbs, scrolls, shards) carries NO real rarity — it has no
+        ; Mods/ObjectMagicProperties component, so ReadItemRarity returns -1. It
+        ; MUST be matched by PATH first (exactly like StashMover's
+        ; _SmItemCategory), otherwise it fell through to "Normal" and — with
+        ; Normal off — was never picked up, even though it is the most valuable
+        ; class (this was the bug: cache-empty "0 passed filter" for currency).
+        if (InStr(StrLower(itemPath), "/currency/"))
+            rarity := "Currency"
+        else
         {
-            rarity := _RarityIdToFilterLabel(rid)
-            if (innerPath != "")
-                itemPath := innerPath
+            rid := -1
+            try rid := g_reader.ReadItemRarity(innerPtr)
+            ; rid >= 0 → real rarity. rid = -1 → a no-rarity item; white GEAR is
+            ; genuinely Normal (the common case). Either way this is a CONFIRMED
+            ; resolution, so cache it (below) to avoid re-resolving every tick.
+            rarity := (rid >= 0) ? _RarityIdToFilterLabel(rid) : "Normal"
+            if (rarity = "")
+                rarity := "Normal"
         }
-    }
-
-    if (rarity != "")
-    {
         out := Map("rarity", rarity, "path", itemPath)
-        _cache[wrapperAddr] := out   ; cache only confirmed inner resolutions
+        _cache[wrapperAddr] := out   ; cache confirmed inner resolutions
         return out
     }
 
-    ; Fallback (NOT cached — retry next tick once the inner item decodes):
-    ; the wrapper's own decoded rarity, else Normal.
+    ; Inner item NOT resolved yet (freshly dropped, inner not decoded) — fall back
+    ; to the wrapper's own decoded rarity (usually 0) and do NOT cache, so it is
+    ; retried next tick once the inner item decodes and can be classified for real.
     ridW := (decoded && IsObject(decoded) && decoded.Has("rarityId")) ? decoded["rarityId"] : 0
     rarity := _RarityIdToFilterLabel(ridW)
     if (rarity = "")
