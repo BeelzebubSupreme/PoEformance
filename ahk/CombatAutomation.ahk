@@ -53,8 +53,11 @@ TryCombatAutomation(radarSnap, gameHwnd)
         ; Tracks how long the aim has been continuously "no-path" — used to
         ; give up on unreachable enemies instead of claiming the tick forever.
         ; Declared up here so the reset below the no-path branch can run on
-        ; every tick that reaches it.
+        ; every tick that reaches it. _noPathExhSeen remembers whether the
+        ; current no-path streak included an EXHAUSTED A* result (genuinely cut
+        ; off) — that shortens the give-up from 4 s to 1.5 s.
         static _noPathSince := 0
+        static _noPathExhSeen := false
 
         ; ── Combat detection from entity cache ────────────────────────────
         combatInfo := _DetectCombat(radarSnap)
@@ -217,11 +220,15 @@ TryCombatAutomation(radarSnap, gameHwnd)
             enemyHd := hzOk ? Round(TerrainHeightAt(hCtx, eGX, eGY) - combatInfo["playerWorldZ"]) : 0
             if (hzOk && Abs(enemyHd) > 200)
             {
+                ; Pack-wide: its packmates stand on the same unreachable floor, so
+                ; blacklisting one at a time just re-targets the neighbour next tick.
+                blN := _CombatBlacklistPackNear(radarSnap
+                    , combatInfo["nearestWorldX"], combatInfo["nearestWorldY"], 700, 30000)
                 blAddr := combatInfo["nearestEntityAddr"]
                 if (blAddr && IsSet(g_combatNoPathBlacklist))
-                    g_combatNoPathBlacklist[blAddr] := A_TickCount + 15000
+                    g_combatNoPathBlacklist[blAddr] := A_TickCount + 30000
                 g_combatState := "idle"
-                g_combatLastReason := "off-floor(hd=" enemyHd " d=" Round(terrainDist) ")"
+                g_combatLastReason := "off-floor(hd=" enemyHd " d=" Round(terrainDist) " bl=" blN ")"
                 return false
             }
 
@@ -285,21 +292,33 @@ TryCombatAutomation(radarSnap, gameHwnd)
         ; skills (no LoS = wasted cooldown). Stay in "combat" state briefly —
         ; the enemy may come to us or a future tick may re-find the path.
         ; BUT: a genuinely unreachable enemy (across a chasm, behind sealed
-        ; geometry) used to freeze the whole AutoPilot here forever. After
-        ; 4 s of continuous no-path we blacklist that entity for 15 s and
-        ; disengage so loot/exploration can continue.
+        ; geometry) used to freeze the whole AutoPilot here forever, and the
+        ; old give-up (ONE entity, 15 s) chained on packs: the next packmate
+        ; became the nearest and burned its own 4 s, and by pack member #4 the
+        ; first blacklist had already expired — the owner's status log showed
+        ; a 17-strong ledge pack (hd=88) occupying combat for minutes. Now the
+        ; give-up (a) fires after 1.5 s once A* reported the search space
+        ; EXHAUSTED (genuinely cut off — waiting longer can't help; budget
+        ; timeouts keep the patient 4 s), and (b) blacklists the WHOLE pack
+        ; around the unreachable enemy for 30 s.
         if (aimMode = "no-path")
         {
+            if InStr(aimTag, "exh")
+                _noPathExhSeen := true
             if (_noPathSince = 0)
                 _noPathSince := A_TickCount
-            else if ((A_TickCount - _noPathSince) > 4000)
+            else if ((A_TickCount - _noPathSince) > (_noPathExhSeen ? 1500 : 4000))
             {
+                blN := _CombatBlacklistPackNear(radarSnap
+                    , combatInfo["nearestWorldX"], combatInfo["nearestWorldY"], 700, 30000)
                 blAddr := combatInfo["nearestEntityAddr"]
                 if (blAddr && IsSet(g_combatNoPathBlacklist))
-                    g_combatNoPathBlacklist[blAddr] := A_TickCount + 15000
+                    g_combatNoPathBlacklist[blAddr] := A_TickCount + 30000
                 g_combatState := "idle"
                 _noPathSince := 0
-                g_combatLastReason := "no-path-giveup(d=" Round(terrainDist) " n=" hostileCount " hd=" enemyHd ")"
+                _noPathExhSeen := false
+                g_combatLastReason := "no-path-giveup(d=" Round(terrainDist) " n=" hostileCount
+                    . " hd=" enemyHd " bl=" blN ")"
                 return false
             }
             g_combatLastReason := "no-path(d=" Round(terrainDist) " n=" hostileCount
@@ -307,6 +326,7 @@ TryCombatAutomation(radarSnap, gameHwnd)
             return true
         }
         _noPathSince := 0   ; any reachable aim resets the give-up timer
+        _noPathExhSeen := false
 
         ; ── Move mouse toward aim point ────────────────────────────────────
         ; Build a thin info Map carrying just the projection-relevant fields so
@@ -703,6 +723,55 @@ _DetectCombat(radarSnap)
     result["hostileCount"] := hostileCount
     result["nearestDist"] := nearestDist
     return result
+}
+
+; Blacklists every NPC-like entity in the radar sample within `radius` world
+; units of (cx, cy) for `ms` milliseconds. Used by the no-path / off-floor
+; give-ups so an unreachable PACK is skipped as one unit — its members stand
+; together, so blacklisting one at a time just re-targets the neighbour and
+; chains the give-up timer across the whole pack. Returns the count blacklisted.
+_CombatBlacklistPackNear(radarSnap, cx, cy, radius, ms)
+{
+    global g_reader, g_combatNoPathBlacklist
+    if !(IsSet(g_combatNoPathBlacklist) && cx != 0)
+        return 0
+    inGs   := radarSnap.Has("inGameState") ? radarSnap["inGameState"] : 0
+    area   := (inGs && IsObject(inGs) && inGs.Has("areaInstance")) ? inGs["areaInstance"] : 0
+    awake  := (area && IsObject(area) && area.Has("awakeEntities")) ? area["awakeEntities"] : 0
+    sample := (awake && IsObject(awake) && awake.Has("sample")) ? awake["sample"] : []
+    if !(sample && Type(sample) = "Array")
+        return 0
+    expiry := A_TickCount + ms
+    r2 := radius * radius
+    n := 0
+    for _, entry in sample
+    {
+        if !(entry && IsObject(entry))
+            continue
+        entity := entry.Has("entity") ? entry["entity"] : 0
+        if !(entity && IsObject(entity))
+            continue
+        path := entity.Has("path") ? entity["path"] : ""
+        if (path = "" || !g_reader.IsNpcLikeEntityPath(path))
+            continue
+        addr := entity.Has("address") ? entity["address"] : 0
+        if !addr
+            continue
+        ; Position from the decoded render component; entities without one
+        ; can't be distance-tested — leave them to the normal give-up.
+        decoded := entity.Has("decodedComponents") ? entity["decodedComponents"] : 0
+        render  := (decoded && IsObject(decoded) && decoded.Has("render")) ? decoded["render"] : 0
+        if !(render && IsObject(render) && render.Has("worldPosition"))
+            continue
+        wp := render["worldPosition"]
+        dx := (wp.Has("x") ? wp["x"] : 0) - cx
+        dy := (wp.Has("y") ? wp["y"] : 0) - cy
+        if (dx * dx + dy * dy > r2)
+            continue
+        g_combatNoPathBlacklist[addr] := expiry
+        n += 1
+    }
+    return n
 }
 
 ; ── Skill Selection ───────────────────────────────────────────────────────
