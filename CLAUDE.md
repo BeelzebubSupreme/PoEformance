@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.117`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.118`.
 
 ## Language
 
@@ -910,6 +910,25 @@ no click → no movement).
   drops with far fewer skips; `avoid-zone` should only appear as `.../ent` (next to a real portal /
   waypoint). If `grnd` still dominates over `lbl`, the loot-label StringId may not match
   `_IsWorldItemPath` — capture it with the "Loot Label Probe" and widen the predicate.
+
+## AutoPilot status file-log (shipped 0.45.13.118)
+
+The WebView tool is rarely in the foreground during play, so the live AutoPilot status line
+(state + loot/combat/explore reasons) couldn't be watched while playing. `ahk/AutoPilotStatusLog.ahk`
+mirrors it into `logs\InGameStateMonitor.autopilot_status.log` for after-the-fact review in
+**Config → Data & Logs**.
+
+- Opt-in **persistent** toggle `[Diagnostics] apStatusLog` (default OFF; stays on across restarts,
+  like the startup trace). `LoadAutoPilotStatusLog()` seeds all globals (init gotcha) and reads the
+  existing file size so rotation accounts for it. Cheap no-op when off (one global check).
+- `ApStatusLogTick()` is called at the end of `TryAutoPilot` (after the reasons are computed). It
+  appends `HH:mm:ss.mmm | state=… | loot: … | combat: … | explore: …` only when the line CHANGES
+  (deduped) and ≤ ~4×/s (throttled), and rotates the file at ~2 MB. `SetAutoPilotStatusLog(on)`
+  writes a session marker when enabled.
+- Wiring: `#Include ahk/AutoPilotStatusLog.ahk` + `LoadAutoPilotStatusLog()` at startup;
+  `TryAutoPilot` calls `ApStatusLogTick()`; `BridgeDispatch` case `SetAutoPilotStatusLog`;
+  `WebViewBridge` pushes `apStatusLog`; UI toggle "📝 Log status to file" in **Config → AutoPilot →
+  Live Status**.
 
 ## Reference
 

@@ -199,6 +199,11 @@ _DispatchBridgeCall(method, args)
             if (args.Length >= 1)
                 SetStartupTrace(args[1])
             SetTimer(PushHeaderToWebView, -50)
+        case "SetAutoPilotStatusLog":
+            ; Persistent AutoPilot status file-log toggle ([Diagnostics] apStatusLog). args[1]=on.
+            if (args.Length >= 1)
+                SetAutoPilotStatusLog(args[1])
+            SetTimer(PushHeaderToWebView, -50)
         case "DiagListFiles":
             ; Enumerate all diagnostic files (logs/debug/data) and push the list to the WebView.
             SetTimer(PushDiagFilesToWebView, -1)

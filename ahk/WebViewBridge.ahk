@@ -158,6 +158,7 @@ PushHeaderToWebView()
         . ',"lootTradePricing":' BuildLootTradePricingHeaderJson()
         . ',"overlayPlacement":' BuildOverlayPlacementHeaderJson()
         . ',"startupTrace":' BuildStartupTraceHeaderJson()
+        . ',"apStatusLog":' BuildAutoPilotStatusLogHeaderJson()
         . "}"
     WebViewExec("updateHeader(" json ")")
 }

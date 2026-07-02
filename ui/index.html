@@ -5298,6 +5298,17 @@
                     Data &amp; Logs). If that report shows the matrix is present but a far enemy projects onto the
                     same pixel as you, click <b>Scan matrix offset</b> — it searches for the correct camera-matrix
                     offset and writes <code>debug\autopilot_matrixscan_*.txt</code>.</div>
+                  <!-- Mirror this Live-Status readout into a file so it can be reviewed while the
+                       game (not the tool) is in the foreground. -->
+                  <div class="cfg-row">
+                    <span class="cfg-label">📝 Log status to file</span>
+                    <label class="toggle"><input type="checkbox" id="ap-status-log"
+                        onchange="ahkCall('SetAutoPilotStatusLog', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label>
+                  </div>
+                  <div class="cfg-help">Writes the live status line (state · loot · combat · explore reasons) to
+                    <code>logs\InGameStateMonitor.autopilot_status.log</code> on every change — review it under
+                    <b>Data &amp; Logs</b> after playing. Persistent (stays on across restarts); deduped, throttled,
+                    and auto-rotated at ~2&nbsp;MB.</div>
                 </div>
               </details>
 
@@ -10158,6 +10169,8 @@
       if (d.invChainDump !== undefined) setChk('inv-chain-dump', d.invChainDump);
       // Startup timing trace toggle (Config > Debug > Diagnostic Actions).
       if (d.startupTrace !== undefined) setChk('startup-trace', d.startupTrace);
+      // AutoPilot status file-log toggle (Config > AutoPilot > Live Status).
+      if (d.apStatusLog !== undefined) setChk('ap-status-log', d.apStatusLog);
 
       // Combat Automation config sync
       const prevCombatEnabled = document.getElementById('tog-combat')?.checked || false;

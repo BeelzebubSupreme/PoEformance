@@ -53,6 +53,10 @@ TryAutoPilot(radarSnap)
     }
     finally
         _running := false
+
+    ; Mirror the just-computed status line into the opt-in file log (no-op when
+    ; the toggle is off) so it can be reviewed without the tool in the foreground.
+    try ApStatusLogTick()
 }
 
 _RunAutoPilot(radarSnap)
