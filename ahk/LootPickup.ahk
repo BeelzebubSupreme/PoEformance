@@ -197,7 +197,12 @@ _RunLootPickup(radarSnap, gameHwnd)
         return false
     }
 
-    ; Project the item's world position to screen; check AvoidZones.
+    ; Project the item's GROUND world position to screen — used to LOCATE the
+    ; item's floating on-screen LABEL. Gear is picked up by clicking that label
+    ; (the interactable), NOT the ground under the item: a ground click just
+    ; walks the character there and grabs whatever drop sits under the cursor
+    ; (often an adjacent white item), and the ground point frequently lands in
+    ; the bottom-HUD avoid zones (→ "avoid-zone", walk around).
     inGs   := radarSnap.Has("inGameState") ? radarSnap["inGameState"] : 0
     w2sMat := (inGs && IsObject(inGs) && inGs.Has("w2sMatrix")) ? inGs["w2sMatrix"] : 0
     if !(w2sMat && Type(w2sMat) = "Array" && w2sMat.Length = 16)
@@ -213,22 +218,8 @@ _RunLootPickup(radarSnap, gameHwnd)
         return false
     }
 
-    avoidRects := GetAvoidZones(radarSnap, gameHwnd)
-    if IsPointInAvoidZone(sp["x"], sp["y"], avoidRects)
-    {
-        ; The item itself wouldn't normally be in an avoid zone, but the
-        ; projected position might be — e.g. an item dropped right next to a
-        ; waypoint pillar. Don't claim the tick: if we blocked exploration
-        ; here the player would never move, the projection would never shift
-        ; off the avoid box, and the bot froze in place. Let exploration
-        ; carry on; the cached item is retried from a different angle later.
-        g_lootLastReason := "avoid-zone(" target["rarity"] ")"
-        return false
-    }
-
-    ; Throttle: one click every ~400 ms. The game itself walks the character
-    ; to the item once it sees the click; spamming clicks would just stop
-    ; the walk over and over.
+    ; Throttle FIRST (before the label scan) so the label DFS runs only ~once
+    ; per click, not on every tick while the character walks toward the item.
     now := A_TickCount
     if ((now - _lastClickTick) < 400)
     {
@@ -236,8 +227,28 @@ _RunLootPickup(radarSnap, gameHwnd)
         return true   ; busy walking — block exploration
     }
 
+    ; Prefer the item's LABEL (interactable, above the item, clear of the
+    ; bottom HUD) over the raw ground point. Fall back to the ground projection
+    ; when no label is found near the item (far item off-screen, labels hidden).
+    labelPt  := _LootFindLabelNear(g_reader, sp["x"], sp["y"], gameHwnd)
+    clickPt  := labelPt ? labelPt : sp
+    clickTag := labelPt ? "lbl" : "grnd"
+
+    avoidRects := GetAvoidZones(radarSnap, gameHwnd)
+    azKind := AvoidZoneHitKind(clickPt["x"], clickPt["y"], avoidRects)
+    if (azKind != "")
+    {
+        ; The click point landed on a HUD element / minimap / interactable's
+        ; avoid box (e.g. an item next to a waypoint). Don't claim the tick —
+        ; let exploration nudge the camera so a later angle clears the box; the
+        ; cached item is retried then. The kind (hud/map/ent) is surfaced for
+        ; tuning.
+        g_lootLastReason := "avoid-zone(" target["rarity"] " " clickTag "/" azKind ")"
+        return false
+    }
+
     ; Aim + click.
-    DllCall("SetCursorPos", "int", sp["x"], "int", sp["y"])
+    DllCall("SetCursorPos", "int", clickPt["x"], "int", clickPt["y"])
     Sleep(20)
     DllCall("mouse_event", "uint", 0x0002, "int", 0, "int", 0, "uint", 0, "uptr", 0) ; LDOWN
     Sleep(20)
@@ -257,7 +268,7 @@ _RunLootPickup(radarSnap, gameHwnd)
 
     freeTag := (free < 0) ? "" : (" free=" free)
     sizeTag := (rw > 0 && rh > 0) ? (" " rw "x" rh "/" fpSrc) : ""
-    g_lootLastReason := "pickup(" target["rarity"] sizeTag " d=" Round(target["dist"])
+    g_lootLastReason := "pickup(" target["rarity"] sizeTag " " clickTag " d=" Round(target["dist"])
         . " " (g_lootCache.Count) "cached" freeTag ")"
     return true
 }
@@ -638,6 +649,83 @@ _LootWorldToScreen(wx, wy, wz, w2sMat, gameHwnd)
     sx := Max(cX + margin, Min(sx, cX + cW - margin))
     sy := Max(cY + margin, Min(sy, cY + cH - margin))
     return Map("x", sx, "y", sy)
+}
+
+; Finds the on-screen LABEL of a ground item near a target screen point and
+; returns its CENTRE in absolute screen px, or 0 if none is within MAXDIST px.
+; Ground gear is picked up by clicking its floating label (the interactable),
+; which sits above the item — clear of the bottom-HUD avoid zones and precise
+; enough not to grab an adjacent (e.g. white) drop. Focused, visibility-pruned
+; DFS from the GameUI root for visible WorldItem labels (StringId = the WorldItem
+; metadata path, with displayed name text); keeps the nearest to the target
+; point. Runs only on an actual click (~2.5/s), bounded by a 30 ms deadline.
+; Reuses the UI-tree helpers from LootLabelClear / UiTreeBrowser. Params:
+; reader, targetSx/targetSy (absolute screen px), gameHwnd. Returns Map("x","y")|0.
+_LootFindLabelNear(reader, targetSx, targetSy, gameHwnd)
+{
+    static MAXDIST := 150
+    if !(IsObject(reader) && IsObject(reader.Mem) && reader.Mem.Handle && gameHwnd)
+        return 0
+    root := _UiBrowser_GetGameUiPtr()
+    if !(root && reader.IsProbablyValidPointer(root))
+        return 0
+    cr := NavClientRect(gameHwnd)
+    if !IsObject(cr)
+        return 0
+    hScale := (cr["h"] > 0) ? (cr["h"] / 1600.0) : 1.0
+    sidOff := PoE2Offsets.UiElementBase["StringIdPtr"]
+    txtOff := PoE2Offsets.UiElementBase["TextPtr"]
+
+    rg := _UiHitGeom(reader, root)
+    if !IsObject(rg)
+        return 0
+    stack := []
+    _LlcPushChildren(reader, rg, stack)
+
+    bestD  := MAXDIST * MAXDIST
+    bestPt := 0
+    visited := Map(), nodes := 0
+    deadline := A_TickCount + 30
+    while (stack.Length > 0 && nodes < 5000)
+    {
+        if (A_TickCount > deadline)
+            break
+        ptr := stack.Pop()
+        if visited.Has(ptr)
+            continue
+        visited[ptr] := true
+        nodes += 1
+        g := _UiHitGeom(reader, ptr)
+        if !IsObject(g)
+            continue
+        if !g["visible"]            ; hidden → skip node AND its subtree
+            continue
+        if (g["sizeW"] > 0 && g["sizeH"] > 0)
+        {
+            sid := ""
+            try sid := reader.ReadStdWStringAt(ptr + sidOff)
+            if _IsWorldItemPath(sid)
+            {
+                txt := ""
+                try txt := reader.ReadStdWStringAt(ptr + txtOff, 64)
+                if (Trim(txt) != "")
+                {
+                    lsp := UiTree_GetScreenPos(reader, ptr)
+                    cxp := cr["x"] + (lsp["x"] + g["sizeW"] / 2) * hScale
+                    cyp := cr["y"] + (lsp["y"] + g["sizeH"] / 2) * hScale
+                    dx := cxp - targetSx, dy := cyp - targetSy
+                    d := dx * dx + dy * dy
+                    if (d < bestD)
+                    {
+                        bestD  := d
+                        bestPt := Map("x", Round(cxp), "y", Round(cyp))
+                    }
+                }
+            }
+        }
+        _LlcPushChildren(reader, g, stack)
+    }
+    return bestPt
 }
 
 ; ── Inventory free-space gate ───────────────────────────────────────────

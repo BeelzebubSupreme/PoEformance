@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.115`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.116`.
 
 ## Language
 
@@ -885,6 +885,23 @@ no click → no movement).
   and sizes via `ItemSizeRegistry.Get(innerPath)`. Verified in-game: `pickup(...)` fires and the
   per-rarity filter works, so "Normal" can go back OFF and Magic/Rare/Unique/Currency filter
   correctly.
+- **Follow-up — pick up by LABEL, not ground (0.45.13.116):** with rarity working, gear pickup was
+  unreliable — the bot clicked the item's projected GROUND position, which (a) landed in the
+  bottom-HUD avoid zones a lot (`avoid-zone(Magic)` → walk around) and (b) was imprecise (grabbed
+  adjacent white drops). In PoE2 gear is picked up by clicking the floating item **label** (the
+  interactable, which also sits above the item, clear of the HUD). Fix: new
+  `_LootFindLabelNear(reader, targetSx, targetSy, gameHwnd)` — a focused, visibility-pruned DFS
+  (reusing `LootLabelClear`/`UiTreeBrowser` helpers) that finds the nearest visible WorldItem label
+  (StringId matches `_IsWorldItemPath`, has name text) to the item's ground projection and returns
+  its centre in absolute screen px. `_RunLootPickup` now throttles FIRST (so the label DFS runs
+  ~once per click, not every tick), clicks the LABEL when found (`clickTag=lbl`) and falls back to
+  the ground point otherwise (`grnd`), and the avoid-zone reason now carries the kind
+  (`avoid-zone(<rarity> <lbl|grnd>/<hud|map|ent>)`) for tuning. `pickup(...)` shows `lbl`/`grnd`.
+- **Pending in-game verification (owner):** with only Magic/Rare (Normal OFF), the bot should walk
+  to blue/yellow drops and actually collect them via the label click (status `pickup(... lbl ...)`),
+  far fewer `avoid-zone` skips, and no more accidental white grabs. If `avoid-zone(... lbl/hud)`
+  still shows often, the label is hitting the HUD box and the loot avoid-zone should drop hud/map
+  (keep only `ent`).
 
 ## Reference
 
