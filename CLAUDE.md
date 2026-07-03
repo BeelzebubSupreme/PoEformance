@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.123`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.124`.
 
 ## Language
 
@@ -1026,6 +1026,14 @@ tile-path pattern → label, matched by SUBSTRING against the tile paths we alre
   `customLandmarksSyncFromHeader`. Default ON.
 - **Pending in-game verification:** confirm labels render at the right tiles (boss arenas / POIs /
   transitions) for the current area, the amber colour/outline is legible, and toggling off hides them.
+- **Label de-dupe fix (0.45.13.124):** first in-game test showed the SAME label stacked many times
+  across the map (e.g. a wall/arena tile such as Machinarium `BossWall01` → "Boss" is placed at many
+  spots; the zone scan emits ONE POI per tile, so each drew its own "Boss (Nm)" label — a cluttered
+  column spanning 300–5000 m). Fix in `RadarOverlay.ahk`: a per-frame pre-pass groups the POIs by
+  label and keeps only the tile NEAREST the player per unique label (`lmRep`); only that
+  representative draws the label + dot. Nav POIs (AreaTransition/Waypoint filenames) are unaffected;
+  a pure-`Landmark` duplicate is suppressed even with zone-nav on so identical dots don't stack.
+  So each curated landmark now shows exactly once, at its closest tile.
 
 ## Reference
 

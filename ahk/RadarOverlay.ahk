@@ -1109,12 +1109,45 @@ class RadarOverlay extends GdiOverlayBase
             navOn     := this._navEnabled
             playerGX  := playerWorldX / RadarOverlay.WORLD_TO_GRID_RATIO
             playerGY  := playerWorldY / RadarOverlay.WORLD_TO_GRID_RATIO
+
+            ; De-dupe curated landmark labels. One boss arena / wall / POI spans MANY
+            ; terrain tiles that all carry the SAME label (Sikaka's map is per-tile),
+            ; so without this a single landmark stacks its label dozens of times across
+            ; the map. Pre-pass: keep only the tile nearest the player per unique label;
+            ; that representative tile is the one allowed to draw the label + dot.
+            lmRep := Map()   ; label -> Map("idx", nearestIdx, "dsq", distSq)
+            if (clmOn)
+            {
+                for idx, target in this._navTargets
+                {
+                    lmLabel := target.Has("label") ? target["label"] : ""
+                    if (lmLabel = "")
+                        continue
+                    ldGX := target["gridX"] - playerGX
+                    ldGY := target["gridY"] - playerGY
+                    ldSq := ldGX * ldGX + ldGY * ldGY
+                    if (!lmRep.Has(lmLabel) || ldSq < lmRep[lmLabel]["dsq"])
+                        lmRep[lmLabel] := Map("idx", idx, "dsq", ldSq)
+                }
+            }
+
             for idx, target in this._navTargets
             {
                 lmLabel := target.Has("label") ? target["label"] : ""
                 clmShow := (clmOn && lmLabel != "")
-                ; With only landmarks on, skip generic (unlabelled) nav POIs.
-                if !(navOn || clmShow)
+                ; Is this the representative (nearest) tile for its label?
+                isRep    := clmShow && lmRep.Has(lmLabel) && (lmRep[lmLabel]["idx"] = idx)
+                isPureLm := (target["type"] = "Landmark")   ; landmark with no nav value
+
+                ; Landmarks-only (nav off): only representative landmark tiles draw.
+                if (!navOn)
+                {
+                    if (!isRep)
+                        continue
+                }
+                ; Nav on: a pure-landmark DUPLICATE (same label, not the representative)
+                ; carries no nav value → suppress so identical labels/dots don't stack.
+                else if (isPureLm && clmShow && !isRep)
                     continue
 
                 dGX := target["gridX"] - playerGX
@@ -1137,10 +1170,11 @@ class RadarOverlay extends GdiOverlayBase
                 this._DrawDot(tSX, tSY, tColor, tRadius)
 
                 distWorld := Round(Sqrt(dGX * dGX + dGY * dGY) * RadarOverlay.WORLD_TO_GRID_RATIO)
-                if (clmShow)
+                if (clmShow && isRep)
                 {
-                    ; Curated landmark name (boss + reward / POI / transition dest).
-                    ; Outlined so it stays readable over the maphack walls.
+                    ; Curated landmark name (boss + reward / POI / transition dest),
+                    ; drawn once at the nearest tile. Outlined so it stays readable
+                    ; over the maphack walls.
                     this._DrawTextOutlined(tSX + tRadius + 3, tSY - 6,
                         lmLabel " (" distWorld "m)", RadarOverlay.COLOR_LANDMARK, 0, 1)
                 }
