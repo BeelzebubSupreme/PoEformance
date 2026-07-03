@@ -18,21 +18,29 @@ LoadCustomLandmarks()
     global g_clmEnabled := true
     global g_clmConfigFile := A_ScriptDir "\poeformance_config.ini"
     global g_clmFile := A_ScriptDir "\data\custom_landmarks.json"
-    global g_clmData := Map()          ; areaCodeLower -> [ [patternLower, label], ... ]
+    global g_clmData := Map()          ; areaCodeLower -> Map(fullTileKeyLower -> label)  (coordinate-exact)
+    global g_clmPathOnly := Map()      ; areaCodeLower -> Map(pathLower -> label)  (rare coordless keys)
+    global g_clmPaths := Map()         ; pathLower -> true  (cheap candidate pre-filter for the reader)
     global g_clmCount := 0             ; total pattern count (surfaced in the header)
 
     try g_clmEnabled := (IniRead(g_clmConfigFile, "CustomLandmarks", "enabled", g_clmEnabled ? "1" : "0") = "1")
     _ClmLoadData()
 }
 
-; Parses data/custom_landmarks.json into g_clmData with the reference's
-; normalization: strip the "…:x-y:y" tile-coord suffix at the first ':', map
-; ".tdtx" -> ".tdt" (so ".tdt" is a substring of both), lowercase for
-; case-insensitive InStr matching. No params / no return.
+; Parses data/custom_landmarks.json into a COORDINATE-EXACT lookup. Each JSON key is
+; "<path>.tdtx:<A>-y:<B>" where A/B are the tile's sub-cell (TileIdX/TileIdY) — the
+; SAME numbers the reader reads per tile. We keep the whole key (normalized ".tdtx"
+; -> ".tdt", lowercased) and match it exactly, so a landmark pinned to ONE sub-cell
+; no longer matches every reused instance of that tile file (e.g. a "BossWall01" wall
+; placed all over the map). The 2 rare coordless keys go into a path-only fallback.
+; Also builds g_clmPaths (the set of landmark tile paths) for a cheap reader pre-filter.
+; No params / no return.
 _ClmLoadData()
 {
-    global g_clmFile, g_clmData, g_clmCount
+    global g_clmFile, g_clmData, g_clmPathOnly, g_clmPaths, g_clmCount
     g_clmData := Map()
+    g_clmPathOnly := Map()
+    g_clmPaths := Map()
     g_clmCount := 0
     try
     {
@@ -46,47 +54,77 @@ _ClmLoadData()
         {
             if !(tiles && Type(tiles) = "Map")
                 continue
-            list := []
+            areaLower := StrLower("" areaCode)
+            if !g_clmData.Has(areaLower)
+                g_clmData[areaLower] := Map()
+            if !g_clmPathOnly.Has(areaLower)
+                g_clmPathOnly[areaLower] := Map()
             for key, label in tiles
             {
-                pat := "" key
-                ci := InStr(pat, ":")
-                if ci
-                    pat := SubStr(pat, 1, ci - 1)
-                pat := StrLower(Trim(StrReplace(pat, ".tdtx", ".tdt")))
-                if (pat = "")
+                full := StrLower(Trim(StrReplace("" key, ".tdtx", ".tdt")))
+                if (full = "")
                     continue
-                list.Push([pat, "" label])
+                ; The path part is everything before the ":<A>-y:<B>" coord suffix
+                ; (metadata paths carry no ':', so the first ':' is the split).
+                ci := InStr(full, ":")
+                pathPart := ci ? SubStr(full, 1, ci - 1) : full
+                if (ci)
+                    g_clmData[areaLower][full] := "" label       ; coordinate-exact key
+                else
+                    g_clmPathOnly[areaLower][pathPart] := "" label  ; rare coordless entry
+                g_clmPaths[pathPart] := true
                 g_clmCount += 1
             }
-            g_clmData[StrLower("" areaCode)] := list
         }
     }
 }
 
-; Returns the human-readable landmark label for a tile path in an area, or "".
-; Case-insensitive SUBSTRING match: the area's own patterns first, then the global
-; "*" bucket (mirrors the reference TryMatch). Params: areaCode (world-area Id, e.g.
-; "G1_2"), tilePath (the tgt tile path). Gated by the caller on g_clmEnabled.
-CustomLandmarkMatch(areaCode, tilePath)
+; Cheap yes/no: could this tile path EVER carry a landmark label (ignoring the
+; coordinate)? Lets the reader skip the per-instance coord match for the vast
+; majority of tiles. Param: tilePath (the tgt tile path). Returns bool.
+CustomLandmarkPathCandidate(tilePath)
 {
-    global g_clmData
-    if !(IsSet(g_clmData) && g_clmData.Count && tilePath != "")
-        return ""
-    tpl := StrLower(tilePath)
+    global g_clmPaths
+    if !(IsSet(g_clmPaths) && g_clmPaths.Count && tilePath != "")
+        return false
+    return g_clmPaths.Has(StrLower(StrReplace(tilePath, ".tdtx", ".tdt")))
+}
 
+; Returns the human-readable landmark label for a SPECIFIC tile instance, or "".
+; COORDINATE-EXACT match on "<path>:<TileIdX>-y:<TileIdY>" — the area's own keys
+; first, then the global "*" bucket; both tile-coord orderings are tried (the reader
+; swaps X/Y on odd rotation, and the reference's orientation is not guaranteed). Falls
+; back to a path-only match for the 2 coordless keys. Params: areaCode (world-area Id,
+; e.g. "G1_2"), tilePath, tileIdX, tileIdY (the tile's sub-cell). Gated by the caller.
+CustomLandmarkMatch(areaCode, tilePath, tileIdX, tileIdY)
+{
+    global g_clmData, g_clmPathOnly
+    if !(IsSet(g_clmData) && tilePath != "")
+        return ""
+    p  := StrLower(StrReplace(tilePath, ".tdtx", ".tdt"))
+    k1 := p ":" tileIdX "-y:" tileIdY
+    k2 := p ":" tileIdY "-y:" tileIdX
     ac := StrLower("" areaCode)
-    if (ac != "" && g_clmData.Has(ac))
+
+    ; Coordinate-exact: area-specific first, then global "*".
+    for _, key in [ac, "*"]
     {
-        for _, pair in g_clmData[ac]
-            if InStr(tpl, pair[1])
-                return pair[2]
+        if (key = "" || !g_clmData.Has(key))
+            continue
+        am := g_clmData[key]
+        if am.Has(k1)
+            return am[k1]
+        if am.Has(k2)
+            return am[k2]
     }
-    if g_clmData.Has("*")
+    ; Path-only fallback for the rare coordless keys.
+    for _, key in [ac, "*"]
     {
-        for _, pair in g_clmData["*"]
-            if InStr(tpl, pair[1])
-                return pair[2]
+        if (key = "" || !g_clmPathOnly.Has(key))
+            continue
+        pm := g_clmPathOnly[key]
+        if pm.Has(p)
+            return pm[p]
     }
     return ""
 }

@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.124`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.125`.
 
 ## Language
 
@@ -1034,6 +1034,21 @@ tile-path pattern → label, matched by SUBSTRING against the tile paths we alre
   representative draws the label + dot. Nav POIs (AreaTransition/Waypoint filenames) are unaffected;
   a pure-`Landmark` duplicate is suppressed even with zone-nav on so identical dots don't stack.
   So each curated landmark now shows exactly once, at its closest tile.
+- **Coordinate-exact matching (0.45.13.125):** de-dupe stopped the stack, but the single remaining
+  "Boss" label sat on the wrong tile — the deduped nearest `BossWall01` was a random reused wall, not
+  the boss room. Root cause: I matched by PATH substring and STRIPPED the `:<A>-y:<B>` tile-coord
+  suffix from each JSON key. That suffix is the tile's sub-cell (`TileIdX`/`TileIdY`) — exactly what
+  the reference pins a landmark to, so a reused tile file (a wall placed all over) matched everywhere.
+  Fix: `CustomLandmarks.ahk` now keeps the FULL normalized key (`<path>.tdt:<A>-y:<B>`) and matches it
+  **exactly** against `<path>:<TileIdX>-y:<TileIdY>` built per tile INSTANCE (both coord orderings
+  tried, since the reader swaps X/Y on odd rotation); the 2 rare coordless keys use a path-only
+  fallback. `g_clmData` is now `area → Map(fullKey→label)` (+ `g_clmPathOnly`, `g_clmPaths`). New
+  `CustomLandmarkPathCandidate(path)` is a cheap pre-filter so the reader only runs the per-instance
+  coord match for tiles whose path could ever be a landmark. `PoE2EntityReader._ProcessTgtScanBatch`
+  caches `{type, path, clmCand}` per tile FILE and computes the label per INSTANCE after reading the
+  tile coords (the label can no longer be cached by `tgtFilePtr`, since it now depends on the coords).
+  Exact matching is a strict SUBSET of the old substring match — it can only REMOVE false matches,
+  never add wrong ones. The de-dupe stays as a safety net for arenas built from several variant tiles.
 
 ## Reference
 
