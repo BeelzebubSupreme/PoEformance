@@ -83,6 +83,10 @@ class RadarOverlay extends GdiOverlayBase
     static COLOR_AREATRANSITION := 0x00BFFF   ; deep sky blue
     static COLOR_CHECKPOINT     := 0x7FFF00   ; chartreuse
     static COLOR_LANDMARK       := 0x20B0FF   ; amber (curated custom landmarks)
+    ; Per-route colour cycle for the optional "walkable path to each landmark"
+    ; feature (BGR). Bright + mutually distinct so overlapping routes stay legible.
+    static CLM_PATH_PALETTE := [0x00A5FF, 0x50FF50, 0xF0C000, 0xFF50FF, 0x50FFFF
+                              , 0x6060FF, 0xC0FF00, 0xFF00A0, 0x00FF9B, 0xFF8C40]
     static COLOR_MAPHACK        := 0x909090   ; neutral gray (BGR) — matches game map outlines
     static COLOR_WALKABLE       := 0xFF8030   ; blue (BGR) — walkable-grid fill diagnostic overlay
 
@@ -1141,6 +1145,7 @@ class RadarOverlay extends GdiOverlayBase
             ; pos; navClaimed: portal idx -> true.
             navSnap := Map()
             navClaimed := Map()
+            navPortal := Map()   ; landmark idx -> true when it snapped to a real exit (vs a POI)
             if (clmOn)
             {
                 ; Radius (world units) → grid² threshold. Transition-TYPE curated tiles
@@ -1191,6 +1196,7 @@ class RadarOverlay extends GdiOverlayBase
                     {
                         navSnap[li] := Map("gx", this._navTargets[bestPi]["gridX"], "gy", this._navTargets[bestPi]["gridY"])
                         navClaimed[bestPi] := true
+                        navPortal[li] := true   ; snapped to a real AreaTransition → this is an EXIT
                     }
                 }
 
@@ -1270,7 +1276,7 @@ class RadarOverlay extends GdiOverlayBase
                     ; over the maphack walls.
                     this._DrawTextOutlined(tSX + tRadius + 3, tSY - 6,
                         lmLabel " (" distWorld "m)", RadarOverlay.COLOR_LANDMARK, 0, 1)
-                    lmDrawn.Push(Map("gx", srcGX, "gy", srcGY))
+                    lmDrawn.Push(Map("gx", srcGX, "gy", srcGY, "exit", navPortal.Has(idx)))
                 }
                 else if (navOn && (tType = "AreaTransition" || tType = "Waypoint") && !navClaimed.Has(idx))
                 {
@@ -1287,28 +1293,39 @@ class RadarOverlay extends GdiOverlayBase
 
             ; ── Optional: walkable A* path from the player to each landmark ──
             ; Recompute is THROTTLED (A* is costly) + cached by _clmPathCache; the
-            ; draw runs every frame off the cache. Far POIs are skipped (path
-            ; impractical / too expensive). Dim amber, thin — sits under the
-            ; gold nav path and red combat path drawn below.
+            ; draw runs every frame off the cache. Each route gets its own colour
+            ; (palette cycle), a configurable width + range, an exit/POI filter and
+            ; optional direction chevrons. Drawn UNDER the gold nav / red combat paths.
             if (clmOn && CustomLandmarkPathsOn() && this._pathfinder.HasTerrain() && lmDrawn.Length > 0)
             {
+                clmPO := CustomLandmarkPathOpts()
                 if !this.HasOwnProp("_clmPathCache")
                 {
                     this._clmPathCache := []
                     this._clmPathTick  := 0
                     this._clmPathPGX   := -999999
                     this._clmPathPGY   := -999999
+                    this._clmPathSig   := ""
                 }
                 pGXi := Round(playerGX)
                 pGYi := Round(playerGY)
                 nowT := A_TickCount
-                if ((nowT - this._clmPathTick) > 1500
+                ; Re-run A* on player move / timer OR when the exit/POI filter or range
+                ; changed (so toggling an option updates without waiting for the timer).
+                clmSig := clmPO["toExits"] "|" clmPO["toPois"] "|" clmPO["maxDist"] "|" lmDrawn.Length
+                if ((nowT - this._clmPathTick) > 1500 || clmSig != this._clmPathSig
                     || Abs(pGXi - this._clmPathPGX) > 12 || Abs(pGYi - this._clmPathPGY) > 12)
                 {
-                    capSq := 550.0 * 550.0   ; ~6000 world units — skip far POIs
+                    capG  := clmPO["maxDist"] / RadarOverlay.WORLD_TO_GRID_RATIO
+                    capSq := capG * capG
                     fresh := []
                     for _, lm in lmDrawn
                     {
+                        isExit := lm["exit"]
+                        if (isExit && !clmPO["toExits"])
+                            continue
+                        if (!isExit && !clmPO["toPois"])
+                            continue
                         pcdx := lm["gx"] - playerGX
                         pcdy := lm["gy"] - playerGY
                         if (pcdx * pcdx + pcdy * pcdy > capSq)
@@ -1321,14 +1338,16 @@ class RadarOverlay extends GdiOverlayBase
                     this._clmPathTick  := nowT
                     this._clmPathPGX   := pGXi
                     this._clmPathPGY   := pGYi
+                    this._clmPathSig   := clmSig
                 }
-                lmPathColor := 0x1878B0   ; dim amber (BGR)
-                lmPathWidth := isLargeMap ? 2 : 1
-                for _, lmp in this._clmPathCache
+                lmPathWidth := Max(1, clmPO["width"] + (isLargeMap ? 1 : 0))
+                lmArrows    := clmPO["arrows"]
+                for ci, lmp in this._clmPathCache
                 {
                     ln := lmp.Length
                     if (ln < 2)
                         continue
+                    lmPathColor := RadarOverlay.CLM_PATH_PALETTE[Mod(ci - 1, RadarOverlay.CLM_PATH_PALETTE.Length) + 1]
                     lmPts := Buffer(ln * 8, 0)
                     for i, pt in lmp
                     {
@@ -1341,6 +1360,20 @@ class RadarOverlay extends GdiOverlayBase
                     oldPen := DllCall("SelectObject", "Ptr", this.memDC, "Ptr", pen, "Ptr")
                     DllCall("Polyline", "Ptr", this.memDC, "Ptr", lmPts, "Int", ln)
                     DllCall("SelectObject", "Ptr", this.memDC, "Ptr", oldPen)
+                    ; Direction chevrons: every ~14 points draw a ">" pointing the way
+                    ; the route runs (player → landmark = increasing index).
+                    if (lmArrows && ln >= 6)
+                    {
+                        step := 14
+                        j := step
+                        while (j < ln)
+                        {
+                            ax := NumGet(lmPts, (j-1)*8, "Int"),     ay := NumGet(lmPts, (j-1)*8+4, "Int")
+                            bx := NumGet(lmPts, (j-4-1)*8, "Int"),   by := NumGet(lmPts, (j-4-1)*8+4, "Int")
+                            this._DrawArrowHead(ax, ay, ax - bx, ay - by, isLargeMap ? 8 : 6, lmPathColor, lmPathWidth)
+                            j += step
+                        }
+                    }
                 }
             }
         }
@@ -1597,6 +1630,29 @@ class RadarOverlay extends GdiOverlayBase
         if !this._lineBatch.Has(key)
             this._lineBatch[key] := []
         this._lineBatch[key].Push([x1, y1, x2, y2])
+    }
+
+    ; Draws a small ">" chevron IMMEDIATELY at (sx,sy) pointing in direction (dx,dy)
+    ; — used to show which way a landmark route runs. Params: tip screen pos, a
+    ; direction vector (need not be unit), barb length px, colour (BGR), pen width.
+    ; No return.
+    _DrawArrowHead(sx, sy, dx, dy, len, colorBGR, width := 1)
+    {
+        mag := Sqrt(dx * dx + dy * dy)
+        if (mag < 0.001)
+            return
+        ux := dx / mag, uy := dy / mag
+        px := -uy, py := ux                      ; perpendicular
+        b1x := sx - Round(len * (ux * 0.80 + px * 0.60)), b1y := sy - Round(len * (uy * 0.80 + py * 0.60))
+        b2x := sx - Round(len * (ux * 0.80 - px * 0.60)), b2y := sy - Round(len * (uy * 0.80 - py * 0.60))
+        pts := Buffer(3 * 8, 0)
+        NumPut("Int", b1x, pts, 0),  NumPut("Int", b1y, pts, 4)
+        NumPut("Int", sx,  pts, 8),  NumPut("Int", sy,  pts, 12)
+        NumPut("Int", b2x, pts, 16), NumPut("Int", b2y, pts, 20)
+        pen    := this._GetPen(colorBGR, width)
+        oldPen := DllCall("SelectObject", "Ptr", this.memDC, "Ptr", pen, "Ptr")
+        DllCall("Polyline", "Ptr", this.memDC, "Ptr", pts, "Int", 3)
+        DllCall("SelectObject", "Ptr", this.memDC, "Ptr", oldPen)
     }
 
     ; Queues a text draw into the text batch. Optional font handle (5th element) lets a few

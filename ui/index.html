@@ -5866,6 +5866,24 @@
                 <label class="toggle"><input type="checkbox" id="clm-showPaths"
                     onchange="ahkCall('SetCustomLandmarks','showPaths', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
               </div>
+              <div class="cfg-row"><span class="cfg-label">↳ Line width (px)</span>
+                <span class="hk-num"><input type="number" id="clm-pathWidth" min="1" max="8" step="1" onchange="ahkCall('SetCustomLandmarks','pathWidth',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">↳ Max distance (world units)</span>
+                <span class="hk-num"><input type="number" id="clm-pathMaxDist" min="500" max="40000" step="500" onchange="ahkCall('SetCustomLandmarks','pathMaxDist',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,500)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-500)">▼</button></span></span>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">↳ Routes to exits (transitions)</span>
+                <label class="toggle"><input type="checkbox" id="clm-pathToExits"
+                    onchange="ahkCall('SetCustomLandmarks','pathToExits', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">↳ Routes to POIs (bosses / chests / features)</span>
+                <label class="toggle"><input type="checkbox" id="clm-pathToPois"
+                    onchange="ahkCall('SetCustomLandmarks','pathToPois', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">↳ Direction arrows along the route</span>
+                <label class="toggle"><input type="checkbox" id="clm-pathArrows"
+                    onchange="ahkCall('SetCustomLandmarks','pathArrows', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
               <div class="cfg-row">
                 <span class="cfg-label">Wrong label position? Dump the matched landmarks + coords</span>
                 <button type="button" class="cfg-btn" onclick="ahkCall('CustomLandmarkDiag')">🔍 Diagnose positions</button>
@@ -7660,10 +7678,16 @@
 
     function customLandmarksSyncFromHeader(s) {
       if (!s) return;
-      const e = document.getElementById('clm-enabled');
-      if (e) e.checked = s.enabled === true || s.enabled === 1 || s.enabled === '1' || s.enabled === 'true';
-      const sp = document.getElementById('clm-showPaths');
-      if (sp) sp.checked = s.showPaths === true || s.showPaths === 1 || s.showPaths === '1' || s.showPaths === 'true';
+      const truthy = v => v === true || v === 1 || v === '1' || v === 'true';
+      const chk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = truthy(v); };
+      const num = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
+      chk('clm-enabled', s.enabled);
+      chk('clm-showPaths', s.showPaths);
+      chk('clm-pathToExits', s.pathToExits);
+      chk('clm-pathToPois', s.pathToPois);
+      chk('clm-pathArrows', s.pathArrows);
+      num('clm-pathWidth', s.pathWidth);
+      num('clm-pathMaxDist', s.pathMaxDist);
       const c = document.getElementById('clm-count');
       if (c) c.textContent = (s.count > 0) ? (s.count + ' labels loaded.') : '';
     }
