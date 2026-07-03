@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.125`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.126`.
 
 ## Language
 
@@ -1049,6 +1049,19 @@ tile-path pattern → label, matched by SUBSTRING against the tile paths we alre
   tile coords (the label can no longer be cached by `tgtFilePtr`, since it now depends on the coords).
   Exact matching is a strict SUBSET of the old substring match — it can only REMOVE false matches,
   never add wrong ones. The de-dupe stays as a safety net for arenas built from several variant tiles.
+- **Position diagnostic (0.45.13.126, WIP):** with coordinate matching correct (in-game it now surfaces
+  exactly the two real G4_10 = "The Excavation" landmarks — the Precursor `BossArena` + `DigSite` chest —
+  no spam), a NEW issue surfaced: in `G2_5_1` ("Mastodon Badlands") the labels render at huge clustered
+  distances (~12000 m, bottom-left) even though the game shows those transitions nearby. Suspected cause:
+  the landmark POI world position comes from the tile's INDEX in the terrain grid
+  (`gridX := Mod(tileIdx, totalTilesX) * 0x17`, `worldX := gridX * 250/23`), which was never used for
+  DISPLAY before — nav AreaTransition/Waypoint POIs always got their position overwritten by the live
+  entity's render position (`_zoneScanAccumulated` refine in `PoE2MemoryReader`), so the raw tile-index
+  position was never validated. Pure-terrain landmarks (and un-refined far transitions) rely on it.
+  `CustomLandmarkDiagnose()` (bridge `CustomLandmarkDiag`, UI "🔍 Diagnose positions" in the Custom
+  Landmarks box) dumps every matched landmark's label + tile coords + computed world pos + `refined`
+  flag + distance from the player to `debug\custom_landmarks_diag_*.txt`, to confirm whether the fix is
+  a corrected grid formula or attaching the label to the refined entity position. Pending owner run.
 
 ## Reference
 

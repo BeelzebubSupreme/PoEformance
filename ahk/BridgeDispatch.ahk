@@ -194,6 +194,9 @@ _DispatchBridgeCall(method, args)
                 _ClmApplySetting(args[1], args[2])
             SaveCustomLandmarks()
             SetTimer(PushHeaderToWebView, -50)
+        case "CustomLandmarkDiag":
+            ; Dump the current zone's matched landmarks + positions (debug\custom_landmarks_diag_*).
+            SetTimer(CustomLandmarkDiagnose, -1)
         case "SetLootLabelClear":
             ; Keep loot labels clear of the large-map maphack. args[1]=key, args[2]=value.
             if (args.Length >= 2)
