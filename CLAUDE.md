@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.135`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.136`.
 
 ## Language
 
@@ -1141,6 +1141,14 @@ tile-path pattern → label, matched by SUBSTRING against the tile paths we alre
   `checkpoint` carry no "transition" so they keep their own types. This is the correct semantics (these ARE
   zone exits) and also improves nav/AutoPilot exit detection. Low over-match risk (decorative "transition"
   objects are rare and usually not in the radar sample).
+- **Walkable path to each landmark (0.45.13.136, opt-in):** new `[CustomLandmarks] showPaths` toggle
+  (default OFF; `g_clmShowPaths`, `CustomLandmarkPathsOn()`, UI "Draw a walkable path to each landmark").
+  In `RadarOverlay.Render`, the drawn landmarks' display positions are collected (`lmDrawn`); a THROTTLED
+  pass (recompute every 1.5 s or on >12-cell player move, cached in `_clmPathCache`) runs
+  `_pathfinder.FindPath(player → landmark)` for each within ~6000 world units (far POIs skipped — A* too
+  costly), and the cached routes draw every frame as thin dim-amber polylines UNDER the gold nav / red
+  combat paths. Wired via the existing `SetCustomLandmarks` bridge case (`_ClmApplySetting` key
+  `showPaths`) + header + `customLandmarksSyncFromHeader`.
 
 ## Reference
 

@@ -1219,6 +1219,8 @@ class RadarOverlay extends GdiOverlayBase
                 }
             }
 
+            lmDrawn := []   ; display positions of the drawn landmarks (for the optional path lines)
+
             for idx, target in this._navTargets
             {
                 lmLabel := target.Has("label") ? target["label"] : ""
@@ -1268,6 +1270,7 @@ class RadarOverlay extends GdiOverlayBase
                     ; over the maphack walls.
                     this._DrawTextOutlined(tSX + tRadius + 3, tSY - 6,
                         lmLabel " (" distWorld "m)", RadarOverlay.COLOR_LANDMARK, 0, 1)
+                    lmDrawn.Push(Map("gx", srcGX, "gy", srcGY))
                 }
                 else if (navOn && (tType = "AreaTransition" || tType = "Waypoint") && !navClaimed.Has(idx))
                 {
@@ -1279,6 +1282,65 @@ class RadarOverlay extends GdiOverlayBase
                         shortName := SubStr(shortName, lastSlash + 1)
                     this._DrawText(tSX + tRadius + 3, tSY - 6,
                         shortName " (" distWorld "m)", tColor)
+                }
+            }
+
+            ; ── Optional: walkable A* path from the player to each landmark ──
+            ; Recompute is THROTTLED (A* is costly) + cached by _clmPathCache; the
+            ; draw runs every frame off the cache. Far POIs are skipped (path
+            ; impractical / too expensive). Dim amber, thin — sits under the
+            ; gold nav path and red combat path drawn below.
+            if (clmOn && CustomLandmarkPathsOn() && this._pathfinder.HasTerrain() && lmDrawn.Length > 0)
+            {
+                if !this.HasOwnProp("_clmPathCache")
+                {
+                    this._clmPathCache := []
+                    this._clmPathTick  := 0
+                    this._clmPathPGX   := -999999
+                    this._clmPathPGY   := -999999
+                }
+                pGXi := Round(playerGX)
+                pGYi := Round(playerGY)
+                nowT := A_TickCount
+                if ((nowT - this._clmPathTick) > 1500
+                    || Abs(pGXi - this._clmPathPGX) > 12 || Abs(pGYi - this._clmPathPGY) > 12)
+                {
+                    capSq := 550.0 * 550.0   ; ~6000 world units — skip far POIs
+                    fresh := []
+                    for _, lm in lmDrawn
+                    {
+                        pcdx := lm["gx"] - playerGX
+                        pcdy := lm["gy"] - playerGY
+                        if (pcdx * pcdx + pcdy * pcdy > capSq)
+                            continue
+                        route := this._pathfinder.FindPath(pGXi, pGYi, Round(lm["gx"]), Round(lm["gy"]))
+                        if (route && route.Length >= 2)
+                            fresh.Push(route)
+                    }
+                    this._clmPathCache := fresh
+                    this._clmPathTick  := nowT
+                    this._clmPathPGX   := pGXi
+                    this._clmPathPGY   := pGYi
+                }
+                lmPathColor := 0x1878B0   ; dim amber (BGR)
+                lmPathWidth := isLargeMap ? 2 : 1
+                for _, lmp in this._clmPathCache
+                {
+                    ln := lmp.Length
+                    if (ln < 2)
+                        continue
+                    lmPts := Buffer(ln * 8, 0)
+                    for i, pt in lmp
+                    {
+                        pdGX := pt[1] - playerGX
+                        pdGY := pt[2] - playerGY
+                        NumPut("Int", Round(mapCenterX + (pdGX - pdGY) * projectionCos), lmPts, (i-1)*8)
+                        NumPut("Int", Round(mapCenterY + (0-pdGX-pdGY) * projectionSin), lmPts, (i-1)*8+4)
+                    }
+                    pen    := this._GetPen(lmPathColor, lmPathWidth)
+                    oldPen := DllCall("SelectObject", "Ptr", this.memDC, "Ptr", pen, "Ptr")
+                    DllCall("Polyline", "Ptr", this.memDC, "Ptr", lmPts, "Int", ln)
+                    DllCall("SelectObject", "Ptr", this.memDC, "Ptr", oldPen)
                 }
             }
         }
