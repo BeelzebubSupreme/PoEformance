@@ -197,7 +197,12 @@ _RunLootPickup(radarSnap, gameHwnd)
         return false
     }
 
-    ; Project the item's world position to screen; check AvoidZones.
+    ; Project the item's GROUND world position to screen — used to LOCATE the
+    ; item's floating on-screen LABEL. Gear is picked up by clicking that label
+    ; (the interactable), NOT the ground under the item: a ground click just
+    ; walks the character there and grabs whatever drop sits under the cursor
+    ; (often an adjacent white item), and the ground point frequently lands in
+    ; the bottom-HUD avoid zones (→ "avoid-zone", walk around).
     inGs   := radarSnap.Has("inGameState") ? radarSnap["inGameState"] : 0
     w2sMat := (inGs && IsObject(inGs) && inGs.Has("w2sMatrix")) ? inGs["w2sMatrix"] : 0
     if !(w2sMat && Type(w2sMat) = "Array" && w2sMat.Length = 16)
@@ -213,22 +218,8 @@ _RunLootPickup(radarSnap, gameHwnd)
         return false
     }
 
-    avoidRects := GetAvoidZones(radarSnap, gameHwnd)
-    if IsPointInAvoidZone(sp["x"], sp["y"], avoidRects)
-    {
-        ; The item itself wouldn't normally be in an avoid zone, but the
-        ; projected position might be — e.g. an item dropped right next to a
-        ; waypoint pillar. Don't claim the tick: if we blocked exploration
-        ; here the player would never move, the projection would never shift
-        ; off the avoid box, and the bot froze in place. Let exploration
-        ; carry on; the cached item is retried from a different angle later.
-        g_lootLastReason := "avoid-zone(" target["rarity"] ")"
-        return false
-    }
-
-    ; Throttle: one click every ~400 ms. The game itself walks the character
-    ; to the item once it sees the click; spamming clicks would just stop
-    ; the walk over and over.
+    ; Throttle FIRST (before the label scan) so the label DFS runs only ~once
+    ; per click, not on every tick while the character walks toward the item.
     now := A_TickCount
     if ((now - _lastClickTick) < 400)
     {
@@ -236,8 +227,33 @@ _RunLootPickup(radarSnap, gameHwnd)
         return true   ; busy walking — block exploration
     }
 
+    ; Prefer the item's LABEL (interactable, above the item, clear of the
+    ; bottom HUD) over the raw ground point. Fall back to the ground projection
+    ; when no label is found near the item (far item off-screen, labels hidden).
+    labelPt  := _LootFindLabelNear(g_reader, sp["x"], sp["y"], gameHwnd)
+    clickPt  := labelPt ? labelPt : sp
+    clickTag := labelPt ? "lbl" : "grnd"
+
+    ; Loot only truly needs to avoid INTERACTABLES ("ent": transitions / portals
+    ; / waypoints / NPCs / checkpoints) whose left-click changes zone or opens a
+    ; dialog. The HUD ("hud") and minimap ("map") boxes are display-only and
+    ; deliberately OVERSIZED — vetoing them just made the bot skip good clicks
+    ; and walk past loot (the reported avoid-zone(… grnd/hud)); clicking a globe
+    ; / skill-bar / minimap is harmless in PoE2. So for loot we block ONLY
+    ; "ent"; hud/map hits fall through to the click.
+    avoidRects := GetAvoidZones(radarSnap, gameHwnd)
+    azKind := AvoidZoneHitKind(clickPt["x"], clickPt["y"], avoidRects)
+    if (azKind = "ent")
+    {
+        ; Interactable in the way (e.g. an item next to a waypoint). Don't claim
+        ; the tick — let exploration nudge the camera so a later angle clears
+        ; the box; the cached item is retried then.
+        g_lootLastReason := "avoid-zone(" target["rarity"] " " clickTag "/" azKind ")"
+        return false
+    }
+
     ; Aim + click.
-    DllCall("SetCursorPos", "int", sp["x"], "int", sp["y"])
+    DllCall("SetCursorPos", "int", clickPt["x"], "int", clickPt["y"])
     Sleep(20)
     DllCall("mouse_event", "uint", 0x0002, "int", 0, "int", 0, "uint", 0, "uptr", 0) ; LDOWN
     Sleep(20)
@@ -257,7 +273,7 @@ _RunLootPickup(radarSnap, gameHwnd)
 
     freeTag := (free < 0) ? "" : (" free=" free)
     sizeTag := (rw > 0 && rh > 0) ? (" " rw "x" rh "/" fpSrc) : ""
-    g_lootLastReason := "pickup(" target["rarity"] sizeTag " d=" Round(target["dist"])
+    g_lootLastReason := "pickup(" target["rarity"] sizeTag " " clickTag " d=" Round(target["dist"])
         . " " (g_lootCache.Count) "cached" freeTag ")"
     return true
 }
@@ -312,17 +328,23 @@ _RefreshLootCache(radarSnap)
         if !(decoded && IsObject(decoded))
             continue
 
-        ; Rarity decoding is round-robin in PoE2EntityReader — a freshly
-        ; spotted item may not have rarityId set yet. Treat that case as
-        ; Normal (id 0) instead of skipping the item; if the user has
-        ; Normal disabled, the filter will exclude it on this tick AND on
-        ; later ticks once a real rarityId is decoded, so the behaviour is
-        ; conservative. The previous "rarity = '' → continue" path silently
-        ; dropped every freshly-dropped item until a future decoder cycle.
-        rarityId := decoded.Has("rarityId") ? decoded["rarityId"] : 0
-        rarity := _RarityIdToFilterLabel(rarityId)
-        if (rarity = "")
-            rarity := "Normal"
+        addr := entity.Has("address") ? entity["address"] : 0
+        if !addr
+            continue
+
+        ; ── Real rarity + inner base-item path ─────────────────────────────
+        ; Ground drops are WorldItem WRAPPER entities (rarity 0, wrapper path);
+        ; the true rarity AND base-type path live on the INNER item, reached via
+        ; the WorldItem component (+0x28) exactly like the value radar. We
+        ; resolve it ONCE per drop (cached). Without this every drop read as
+        ; "Normal" (the rarity filter was dead — nothing was picked up unless
+        ; Normal was enabled) and item sizes fell back to a 2×2 guess because
+        ; the wrapper path never matches the base-item registry (issue #158
+        ; follow-up). A freshly-dropped item whose inner isn't decoded yet is
+        ; retried next tick; the wrapper's own decoded rarity is the fallback.
+        info     := _LootResolveItemInfo(addr, path, decoded)
+        rarity   := info["rarity"]
+        itemPath := info["path"]
         if !_IsRarityEnabled(rarity)
             continue
 
@@ -341,10 +363,6 @@ _RefreshLootCache(radarSnap)
         if (wx = 0 && wy = 0)
             continue
 
-        addr := entity.Has("address") ? entity["address"] : 0
-        if !addr
-            continue
-
         if g_lootCache.Has(addr)
         {
             cached := g_lootCache[addr]
@@ -357,15 +375,16 @@ _RefreshLootCache(radarSnap)
         else
         {
             ; Resolve actual footprint from the base-item registry on first
-            ; sighting. Stored in the cache entry so the per-tick fit check
-            ; doesn't need to repeat the lookup. Missing entries get 0/0 here
-            ; and fall back to the rarity heuristic at fit-check time.
-            sz := ItemSizeRegistry.Get(path)
+            ; sighting, using the INNER item path (the wrapper path never
+            ; matches the registry → 2×2 fallback). Stored in the cache entry so
+            ; the per-tick fit check doesn't repeat the lookup. Missing entries
+            ; get 0/0 here and fall back to the rarity heuristic at fit time.
+            sz := ItemSizeRegistry.Get(itemPath)
             sw := (sz && IsObject(sz)) ? sz["w"] : 0
             sh := (sz && IsObject(sz)) ? sz["h"] : 0
             g_lootCache[addr] := Map(
                 "addr",         addr,
-                "path",         path,
+                "path",         itemPath,
                 "rarity",       rarity,
                 "worldX",       wx,
                 "worldY",       wy,
@@ -419,6 +438,65 @@ _RarityIdToFilterLabel(rarityId)
     if (rarityId = 5)
         return "Currency"
     return ""
+}
+
+; Resolves a ground drop's TRUE rarity label + inner base-item path. Ground
+; drops are WorldItem WRAPPER entities whose rarity/path live on the inner item
+; (reached via the WorldItem component, same chain as the value radar). Resolved
+; once per wrapper address and cached; only CONFIRMED inner resolutions are
+; cached, so a freshly-dropped item whose inner item hasn't decoded yet is
+; retried on later ticks. Falls back to the wrapper's own decoded rarity, then
+; "Normal". Param: wrapperAddr, wrapperPath, decoded (wrapper decodedComponents).
+; Returns Map("rarity", label, "path", innerOrWrapperPath).
+_LootResolveItemInfo(wrapperAddr, wrapperPath, decoded)
+{
+    global g_reader
+    static _cache := Map()   ; wrapperAddr -> Map("rarity", label, "path", path)
+
+    if _cache.Has(wrapperAddr)
+        return _cache[wrapperAddr]
+    ; Bound the cache — entity addresses churn as areas change.
+    if (_cache.Count > 4096)
+        _cache := Map()
+
+    itemPath := wrapperPath
+    innerPtr := 0, innerPath := "", off := -1, compAddr := 0, compNames := ""
+    if _LrvResolveInnerItem(wrapperAddr, &innerPtr, &innerPath, &off, &compAddr, &compNames)
+    {
+        if (innerPath != "")
+            itemPath := innerPath
+        ; Currency (orbs, scrolls, shards) carries NO real rarity — it has no
+        ; Mods/ObjectMagicProperties component, so ReadItemRarity returns -1. It
+        ; MUST be matched by PATH first (exactly like StashMover's
+        ; _SmItemCategory), otherwise it fell through to "Normal" and — with
+        ; Normal off — was never picked up, even though it is the most valuable
+        ; class (this was the bug: cache-empty "0 passed filter" for currency).
+        if (InStr(StrLower(itemPath), "/currency/"))
+            rarity := "Currency"
+        else
+        {
+            rid := -1
+            try rid := g_reader.ReadItemRarity(innerPtr)
+            ; rid >= 0 → real rarity. rid = -1 → a no-rarity item; white GEAR is
+            ; genuinely Normal (the common case). Either way this is a CONFIRMED
+            ; resolution, so cache it (below) to avoid re-resolving every tick.
+            rarity := (rid >= 0) ? _RarityIdToFilterLabel(rid) : "Normal"
+            if (rarity = "")
+                rarity := "Normal"
+        }
+        out := Map("rarity", rarity, "path", itemPath)
+        _cache[wrapperAddr] := out   ; cache confirmed inner resolutions
+        return out
+    }
+
+    ; Inner item NOT resolved yet (freshly dropped, inner not decoded) — fall back
+    ; to the wrapper's own decoded rarity (usually 0) and do NOT cache, so it is
+    ; retried next tick once the inner item decodes and can be classified for real.
+    ridW := (decoded && IsObject(decoded) && decoded.Has("rarityId")) ? decoded["rarityId"] : 0
+    rarity := _RarityIdToFilterLabel(ridW)
+    if (rarity = "")
+        rarity := "Normal"
+    return Map("rarity", rarity, "path", itemPath)
 }
 
 ; Reads the per-rarity filter flag for the given label.
@@ -585,6 +663,87 @@ _LootWorldToScreen(wx, wy, wz, w2sMat, gameHwnd)
     sx := Max(cX + margin, Min(sx, cX + cW - margin))
     sy := Max(cY + margin, Min(sy, cY + cH - margin))
     return Map("x", sx, "y", sy)
+}
+
+; Finds the on-screen LABEL of a ground item near a target screen point and
+; returns its CENTRE in absolute screen px, or 0 if none is within MAXDIST px.
+; Ground gear is picked up by clicking its floating label (the interactable),
+; which sits above the item — clear of the bottom-HUD avoid zones and precise
+; enough not to grab an adjacent (e.g. white) drop. Focused, visibility-pruned
+; DFS from the GameUI root for visible WorldItem labels (StringId = the WorldItem
+; metadata path, with displayed name text); keeps the nearest to the target
+; point. Runs only on an actual click (~2.5/s), bounded by a 30 ms deadline.
+; Reuses the UI-tree helpers from LootLabelClear / UiTreeBrowser. Params:
+; reader, targetSx/targetSy (absolute screen px), gameHwnd. Returns Map("x","y")|0.
+_LootFindLabelNear(reader, targetSx, targetSy, gameHwnd)
+{
+    static MAXDIST := 220   ; labels float above the item and spread apart in dense loot
+    if !(IsObject(reader) && IsObject(reader.Mem) && reader.Mem.Handle && gameHwnd)
+        return 0
+    root := _UiBrowser_GetGameUiPtr()
+    if !(root && reader.IsProbablyValidPointer(root))
+        return 0
+    cr := NavClientRect(gameHwnd)
+    if !IsObject(cr)
+        return 0
+    hScale := (cr["h"] > 0) ? (cr["h"] / 1600.0) : 1.0
+    sidOff := PoE2Offsets.UiElementBase["StringIdPtr"]
+    txtOff := PoE2Offsets.UiElementBase["TextPtr"]
+
+    rg := _UiHitGeom(reader, root)
+    if !IsObject(rg)
+        return 0
+    stack := []
+    _LlcPushChildren(reader, rg, stack)
+
+    bestD  := MAXDIST * MAXDIST
+    bestPt := 0
+    visited := Map(), nodes := 0
+    ; 50 ms, not less: A_TickCount has ~15 ms granularity, so a tighter deadline
+    ; trips at random before the DFS reaches the labels (the LootLabelClear
+    ; lesson). That intermittency showed as mostly-"grnd" fallbacks in the
+    ; status log even with item labels permanently visible.
+    deadline := A_TickCount + 50
+    while (stack.Length > 0 && nodes < 5000)
+    {
+        if (A_TickCount > deadline)
+            break
+        ptr := stack.Pop()
+        if visited.Has(ptr)
+            continue
+        visited[ptr] := true
+        nodes += 1
+        g := _UiHitGeom(reader, ptr)
+        if !IsObject(g)
+            continue
+        if !g["visible"]            ; hidden → skip node AND its subtree
+            continue
+        if (g["sizeW"] > 0 && g["sizeH"] > 0)
+        {
+            sid := ""
+            try sid := reader.ReadStdWStringAt(ptr + sidOff)
+            if _IsWorldItemPath(sid)
+            {
+                txt := ""
+                try txt := reader.ReadStdWStringAt(ptr + txtOff, 64)
+                if (Trim(txt) != "")
+                {
+                    lsp := UiTree_GetScreenPos(reader, ptr)
+                    cxp := cr["x"] + (lsp["x"] + g["sizeW"] / 2) * hScale
+                    cyp := cr["y"] + (lsp["y"] + g["sizeH"] / 2) * hScale
+                    dx := cxp - targetSx, dy := cyp - targetSy
+                    d := dx * dx + dy * dy
+                    if (d < bestD)
+                    {
+                        bestD  := d
+                        bestPt := Map("x", Round(cxp), "y", Round(cyp))
+                    }
+                }
+            }
+        }
+        _LlcPushChildren(reader, g, stack)
+    }
+    return bestPt
 }
 
 ; ── Inventory free-space gate ───────────────────────────────────────────

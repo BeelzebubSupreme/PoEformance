@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.114`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.121`.
 
 ## Language
 
@@ -872,6 +872,98 @@ no click → no movement).
   move along the explored route and skills should aim at enemies (no more centre-fire / standing
   still). Re-run "🔍 Diagnose projection" to confirm an enemy now projects to a DIFFERENT pixel
   than the player.
+- **Follow-up — Auto Loot rarity/size fix (0.45.13.115):** once movement worked, Auto Loot still
+  never fired unless "Normal" was enabled, and then it grabbed everything as Normal. Cause:
+  `LootPickup._RefreshLootCache` read rarity from `decoded["rarityId"]`, which is only set from a
+  `Mods`/`ObjectMagicProperties` component — but ground drops are `WorldItem` WRAPPER entities
+  (rarity 0, wrapper path); the real rarity + base-item path live on the INNER item. So every drop
+  classified as "Normal" (rarity filter dead) and the size lookup used the wrapper path (registry
+  miss → 2×2 guess). Fix: new `_LootResolveItemInfo(addr, path, decoded)` resolves the inner item
+  ONCE per drop (reusing the value radar's `_LrvResolveInnerItem` → `g_reader.ReadItemRarity`),
+  caching only confirmed resolutions (freshly-dropped items retry until the inner decodes), and
+  returns the real rarity label + inner path. `_RefreshLootCache` now filters on the true rarity
+  and sizes via `ItemSizeRegistry.Get(innerPath)`. Verified in-game: `pickup(...)` fires and the
+  per-rarity filter works, so "Normal" can go back OFF and Magic/Rare/Unique/Currency filter
+  correctly.
+- **Follow-up — pick up by LABEL, not ground (0.45.13.116):** with rarity working, gear pickup was
+  unreliable — the bot clicked the item's projected GROUND position, which (a) landed in the
+  bottom-HUD avoid zones a lot (`avoid-zone(Magic)` → walk around) and (b) was imprecise (grabbed
+  adjacent white drops). In PoE2 gear is picked up by clicking the floating item **label** (the
+  interactable, which also sits above the item, clear of the HUD). Fix: new
+  `_LootFindLabelNear(reader, targetSx, targetSy, gameHwnd)` — a focused, visibility-pruned DFS
+  (reusing `LootLabelClear`/`UiTreeBrowser` helpers) that finds the nearest visible WorldItem label
+  (StringId matches `_IsWorldItemPath`, has name text) to the item's ground projection and returns
+  its centre in absolute screen px. `_RunLootPickup` now throttles FIRST (so the label DFS runs
+  ~once per click, not every tick), clicks the LABEL when found (`clickTag=lbl`) and falls back to
+  the ground point otherwise (`grnd`), and the avoid-zone reason now carries the kind
+  (`avoid-zone(<rarity> <lbl|grnd>/<hud|map|ent>)`) for tuning. `pickup(...)` shows `lbl`/`grnd`.
+- **Follow-up — loot avoid-zone = interactables only (0.45.13.117):** in-game it was better but the
+  bot still walked past some drops with `avoid-zone(Rare grnd/hud)` — the ground click was vetoed by
+  the (oversized, display-only) HUD box. For LOOT only `ent` zones (transitions / portals /
+  waypoints / NPCs / checkpoints, which change zone or open a dialog) are actually dangerous;
+  clicking a globe / skill-bar / minimap is harmless in PoE2. `_RunLootPickup` now blocks ONLY
+  `azKind = "ent"` and lets hud/map hits fall through to the click. Also widened `_LootFindLabelNear`
+  `MAXDIST` 150→220 px (labels float above the item and spread apart in dense loot, so 150 fell back
+  to `grnd` too often). Combat/exploration keep the full HUD/map/ent avoid set (a stray HUD click
+  there wastes a tick; for loot it doesn't).
+- **Pending in-game verification (owner):** with Normal OFF, the bot should now collect blue/yellow
+  drops with far fewer skips; `avoid-zone` should only appear as `.../ent` (next to a real portal /
+  waypoint). If `grnd` still dominates over `lbl`, the loot-label StringId may not match
+  `_IsWorldItemPath` — capture it with the "Loot Label Probe" and widen the predicate.
+- **Follow-up — currency classified by PATH (0.45.13.119):** the status log showed gear pickup
+  working (`pickup(Rare 2x3/reg …)` → `picked-up(Rare)`) but almost every scan was
+  `cache-empty (saw N, 0 passed filter)` and the owner confirmed CURRENCY was never picked up.
+  Cause: `_LootResolveItemInfo` classified only by `ReadItemRarity`, but **currency carries no real
+  rarity** (no Mods/ObjectMagicProperties → `ReadItemRarity` returns -1), so it fell through to
+  "Normal" and — Normal being off — was filtered out (the value-radar / `StashMover._SmItemCategory`
+  already knew this: "Currency / maps are matched by PATH first because those classes carry no real
+  rarity"). Fix: resolve the inner path FIRST (was nested inside the `rid>=0` branch — a second bug),
+  then if it contains `/currency/` classify as **Currency**, else use `ReadItemRarity` (`rid=-1` →
+  Normal, the white-gear case). Confirmed inner resolutions (incl. white gear) are now CACHED so the
+  common white drops aren't re-resolved every tick. Known gap: fragments / div-cards / essences also
+  carry no rarity and aren't under `/currency/`, so they still classify as Normal — handle by path if
+  reported.
+- **Verified in-game (owner's status log, 0.45.13.119):** currency is collected —
+  `pickup(Currency 1x1/reg …)` → `picked-up(Currency)` repeatedly.
+- **Follow-up — label-scan deadline 30→50 ms (0.45.13.120):** the same log showed the label click
+  (`lbl`) firing only intermittently (mostly `grnd` fallback, so an item took many walk-closer
+  ground clicks before it was grabbed) even though item labels were permanently visible. Cause:
+  `_LootFindLabelNear`'s 30 ms deadline vs `A_TickCount`'s ~15 ms granularity — the DFS was cut
+  short at random before reaching the labels (the same lesson as LootLabelClear's no-op bug).
+  Raised to the proven 50 ms (runs only ~once per click, so the cost is negligible).
+- **FIXED — pack-wide no-path give-up (0.45.13.121):** the log also showed combat
+  `no-path(… hd=88 no-path:exh/tmo)` loops — a 17-strong pack on an unreachable ledge occupied
+  combat for minutes. Two compounding flaws: the give-up blacklisted only the ONE nearest entity
+  (for 15 s), so the next packmate immediately became the target and burned its own 4 s — and by
+  pack member #4 the first blacklist had already expired, restarting the chain. Fix in
+  `CombatAutomation`: (a) new `_CombatBlacklistPackNear(radarSnap, cx, cy, radius, ms)` — on
+  give-up, EVERY NPC-like entity within 700 world units of the unreachable enemy is blacklisted
+  for 30 s (packmates stand together; radius is the tuning knob if a reachable neighbour pack
+  ever gets caught, the cost is only a ≤30 s engagement delay); used by BOTH the no-path give-up
+  and the immediate off-floor (`|hd|>200`) blacklist. (b) `static _noPathExhSeen` — once the
+  streak contains an EXHAUSTED A* result (`no-path:exh` = genuinely cut off, waiting cannot
+  help), the give-up fires after 1.5 s instead of 4 s (budget timeouts `tmo` keep the patient
+  4 s). Reason strings now carry `bl=N` (pack size blacklisted). Worst case for the log's pack:
+  ~68 s before → ~1.5 s now.
+
+## AutoPilot status file-log (shipped 0.45.13.118)
+
+The WebView tool is rarely in the foreground during play, so the live AutoPilot status line
+(state + loot/combat/explore reasons) couldn't be watched while playing. `ahk/AutoPilotStatusLog.ahk`
+mirrors it into `logs\InGameStateMonitor.autopilot_status.log` for after-the-fact review in
+**Config → Data & Logs**.
+
+- Opt-in **persistent** toggle `[Diagnostics] apStatusLog` (default OFF; stays on across restarts,
+  like the startup trace). `LoadAutoPilotStatusLog()` seeds all globals (init gotcha) and reads the
+  existing file size so rotation accounts for it. Cheap no-op when off (one global check).
+- `ApStatusLogTick()` is called at the end of `TryAutoPilot` (after the reasons are computed). It
+  appends `HH:mm:ss.mmm | state=… | loot: … | combat: … | explore: …` only when the line CHANGES
+  (deduped) and ≤ ~4×/s (throttled), and rotates the file at ~2 MB. `SetAutoPilotStatusLog(on)`
+  writes a session marker when enabled.
+- Wiring: `#Include ahk/AutoPilotStatusLog.ahk` + `LoadAutoPilotStatusLog()` at startup;
+  `TryAutoPilot` calls `ApStatusLogTick()`; `BridgeDispatch` case `SetAutoPilotStatusLog`;
+  `WebViewBridge` pushes `apStatusLog`; UI toggle "📝 Log status to file" in **Config → AutoPilot →
+  Live Status**.
 
 ## Reference
 
