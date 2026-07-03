@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.121`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.122`.
 
 ## Language
 
@@ -964,6 +964,28 @@ mirrors it into `logs\InGameStateMonitor.autopilot_status.log` for after-the-fac
   `TryAutoPilot` calls `ApStatusLogTick()`; `BridgeDispatch` case `SetAutoPilotStatusLog`;
   `WebViewBridge` pushes `apStatusLog`; UI toggle "📝 Log status to file" in **Config → AutoPilot →
   Live Status**.
+
+## Auto-detect price league (shipped 0.45.13.122)
+
+The price league was manually typed (`g_ltLeague`, default "Standard"); a wrong/stale value gave
+empty prices. The owner supplied a verified pointer: **`ServerData + 0x21E0`** is a `std::wstring`
+holding the active league name — EXACTLY poe.ninja/poe2scout's value (`"Standard"`, `"Hardcore"`,
+`"HC Runes of Aldur"`; the HC/SC prefix disambiguates), so it feeds the price layer directly.
+
+- **`PoE2Offsets.ServerDataStructure["League"] = 0x21E0`** (same base as `PlayerInventories` 0x320).
+- **`PoE2PlayerComponentsReader.ReadCurrentLeague(areaInstanceAddress)`** — resolves ServerData
+  (`PlayerInfo → ServerDataPtr → ResolveServerDataPointer`) and reads the wstring; returns `""` if
+  unresolvable.
+- **`LootTracker`** — new `g_ltAutoLeague` (default ON, persisted `[LootTracker] autoLeague`) +
+  runtime `g_ltDetectedLeague`. `_LtAutoLeagueTick(radarSnap)` (in `TryLootTrackerTick`, throttled
+  15 s, acts only on a CHANGE) reads the league and, when it differs, repoints `g_ltLeague` **and**
+  `g_ltTradeLeague` (trade API, in lock-step), persists both, and kicks a poe.ninja refresh (only
+  when `g_ltEnabled`). Toggling auto on resets `g_ltAutoLeagueNextTick` for an immediate re-detect.
+- **Header/UI:** `BuildLootHeaderJson` pushes `autoLeague` + `detectedLeague`; `_LtApplySetting`
+  handles the `autoLeague` key; UI **Config → Loot** has an "Auto-detect league" toggle that dims
+  the manual `poe.ninja league` field and shows `detected: <league>` when on.
+- **Pending in-game verification:** with auto on, the league field should show the character's real
+  league (e.g. `detected: HC Runes of Aldur`), prices refetch on a league change, no manual entry.
 
 ## Reference
 

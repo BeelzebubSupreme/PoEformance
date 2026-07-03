@@ -58,6 +58,7 @@ LoadLootTracker()
     global g_ltEnabled, g_ltShowKills, g_ltHistorySize, g_ltMaxSessions, g_ltLeague
     global g_ltCacheTtlMin, g_ltCompactHeight, g_ltBarOpacity, g_ltBarOnRight
     global g_ltBarBottomOffset, g_ltUiScale, g_ltConfigFile
+    global g_ltAutoLeague, g_ltDetectedLeague
     global g_ltCurrent, g_ltCompleted, g_ltRunStartTick, g_ltBaseline, g_ltBaselinePending
     global g_ltLastZoneHash, g_ltSessionStartTick, g_ltSessionStartStamp, g_ltOnMap
     global g_ltLiveLegDelta, g_ltNextLiveSnapTick, g_ltNextViewTick, g_ltLastLivePushTick
@@ -73,6 +74,9 @@ LoadLootTracker()
     g_ltHistorySize     := 50
     g_ltMaxSessions     := 30
     g_ltLeague          := "Standard"
+    g_ltAutoLeague      := true    ; auto-detect the price league from ServerData (+0x21E0)
+    g_ltDetectedLeague  := ""      ; runtime: last league read from memory (not persisted)
+    global g_ltAutoLeagueNextTick := 0   ; throttle stamp for the auto-detect tick
     g_ltCacheTtlMin     := 60
     g_ltCompactHeight   := 115
     g_ltBarOpacity      := 0.55
@@ -119,6 +123,7 @@ LoadLootTracker()
         lg := IniRead(f, "LootTracker", "league", g_ltLeague)
         if (lg != "")
             g_ltLeague := lg
+        g_ltAutoLeague := IniRead(f, "LootTracker", "autoLeague", g_ltAutoLeague ? 1 : 0) + 0 ? true : false
     }
 }
 
@@ -127,10 +132,11 @@ SaveLootTrackerConfig()
 {
     global g_ltConfigFile, g_ltEnabled, g_ltShowKills, g_ltHistorySize, g_ltMaxSessions
     global g_ltLeague, g_ltCacheTtlMin, g_ltCompactHeight, g_ltBarOpacity, g_ltBarOnRight
-    global g_ltBarBottomOffset, g_ltUiScale
+    global g_ltBarBottomOffset, g_ltUiScale, g_ltAutoLeague
     f := g_ltConfigFile
     try
     {
+        IniWrite(g_ltAutoLeague ? 1 : 0, f, "LootTracker", "autoLeague")
         IniWrite(g_ltEnabled ? 1 : 0,    f, "LootTracker", "enabled")
         IniWrite(g_ltShowKills ? 1 : 0,  f, "LootTracker", "showKills")
         IniWrite(g_ltBarOnRight ? 1 : 0, f, "LootTracker", "barOnRight")
@@ -154,13 +160,68 @@ TryLootTrackerTick(radarSnap)
         return
     _running := true
     try
+    {
+        _LtAutoLeagueTick(radarSnap)   ; keep the price league in sync with the character's league
         _LtRunTick(radarSnap)
+    }
     catch as ex
     {
         try LogError("TryLootTrackerTick", ex)
     }
     finally
         _running := false
+}
+
+; Auto-detects the active league from ServerData (+0x21E0) and points the price
+; layers at it when "Auto-detect league" is on. Throttled ~15 s and acts only on a
+; CHANGE: it updates g_ltLeague (and the trade league in lock-step), persists, and
+; kicks a fresh poe.ninja refresh so prices always match the character's league
+; without manual entry. Cheap no-op when auto is off / not connected / unreadable.
+; Param: radarSnap. No return.
+_LtAutoLeagueTick(radarSnap)
+{
+    global g_ltAutoLeague, g_ltDetectedLeague, g_ltLeague, g_ltAutoLeagueNextTick, g_reader
+    if !(IsSet(g_ltAutoLeague) && g_ltAutoLeague)
+        return
+    now := A_TickCount
+    if (now < g_ltAutoLeagueNextTick)
+        return
+    g_ltAutoLeagueNextTick := now + 15000
+    if !(IsObject(g_reader) && IsObject(g_reader.Mem) && g_reader.Mem.Handle)
+        return
+    if !(radarSnap && Type(radarSnap) = "Map")
+        return
+    inGs := radarSnap.Has("inGameState") ? radarSnap["inGameState"] : 0
+    area := (inGs && IsObject(inGs) && inGs.Has("areaInstance")) ? inGs["areaInstance"] : 0
+    areaAddr := (area && IsObject(area) && area.Has("address")) ? area["address"] : 0
+    if !areaAddr
+        return
+
+    league := ""
+    try league := g_reader.ReadCurrentLeague(areaAddr)
+    if (league = "" || league = g_ltDetectedLeague)
+        return                       ; unreadable, or already handled this league
+    g_ltDetectedLeague := league
+    if (league = g_ltLeague)
+    {
+        SetTimer(PushHeaderToWebView, -50)   ; already correct — just surface it in the UI
+        return
+    }
+
+    ; League actually changed → repoint both price layers, persist, refetch.
+    global g_ltEnabled
+    g_ltLeague := league
+    global g_ltTradeLeague
+    if IsSet(g_ltTradeLeague)
+        g_ltTradeLeague := league
+    SetTimer(() => SaveLootTrackerConfig(), -100)
+    if IsSet(g_ltTradeLeague)
+        SetTimer(() => SaveLootTradePricing(), -120)
+    ; Only spawn the poe.ninja fetch when pricing is actually on (it's gated on
+    ; g_ltEnabled); otherwise just keep g_ltLeague current for when it's enabled.
+    if (IsSet(g_ltEnabled) && g_ltEnabled)
+        StartLootPriceRefresh()
+    SetTimer(PushHeaderToWebView, -50)
 }
 
 _LtRunTick(radarSnap)
@@ -641,7 +702,7 @@ BuildLootHeaderJson()
 {
     global g_ltEnabled, g_ltShowKills, g_ltHistorySize, g_ltMaxSessions, g_ltLeague
     global g_ltCacheTtlMin, g_ltCompactHeight, g_ltBarOpacity, g_ltBarOnRight
-    global g_ltBarBottomOffset, g_ltUiScale
+    global g_ltBarBottomOffset, g_ltUiScale, g_ltAutoLeague, g_ltDetectedLeague
     j := "{"
     j .= '"enabled":'         (g_ltEnabled ? "true" : "false")
     j .= ',"showKills":'      (g_ltShowKills ? "true" : "false")
@@ -654,6 +715,8 @@ BuildLootHeaderJson()
     j .= ',"barOpacity":'     _LtNum(g_ltBarOpacity)
     j .= ',"uiScale":'        _LtNum(g_ltUiScale)
     j .= ',"league":'         _JsStr(g_ltLeague)
+    j .= ',"autoLeague":'     (IsSet(g_ltAutoLeague) && g_ltAutoLeague ? "true" : "false")
+    j .= ',"detectedLeague":' _JsStr(IsSet(g_ltDetectedLeague) ? g_ltDetectedLeague : "")
     j .= "}"
     return j
 }
@@ -664,11 +727,16 @@ _LtApplySetting(key, value)
 {
     global g_ltEnabled, g_ltShowKills, g_ltHistorySize, g_ltMaxSessions, g_ltLeague
     global g_ltCacheTtlMin, g_ltCompactHeight, g_ltBarOpacity, g_ltBarOnRight
-    global g_ltBarBottomOffset, g_ltUiScale
+    global g_ltBarBottomOffset, g_ltUiScale, g_ltAutoLeague, g_ltAutoLeagueNextTick
 
     b := (value = true || value = 1 || value = "1" || value = "true")
     switch key
     {
+        case "autoLeague":
+            g_ltAutoLeague := b
+            if b
+                g_ltAutoLeagueNextTick := 0   ; force an immediate re-detect on the next tick
+            return false
         case "enabled":         g_ltEnabled := b
         case "showKills":       g_ltShowKills := b
         case "barOnRight":      g_ltBarOnRight := b

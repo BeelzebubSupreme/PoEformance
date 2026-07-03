@@ -4860,6 +4860,10 @@
                 <label class="toggle"><input type="checkbox" id="lt-showKills" onchange="lootChk('showKills',this)"><span class="toggle-slider"></span></label></div>
               <div class="cfg-row"><span class="cfg-label">Hide while a UI panel is open</span>
                 <label class="toggle"><input type="checkbox" id="tog-panel-hidelootbars" onchange="ahkCall('SetPanelRespect','loot', this.checked?1:0)"><span class="toggle-slider"></span></label></div>
+              <div class="cfg-row"><span class="cfg-label">Auto-detect league</span>
+                <label class="toggle"><input type="checkbox" id="lt-autoLeague" onchange="lootChk('autoLeague',this)"><span class="toggle-slider"></span></label>
+                <span id="lt-detected-league" style="margin-left:12px;font-size:11px;color:var(--subtext)"></span></div>
+              <div class="cfg-help">Reads the active league from the game (matches poe.ninja / poe2scout exactly, incl. the HC/SC prefix) and points the price layers at it automatically. Turn off to enter the league by hand.</div>
               <div class="cfg-row"><span class="cfg-label">poe.ninja league</span>
                 <input type="text" class="cfg-input" id="lt-league" placeholder="e.g. Standard" style="width:200px" onchange="lootStr('league',this)"></div>
               <div class="cfg-row"><span class="cfg-label">Price refresh (min)</span>
@@ -7490,7 +7494,17 @@
       const val = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
       chk('lt-enabled', s.enabled);
       chk('lt-showKills', s.showKills);
+      chk('lt-autoLeague', s.autoLeague);
       val('lt-league', s.league);
+      // When auto-detect is on, the league is driven from memory: dim the manual
+      // field and surface the detected league next to the toggle.
+      {
+        const auto = (s.autoLeague === true || s.autoLeague === 1 || s.autoLeague === '1' || s.autoLeague === 'true');
+        const inp = document.getElementById('lt-league');
+        if (inp) inp.disabled = auto;
+        const det = document.getElementById('lt-detected-league');
+        if (det) det.textContent = auto ? (s.detectedLeague ? ('detected: ' + s.detectedLeague) : 'detecting…') : '';
+      }
       val('lt-cacheTtlMin', s.cacheTtlMin);
       val('lt-historySize', s.historySize);
       val('lt-maxSessions', s.maxSessions);
