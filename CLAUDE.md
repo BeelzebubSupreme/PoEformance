@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.133`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.134`.
 
 ## Language
 
@@ -1124,6 +1124,13 @@ tile-path pattern → label, matched by SUBSTRING against the tile paths we alre
   Non-transition radius tightened 1200 → 1000 m to offset the looser match. Known residual risk: a
   boss/chest/POI within ~1000 m of an unrelated transition could mis-snap — revisit with a path-keyword
   gate (entrance/hole/passage/stairs/…) if it shows up in-game.
+- **Portal candidates = AreaTransition only (0.45.13.134):** with the looser different-path match, Lightless
+  Passage / Ardura Caravan snapped to the nearby **Checkpoint / Waypoint** instead of the real exit — those
+  are intra-zone features that often sit right beside a transition. A destination landmark is reached via an
+  AREA TRANSITION, so the portal-candidate filter tightened from any transition-type to
+  `pt["type"] = "AreaTransition"` (Waypoint / Checkpoint excluded). Bone Pits' portal
+  `AreaTransition_Animate` is still an AreaTransition (folder `AreaTransitions/` → the classifier matches),
+  so it keeps working.
 
 ## Reference
 

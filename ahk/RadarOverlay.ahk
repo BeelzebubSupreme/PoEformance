@@ -1165,9 +1165,12 @@ class RadarOverlay extends GdiOverlayBase
                     {
                         if (pi = li)
                             continue
-                        ptype := pt["type"]
-                        if !(ptype = "AreaTransition" || ptype = "Waypoint" || ptype = "Checkpoint")
-                            continue   ; a portal is a transition-type entry
+                        ; A destination landmark is reached via an AREA TRANSITION —
+                        ; NOT a Waypoint / Checkpoint (those are intra-zone features that
+                        ; often sit right next to an exit and would otherwise steal the
+                        ; snap). Only AreaTransition entries are portal candidates.
+                        if (pt["type"] != "AreaTransition")
+                            continue
                         ; The real portal has a DIFFERENT tile path than the curated
                         ; landmark (whose own gate/structure spans many SAME-path tiles);
                         ; that difference — not the `refined` flag — is what separates the
