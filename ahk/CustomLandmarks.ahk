@@ -23,9 +23,23 @@ LoadCustomLandmarks()
     global g_clmPaths := Map()         ; pathLower -> true  (cheap candidate pre-filter for the reader)
     global g_clmCount := 0             ; total pattern count (surfaced in the header)
     global g_clmShowPaths := false     ; draw a walkable A* path from the player to each landmark
+    global g_clmPathWidth := 2         ; path line width (px)
+    global g_clmPathMaxDist := 6000    ; skip landmarks farther than this (world units; A* too costly)
+    global g_clmPathToExits := true    ; draw routes to transition/exit landmarks
+    global g_clmPathToPois := true      ; draw routes to POI / boss / chest landmarks
+    global g_clmPathArrows := true     ; overlay direction chevrons along each route
 
     try g_clmEnabled := (IniRead(g_clmConfigFile, "CustomLandmarks", "enabled", g_clmEnabled ? "1" : "0") = "1")
     try g_clmShowPaths := (IniRead(g_clmConfigFile, "CustomLandmarks", "showPaths", g_clmShowPaths ? "1" : "0") = "1")
+    try g_clmPathWidth := Integer(IniRead(g_clmConfigFile, "CustomLandmarks", "pathWidth", g_clmPathWidth))
+    try g_clmPathMaxDist := Integer(IniRead(g_clmConfigFile, "CustomLandmarks", "pathMaxDist", g_clmPathMaxDist))
+    try g_clmPathToExits := (IniRead(g_clmConfigFile, "CustomLandmarks", "pathToExits", g_clmPathToExits ? "1" : "0") = "1")
+    try g_clmPathToPois := (IniRead(g_clmConfigFile, "CustomLandmarks", "pathToPois", g_clmPathToPois ? "1" : "0") = "1")
+    try g_clmPathArrows := (IniRead(g_clmConfigFile, "CustomLandmarks", "pathArrows", g_clmPathArrows ? "1" : "0") = "1")
+    if (g_clmPathWidth < 1)
+        g_clmPathWidth := 1
+    if (g_clmPathMaxDist < 500)
+        g_clmPathMaxDist := 500
     _ClmLoadData()
 }
 
@@ -147,31 +161,67 @@ CustomLandmarkPathsOn()
     return (IsSet(g_clmEnabled) && g_clmEnabled && IsSet(g_clmShowPaths) && g_clmShowPaths) ? true : false
 }
 
+; Bundles the landmark-path draw options for RadarOverlay.Render (which can't add
+; `global` lines). Returns Map(width, maxDist, toExits, toPois, arrows).
+CustomLandmarkPathOpts()
+{
+    global g_clmPathWidth, g_clmPathMaxDist, g_clmPathToExits, g_clmPathToPois, g_clmPathArrows
+    return Map(
+        "width",   (IsSet(g_clmPathWidth) ? g_clmPathWidth : 2),
+        "maxDist", (IsSet(g_clmPathMaxDist) ? g_clmPathMaxDist : 6000),
+        "toExits", (IsSet(g_clmPathToExits) ? g_clmPathToExits : true),
+        "toPois",  (IsSet(g_clmPathToPois) ? g_clmPathToPois : true),
+        "arrows",  (IsSet(g_clmPathArrows) ? g_clmPathArrows : true))
+}
+
 ; Applies one setting from the UI/bridge. No return.
 _ClmApplySetting(key, val)
 {
-    global g_clmEnabled, g_clmShowPaths
+    global g_clmEnabled, g_clmShowPaths, g_clmPathWidth, g_clmPathMaxDist
+    global g_clmPathToExits, g_clmPathToPois, g_clmPathArrows
     on := (val = true || val = 1 || val = "1" || val = "true")
     if (key = "enabled")
         g_clmEnabled := on
     else if (key = "showPaths")
         g_clmShowPaths := on
+    else if (key = "pathWidth")
+        g_clmPathWidth := Max(1, Integer(val))
+    else if (key = "pathMaxDist")
+        g_clmPathMaxDist := Max(500, Integer(val))
+    else if (key = "pathToExits")
+        g_clmPathToExits := on
+    else if (key = "pathToPois")
+        g_clmPathToPois := on
+    else if (key = "pathArrows")
+        g_clmPathArrows := on
 }
 
 ; Persists [CustomLandmarks].
 SaveCustomLandmarks()
 {
     global g_clmEnabled, g_clmShowPaths, g_clmConfigFile
+    global g_clmPathWidth, g_clmPathMaxDist, g_clmPathToExits, g_clmPathToPois, g_clmPathArrows
     try IniWrite(g_clmEnabled ? "1" : "0", g_clmConfigFile, "CustomLandmarks", "enabled")
     try IniWrite(g_clmShowPaths ? "1" : "0", g_clmConfigFile, "CustomLandmarks", "showPaths")
+    try IniWrite(g_clmPathWidth + 0, g_clmConfigFile, "CustomLandmarks", "pathWidth")
+    try IniWrite(g_clmPathMaxDist + 0, g_clmConfigFile, "CustomLandmarks", "pathMaxDist")
+    try IniWrite(g_clmPathToExits ? "1" : "0", g_clmConfigFile, "CustomLandmarks", "pathToExits")
+    try IniWrite(g_clmPathToPois ? "1" : "0", g_clmConfigFile, "CustomLandmarks", "pathToPois")
+    try IniWrite(g_clmPathArrows ? "1" : "0", g_clmConfigFile, "CustomLandmarks", "pathArrows")
 }
 
 ; Builds the header JSON object (settings) for the WebView push. Caller prepends the key.
 BuildCustomLandmarksHeaderJson()
 {
     global g_clmEnabled, g_clmShowPaths, g_clmCount
+    global g_clmPathWidth, g_clmPathMaxDist, g_clmPathToExits, g_clmPathToPois, g_clmPathArrows
     return '{"enabled":' ((IsSet(g_clmEnabled) && g_clmEnabled) ? "true" : "false")
         . ',"showPaths":' ((IsSet(g_clmShowPaths) && g_clmShowPaths) ? "true" : "false")
+        . ',"pathWidth":' ((IsSet(g_clmPathWidth) ? g_clmPathWidth : 2) + 0)
+        . ',"pathMaxDist":' ((IsSet(g_clmPathMaxDist) ? g_clmPathMaxDist : 6000) + 0)
+        . ',"pathToExits":' ((IsSet(g_clmPathToExits) && g_clmPathToExits) ? "true" : "false")
+        . ',"pathToPois":' ((IsSet(g_clmPathToPois) && g_clmPathToPois) ? "true" : "false")
+        . ',"pathArrows":' ((IsSet(g_clmPathArrows) && g_clmPathArrows) ? "true" : "false")
         . ',"count":' ((IsSet(g_clmCount) ? g_clmCount : 0) + 0) "}"
 }
 

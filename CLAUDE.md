@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.136`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.137`.
 
 ## Language
 
@@ -1149,6 +1149,16 @@ tile-path pattern → label, matched by SUBSTRING against the tile paths we alre
   costly), and the cached routes draw every frame as thin dim-amber polylines UNDER the gold nav / red
   combat paths. Wired via the existing `SetCustomLandmarks` bridge case (`_ClmApplySetting` key
   `showPaths`) + header + `customLandmarksSyncFromHeader`.
+- **Landmark-path options (0.45.13.137):** the path feature is now tunable — `[CustomLandmarks]`
+  `pathWidth` (px), `pathMaxDist` (world units, the range cap), `pathToExits` / `pathToPois` (an
+  exit-vs-POI filter), `pathArrows` (direction chevrons); all in `CustomLandmarkPathOpts()` (a Map read
+  once per frame by the overlay), the header, and UI sub-rows under the path toggle. Each route now gets
+  its OWN colour from `RadarOverlay.CLM_PATH_PALETTE` (cycled by draw index). The exit/POI split uses the
+  new `navPortal[idx]` flag (set when a landmark portal-snapped — those are exits; everything else is a
+  POI), recorded on each `lmDrawn` entry. Direction chevrons draw via `_DrawArrowHead(sx, sy, dx, dy, len,
+  colour, width)` (immediate 3-point Polyline ">" every ~14 path points, pointing player→landmark since
+  `FindPath` returns start→end). The A* recompute also re-runs when the exit/POI/range signature changes
+  (not just on the timer), so toggling an option updates immediately.
 
 ## Reference
 
