@@ -1543,18 +1543,19 @@ class PoE2EntityReader extends PoE2ComponentDecoders
             if cache.Has(tgtFilePtr)
             {
                 cached := cache[tgtFilePtr]
-                lmLabel := cached.Has("label") ? cached["label"] : ""
-                if (cached["type"] = "" && lmLabel = "")
-                    continue
                 entType := cached["type"]
                 tgtPath := cached["path"]
+                clmCand := cached["clmCand"]
+                ; Not a nav POI and this tile file can never carry a landmark → skip.
+                if (entType = "" && !clmCand)
+                    continue
             }
             else
             {
                 tgtPath := this.ReadStdWStringAt(tgtFilePtr + PoE2Offsets.TgtFile["TgtPath"], 260)
                 if (tgtPath = "")
                 {
-                    cache[tgtFilePtr] := Map("type", "", "path", "", "label", "")
+                    cache[tgtFilePtr] := Map("type", "", "path", "", "clmCand", false)
                     continue
                 }
 
@@ -1566,18 +1567,26 @@ class PoE2EntityReader extends PoE2ComponentDecoders
                     entType := "Waypoint"
                 else if InStr(pathLower, "checkpoint")
                     entType := "Checkpoint"
-                ; Curated landmark label (boss arena + reward, named POI, transition
-                ; destination). Kept ALONGSIDE entType so a labelled transition still
-                ; navigates. A pure landmark (entType="") is still kept via the label.
-                lmLabel := CustomLandmarkMatch(clmAreaCode, tgtPath)
-                cache[tgtFilePtr] := Map("type", entType, "path", tgtPath, "label", lmLabel)
-                if (entType = "" && lmLabel = "")
+                ; Could this tile FILE ever carry a curated landmark (any coordinate)?
+                ; The coordinate-exact match runs per instance below (needs the coords).
+                clmCand := CustomLandmarkPathCandidate(tgtPath)
+                cache[tgtFilePtr] := Map("type", entType, "path", tgtPath, "clmCand", clmCand)
+                if (entType = "" && !clmCand)
                     continue
             }
 
             rotSel  := NumGet(tileBatchBuf.Ptr, bufOff + offRotSel, "UChar")
             tileIdX := NumGet(tileBatchBuf.Ptr, bufOff + offTileIdX, "UChar")
             tileIdY := NumGet(tileBatchBuf.Ptr, bufOff + offTileIdY, "UChar")
+
+            ; Coordinate-exact curated landmark for THIS tile instance (only candidate
+            ; paths reach here). A boss arena / POI / transition is pinned to one sub-cell
+            ; (TileIdX/TileIdY), so a reused wall tile elsewhere no longer picks up the
+            ; label. Kept ALONGSIDE entType so a labelled transition still navigates.
+            lmLabel := clmCand ? CustomLandmarkMatch(clmAreaCode, tgtPath, tileIdX, tileIdY) : ""
+            if (entType = "" && lmLabel = "")
+                continue
+
             if (Mod(rotSel, 2) = 0)
                 tileKey := tgtPath "x:" tileIdX "-y:" tileIdY
             else
