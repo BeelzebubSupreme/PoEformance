@@ -151,7 +151,8 @@ class PoE2GameStateReader extends PoE2InventoryReader
 
         ; Zone navigation: continuous accumulation of important entities.
         ; Initial deep scan on area change, then harvests from regular scans each tick.
-        this._zoneScanAccumulated := Map()   ; path → Map(path, type, worldX/Y/Z, gridX/Y)
+        this._zoneScanAccumulated := Map()   ; key/path → Map(path, type, worldX/Y/Z, gridX/Y)
+        this._zoneScanUnrefinedByPath := Map()   ; path → [zoneScanAccumulated keys pending first refine]
         this._zoneScanAreaHash := 0xFFFFFFFF
         this._zoneScanDone := false   ; true once initial deep scan completed
         this._zoneScanEnabled := true    ; toggle from config
@@ -3225,6 +3226,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
             this._zoneScanScheduledAt := A_TickCount + 200
             this._zoneScanRetries := 0
             this._zoneScanAccumulated := Map()
+            this._zoneScanUnrefinedByPath := Map()
             this._zoneScanTimingMs := 0
             this._zoneScanStartedAt := A_TickCount
             this._zoneScanFailReason := ""
@@ -3323,7 +3325,10 @@ class PoE2GameStateReader extends PoE2InventoryReader
                         for key, ent in tgtResults
                         {
                             if !this._zoneScanAccumulated.Has(key)
+                            {
                                 this._zoneScanAccumulated[key] := ent
+                                this._ZoneScanQueueUnrefinedEntry(key, ent)
+                            }
                         }
                     }
                     this._zoneScanAreaHash := currentAreaHash
@@ -3613,21 +3618,34 @@ class PoE2GameStateReader extends PoE2InventoryReader
                         gridX := worldX / worldToGridRatio
                         gridY := worldY / worldToGridRatio
 
-                        ; Try to refine an existing TGT tile entry with precise render position
+                        ; Try to refine an existing TGT tile entry with precise render position.
+                        ; Uses the per-path queue built from deep-scan results instead of a full
+                        ; scan over _zoneScanAccumulated on every candidate entity.
                         refined := false
-                        for existingKey, existing in this._zoneScanAccumulated
+                        while this._zoneScanUnrefinedByPath.Has(path)
                         {
-                            if (InStr(existingKey, path) = 1 && !existing.Has("refined"))
+                            pathKeys := this._zoneScanUnrefinedByPath[path]
+                            if (pathKeys.Length = 0)
                             {
-                                existing["worldX"] := worldX
-                                existing["worldY"] := worldY
-                                existing["worldZ"] := worldZ
-                                existing["gridX"] := gridX
-                                existing["gridY"] := gridY
-                                existing["refined"] := true
-                                refined := true
+                                this._zoneScanUnrefinedByPath.Delete(path)
                                 break
                             }
+                            existingKey := pathKeys.Pop()
+                            if !this._zoneScanAccumulated.Has(existingKey)
+                                continue
+                            existing := this._zoneScanAccumulated[existingKey]
+                            if existing.Has("refined")
+                                continue
+                            existing["worldX"] := worldX
+                            existing["worldY"] := worldY
+                            existing["worldZ"] := worldZ
+                            existing["gridX"] := gridX
+                            existing["gridY"] := gridY
+                            existing["refined"] := true
+                            refined := true
+                            if (pathKeys.Length = 0)
+                                this._zoneScanUnrefinedByPath.Delete(path)
+                            break
                         }
 
                         ; If no TGT match, add as new entry (entity not in tile data)
@@ -3644,6 +3662,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
                                 "refined", true
                             )
                         }
+
                     }
                 }
             }
@@ -3736,6 +3755,21 @@ class PoE2GameStateReader extends PoE2InventoryReader
                 )
             )
         )
+    }
+
+    ; Records a deep-scan entry in the per-path "needs refine" queue so the
+    ; live-entity refinement pass can locate one unresolved tile in O(1)-ish
+    ; time instead of scanning every accumulated entry every tick.
+    _ZoneScanQueueUnrefinedEntry(key, ent)
+    {
+        if !(ent && Type(ent) = "Map")
+            return
+        path := ent.Has("path") ? ent["path"] : ""
+        if (path = "" || ent.Has("refined"))
+            return
+        if !this._zoneScanUnrefinedByPath.Has(path)
+            this._zoneScanUnrefinedByPath[path] := []
+        this._zoneScanUnrefinedByPath[path].Push(key)
     }
 
     ; Converts the accumulated zone scan Map to an Array for snapshot output.
