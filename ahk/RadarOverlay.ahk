@@ -657,11 +657,13 @@ class RadarOverlay extends GdiOverlayBase
         global g_uiBrowserHighlight
         if IsObject(g_uiBrowserHighlight)
         {
-            sf := gameWindowHeight / 1600.0
-            hx := Round(g_uiBrowserHighlight["x"] * sf)
-            hy := Round(g_uiBrowserHighlight["y"] * sf)
-            hw := Round(g_uiBrowserHighlight["w"] * sf)
-            hh := Round(g_uiBrowserHighlight["h"] * sf)
+            ; The highlight arrives in ABSOLUTE screen px (UiTree_ScreenRectOf,
+            ; scale-aware); the memDC is window-local → shift by the overlay
+            ; window origin (_lastX/_lastY = this frame's Layout position).
+            hx := Round(g_uiBrowserHighlight["x"] - this._lastX)
+            hy := Round(g_uiBrowserHighlight["y"] - this._lastY)
+            hw := Round(g_uiBrowserHighlight["w"])
+            hh := Round(g_uiBrowserHighlight["h"])
             if (hw > 4 && hh > 4 && hx < gameWindowWidth && hy < gameWindowHeight)
                 this._DrawRect(hx, hy, hw, hh, 0x0000FF, 3)
         }

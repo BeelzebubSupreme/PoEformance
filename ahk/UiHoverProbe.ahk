@@ -30,29 +30,26 @@ UiHoverProbeRun()
         return
     }
 
-    ; Cursor in screen px, converted to UI-space (the space UiTree_GetScreenPos / the
-    ; tree geometry use): uiPos = (screenPx - clientOrigin) / hScale, hScale = clientH/1600.
+    ; Cursor in screen px; the hit test itself is scale-aware (UiTree_HitTest
+    ; converts per element via ScaleIndex/LocalScaleMultiplier + cull).
     CoordMode("Mouse", "Screen")
     MouseGetPos(&mx, &my)
     gameHwnd := ResolvePoEWindow()
-    cr := gameHwnd ? NavClientRect(gameHwnd) : 0
-    if !IsObject(cr)
+    sc := gameHwnd ? UiTree_ScaleCtx(reader, gameHwnd) : 0
+    if !IsObject(sc)
     {
         try MsgBox("Could not resolve the PoE window client rect.", "UIHover Probe", "Iconx")
         return
     }
-    hScale := (cr["h"] > 0) ? (cr["h"] / 1600.0) : 1.0
-    uiCx := (mx - cr["x"]) / hScale
-    uiCy := (my - cr["y"]) / hScale
 
     ; Deterministic descent: deepest visible element under the cursor.
-    path := UiTree_HitTest(reader, root, uiCx, uiCy)
+    path := UiTree_HitTest(reader, root, mx, my, sc)
 
     nl := "`r`n"
     rpt := "=== UIHover tree-descent probe ===" nl
-    rpt .= "Cursor screen=" mx "," my "   UI-space=" Round(uiCx) "," Round(uiCy)
-        . "   clientRect=" cr["x"] "," cr["y"] " " cr["w"] "x" cr["h"]
-        . "   hScale=" Round(hScale, 4) nl
+    rpt .= "Cursor screen=" mx "," my
+        . "   clientRect=" sc["x"] "," sc["y"] " " sc["w"] "x" sc["h"]
+        . "   v1=" Round(sc["v1"], 4) " v2=" Round(sc["v2"], 4) " cull=" sc["cull"] nl
     rpt .= "GameUI root=0x" Format("{:X}", root) "   descent depth=" path.Length nl nl
 
     if (path.Length <= 1)

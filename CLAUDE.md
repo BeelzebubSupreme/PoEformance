@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.140`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.141`.
 
 ## Language
 
@@ -1197,6 +1197,44 @@ tile-path pattern → label, matched by SUBSTRING against the tile paths we alre
   the `CustomLandmarkDiag` / `CustomLandmarkPosProbe` bridge cases, and the `CustomLandmarkDiagnose` /
   `CustomLandmarkPosProbe` functions in `CustomLandmarks.ahk` (the landmark position bug they helped solve
   is fixed).
+
+## Scale-aware UI→screen conversion (shipped 0.45.13.141) — fixes the "slight offset" on all UI rects/labels
+
+Every UI-rect consumer (UI-browser highlight, hover-price badge, ritual badges, loot-label
+clear/click, stash-mover grid) converted UI coords with ONE global scale (`clientH/1600` on
+both axes, no cull, no per-element multiplier) — a systematic slight offset on everything.
+The C# reference (GameHelper2 `UiElementBase.GetUnScaledPosition` + `GameWindowScale` +
+`GameCull`) does three things we didn't:
+
+- **Per-element scale conversion in the parent chain:** each UiElement carries `ScaleIndex`
+  (0x18A) + `LocalScaleMultiplier` (0x130); when parent and child differ, the accumulated
+  position converts between their scale spaces (`parentPos * parentScale / childScale`, per axis).
+- **Per-axis final scale:** `v1 = (clientW − 2·cull)/2560` (width), `v2 = clientH/1600`
+  (height); ScaleIndex picks the pair (1→v1/v1, 2→v2/v2, 3→v1/v2, else 1/1) × localMult.
+- **Cull + client rect:** screen X shifts by `+cull` (the letterbox bar width, an int at the
+  `GameCullSize` static address — our pattern scanner already found it, nobody read it) and the
+  origin is the CLIENT area (GetClientRect), never WinGetPos.
+
+Implementation (`ahk/UiTreeBrowser.ahk`): `UiTree_ScaleCtx(reader, hwnd)` (client rect + cull
++ v1/v2, one cheap ReadInt; cull sanity-clamped to 0), `_UiScalePair(idx, mult, sc)`,
+`UiTree_GetScreenPos(reader, elem, sc:=0)` (faithful GetUnScaledPosition port; now also returns
+the leaf's `scaleIndex`/`localMult`; degrades to the old plain sum without a window),
+`UiTree_ScreenRectOf(reader, elem, sc:=0, sizeW:="", sizeH:="")` (absolute screen-px rect =
+leaf pos × own pair + cull + client origin), and a scale-aware `UiTree_HitTest(reader, root,
+px, py, sc:=0)` — SIGNATURE CHANGE: takes absolute screen px now, not pre-divided UI coords.
+Consumers switched to `UiTree_ScreenRectOf`: `UiHoverPrice` (+ hit test in px),
+`RitualValueBadges`, `LootLabelClear` (abs px − window origin for the overlay-local rects),
+`LootPickup._LootFindLabelNear`, `StashMover._SmInventoryGridRect` (manual offsets kept on
+top), `UiBrowserHandler` (props now client-local px + cull; per-element localMult respected).
+`g_uiBrowserHighlight` now stores ABSOLUTE screen px; `RadarOverlay._FinishFrame` shifts it by
+the overlay window origin (`this._lastX/_lastY`) instead of re-scaling with the WINDOW height.
+On a 16:10 window with cull 0 and uniform scale chains the new math reduces exactly to the old
+formula — differences appear only where the old math was wrong (mixed scale spaces, non-16:10
+aspects, windowed mode, localMult ≠ 1).
+**Pending in-game verification:** UI-browser highlight sits exactly on the selected element
+(e.g. Guild Stash), hover-price/ritual badges pixel-exact on their cells, loot-label click
+accuracy, stash-mover button/grid anchor (existing offsetX/offsetY calibrations may now
+double-correct — re-zero them if the grid is offset the other way).
 
 ## Reference
 

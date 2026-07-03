@@ -7,9 +7,8 @@
 ; Data sources (all already reverse-engineered elsewhere in the project):
 ;   - Backpack items + their grid cells  -> ReadAllPlayerInventories (id == 1).
 ;   - Inventory grid screen rectangle    -> UI tree element "InventoryPanel"
-;     (UiTree_GetScreenPos + UnscaledSize), converted to absolute screen pixels
-;     with NavClientRect, mirroring the conversion in UiBrowserHandler
-;     (screenPx = clientOrigin + uiPos * clientHeight/1600).
+;     (UiTree_ScreenRectOf: per-element ScaleIndex/LocalScaleMultiplier scale
+;     chain + cull + client origin — the shared scale-aware conversion).
 ;
 ; Safety / quality of life:
 ;   - Ignore filter: a user-built set of item base-type paths that are never
@@ -681,8 +680,8 @@ _SmFindGridIn(reader, panel)
 
 ; Resolves the backpack GRID's ABSOLUTE screen rectangle in pixels, or 0 when the
 ; inventory isn't open. Finds the inventory side panel, then the 12×5 grid inside
-; it. The UI→pixel conversion mirrors the (working) UI-browser highlight:
-; screenPx = uiPos * (clientHeight / 1600), origin = client-area top-left; plus the
+; it. The UI→pixel conversion is the shared scale-aware UiTree_ScreenRectOf
+; (per-element ScaleIndex/LocalScaleMultiplier + cull + client origin); plus the
 ; manual offsetX/offsetY fine-tune (passed in — the stash and sell sides each carry
 ; their own calibration even though it's the same physical grid).
 _SmInventoryGridRect(offX := 0, offY := 0)
@@ -702,16 +701,15 @@ _SmInventoryGridRect(offX := 0, offY := 0)
     elem := UiTree_ReadElement(g_reader, grid)
     if !elem
         return 0
-    sp := UiTree_GetScreenPos(g_reader, grid)
     gameHwnd := ResolvePoEWindow()
-    cr := gameHwnd ? NavClientRect(gameHwnd) : 0
-    if !IsObject(cr)
+    sc := gameHwnd ? UiTree_ScaleCtx(g_reader, gameHwnd) : 0
+    if !IsObject(sc)
         return 0
-    hScale := (cr["h"] > 0) ? (cr["h"] / 1600.0) : 1.0
-    x := cr["x"] + sp["x"] * hScale + offX
-    y := cr["y"] + sp["y"] * hScale + offY
-    w := elem["sizeW"] * hScale
-    h := elem["sizeH"] * hScale
+    r := UiTree_ScreenRectOf(g_reader, grid, sc, elem["sizeW"], elem["sizeH"])
+    x := r["x"] + offX
+    y := r["y"] + offY
+    w := r["w"]
+    h := r["h"]
     if (w < 20 || h < 20)
         return 0
     return Map("x", x, "y", y, "w", w, "h", h)

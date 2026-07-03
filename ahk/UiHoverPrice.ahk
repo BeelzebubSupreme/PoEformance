@@ -185,14 +185,11 @@ _UhpResolveHoveredItem(reader)
     CoordMode("Mouse", "Screen")
     MouseGetPos(&mx, &my)
     gameHwnd := ResolvePoEWindow()
-    cr := gameHwnd ? NavClientRect(gameHwnd) : 0
-    if !IsObject(cr)
+    sc := gameHwnd ? UiTree_ScaleCtx(reader, gameHwnd) : 0
+    if !IsObject(sc)
         return 0
-    hScale := (cr["h"] > 0) ? (cr["h"] / 1600.0) : 1.0
-    uiCx := (mx - cr["x"]) / hScale
-    uiCy := (my - cr["y"]) / hScale
 
-    chain := UiTree_HitTest(reader, root, uiCx, uiCy)
+    chain := UiTree_HitTest(reader, root, mx, my, sc)
     if !(IsObject(chain) && chain.Length > 1)
         return 0
 
@@ -221,14 +218,12 @@ _UhpResolveHoveredItem(reader)
         try rarityId := reader.ReadItemRarity(ip)
         stack := _UhpStackCount(reader, ip)
 
-        el := UiTree_ReadElement(reader, slotAddr)
-        sp := UiTree_GetScreenPos(reader, slotAddr)
-        if !(IsObject(el) && IsObject(sp))
+        r := UiTree_ScreenRectOf(reader, slotAddr, sc)
+        if !IsObject(r)
             return 0
         return Map(
             "ptr", ip, "path", p, "rarity", rarityId, "stack", stack,
-            "sx", cr["x"] + sp["x"] * hScale, "sy", cr["y"] + sp["y"] * hScale,
-            "sw", el["sizeW"] * hScale, "sh", el["sizeH"] * hScale)
+            "sx", r["x"], "sy", r["y"], "sw", r["w"], "sh", r["h"])
     }
     return 0
 }
