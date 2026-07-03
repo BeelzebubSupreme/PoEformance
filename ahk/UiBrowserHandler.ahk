@@ -5,6 +5,7 @@ global g_uiBrowserCurrentPtr := 0
 global g_uiBrowserHistory := []
 global g_uiBrowserRootPtr := 0
 global g_uiBrowserHighlight := 0   ; Map(x,y,w,h) in ABSOLUTE screen px, or 0 when inactive
+global g_uiBrowserHoverHighlight := 0   ; blue mouse-over rect (children list), same format
 
 ; Formats a float for JSON — always uses "." regardless of Windows locale.
 _UibF(n, decimals := 2)
@@ -460,8 +461,28 @@ PushUiBrowserState()
 ; Clears the UI Browser overlay highlight (call when leaving the UI tab).
 UiBrowserClearHighlight()
 {
-    global g_uiBrowserHighlight
+    global g_uiBrowserHighlight, g_uiBrowserHoverHighlight
     g_uiBrowserHighlight := 0
+    g_uiBrowserHoverHighlight := 0
+}
+
+; Sets/clears the BLUE mouse-over highlight rect for the UI Browser children
+; list. ptrStr: hex address string of the hovered element ("" / invalid clears).
+; Computes the absolute screen-px rect once via UiTree_ScreenRectOf; the
+; overlay just draws whatever is cached here. Bridge case: UiBrowseHover.
+UiBrowserHoverHighlight(ptrStr)
+{
+    global g_uiBrowserHoverHighlight, g_reader
+    ptr := 0
+    try ptr := Integer(ptrStr)
+    if !(ptr && IsObject(g_reader) && g_reader.IsProbablyValidPointer(ptr))
+    {
+        g_uiBrowserHoverHighlight := 0
+        return
+    }
+    r := 0
+    try r := UiTree_ScreenRectOf(g_reader, ptr)
+    g_uiBrowserHoverHighlight := IsObject(r) ? r : 0
 }
 
 ; RE aid: dumps every readable wide-string field of the currently-selected UI

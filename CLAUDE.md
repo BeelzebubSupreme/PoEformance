@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.142`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.143`.
 
 ## Language
 
@@ -1258,6 +1258,16 @@ double-correct — re-zero them if the grid is offset the other way).
   (`ui_scale_test.ahk`), validated: uniform 16:10 ≡ old math, 16:9 + client offset, mixed
   scale-space conversion, real cull (+128), poisoned cull (700 → rejected), garbage
   index/mult leaf (→ uniform behavior), partial-chain + uniform retry.
+- **UI Browser hover highlight (0.45.13.143):** hovering a node in the CHILDREN list (and in
+  the search-results list) draws a BLUE rect (BGR `0xFF0000`) on that element's live screen
+  rect, alongside the red selection rect. `ui/index.html`: `onmouseenter`/`onmouseleave` on
+  `.uib-child-row` + `.uib-sr-row` → `ahkCall('UiBrowseHover', ptr)` ('' clears; the static
+  `#uib-children-list` also clears on `onmouseleave` as a safety net against re-renders).
+  `BridgeDispatch` case `UiBrowseHover` → `UiBrowserHoverHighlight(hex)`
+  (`UiBrowserHandler.ahk`): resolves the ptr, caches the ABSOLUTE screen-px rect
+  (`UiTree_ScreenRectOf`) in `g_uiBrowserHoverHighlight` (0 clears; also cleared by
+  `UiBrowserClearHighlight`). `OverlayManager` counts the hover rect toward
+  `ctx.inspectOverride`; `RadarOverlay._FinishFrame` draws it after the red rect.
 
 ## Reference
 

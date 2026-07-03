@@ -4975,7 +4975,7 @@
       <div id="uib-body">
         <div id="uib-children-panel">
           <div class="uib-panel-hdr">Children</div>
-          <div id="uib-children-list">
+          <div id="uib-children-list" onmouseleave="ahkCall('UiBrowseHover','')">
             <div class="uib-empty">Select "⌂ Root" to start.</div>
           </div>
         </div>
@@ -11305,7 +11305,8 @@
           const sid = c.stringId || '';
           const label = sid ? escHtml(sid) : `<span class="no-id">[${c.idx}]</span>`;
           const ccTxt = c.childCount > 0 ? `<span class="uib-child-cc">${c.childCount}▸</span>` : '';
-          return `<div class="uib-child-row" onclick="ahkCall('UiBrowseChild',${c.idx})" data-tip="${escAttr(c.ptr)}">
+          return `<div class="uib-child-row" onclick="ahkCall('UiBrowseChild',${c.idx})" data-tip="${escAttr(c.ptr)}"
+                onmouseenter="ahkCall('UiBrowseHover','${escAttr(c.ptr)}')" onmouseleave="ahkCall('UiBrowseHover','')">
                 <span class="uib-child-idx">[${c.idx}]</span>
                 <span class="uib-child-vis ${c.isVisible ? 'visible' : 'hidden'}"></span>
                 <span class="uib-child-sid">${label}</span>
@@ -11426,7 +11427,8 @@
       document.getElementById('uib-search-results-list').innerHTML = results.length === 0
         ? `<div class="uib-empty">No matches for "${escHtml(query)}"</div>`
         : results.map(r =>
-          `<div class="uib-sr-row" onclick="ahkCall('UiBrowseAddress','${escAttr(r.ptr)}')" data-tip="${escAttr(r.ptr)}">
+          `<div class="uib-sr-row" onclick="ahkCall('UiBrowseAddress','${escAttr(r.ptr)}')" data-tip="${escAttr(r.ptr)}"
+            onmouseenter="ahkCall('UiBrowseHover','${escAttr(r.ptr)}')" onmouseleave="ahkCall('UiBrowseHover','')">
            <span class="uib-child-vis ${r.isVisible ? 'visible' : 'hidden'}"></span>
            <span style="flex:1;font-size:11px">${escHtml(r.stringId)}</span>
            <span style="font-size:10px;color:var(--subtext)">${escHtml(r.ptr)}</span>
