@@ -43,13 +43,17 @@ UiHoverProbeRun()
     }
 
     ; Deterministic descent: deepest visible element under the cursor.
+    ; NOTE: the hit test may flip sc["uniform"] (self-healing legacy retry) —
+    ; every report line below reuses this SAME sc so the printed positions stay
+    ; consistent with the geometry the hit was actually found with.
     path := UiTree_HitTest(reader, root, mx, my, sc)
 
     nl := "`r`n"
     rpt := "=== UIHover tree-descent probe ===" nl
     rpt .= "Cursor screen=" mx "," my
         . "   clientRect=" sc["x"] "," sc["y"] " " sc["w"] "x" sc["h"]
-        . "   v1=" Round(sc["v1"], 4) " v2=" Round(sc["v2"], 4) " cull=" sc["cull"] nl
+        . "   v1=" Round(sc["v1"], 4) " v2=" Round(sc["v2"], 4) " cull=" sc["cull"]
+        . "   scaleMode=" ((sc.Has("uniform") && sc["uniform"]) ? "UNIFORM (legacy fallback)" : "per-element") nl
     rpt .= "GameUI root=0x" Format("{:X}", root) "   descent depth=" path.Length nl nl
 
     if (path.Length <= 1)
@@ -61,7 +65,7 @@ UiHoverProbeRun()
     {
         rpt .= "--- DESCENT CHAIN (root -> leaf; the LAST line is the hovered element) ---" nl
         for i, addr in path
-            rpt .= "  [" (i - 1) "] " _UiHoverChainLine(reader, addr) nl
+            rpt .= "  [" (i - 1) "] " _UiHoverChainLine(reader, addr, sc) nl
     }
 
     leaf := path.Length ? path[path.Length] : 0
@@ -108,14 +112,14 @@ UiHoverProbeRun()
     summary := "UIHover probe done — log " writeMsg ":" nl path_log nl nl
     if (leaf)
     {
-        summary .= "Hovered (leaf) element:" nl "  " _UiHoverChainLine(reader, leaf) nl nl
+        summary .= "Hovered (leaf) element:" nl "  " _UiHoverChainLine(reader, leaf, sc) nl nl
         summary .= (foundItem != "" ? ("Resolved item (+0x4F8):" nl "  " foundItem nl nl)
             : ("No item at +0x4F8 on the chain (see log)." nl nl))
         if (path.Length > 1)
         {
             summary .= "Descent chain (" path.Length " levels):" nl
             for i, addr in path
-                summary .= "  [" (i - 1) "] " _UiHoverChainLine(reader, addr) nl
+                summary .= "  [" (i - 1) "] " _UiHoverChainLine(reader, addr, sc) nl
         }
     }
     else
@@ -149,11 +153,13 @@ _UiHoverItemAt(reader, addr)
 }
 
 ; Formats one descent-chain element line (full UiTree read for stringId/text/size + the
-; canonical absolute UI-space position) for the report. Params: reader, addr.
-_UiHoverChainLine(reader, addr)
+; canonical absolute UI-space position) for the report. Params: reader, addr, sc —
+; the SAME scale ctx the hit test ran with (it may carry the uniform-fallback flag),
+; so the printed positions match the hit-tested geometry; optional (built on demand).
+_UiHoverChainLine(reader, addr, sc := 0)
 {
     el := UiTree_ReadElement(reader, addr)
-    sp := UiTree_GetScreenPos(reader, addr)
+    sp := UiTree_GetScreenPos(reader, addr, sc)
     id := (IsObject(el) && el["stringId"] != "") ? el["stringId"] : "-"
     txt := IsObject(el) ? StrReplace(StrReplace(SubStr(el["text"], 1, 40), "`r", " "), "`n", " ") : ""
     w := IsObject(el) ? el["sizeW"] : 0

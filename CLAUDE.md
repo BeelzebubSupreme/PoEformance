@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.145`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.146`.
 
 ## Language
 
@@ -1254,7 +1254,10 @@ double-correct — re-zero them if the grid is offset the other way).
   root-level fallback can't see); scan extracted into `_UhpScanChainForItem`. The
   UIHover probe (`Ctrl+Alt+Shift+H`) now prints per-chain-element `scIdx`/`lMult` and the
   ctx `v1/v2/cull` — capture it over an inventory item to see the REAL memory values if
-  anything still misbehaves. Offline harness lives in the session scratchpad
+  anything still misbehaves. (0.45.13.146: the probe threads its ONE scale ctx through every
+  report line — `_UiHoverChainLine(reader, addr, sc)` — and prints the `scaleMode`, so when
+  the hit test flips the uniform fallback the printed positions match the hit geometry.)
+  Offline harness lives in the session scratchpad
   (`ui_scale_test.ahk`), validated: uniform 16:10 ≡ old math, 16:9 + client offset, mixed
   scale-space conversion, real cull (+128), poisoned cull (700 → rejected), garbage
   index/mult leaf (→ uniform behavior), partial-chain + uniform retry.
