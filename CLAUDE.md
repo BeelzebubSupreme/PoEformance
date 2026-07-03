@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.132`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.133`.
 
 ## Language
 
@@ -1114,6 +1114,16 @@ tile-path pattern → label, matched by SUBSTRING against the tile paths we alre
   still-unplaced labelled landmark that fails `IsWalkable`. `target["gridX"]/gridY` are already
   walkable-grid cell coords (both = `worldX / WORLD_TO_GRID_RATIO`), so no conversion is needed. Gated on
   `_pathfinder.HasTerrain()`; landmarks already on walkable ground are left untouched.
+- **Portal match by DIFFERENT-PATH, not `refined` (0.45.13.133):** "Lightless Passage" (on tile
+  `AbyssHole`) still didn't snap — the `refined`-flag requirement was wrong: the real portal
+  `LightlessPassageTransition` either isn't a refined entity, or the `AbyssHole` tile itself got refined
+  to the hole feature (559 m) not the portal (89 m). The robust distinguisher between the clickable portal
+  and the landmark's own gate/structure tiles is that the portal has a DIFFERENT tile path (a gate spans
+  many SAME-path tiles), so the snap now matches "nearest transition-type entry whose `path` differs from
+  the curated tile's path" and dropped the `refined` gate + the "skip already-refined landmark" guard.
+  Non-transition radius tightened 1200 → 1000 m to offset the looser match. Known residual risk: a
+  boss/chest/POI within ~1000 m of an unrelated transition could mis-snap — revisit with a path-keyword
+  gate (entrance/hole/passage/stairs/…) if it shows up in-game.
 
 ## Reference
 
