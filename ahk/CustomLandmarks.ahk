@@ -22,8 +22,10 @@ LoadCustomLandmarks()
     global g_clmPathOnly := Map()      ; areaCodeLower -> Map(pathLower -> label)  (rare coordless keys)
     global g_clmPaths := Map()         ; pathLower -> true  (cheap candidate pre-filter for the reader)
     global g_clmCount := 0             ; total pattern count (surfaced in the header)
+    global g_clmShowPaths := false     ; draw a walkable A* path from the player to each landmark
 
     try g_clmEnabled := (IniRead(g_clmConfigFile, "CustomLandmarks", "enabled", g_clmEnabled ? "1" : "0") = "1")
+    try g_clmShowPaths := (IniRead(g_clmConfigFile, "CustomLandmarks", "showPaths", g_clmShowPaths ? "1" : "0") = "1")
     _ClmLoadData()
 }
 
@@ -137,26 +139,39 @@ CustomLandmarksOn()
     return (IsSet(g_clmEnabled) && g_clmEnabled) ? true : false
 }
 
+; True when a walkable path to each landmark should be drawn. Cheap accessor for
+; RadarOverlay.Render (same rationale as CustomLandmarksOn).
+CustomLandmarkPathsOn()
+{
+    global g_clmEnabled, g_clmShowPaths
+    return (IsSet(g_clmEnabled) && g_clmEnabled && IsSet(g_clmShowPaths) && g_clmShowPaths) ? true : false
+}
+
 ; Applies one setting from the UI/bridge. No return.
 _ClmApplySetting(key, val)
 {
-    global g_clmEnabled
+    global g_clmEnabled, g_clmShowPaths
+    on := (val = true || val = 1 || val = "1" || val = "true")
     if (key = "enabled")
-        g_clmEnabled := (val = true || val = 1 || val = "1" || val = "true")
+        g_clmEnabled := on
+    else if (key = "showPaths")
+        g_clmShowPaths := on
 }
 
 ; Persists [CustomLandmarks].
 SaveCustomLandmarks()
 {
-    global g_clmEnabled, g_clmConfigFile
+    global g_clmEnabled, g_clmShowPaths, g_clmConfigFile
     try IniWrite(g_clmEnabled ? "1" : "0", g_clmConfigFile, "CustomLandmarks", "enabled")
+    try IniWrite(g_clmShowPaths ? "1" : "0", g_clmConfigFile, "CustomLandmarks", "showPaths")
 }
 
 ; Builds the header JSON object (settings) for the WebView push. Caller prepends the key.
 BuildCustomLandmarksHeaderJson()
 {
-    global g_clmEnabled, g_clmCount
+    global g_clmEnabled, g_clmShowPaths, g_clmCount
     return '{"enabled":' ((IsSet(g_clmEnabled) && g_clmEnabled) ? "true" : "false")
+        . ',"showPaths":' ((IsSet(g_clmShowPaths) && g_clmShowPaths) ? "true" : "false")
         . ',"count":' ((IsSet(g_clmCount) ? g_clmCount : 0) + 0) "}"
 }
 

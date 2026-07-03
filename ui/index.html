@@ -5862,6 +5862,10 @@
                 <label class="toggle"><input type="checkbox" id="clm-enabled"
                     onchange="ahkCall('SetCustomLandmarks','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
               </div>
+              <div class="cfg-row"><span class="cfg-label">Draw a walkable path to each landmark</span>
+                <label class="toggle"><input type="checkbox" id="clm-showPaths"
+                    onchange="ahkCall('SetCustomLandmarks','showPaths', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
               <div class="cfg-row">
                 <span class="cfg-label">Wrong label position? Dump the matched landmarks + coords</span>
                 <button type="button" class="cfg-btn" onclick="ahkCall('CustomLandmarkDiag')">🔍 Diagnose positions</button>
@@ -7658,6 +7662,8 @@
       if (!s) return;
       const e = document.getElementById('clm-enabled');
       if (e) e.checked = s.enabled === true || s.enabled === 1 || s.enabled === '1' || s.enabled === 'true';
+      const sp = document.getElementById('clm-showPaths');
+      if (sp) sp.checked = s.showPaths === true || s.showPaths === 1 || s.showPaths === '1' || s.showPaths === 'true';
       const c = document.getElementById('clm-count');
       if (c) c.textContent = (s.count > 0) ? (s.count + ' labels loaded.') : '';
     }
