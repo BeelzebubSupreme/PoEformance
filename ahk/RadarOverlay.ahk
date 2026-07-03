@@ -1143,22 +1143,34 @@ class RadarOverlay extends GdiOverlayBase
             navClaimed := Map()
             if (clmOn)
             {
-                snapRadiusSq := 276.0 * 276.0   ; ~3000 world units, in grid units
+                ; Radius (world units) → grid² threshold. Transition-TYPE curated tiles
+                ; pin to a big gate structure (large offset like Bone Pits ~1350) → a
+                ; generous radius. Other curated tiles (entrance/passage Landmarks like
+                ; Ardura Caravan / Lightless Passage) only snap to a CLOSE portal so real
+                ; POIs / bosses that aren't at an exit (e.g. a Memorial) stay on their
+                ; own tile — they simply have no portal within the small radius.
+                ratio := RadarOverlay.WORLD_TO_GRID_RATIO
+                radTransSq := (3000.0 / ratio) * (3000.0 / ratio)
+                radOtherSq := (1200.0 / ratio) * (1200.0 / ratio)
                 for li, lt in this._navTargets
                 {
                     llabel := lt.Has("label") ? lt["label"] : ""
-                    ltype := lt["type"]
-                    if (llabel = "" || !(ltype = "AreaTransition" || ltype = "Waypoint" || ltype = "Checkpoint"))
+                    if (llabel = "")
                         continue
                     if (lt.Has("refined") && lt["refined"])
                         continue   ; already anchored on a live entity — no snap needed
-                    bestPi := -1, bestPd := snapRadiusSq
+                    ltype := lt["type"]
+                    isTransType := (ltype = "AreaTransition" || ltype = "Waypoint" || ltype = "Checkpoint")
+                    bestPi := -1, bestPd := (isTransType ? radTransSq : radOtherSq)
                     for pi, pt in this._navTargets
                     {
-                        if (pi = li || pt["type"] != ltype)
+                        if (pi = li)
                             continue
+                        ptype := pt["type"]
+                        if !(ptype = "AreaTransition" || ptype = "Waypoint" || ptype = "Checkpoint")
+                            continue   ; portals are transition-type entities
                         if !(pt.Has("refined") && pt["refined"])
-                            continue   ; only actual portals (refined entities)
+                            continue   ; only actual (live) portals, not raw structure tiles
                         pdx := pt["gridX"] - lt["gridX"]
                         pdy := pt["gridY"] - lt["gridY"]
                         pd := pdx * pdx + pdy * pdy
