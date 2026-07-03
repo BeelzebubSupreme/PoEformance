@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.127`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.128`.
 
 ## Language
 
@@ -1060,8 +1060,26 @@ tile-path pattern → label, matched by SUBSTRING against the tile paths we alre
   position was never validated. Pure-terrain landmarks (and un-refined far transitions) rely on it.
   `CustomLandmarkDiagnose()` (bridge `CustomLandmarkDiag`, UI "🔍 Diagnose positions" in the Custom
   Landmarks box) dumps every matched landmark's label + tile coords + computed world pos + `refined`
-  flag + distance from the player to `debug\custom_landmarks_diag_*.txt`, to confirm whether the fix is
-  a corrected grid formula or attaching the label to the refined entity position. Pending owner run.
+  flag + distance from the player to `debug\custom_landmarks_diag_*.txt`.
+- **`CustomLandmarkPosProbe()` (0.45.13.127, RE aid):** deep probe (bridge `CustomLandmarkPosProbe`, UI
+  "🧭 Probe tile positions") that re-walks the raw terrain tile vector and dumps every landmark-candidate
+  tile occurrence with array index, row-major world pos, sub-cell + rotation, distance, and a `SubTileDetailsPtr`
+  int/float dump. It proved the row-major formula is CORRECT: the `AreaTransition_BadlandsToPits`
+  (Bone Pits) tiles sit at world ~(12750, 2250-3750), d≈300-2600 (right next to the player), while the
+  diagnostic's `zoneScanResults` reported them at ~(750, 0), d≈12700 — so the SCAN was corrupting the
+  position, not the formula.
+- **FIXED — AHK case-insensitive variable collision (0.45.13.128):** the root cause. In
+  `PoE2EntityReader._ProcessTgtScanBatch` the tile-array loop index was named `tileIdx` and the tile's
+  sub-cell byte (read from the struct) was named `tileIdX`. **AHK v2 variable names are CASE-INSENSITIVE**,
+  so `tileIdx` and `tileIdX` are the SAME variable — the sub-cell read (`tileIdX := NumGet(...)`, value
+  0-14) CLOBBERED the loop index, and the position line `gridX := Mod(tileIdx, totalTilesX) * 0x17` then
+  computed from the sub-cell instead of the array index → every tile landed at `(subCellX*23, 0)` with
+  `gridY` always 0 (hence all landmarks stacked near the origin corner, two different tiles even colliding
+  on the same `(92,0)`). Fix: rename the loop index to `tileArrayIdx` (distinct from `tileIdX`). The
+  identical latent bug in the dead legacy `ReadTgtTilesLocations` (chunk cursor `tileIdx` vs sub-cell
+  `tileIdX`) was renamed to `chunkStart` too. This ALSO fixes nav AreaTransition/Waypoint/Checkpoint POI
+  positions (they used the same clobbered value; it was only ever masked by the live-entity refine).
+  Lesson: never let two locals differ only by letter case in AHK.
 
 ## Reference
 
