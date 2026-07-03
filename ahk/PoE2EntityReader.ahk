@@ -1520,14 +1520,19 @@ class PoE2EntityReader extends PoE2ComponentDecoders
         processed := 0
         Loop endIdx - startIdx
         {
-            tileIdx := startIdx + A_Index - 1
+            ; NOTE: AHK v2 variable names are CASE-INSENSITIVE, so this loop index
+            ; MUST NOT be named `tileIdx` — that collides with the `tileIdX` sub-cell
+            ; byte read below and the sub-cell would clobber the array index, making
+            ; the tile world position `(subCellX*23, 0)` for every tile. Use a
+            ; distinct name.
+            tileArrayIdx := startIdx + A_Index - 1
             bufOff := (A_Index - 1) * tileStructSize
 
             ; Check the deadline every 64 tiles (cheap; sufficiently fine-grained)
             if (Mod(processed, 64) = 0 && A_TickCount > deadline)
             {
                 ; Resume from the NEXT unprocessed tile next tick
-                this._tgtScanTileIdx := tileIdx
+                this._tgtScanTileIdx := tileArrayIdx
                 return false
             }
             processed += 1
@@ -1592,8 +1597,8 @@ class PoE2EntityReader extends PoE2ComponentDecoders
             else
                 tileKey := tgtPath "x:" tileIdY "-y:" tileIdX
 
-            gridX := Mod(tileIdx, this._tgtScanTotalTilesX) * tileToGrid
-            gridY := Floor(tileIdx / this._tgtScanTotalTilesX) * tileToGrid
+            gridX := Mod(tileArrayIdx, this._tgtScanTotalTilesX) * tileToGrid
+            gridY := Floor(tileArrayIdx / this._tgtScanTotalTilesX) * tileToGrid
 
             if !results.Has(tileKey)
             {
@@ -1642,23 +1647,26 @@ class PoE2EntityReader extends PoE2ComponentDecoders
         offTileIdY    := PoE2Offsets.TileStruct["TileIdY"]
         offRotSel     := PoE2Offsets.TileStruct["RotationSelector"]
 
-        ; Process in chunks to use batch reads
+        ; Process in chunks to use batch reads.
+        ; NOTE: the chunk cursor must NOT be named `tileIdx` — AHK v2 names are
+        ; case-insensitive, so it would alias the `tileIdX` sub-cell byte read below
+        ; and corrupt the loop/position. Use `chunkStart`.
         chunkSize := 2000
-        tileIdx := 0
-        while (tileIdx < totalTiles)
+        chunkStart := 0
+        while (chunkStart < totalTiles)
         {
-            chunkEnd := Min(tileIdx + chunkSize, totalTiles)
-            chunkBytes := (chunkEnd - tileIdx) * tileStructSize
-            chunkBuf := this.Mem.ReadBytes(tileVecFirst + tileIdx * tileStructSize, chunkBytes)
+            chunkEnd := Min(chunkStart + chunkSize, totalTiles)
+            chunkBytes := (chunkEnd - chunkStart) * tileStructSize
+            chunkBuf := this.Mem.ReadBytes(tileVecFirst + chunkStart * tileStructSize, chunkBytes)
             if !chunkBuf
             {
-                tileIdx := chunkEnd
+                chunkStart := chunkEnd
                 continue
             }
 
-            Loop chunkEnd - tileIdx
+            Loop chunkEnd - chunkStart
             {
-                curIdx := tileIdx + A_Index - 1
+                curIdx := chunkStart + A_Index - 1
                 bufOff := (A_Index - 1) * tileStructSize
 
                 tgtFilePtr := NumGet(chunkBuf.Ptr, bufOff + offTgtFilePtr, "Ptr")
@@ -1704,7 +1712,7 @@ class PoE2EntityReader extends PoE2ComponentDecoders
                     )
                 }
             }
-            tileIdx := chunkEnd
+            chunkStart := chunkEnd
         }
         return results
     }
