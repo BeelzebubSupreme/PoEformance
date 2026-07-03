@@ -159,3 +159,111 @@ BuildCustomLandmarksHeaderJson()
     return '{"enabled":' ((IsSet(g_clmEnabled) && g_clmEnabled) ? "true" : "false")
         . ',"count":' ((IsSet(g_clmCount) ? g_clmCount : 0) + 0) "}"
 }
+
+; One-shot diagnostic: dumps every matched landmark POI in the current zone with its
+; world position + distance from the player, so a "label sits at the wrong spot"
+; report can be root-caused without the game running here. Writes debug\custom_landmarks_diag_*.txt
+; (readable in Config -> Data & Logs) + a MsgBox summary. Triggered by the UI button
+; (bridge CustomLandmarkDiag). No params / no return.
+CustomLandmarkDiagnose()
+{
+    global g_reader, g_radarLastSnap, g_clmCount
+
+    snap := (IsSet(g_radarLastSnap) && IsObject(g_radarLastSnap) && g_radarLastSnap is Map) ? g_radarLastSnap : 0
+    inGs := (snap && snap.Has("inGameState")) ? snap["inGameState"] : 0
+    area := (inGs && IsObject(inGs) && inGs.Has("areaInstance")) ? inGs["areaInstance"] : 0
+    if !(area && IsObject(area))
+    {
+        try MsgBox("Custom Landmarks Diagnose: no radar snapshot yet (enter a zone first).", "Custom Landmarks", 0x40)
+        return
+    }
+
+    ; Player world position.
+    pwp := 0
+    pr := area.Has("playerRenderComponent") ? area["playerRenderComponent"] : 0
+    if (pr && IsObject(pr) && pr.Has("worldPosition"))
+        pwp := pr["worldPosition"]
+    px := (pwp && IsObject(pwp) && pwp.Has("x")) ? pwp["x"] : 0
+    py := (pwp && IsObject(pwp) && pwp.Has("y")) ? pwp["y"] : 0
+
+    areaCode := ""
+    try areaCode := (IsObject(g_reader) && g_reader.HasOwnProp("_radarWorldAreaCache")
+        && IsObject(g_reader._radarWorldAreaCache) && g_reader._radarWorldAreaCache.Has("id"))
+        ? g_reader._radarWorldAreaCache["id"] : ""
+
+    totalTilesX := 0, totalTiles := 0
+    try totalTilesX := (IsObject(g_reader) && g_reader.HasOwnProp("_tgtScanTotalTilesX")) ? g_reader._tgtScanTotalTilesX : 0
+    try totalTiles  := (IsObject(g_reader) && g_reader.HasOwnProp("_tgtScanTotalTiles"))  ? g_reader._tgtScanTotalTiles  : 0
+
+    zsr := area.Has("zoneScanResults") ? area["zoneScanResults"] : 0
+
+    out := "=== Custom Landmarks Diagnose  (" FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") ") ===`n`n"
+    out .= "area code (worldAreaDat id): '" areaCode "'`n"
+    out .= "player world pos: x=" Round(px) " y=" Round(py) "`n"
+    out .= "terrain grid: totalTilesX=" totalTilesX "  totalTiles=" totalTiles
+         . (totalTilesX ? ("  => impliedRows=" Round(totalTiles / totalTilesX)) : "") "`n"
+    out .= "loaded landmark patterns: " (IsSet(g_clmCount) ? g_clmCount : 0) "`n`n"
+
+    n := 0, labelled := 0, msgLines := ""
+    if (zsr && Type(zsr) = "Array")
+    {
+        out .= "POIs with a curated label (path | type | tileWorld x,y | dist | refined):`n"
+        for _, t in zsr
+        {
+            if !(t && IsObject(t))
+                continue
+            lbl := t.Has("label") ? t["label"] : ""
+            if (lbl = "")
+                continue
+            labelled += 1
+            wx := t.Has("worldX") ? t["worldX"] : 0
+            wy := t.Has("worldY") ? t["worldY"] : 0
+            gx := t.Has("gridX") ? t["gridX"] : 0
+            gy := t.Has("gridY") ? t["gridY"] : 0
+            ty := t.Has("type") ? t["type"] : ""
+            ref := (t.Has("refined") && t["refined"]) ? "REFINED" : "tile-idx"
+            pth := t.Has("path") ? t["path"] : ""
+            short := pth
+            sl := InStr(short, "/",, -1)
+            if (sl > 0)
+                short := SubStr(short, sl + 1)
+            ddx := wx - px, ddy := wy - py
+            dist := Round(Sqrt(ddx * ddx + ddy * ddy))
+            line := "  " lbl "`n"
+                  . "     " short "  [" ty "]`n"
+                  . "     grid(" Round(gx) "," Round(gy) ")  world(" Round(wx) "," Round(wy) ")  dist=" dist "  " ref "`n"
+            out .= line
+            n += 1
+            if (n <= 12)
+                msgLines .= "• " lbl "  d=" dist "m  " ref " (" ty ")`n"
+        }
+        if (labelled = 0)
+            out .= "  (none — no landmark matched in this zone)`n"
+    }
+    else
+        out .= "zoneScanResults: (not an array / empty)`n"
+
+    out .= "`nInterpretation:`n"
+    out .= "  - If the game shows a transition NEARBY but its dist here is huge, the tile-index`n"
+    out .= "    world pos is wrong (needs the entity-refined position or a corrected grid formula).`n"
+    out .= "  - REFINED = position came from a live entity (accurate); tile-idx = computed from`n"
+    out .= "    the tile's index in the terrain grid (only source for pure terrain landmarks).`n"
+
+    dir := A_ScriptDir "\debug"
+    if !DirExist(dir)
+        try DirCreate(dir)
+    file := dir "\custom_landmarks_diag_" FormatTime(A_Now, "yyyyMMdd_HHmmss") ".txt"
+    wrote := false
+    try
+    {
+        FileAppend(out, file, "UTF-8")
+        wrote := true
+    }
+
+    summary := "Custom Landmarks Diagnose`n`n"
+             . "area='" areaCode "'  player=(" Round(px) "," Round(py) ")`n"
+             . "labelled POIs: " labelled "`n`n"
+             . (msgLines != "" ? msgLines : "(no landmark matched in this zone)`n")
+             . (wrote ? ("`nWritten to:`n" file "`n(open in Config -> Data & Logs)") : "`n(could not write debug file)")
+    try MsgBox(summary, "Custom Landmarks Diagnose", 0x40)
+}
