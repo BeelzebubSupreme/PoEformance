@@ -176,6 +176,47 @@ class TerrainPathfinder
         return 0
     }
 
+    ; Nearest walkable cell to (gx, gy) via an expanding-ring PERIMETER search
+    ; (only the border of each ring is tested, O(r) per ring) — a port of
+    ; CoreExile2 Radar Pathfinder.TryFindNearestWalkable. Larger reach than
+    ; NudgeToWalkable, used to pull an off-map / on-decoration POI marker (a
+    ; curated landmark whose tile sits on unwalkable terrain) onto the nearest
+    ; reachable ground. Returns [walkableGX, walkableGY] or 0 if none found
+    ; within maxRadius cells.
+    NearestWalkable(gx, gy, maxRadius := 75)
+    {
+        if !this._buf
+            return 0
+        if this.IsWalkable(gx, gy)
+            return [gx, gy]
+        r := 1
+        while (r <= maxRadius)
+        {
+            ; top & bottom edges (corners included)
+            dx := -r
+            while (dx <= r)
+            {
+                if this.IsWalkable(gx + dx, gy - r)
+                    return [gx + dx, gy - r]
+                if this.IsWalkable(gx + dx, gy + r)
+                    return [gx + dx, gy + r]
+                dx += 1
+            }
+            ; left & right edges (corners already tested above)
+            dy := -r + 1
+            while (dy <= r - 1)
+            {
+                if this.IsWalkable(gx - r, gy + dy)
+                    return [gx - r, gy + dy]
+                if this.IsWalkable(gx + r, gy + dy)
+                    return [gx + r, gy + dy]
+                dy += 1
+            }
+            r += 1
+        }
+        return 0
+    }
+
     ; A* pathfinder on the walkable terrain grid.
     ; startGX/GY and endGX/GY are absolute grid coordinates.
     ; Returns an Array of [gx, gy] pairs (start → end), smoothed via line-of-sight culling.
