@@ -5870,31 +5870,32 @@
                 <label class="toggle"><input type="checkbox" id="clm-showPaths"
                     onchange="ahkCall('SetCustomLandmarks','showPaths', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
               </div>
-              <div class="cfg-row"><span class="cfg-label">↳ Line width (px)</span>
-                <span class="hk-num"><input type="number" id="clm-pathWidth" min="1" max="8" step="1" onchange="ahkCall('SetCustomLandmarks','pathWidth',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+              <div class="cfg-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:center">
+                <span style="display:flex;align-items:center;gap:8px;justify-content:flex-start">
+                  <span class="cfg-label" style="white-space:nowrap">↳ Line width (px)</span>
+                  <span class="hk-num"><input type="number" id="clm-pathWidth" min="1" max="8" step="1" onchange="ahkCall('SetCustomLandmarks','pathWidth',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+                </span>
+                <span style="display:flex;align-items:center;gap:8px;justify-content:flex-end">
+                  <span class="cfg-label" style="white-space:nowrap" title="Skip landmarks farther than this (world units)">Max distance</span>
+                  <span class="hk-num"><input type="number" id="clm-pathMaxDist" min="500" max="40000" step="500" onchange="ahkCall('SetCustomLandmarks','pathMaxDist',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,500)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-500)">▼</button></span></span>
+                </span>
               </div>
-              <div class="cfg-row"><span class="cfg-label">↳ Max distance (world units)</span>
-                <span class="hk-num"><input type="number" id="clm-pathMaxDist" min="500" max="40000" step="500" onchange="ahkCall('SetCustomLandmarks','pathMaxDist',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,500)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-500)">▼</button></span></span>
-              </div>
-              <div class="cfg-row"><span class="cfg-label">↳ Routes to exits (transitions)</span>
-                <label class="toggle"><input type="checkbox" id="clm-pathToExits"
-                    onchange="ahkCall('SetCustomLandmarks','pathToExits', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-row"><span class="cfg-label">↳ Routes to POIs (bosses / chests / features)</span>
-                <label class="toggle"><input type="checkbox" id="clm-pathToPois"
-                    onchange="ahkCall('SetCustomLandmarks','pathToPois', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-row"><span class="cfg-label">↳ Direction arrows along the route</span>
-                <label class="toggle"><input type="checkbox" id="clm-pathArrows"
-                    onchange="ahkCall('SetCustomLandmarks','pathArrows', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-row">
-                <span class="cfg-label">Wrong label position? Dump the matched landmarks + coords</span>
-                <button type="button" class="cfg-btn" onclick="ahkCall('CustomLandmarkDiag')">🔍 Diagnose positions</button>
-              </div>
-              <div class="cfg-row">
-                <span class="cfg-label">Deep RE probe — raw tile-vector dump (find the real position source)</span>
-                <button type="button" class="cfg-btn" onclick="ahkCall('CustomLandmarkPosProbe')">🧭 Probe tile positions</button>
+              <div class="cfg-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:center">
+                <span style="display:flex;align-items:center;gap:6px;justify-content:flex-start">
+                  <span class="cfg-label" style="white-space:nowrap" title="Draw routes to area-transition / exit landmarks">↳ To exits</span>
+                  <label class="toggle"><input type="checkbox" id="clm-pathToExits"
+                      onchange="ahkCall('SetCustomLandmarks','pathToExits', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+                </span>
+                <span style="display:flex;align-items:center;gap:6px;justify-content:center">
+                  <span class="cfg-label" style="white-space:nowrap" title="Draw routes to POI / boss / chest / feature landmarks">To POIs</span>
+                  <label class="toggle"><input type="checkbox" id="clm-pathToPois"
+                      onchange="ahkCall('SetCustomLandmarks','pathToPois', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+                </span>
+                <span style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+                  <span class="cfg-label" style="white-space:nowrap" title="Direction chevrons along each route">Arrows</span>
+                  <label class="toggle"><input type="checkbox" id="clm-pathArrows"
+                      onchange="ahkCall('SetCustomLandmarks','pathArrows', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+                </span>
               </div>
             </div>
           </details>
@@ -6902,7 +6903,7 @@
       "tab:ui":"ChannellingAttacksNotable2","tab:gamestate":"auraeffect","tab:memdiff":"flaskstr","tab:dissect":"flaskint","tab:hotkeys":"KeystoneResoluteTechnique",
       "cfgtab:general":"blankStr","cfgtab:automation":"PhysicalDamageOverTimeNode","cfgtab:overlay":"LifeandMana","cfgtab:vitals":"BloodMageNode","cfgtab:debug":"tempint","cfgtab:data":"ChannellingSpeed",
       "sec:det-status":"HollowPalmTechniqueKeystone","sec:det-integrations":"KeystoneAvatarOfFire","sec:det-stashmover":"KeystonePainAttunement","sec:sm-stash":"AzmeriPrimalMonkey","sec:sm-stash-ignore":"shieldblock","sec:sm-stash-rnd":"criticalstrikechance","sec:sm-sell":"AzmeriWildBear","sec:sm-sell-ignore":"shieldblock","sec:sm-sell-rnd":"criticalstrikechance","sec:sm-shared":"TemporalistNearbyEnemiesProjectilesSlowed","sec:det-autopilot":"KeystoneAvatarOfFire","sec:ap-status":"WarbringerEncasedInJade","sec:ap-combat":"LightningDamagenode","sec:ap-explore":"MiracleMaker","sec:ap-loot":"energyshield",
-      "sec:det-maphack":"ColdAndFireHybridNotable","sec:det-radar":"PressurePoints","sec:det-entitymarkers":"TacticianNode","sec:det-rangecircles":"TemporalistNode","sec:det-lootvalue":"ShieldNodeOffensive","sec:lrv-detection":"Rage","sec:lrv-list":"SpellSuppresionNode","sec:lrv-onmap":"RangedTotemDamage","sec:lrv-trade":"ClawsOfTheMagpie","sec:det-uihoverprice":"projectilespeed","sec:det-ritualvalue":"FlaskNotableCritStrikeRecharge","sec:det-overlay-placement":"MiracleMaker",
+      "sec:det-maphack":"ColdAndFireHybridNotable","sec:det-radar":"PressurePoints","sec:det-entitymarkers":"TacticianNode","sec:det-rangecircles":"TemporalistNode","sec:det-lootvalue":"ShieldNodeOffensive","sec:lrv-detection":"Rage","sec:lrv-list":"SpellSuppresionNode","sec:lrv-onmap":"RangedTotemDamage","sec:lrv-trade":"ClawsOfTheMagpie","sec:det-uihoverprice":"projectilespeed","sec:det-ritualvalue":"FlaskNotableCritStrikeRecharge","sec:det-overlay-placement":"MiracleMaker","sec:det-customlandmarks":"PathfinderMultichoicePath",
       "sec:det-vitals-general":"CorpseDamage","sec:det-debug-actions":"axedmgspeed","sec:det-radar-debug":"PathfinderPathoftheWarrior","sec:det-debug-panels":"ColdDamagenode","sec:det-debug-discovery":"LightningDamagenode","sec:det-debug-diff":"ManaLeechThemedNode","sec:det-debug-overlay":"ElementalDamagenode","sec:det-offset-compare":"plusstrengthdexterity",
       "sec:det-al-conditions":"blankDex","sec:det-al-timing":"blankInt","sec:det-al-output":"blankStr","sec:det-lt-settings":"KeystoneWhispersOfDoom","sec:det-blacklist":"ArmourAndEvasionNode",
       "sec:det-vitals-life":"IncreasedMaximumLifeNotable","sec:det-vitals-mana":"MineManaReservationNotable","sec:det-vitals-es":"EnergyShieldNode",
