@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.137`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.138`.
 
 ## Language
 
@@ -1159,6 +1159,18 @@ tile-path pattern → label, matched by SUBSTRING against the tile paths we alre
   colour, width)` (immediate 3-point Polyline ">" every ~14 path points, pointing player→landmark since
   `FindPath` returns start→end). The A* recompute also re-runs when the exit/POI/range signature changes
   (not just on the timer), so toggling an option updates immediately.
+- **Route-coloured dot/label + visible chevrons (0.45.13.138):** two fixes to the landmark paths.
+  (1) The destination DOT and LABEL now share their route's palette colour instead of the generic
+  type/amber colour — the colour is assigned ONCE per route-eligible landmark during the draw loop
+  (`lmRouteColor`, palette-cycled via `lmColorN`) and reused by `_DrawDot` + `_DrawTextOutlined`, then
+  stored on the `lmDrawn` entry (`color`) so the path recompute reads it directly (route colour is no
+  longer derived from the cache index — dots, labels and routes now cycle in lock-step). Route eligibility
+  (exit/POI filter + range cap) is evaluated up front so a filtered-out landmark keeps its normal colour
+  and draws no route (`color = 0`, skipped in the recompute). (2) Direction chevrons were INVISIBLE — the
+  old "every 14th path point" spacing drew nothing because `FindPath` smooths the route down to a few
+  far-apart points. Replaced with SCREEN-distance spacing: a running accumulator walks the projected
+  polyline and drops a `_DrawArrowHead` every ~85–110 px (interpolated INSIDE long segments, first chevron
+  0.6× in from the player), pointing the way the route runs.
 
 ## Reference
 

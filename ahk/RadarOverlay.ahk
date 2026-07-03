@@ -1227,6 +1227,20 @@ class RadarOverlay extends GdiOverlayBase
 
             lmDrawn := []   ; display positions of the drawn landmarks (for the optional path lines)
 
+            ; Landmark-path context (resolved once): when routes are on, each
+            ; ROUTE-ELIGIBLE landmark gets its own palette colour, shared by its
+            ; dot + label + route so they read as one. Eligibility = passes the
+            ; exit/POI filter AND is within the range cap.
+            clmPathsMode := clmOn && CustomLandmarkPathsOn() && this._pathfinder.HasTerrain()
+            clmPO := clmPathsMode ? CustomLandmarkPathOpts() : 0
+            clmCapSq := 0.0
+            if (clmPathsMode)
+            {
+                clmCapG  := clmPO["maxDist"] / RadarOverlay.WORLD_TO_GRID_RATIO
+                clmCapSq := clmCapG * clmCapG
+            }
+            lmColorN := 0
+
             for idx, target in this._navTargets
             {
                 lmLabel := target.Has("label") ? target["label"] : ""
@@ -1265,18 +1279,31 @@ class RadarOverlay extends GdiOverlayBase
                 tRadius := (tType = "AreaTransition" || tType = "Waypoint") ? (isLargeMap ? 7 : 5)
                          : (isLargeMap ? 5 : 3)
 
+                ; Route-eligible landmark → its own palette colour (dot + label +
+                ; route all share it). 0 = not route-eligible (keep normal colours).
+                lmRouteColor := 0
+                if (clmShow && isRep && clmPathsMode)
+                {
+                    routeElig := (navPortal.Has(idx) ? clmPO["toExits"] : clmPO["toPois"])
+                    if (routeElig && (dGX * dGX + dGY * dGY) <= clmCapSq)
+                    {
+                        lmColorN += 1
+                        lmRouteColor := RadarOverlay.CLM_PATH_PALETTE[Mod(lmColorN - 1, RadarOverlay.CLM_PATH_PALETTE.Length) + 1]
+                    }
+                }
+
                 ; Draw a ring (hollow) for zone-scan entities so they're visually distinct from live entities
-                this._DrawDot(tSX, tSY, tColor, tRadius)
+                this._DrawDot(tSX, tSY, (lmRouteColor != 0 ? lmRouteColor : tColor), tRadius)
 
                 distWorld := Round(Sqrt(dGX * dGX + dGY * dGY) * RadarOverlay.WORLD_TO_GRID_RATIO)
                 if (clmShow && isRep)
                 {
                     ; Curated landmark name (boss + reward / POI / transition dest),
                     ; drawn once at the nearest tile. Outlined so it stays readable
-                    ; over the maphack walls.
+                    ; over the maphack walls. Tinted to its route colour when routes are on.
                     this._DrawTextOutlined(tSX + tRadius + 3, tSY - 6,
-                        lmLabel " (" distWorld "m)", RadarOverlay.COLOR_LANDMARK, 0, 1)
-                    lmDrawn.Push(Map("gx", srcGX, "gy", srcGY, "exit", navPortal.Has(idx)))
+                        lmLabel " (" distWorld "m)", (lmRouteColor != 0 ? lmRouteColor : RadarOverlay.COLOR_LANDMARK), 0, 1)
+                    lmDrawn.Push(Map("gx", srcGX, "gy", srcGY, "exit", navPortal.Has(idx), "color", lmRouteColor))
                 }
                 else if (navOn && (tType = "AreaTransition" || tType = "Waypoint") && !navClaimed.Has(idx))
                 {
@@ -1293,12 +1320,12 @@ class RadarOverlay extends GdiOverlayBase
 
             ; ── Optional: walkable A* path from the player to each landmark ──
             ; Recompute is THROTTLED (A* is costly) + cached by _clmPathCache; the
-            ; draw runs every frame off the cache. Each route gets its own colour
-            ; (palette cycle), a configurable width + range, an exit/POI filter and
-            ; optional direction chevrons. Drawn UNDER the gold nav / red combat paths.
-            if (clmOn && CustomLandmarkPathsOn() && this._pathfinder.HasTerrain() && lmDrawn.Length > 0)
+            ; draw runs every frame off the cache. Each route carries its landmark's
+            ; own palette colour (shared with that landmark's dot + label), a
+            ; configurable width + range, an exit/POI filter and optional direction
+            ; chevrons. Drawn UNDER the gold nav / red combat paths.
+            if (clmPathsMode && lmDrawn.Length > 0)
             {
-                clmPO := CustomLandmarkPathOpts()
                 if !this.HasOwnProp("_clmPathCache")
                 {
                     this._clmPathCache := []
@@ -1316,23 +1343,16 @@ class RadarOverlay extends GdiOverlayBase
                 if ((nowT - this._clmPathTick) > 1500 || clmSig != this._clmPathSig
                     || Abs(pGXi - this._clmPathPGX) > 12 || Abs(pGYi - this._clmPathPGY) > 12)
                 {
-                    capG  := clmPO["maxDist"] / RadarOverlay.WORLD_TO_GRID_RATIO
-                    capSq := capG * capG
                     fresh := []
                     for _, lm in lmDrawn
                     {
-                        isExit := lm["exit"]
-                        if (isExit && !clmPO["toExits"])
-                            continue
-                        if (!isExit && !clmPO["toPois"])
-                            continue
-                        pcdx := lm["gx"] - playerGX
-                        pcdy := lm["gy"] - playerGY
-                        if (pcdx * pcdx + pcdy * pcdy > capSq)
+                        ; Only route-eligible landmarks got a colour assigned (0 = filtered
+                        ; out by the exit/POI toggle or the range cap → no route).
+                        if (lm["color"] = 0)
                             continue
                         route := this._pathfinder.FindPath(pGXi, pGYi, Round(lm["gx"]), Round(lm["gy"]))
                         if (route && route.Length >= 2)
-                            fresh.Push(route)
+                            fresh.Push(Map("route", route, "color", lm["color"]))
                     }
                     this._clmPathCache := fresh
                     this._clmPathTick  := nowT
@@ -1342,12 +1362,15 @@ class RadarOverlay extends GdiOverlayBase
                 }
                 lmPathWidth := Max(1, clmPO["width"] + (isLargeMap ? 1 : 0))
                 lmArrows    := clmPO["arrows"]
-                for ci, lmp in this._clmPathCache
+                arrowSpace  := isLargeMap ? 110 : 85
+                arrowLen    := isLargeMap ? 8 : 6
+                for _, lmpEntry in this._clmPathCache
                 {
-                    ln := lmp.Length
+                    lmp := lmpEntry["route"]
+                    ln  := lmp.Length
                     if (ln < 2)
                         continue
-                    lmPathColor := RadarOverlay.CLM_PATH_PALETTE[Mod(ci - 1, RadarOverlay.CLM_PATH_PALETTE.Length) + 1]
+                    lmPathColor := lmpEntry["color"]
                     lmPts := Buffer(ln * 8, 0)
                     for i, pt in lmp
                     {
@@ -1360,18 +1383,40 @@ class RadarOverlay extends GdiOverlayBase
                     oldPen := DllCall("SelectObject", "Ptr", this.memDC, "Ptr", pen, "Ptr")
                     DllCall("Polyline", "Ptr", this.memDC, "Ptr", lmPts, "Int", ln)
                     DllCall("SelectObject", "Ptr", this.memDC, "Ptr", oldPen)
-                    ; Direction chevrons: every ~14 points draw a ">" pointing the way
-                    ; the route runs (player → landmark = increasing index).
-                    if (lmArrows && ln >= 6)
+                    ; Direction chevrons spaced by SCREEN distance along the polyline
+                    ; (not point count — smoothed paths have few, far-apart points, so a
+                    ; per-point step drew nothing). A running accumulator places a ">"
+                    ; every arrowSpace px, interpolated inside long segments, pointing the
+                    ; way the route runs (player → landmark = increasing index).
+                    if (lmArrows)
                     {
-                        step := 14
-                        j := step
-                        while (j < ln)
+                        acc := arrowSpace * 0.6   ; first chevron a little in from the player
+                        px  := NumGet(lmPts, 0, "Int")
+                        py  := NumGet(lmPts, 4, "Int")
+                        k   := 2
+                        while (k <= ln)
                         {
-                            ax := NumGet(lmPts, (j-1)*8, "Int"),     ay := NumGet(lmPts, (j-1)*8+4, "Int")
-                            bx := NumGet(lmPts, (j-4-1)*8, "Int"),   by := NumGet(lmPts, (j-4-1)*8+4, "Int")
-                            this._DrawArrowHead(ax, ay, ax - bx, ay - by, isLargeMap ? 8 : 6, lmPathColor, lmPathWidth)
-                            j += step
+                            cx := NumGet(lmPts, (k-1)*8, "Int")
+                            cy := NumGet(lmPts, (k-1)*8+4, "Int")
+                            sdx := cx - px
+                            sdy := cy - py
+                            slen := Sqrt(sdx*sdx + sdy*sdy)
+                            if (slen > 0.5)
+                            {
+                                ux := sdx / slen
+                                uy := sdy / slen
+                                acc += slen
+                                while (acc >= arrowSpace)
+                                {
+                                    back := acc - arrowSpace
+                                    this._DrawArrowHead(Round(cx - ux*back), Round(cy - uy*back),
+                                        sdx, sdy, arrowLen, lmPathColor, lmPathWidth)
+                                    acc -= arrowSpace
+                                }
+                            }
+                            px := cx
+                            py := cy
+                            k  += 1
                         }
                     }
                 }
