@@ -197,6 +197,9 @@ _DispatchBridgeCall(method, args)
         case "CustomLandmarkDiag":
             ; Dump the current zone's matched landmarks + positions (debug\custom_landmarks_diag_*).
             SetTimer(CustomLandmarkDiagnose, -1)
+        case "CustomLandmarkPosProbe":
+            ; Deep RE probe: raw tile-vector dump for the landmark position bug (debug\custom_landmarks_posprobe_*).
+            SetTimer(CustomLandmarkPosProbe, -1)
         case "SetLootLabelClear":
             ; Keep loot labels clear of the large-map maphack. args[1]=key, args[2]=value.
             if (args.Length >= 2)
