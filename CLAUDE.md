@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.129`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.130`.
 
 ## Language
 
@@ -1084,6 +1084,17 @@ tile-path pattern → label, matched by SUBSTRING against the tile paths we alre
   POI was anchored at the top-left CORNER of its ~250-unit tile cell. `_ProcessTgtScanBatch` now anchors
   at the cell CENTRE (`gridX := (col + 0.5) * tileToGrid`), removing the ~half-tile (~125-unit) shift
   toward the grid origin.
+- **Snap transition labels to the real portal (0.45.13.130):** the remaining offset was structural, not a
+  formula bug — Sikaka pins a TRANSITION label (e.g. "The Bone Pits" on `AreaTransition_BadlandsToPits_01`)
+  to the terrain GATE STRUCTURE, whose curated sub-cell can sit ~1000m+ from the clickable portal ENTITY
+  the nav already marks (so the same exit showed twice: `AreaTransition_Animate (82m)` filename + `The Bone
+  Pits (1287m)` curated). Fix in `RadarOverlay` (per-frame pre-pass, gated on `clmOn`): each labelled
+  AreaTransition/Waypoint/Checkpoint tile is snapped onto the nearest REFINED same-type entity (the live
+  portal) within ~3000 world units (`navSnap`), and that portal's redundant filename is suppressed
+  (`navClaimed`). The curated name now lands on the actual portal at the correct distance; if no portal is
+  loaded within range it falls back to the tile position. Only transition-TYPE landmarks snap (bosses /
+  chests / named POIs sit on their own tiles already). The distinguishing signal is the `refined` flag
+  (entity-scan entries have it; raw tgt structure tiles don't).
 
 ## Reference
 
