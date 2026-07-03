@@ -815,6 +815,8 @@ _DispatchBridgeCall(method, args)
         case "UiBrowseHover":
             hex := (args.Length >= 1) ? String(args[1]) : ""
             SetTimer(() => UiBrowserHoverHighlight(hex), -1)
+        case "NpcIdentifyRun":
+            SetTimer(() => NpcIdentifyRun("ui"), -1)
         case "UiBrowserClearHighlight":
             SetTimer(() => UiBrowserClearHighlight(), -1)
         case "UiBrowseScanStrings":

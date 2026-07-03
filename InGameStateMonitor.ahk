@@ -56,7 +56,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.143"
+POEFORMANCE_VERSION := "0.45.13.144"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -367,6 +367,8 @@ LoadLootTradePricing()    ; official PoE2 trade-API unique pricing (off by defau
 StTrace("LoadLootTradePricing")
 LoadStashMover()          ; "dump backpack to open stash" feature + [StashMover] config
 StTrace("LoadStashMover")
+LoadNpcIdentify()         ; TEST: hideout "click Doryani -> Identify Items" hotkey + [NpcIdentify]
+StTrace("LoadNpcIdentify")
 LoadOverlayIcons()        ; GDI+ currency orb icons for the value-aware loot radar
 StTrace("LoadOverlayIcons")
 LoadOverlayPlacement()    ; per-overlay free-position overrides ([OverlayPlacement])
@@ -411,6 +413,7 @@ g_combatAutoEnabled := g_autoPilotEnabled
 g_exploreEnabled := g_autoPilotEnabled
 RegisterCombatHotkey()
 RegisterStashMoverHotkey() ; configurable "dump backpack to stash" hotkey (only while PoE2 is focused)
+RegisterNpcIdentifyHotkey() ; TEST: hideout NPC-identify hotkey (default F9, only while PoE2 is focused)
 RegisterW2STuneHotkeys()   ; Ctrl +/- tune g_combatW2SScale in-game (only while PoE2 is focused)
 _AIP_RegisterProbeHotkeys()   ; TEMP: Ctrl+Alt+Shift+T triggers the Targetable probe in-game
 
@@ -1007,6 +1010,7 @@ OnTreeTabChanged(*)
 
 #Include ahk/AutoFlask.ahk
 #Include ahk/StashMover.ahk
+#Include ahk/NpcIdentify.ahk
 #Include ahk/LootRadarValue.ahk
 #Include ahk/PoeTradeSession.ahk
 #Include ahk/LootTradePricing.ahk

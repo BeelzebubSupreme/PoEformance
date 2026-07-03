@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.143`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.144`.
 
 ## Language
 
@@ -1268,6 +1268,28 @@ double-correct — re-zero them if the grid is offset the other way).
   (`UiTree_ScreenRectOf`) in `g_uiBrowserHoverHighlight` (0 clears; also cleared by
   `UiBrowserClearHighlight`). `OverlayManager` counts the hover rect toward
   `ctx.inspectOverride`; `RadarOverlay._FinishFrame` draws it after the red rect.
+
+## NPC "Identify Items" hotkey (TEST, shipped 0.45.13.144) — `ahk/NpcIdentify.ahk`
+
+One hotkey (default **F9**, only while PoE2 is focused): in the HIDEOUT, click the NPC
+"Doryani" via his floating hideout label, wait for his dialog window to open, then click its
+"Identify Items" row. UI paths are owner-provided from the UI Browser (root-relative index
+paths) and INI-tunable in `[NpcIdentify]` (`hotkey`, `npcName`, `menuText`, `labelsPath=8,0,0`
+[container of ALL hideout labels — the NPC's child index shifts, so the label is found by its
+displayed TEXT], `windowPath=23` [NPC dialog window], `menuPath=1,0,2,1,0,0` [window → the
+"Identify Items" row]). Flow: hideout gate (`reader._radarWorldAreaCache.isHideout`) → find
+the VISIBLE label child by text → `UiTree_ScreenRectOf` + `NavClickAt` centre (char walks,
+game opens the dialog) → 150 ms poll (9 s deadline) until `windowPath` is
+`UiTree_HierarchicallyVisible` → resolve `menuPath`, require its displayed text to contain
+`menuText` (path-drift guard; aborts with the actual text otherwise) → click it. Every gate
+aborts with a `ToolTip` reason. The section is written back on load so the keys are
+discoverable in `poeformance_config.ini`. Wiring: `#Include ahk/NpcIdentify.ahk`;
+`LoadNpcIdentify()` + `RegisterNpcIdentifyHotkey()` at startup (HotIf-gated to the PoE window,
+StashMover pattern); bridge case `NpcIdentifyRun`; "🪄 Doryani Identify" button in the RE-tools
+row. Verified: full-script `AutoHotkey64.exe /validate` passes.
+**Pending in-game verification:** label click walks to Doryani and opens the dialog; the
+window/menu paths resolve on the live client; the final click fires identification; tooltip
+reasons on each abort gate.
 
 ## Reference
 
