@@ -1186,6 +1186,30 @@ class RadarOverlay extends GdiOverlayBase
                         navClaimed[bestPi] := true
                     }
                 }
+
+                ; Walkable nudge: a curated landmark whose tile sits on UNWALKABLE
+                ; terrain (a decorative feature off the playable area, e.g. "Fossilised
+                ; Memorial") and did NOT snap to a portal is pulled onto the nearest
+                ; reachable ground so its marker lands where you can actually stand.
+                ; target["gridX"]/gridY are already walkable-grid cell coords.
+                if (this._pathfinder && this._pathfinder.HasTerrain())
+                {
+                    for li, lt in this._navTargets
+                    {
+                        if (navSnap.Has(li))
+                            continue
+                        llabel := lt.Has("label") ? lt["label"] : ""
+                        if (llabel = "")
+                            continue
+                        wgx := Round(lt["gridX"])
+                        wgy := Round(lt["gridY"])
+                        if this._pathfinder.IsWalkable(wgx, wgy)
+                            continue   ; already on reachable ground
+                        near := this._pathfinder.NearestWalkable(wgx, wgy, 75)
+                        if (near)
+                            navSnap[li] := Map("gx", near[1], "gy", near[2])
+                    }
+                }
             }
 
             for idx, target in this._navTargets

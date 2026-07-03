@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.131`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.132`.
 
 ## Language
 
@@ -1105,6 +1105,15 @@ tile-path pattern → label, matched by SUBSTRING against the tile paths we alre
   other tiles only ~1200 m so a real POI / boss that isn't at an exit (e.g. "Fossilised Memorial") finds
   no portal in range and stays on its own tile. `RadarOverlay.WORLD_TO_GRID_RATIO` converts the world
   radius to the grid² threshold.
+- **Nearest-walkable nudge (0.45.13.132) — port of coussiraty/CoreExile2 `Pathfinder.TryFindNearestWalkable`:**
+  a curated landmark that did NOT portal-snap AND whose tile sits on UNWALKABLE terrain (a decorative
+  feature off the playable area — the "Fossilised Memorial" case) is pulled onto the nearest reachable
+  ground. `TerrainPathfinder.NearestWalkable(gx, gy, maxRadius:=75)` mirrors the reference: an
+  expanding-ring PERIMETER search (only the border of each ring, O(r) per ring) over the walkable nibble
+  grid via the existing `IsWalkable`. The overlay's snap pre-pass, after the portal pass, nudges every
+  still-unplaced labelled landmark that fails `IsWalkable`. `target["gridX"]/gridY` are already
+  walkable-grid cell coords (both = `worldX / WORLD_TO_GRID_RATIO`), so no conversion is needed. Gated on
+  `_pathfinder.HasTerrain()`; landmarks already on walkable ground are left untouched.
 
 ## Reference
 
