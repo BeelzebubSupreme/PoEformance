@@ -28,9 +28,11 @@ LoadCustomLandmarks()
     global g_clmPathToExits := true    ; draw routes to transition/exit landmarks
     global g_clmPathToPois := true      ; draw routes to POI / boss / chest landmarks
     global g_clmPathArrows := true     ; overlay direction chevrons along each route
+    global g_clmEdgeLabels := true     ; off-screen landmark labels pinned to the map edge (large map)
 
     try g_clmEnabled := (IniRead(g_clmConfigFile, "CustomLandmarks", "enabled", g_clmEnabled ? "1" : "0") = "1")
     try g_clmShowPaths := (IniRead(g_clmConfigFile, "CustomLandmarks", "showPaths", g_clmShowPaths ? "1" : "0") = "1")
+    try g_clmEdgeLabels := (IniRead(g_clmConfigFile, "CustomLandmarks", "edgeLabels", g_clmEdgeLabels ? "1" : "0") = "1")
     try g_clmPathWidth := Integer(IniRead(g_clmConfigFile, "CustomLandmarks", "pathWidth", g_clmPathWidth))
     try g_clmPathMaxDist := Integer(IniRead(g_clmConfigFile, "CustomLandmarks", "pathMaxDist", g_clmPathMaxDist))
     try g_clmPathToExits := (IniRead(g_clmConfigFile, "CustomLandmarks", "pathToExits", g_clmPathToExits ? "1" : "0") = "1")
@@ -161,6 +163,16 @@ CustomLandmarkPathsOn()
     return (IsSet(g_clmEnabled) && g_clmEnabled && IsSet(g_clmShowPaths) && g_clmShowPaths) ? true : false
 }
 
+; True when an off-screen landmark's label should be clamped to the map edge (along
+; the player->landmark direction) so the user can see where a route/landmark leads
+; even when its destination is outside the drawn large map. Cheap accessor for
+; RadarOverlay.Render (same rationale as CustomLandmarksOn).
+CustomLandmarkEdgeLabelsOn()
+{
+    global g_clmEnabled, g_clmEdgeLabels
+    return (IsSet(g_clmEnabled) && g_clmEnabled && IsSet(g_clmEdgeLabels) && g_clmEdgeLabels) ? true : false
+}
+
 ; Bundles the landmark-path draw options for RadarOverlay.Render (which can't add
 ; `global` lines). Returns Map(width, maxDist, toExits, toPois, arrows).
 CustomLandmarkPathOpts()
@@ -178,12 +190,14 @@ CustomLandmarkPathOpts()
 _ClmApplySetting(key, val)
 {
     global g_clmEnabled, g_clmShowPaths, g_clmPathWidth, g_clmPathMaxDist
-    global g_clmPathToExits, g_clmPathToPois, g_clmPathArrows
+    global g_clmPathToExits, g_clmPathToPois, g_clmPathArrows, g_clmEdgeLabels
     on := (val = true || val = 1 || val = "1" || val = "true")
     if (key = "enabled")
         g_clmEnabled := on
     else if (key = "showPaths")
         g_clmShowPaths := on
+    else if (key = "edgeLabels")
+        g_clmEdgeLabels := on
     else if (key = "pathWidth")
         g_clmPathWidth := Max(1, Integer(val))
     else if (key = "pathMaxDist")
@@ -200,9 +214,10 @@ _ClmApplySetting(key, val)
 SaveCustomLandmarks()
 {
     global g_clmEnabled, g_clmShowPaths, g_clmConfigFile
-    global g_clmPathWidth, g_clmPathMaxDist, g_clmPathToExits, g_clmPathToPois, g_clmPathArrows
+    global g_clmPathWidth, g_clmPathMaxDist, g_clmPathToExits, g_clmPathToPois, g_clmPathArrows, g_clmEdgeLabels
     try IniWrite(g_clmEnabled ? "1" : "0", g_clmConfigFile, "CustomLandmarks", "enabled")
     try IniWrite(g_clmShowPaths ? "1" : "0", g_clmConfigFile, "CustomLandmarks", "showPaths")
+    try IniWrite(g_clmEdgeLabels ? "1" : "0", g_clmConfigFile, "CustomLandmarks", "edgeLabels")
     try IniWrite(g_clmPathWidth + 0, g_clmConfigFile, "CustomLandmarks", "pathWidth")
     try IniWrite(g_clmPathMaxDist + 0, g_clmConfigFile, "CustomLandmarks", "pathMaxDist")
     try IniWrite(g_clmPathToExits ? "1" : "0", g_clmConfigFile, "CustomLandmarks", "pathToExits")
@@ -214,9 +229,10 @@ SaveCustomLandmarks()
 BuildCustomLandmarksHeaderJson()
 {
     global g_clmEnabled, g_clmShowPaths, g_clmCount
-    global g_clmPathWidth, g_clmPathMaxDist, g_clmPathToExits, g_clmPathToPois, g_clmPathArrows
+    global g_clmPathWidth, g_clmPathMaxDist, g_clmPathToExits, g_clmPathToPois, g_clmPathArrows, g_clmEdgeLabels
     return '{"enabled":' ((IsSet(g_clmEnabled) && g_clmEnabled) ? "true" : "false")
         . ',"showPaths":' ((IsSet(g_clmShowPaths) && g_clmShowPaths) ? "true" : "false")
+        . ',"edgeLabels":' ((IsSet(g_clmEdgeLabels) && g_clmEdgeLabels) ? "true" : "false")
         . ',"pathWidth":' ((IsSet(g_clmPathWidth) ? g_clmPathWidth : 2) + 0)
         . ',"pathMaxDist":' ((IsSet(g_clmPathMaxDist) ? g_clmPathMaxDist : 6000) + 0)
         . ',"pathToExits":' ((IsSet(g_clmPathToExits) && g_clmPathToExits) ? "true" : "false")

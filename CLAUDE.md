@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.138`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.139`.
 
 ## Language
 
@@ -1171,6 +1171,21 @@ tile-path pattern → label, matched by SUBSTRING against the tile paths we alre
   far-apart points. Replaced with SCREEN-distance spacing: a running accumulator walks the projected
   polyline and drops a `_DrawArrowHead` every ~85–110 px (interpolated INSIDE long segments, first chevron
   0.6× in from the player), pointing the way the route runs.
+- **Off-screen landmark labels pinned to the map edge (0.45.13.139):** when a curated landmark's
+  destination lies OUTSIDE the drawn large map (e.g. a route leading off the top edge), its label was
+  simply invisible. New `RadarOverlay._DrawEdgeLabel(cx, cy, tSX, tSY, winW, winH, text, colour, isLargeMap)`
+  clamps the label to the window edge along the player→landmark ray: it intersects that ray with an inset
+  window rect (parametric first-boundary crossing, player normally inside), drops a `_DrawArrowHead` on the
+  edge pointing off-screen (in the route's direction + route colour), and places the outlined label just
+  inside, kept fully on-screen (text width ESTIMATED from character count — measuring the batched font
+  isn't worth the DC round-trip). In the landmark draw loop a landmark whose projected `(tSX,tSY)` is
+  off-screen (`lmOff`) uses the edge label instead of the normal `tSX+…` placement; it shares the route
+  colour so the edge label matches its route. Gated on `clmEdge := clmOn && isLargeMap &&
+  CustomLandmarkEdgeLabelsOn()` — **large map only** (the minimap projection legitimately runs far past the
+  window, so edge-clamping there would be nonsense). New toggle `[CustomLandmarks] edgeLabels` (default ON;
+  `g_clmEdgeLabels`, `CustomLandmarkEdgeLabelsOn()`); bridge key `edgeLabels` via the existing
+  `SetCustomLandmarks`; header field `edgeLabels`; UI toggle "Pin off-screen labels to the map edge (large
+  map)" under the main Custom Landmarks toggle.
 
 ## Reference
 
