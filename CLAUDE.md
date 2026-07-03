@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.141`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.142`.
 
 ## Language
 
@@ -1235,6 +1235,29 @@ aspects, windowed mode, localMult ≠ 1).
 (e.g. Guild Stash), hover-price/ritual badges pixel-exact on their cells, loot-label click
 accuracy, stash-mover button/grid anchor (existing offsetX/offsetY calibrations may now
 double-correct — re-zero them if the grid is offset the other way).
+- **Hotfix 0.45.13.142 — hover-price died; hardened against bad memory scale data:** first
+  in-game test broke price-on-hover entirely. An OFFLINE harness (fake reader + synthetic
+  UiElement tree, 35 checks incl. hand-computed C#-reference values) proved the core math
+  correct — so the in-game breakage comes from the MEMORY values, with two prime suspects:
+  (a) the `GameCullSize` static was never consumed before, so a mis-resolved pattern
+  (garbage cull int) silently poisons `v1` and collapses every width-scaled rect — the
+  root is ScaleIndex 3, killing the whole descent; (b) the ScaleIndex/LocalScaleMultiplier
+  offsets (0x18A/0x130) are from the 0.4.x reference layout and other UiElement fields HAVE
+  drifted in 0.5.x (StringId 0x140→0x098), so they may read garbage. Hardening (all in
+  `UiTreeBrowser.ahk`): `UiTree_ScaleCtx` clamps v1 into a plausibility band (0.7–1.3 × v2;
+  outside → distrust the cull, then fall back to v1=v2); `_UiScalePair` sanitizes
+  localMult (accept 0.2–5.0, else 1.0), unknown ScaleIndex → uniform (v2,v2), and honors a
+  `sc["uniform"]` legacy-override flag (exact pre-scale-aware behavior); `UiTree_HitTest`
+  retries once in uniform mode when the descent never leaves the root (descent split into
+  `_UiHitDescend`). `UiHoverPrice._UhpResolveHoveredItem` retries its hit test + chain scan
+  once with `sc["uniform"] := true` when NO item slot was found (partial-chain failures the
+  root-level fallback can't see); scan extracted into `_UhpScanChainForItem`. The
+  UIHover probe (`Ctrl+Alt+Shift+H`) now prints per-chain-element `scIdx`/`lMult` and the
+  ctx `v1/v2/cull` — capture it over an inventory item to see the REAL memory values if
+  anything still misbehaves. Offline harness lives in the session scratchpad
+  (`ui_scale_test.ahk`), validated: uniform 16:10 ≡ old math, 16:9 + client offset, mixed
+  scale-space conversion, real cull (+128), poisoned cull (700 → rejected), garbage
+  index/mult leaf (→ uniform behavior), partial-chain + uniform retry.
 
 ## Reference
 

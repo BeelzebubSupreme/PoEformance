@@ -160,7 +160,10 @@ _UiHoverChainLine(reader, addr)
     h := IsObject(el) ? el["sizeH"] : 0
     kids := IsObject(el) ? el["childCount"] : 0
     vis := (IsObject(el) && el["isVisible"]) ? 1 : 0
+    scIdx := IsObject(el) ? el["scaleIndex"] : -1
+    lMult := IsObject(el) ? el["localMult"] : 0
     return "0x" Format("{:X}", addr)
         . "  pos=" Round(sp["x"]) "," Round(sp["y"]) " size=" Round(w) "x" Round(h)
-        . " vis=" vis " kids=" kids " id=" id (txt != "" ? " text=" txt : "")
+        . " vis=" vis " kids=" kids " scIdx=" scIdx " lMult=" Round(lMult, 3)
+        . " id=" id (txt != "" ? " text=" txt : "")
 }

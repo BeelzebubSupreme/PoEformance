@@ -175,7 +175,9 @@ _UhpPriceItem(itemPtr, path, rarityId, stack)
 ; Resolves the inventory/stash item currently under the cursor via deterministic UI
 ; tree-descent + the +0x4F8 item-slot pointer. Returns Map("ptr","path","rarity","stack",
 ; "sx","sy","sw","sh") (the slot's screen rect) or 0 when nothing item-like is hovered.
-; Param: reader (g_reader).
+; Tries the scale-aware geometry first; when that yields no item slot, retries ONCE
+; with the legacy uniform height scale (sc["uniform"]) — self-healing against
+; stale ScaleIndex/LocalScaleMultiplier reads (see _UiScalePair). Param: reader.
 _UhpResolveHoveredItem(reader)
 {
     root := _UiBrowser_GetGameUiPtr()
@@ -189,12 +191,27 @@ _UhpResolveHoveredItem(reader)
     if !IsObject(sc)
         return 0
 
+    hit := _UhpScanChainForItem(reader, root, mx, my, sc)
+    if !IsObject(hit)
+    {
+        ; No item slot under the cursor with scale-aware geometry — retry once
+        ; in legacy uniform mode (the pre-scale-aware behavior, which worked).
+        sc["uniform"] := true
+        hit := _UhpScanChainForItem(reader, root, mx, my, sc)
+    }
+    return hit
+}
+
+; One hit-test + chain scan pass: descends to the cursor, then walks the chain
+; leaf -> root for the first element holding a "Metadata/Items/..." pointer at
+; +0x4F8 (the item slot may be an ancestor of the deepest leaf). Returns the
+; result Map (see _UhpResolveHoveredItem) or 0. Params: reader, root, mx/my
+; (cursor screen px), sc (scale ctx; honors sc["uniform"]).
+_UhpScanChainForItem(reader, root, mx, my, sc)
+{
     chain := UiTree_HitTest(reader, root, mx, my, sc)
     if !(IsObject(chain) && chain.Length > 1)
         return 0
-
-    ; Leaf -> root: the first element that holds a "Metadata/Items/..." pointer at +0x4F8
-    ; is the item slot (the slot may be an ancestor of the deepest leaf).
     itemOff := PoE2Offsets.UiElementBase["ItemPtr"]
     idx := chain.Length
     while (idx >= 1)

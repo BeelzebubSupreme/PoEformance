@@ -339,23 +339,49 @@ UiTree_ScaleCtx(reader, gameHwnd := 0)
     }
     if !(cull > 0 && cull * 2 < cr["w"])   ; sanity: bars can never cover the window
         cull := 0
+    v2 := cr["h"] / 1600.0
+    v1 := (cr["w"] - 2 * cull) / 2560.0
+    ; Plausibility band: the width scale can only deviate a little from the
+    ; height scale (2560×1600 design; wide aspects are letterbox-CULLED back
+    ; toward it, narrow ones squeeze mildly). A v1 far outside the band means
+    ; the cull read is garbage (the GameCullSize static was never consumed
+    ; before this feature, so a mis-resolved pattern was invisible until now)
+    ; — distrust the cull first, then fall back to the uniform height scale.
+    if (v2 > 0 && (v1 < 0.7 * v2 || v1 > 1.3 * v2))
+    {
+        cull := 0
+        v1 := cr["w"] / 2560.0
+        if (v1 < 0.7 * v2 || v1 > 1.3 * v2)
+            v1 := v2   ; extreme aspect — behave like the proven uniform scale
+    }
     cr["cull"] := cull
-    cr["v1"]   := (cr["w"] - 2 * cull) / 2560.0
-    cr["v2"]   := cr["h"] / 1600.0
+    cr["v1"]   := v1
+    cr["v2"]   := v2
     return cr
 }
 
 ; Per-element [wScale, hScale] for a (ScaleIndex, LocalScaleMultiplier) pair
-; under scale context sc — GameHelper2 GameWindowScale.GetScaleValue.
+; under scale context sc — GameHelper2 GameWindowScale.GetScaleValue, hardened
+; against stale/garbage memory reads: the ScaleIndex/LocalScaleMultiplier
+; offsets (0x18A/0x130) come from the 0.4.x reference layout and other fields
+; HAVE drifted in 0.5.x (StringId 0x140→0x098), so an implausible multiplier
+; (≤0 / huge) degrades to 1.0 and an unknown index degrades to the uniform
+; height scale (v2,v2) — the proven pre-scale-aware behavior — instead of raw
+; pixels (the C# default), so a bad read can never collapse or inflate a rect.
 _UiScalePair(scaleIndex, localMult, sc)
 {
+    ; Legacy-uniform override (set by the UiTree_HitTest fallback): ignore the
+    ; per-element scale data entirely — the exact pre-scale-aware behavior.
+    if (sc.Has("uniform") && sc["uniform"])
+        return [sc["v2"], sc["v2"]]
+    m := (localMult > 0.2 && localMult < 5.0) ? localMult : 1.0
     if (scaleIndex = 1)
-        return [localMult * sc["v1"], localMult * sc["v1"]]
+        return [m * sc["v1"], m * sc["v1"]]
     if (scaleIndex = 2)
-        return [localMult * sc["v2"], localMult * sc["v2"]]
+        return [m * sc["v2"], m * sc["v2"]]
     if (scaleIndex = 3)
-        return [localMult * sc["v1"], localMult * sc["v2"]]
-    return [localMult, localMult]
+        return [m * sc["v1"], m * sc["v2"]]
+    return [m * sc["v2"], m * sc["v2"]]
 }
 
 ; Get exact position by walking the parent chain — a faithful port of the C#
@@ -497,6 +523,27 @@ UiTree_HitTest(reader, rootPtr, px, py, sc := 0, maxDepth := 40)
         sc := UiTree_ScaleCtx(reader)
     if !IsObject(sc)
         return []
+    path := _UiHitDescend(reader, rootPtr, px, py, sc, maxDepth)
+    ; Self-healing fallback: a descent that never left the root means the
+    ; scale-aware geometry disagrees with reality (stale ScaleIndex/localMult
+    ; offsets, bad cull). Retry ONCE with the legacy uniform height scale; the
+    ; "uniform" flag is left ON the caller's sc so its follow-up
+    ; UiTree_ScreenRectOf calls use the SAME geometry the hit was found with.
+    if (path.Length <= 1 && !(sc.Has("uniform") && sc["uniform"]))
+    {
+        sc["uniform"] := true
+        retry := _UiHitDescend(reader, rootPtr, px, py, sc, maxDepth)
+        if (retry.Length > 1)
+            return retry
+        sc["uniform"] := false   ; nothing there either — plain miss, keep scale-aware mode
+    }
+    return path
+}
+
+; The actual scale-aware descent for UiTree_HitTest (split out so the fallback
+; can re-run it under a different scale mode). Same params/return as HitTest.
+_UiHitDescend(reader, rootPtr, px, py, sc, maxDepth)
+{
     g := _UiHitGeom(reader, rootPtr)
     if !IsObject(g)
         return []
