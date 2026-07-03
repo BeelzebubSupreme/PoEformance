@@ -5845,6 +5845,27 @@
           </details>
         </div>
 
+        <div class="cfg-section">
+          <details id="det-customlandmarks" ontoggle="syncCfgSections()">
+            <summary>
+              <div class="cfg-header">🗺️ Custom Landmarks</div>
+            </summary>
+            <div class="cfg-subsection">
+              <div class="cfg-help">
+                Draws curated, human-readable labels on the radar for known terrain tiles —
+                boss arenas (with their reward), named points of interest, and where an
+                area-transition leads. The label map is matched against the tile paths the
+                radar already scans, keyed by the current area. Data credit:
+                <em>Sikaka/POE2Radar</em> (CustomLandmarks.json). <span id="clm-count"></span>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Show custom landmark labels</span>
+                <label class="toggle"><input type="checkbox" id="clm-enabled"
+                    onchange="ahkCall('SetCustomLandmarks','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+            </div>
+          </details>
+        </div>
+
         <!-- Overlay Placement — free positioning for the info overlays (Debug, the
              Valuable-loot list, the two Loot bars and the Alert banner). Rows are
              rendered by overlayPlaceRender() from the header's overlayPlacement data.
@@ -7623,6 +7644,14 @@
       const val = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
       chk('rvb-enabled', s.enabled);
       val('rvb-minEx', s.minEx);
+    }
+
+    function customLandmarksSyncFromHeader(s) {
+      if (!s) return;
+      const e = document.getElementById('clm-enabled');
+      if (e) e.checked = s.enabled === true || s.enabled === 1 || s.enabled === '1' || s.enabled === 'true';
+      const c = document.getElementById('clm-count');
+      if (c) c.textContent = (s.count > 0) ? (s.count + ' labels loaded.') : '';
     }
 
     function lootLabelClearSyncFromHeader(s) {
@@ -9857,6 +9886,7 @@
       if (d.lootRadarValue !== undefined) lootRadarValueSyncFromHeader(d.lootRadarValue);
       if (d.uiHoverPrice !== undefined) uiHoverPriceSyncFromHeader(d.uiHoverPrice);
       if (d.ritualValueBadges !== undefined) ritualValueBadgesSyncFromHeader(d.ritualValueBadges);
+      if (d.customLandmarks !== undefined) customLandmarksSyncFromHeader(d.customLandmarks);
       if (d.lootLabelClear !== undefined) lootLabelClearSyncFromHeader(d.lootLabelClear);
       if (d.lootTradePricing !== undefined) lootTradePricingSyncFromHeader(d.lootTradePricing);
       if (d.overlayPlacement !== undefined) overlayPlaceSync(d.overlayPlacement);
@@ -12072,7 +12102,7 @@
     // ═══════════════════════════════════════════════════════════════════
     //  CONFIG HELPERS
     // ═══════════════════════════════════════════════════════════════════
-    const _cfgSectionIds = ['status', 'integrations', 'autoflask', 'autopilot', 'stashmover', 'rangecircles', 'radar', 'lootvalue', 'uihoverprice', 'maphack', 'blacklist', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
+    const _cfgSectionIds = ['status', 'integrations', 'autoflask', 'autopilot', 'stashmover', 'rangecircles', 'radar', 'lootvalue', 'uihoverprice', 'customlandmarks', 'maphack', 'blacklist', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
     let _cfgSectionsGuard = 0;
     let _cfgSectionsLoaded = false;
 
