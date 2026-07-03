@@ -804,9 +804,9 @@
     }
     .subtab-row.active { display: flex }
     .subtab-row.single-tab.active { display: none }
-    /* Config category is right-aligned in the top bar, so push its
-       sub-tab row to match — keeps the visual axis consistent. */
-    .subtab-row[data-cat="config"] { justify-content: flex-end }
+    /* RE + Config categories are right-aligned in the top bar, so push
+       their sub-tab rows to match — keeps the visual axis consistent. */
+    .subtab-row[data-cat="config"], .subtab-row[data-cat="re"] { justify-content: flex-end }
 
     /* Group label ("LIVE" / "TOOLS") — italic Cinzel small-caps in muted
        gold. Acts as a quiet section header inside the sub-tab row. */
@@ -4511,12 +4511,10 @@
           <circle cx="15.5" cy="11" r="0.8" />
           <circle cx="17.5" cy="13" r="0.8" />
         </svg><span class="nav-label">Game</span></div>
-      <div class="cat" data-cat="re" onclick="switchCategory('re')"><svg viewBox="0 0 24 24">
-          <circle cx="11" cy="11" r="7" />
-          <line x1="21" y1="21" x2="16.5" y2="16.5" />
-          <line x1="11" y1="8" x2="11" y2="14" />
-          <line x1="8" y1="11" x2="14" y2="11" />
-        </svg><span class="nav-label">RE</span></div>
+      <div class="cat" data-cat="overlay" onclick="switchCategory('overlay')"><svg viewBox="0 0 24 24">
+          <polygon points="12 3 21 8 12 13 3 8" />
+          <polyline points="3 13 12 18 21 13" />
+        </svg><span class="nav-label">Overlay</span></div>
       <div class="cat" data-cat="hotkeys" onclick="switchCategory('hotkeys')"><svg viewBox="0 0 24 24">
           <rect x="2" y="6" width="20" height="12" rx="2" />
           <line x1="6" y1="10" x2="6" y2="10.5" />
@@ -4525,8 +4523,19 @@
           <line x1="18" y1="10" x2="18" y2="10.5" />
           <line x1="8" y1="14" x2="16" y2="14" />
         </svg><span class="nav-label">Macro Engine</span></div>
+      <div class="cat" data-cat="automation" onclick="switchCategory('automation')"><svg viewBox="0 0 24 24">
+          <rect x="5" y="8" width="14" height="11" rx="2" />
+          <line x1="12" y1="4" x2="12" y2="8" /><circle cx="12" cy="3" r="1" />
+          <circle cx="9.5" cy="13" r="1" /><circle cx="14.5" cy="13" r="1" />
+        </svg><span class="nav-label">Automation</span></div>
     </div>
     <div id="cat-bar-right">
+      <div class="cat" data-cat="re" onclick="switchCategory('re')"><svg viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="7" />
+          <line x1="21" y1="21" x2="16.5" y2="16.5" />
+          <line x1="11" y1="8" x2="11" y2="14" />
+          <line x1="8" y1="11" x2="14" y2="11" />
+        </svg><span class="nav-label">RE</span></div>
       <div class="cat" data-cat="config" onclick="switchCategory('config')"><svg viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="3" />
           <path
@@ -4575,6 +4584,36 @@
       <div class="bar-marker tab-marker"></div>
     </div>
 
+    <!-- OVERLAY — the former Config > Overlay / Vitals sub-panels, promoted to
+         a top-level category. The tabs are ALIAS tabs: switchTab shows
+         #panel-config and flips the matching inner .cfg-subpanel (see
+         cfgPanelForTab), so the content itself never moved out of the
+         #panel-config-scoped styling. -->
+    <div class="subtab-row" data-cat="overlay">
+      <div class="tab" data-tab="cfgoverlay" onclick="switchTab('cfgoverlay')"><svg viewBox="0 0 24 24">
+          <polygon points="12 3 21 8 12 13 3 8" /><polyline points="3 13 12 18 21 13" />
+        </svg><span class="nav-label">Overlay</span></div>
+      <div class="tab" data-tab="cfgvitals" onclick="switchTab('cfgvitals')"><svg viewBox="0 0 24 24">
+          <path d="M20.8 6.6a5 5 0 0 0-8.8-3 5 5 0 0 0-8.8 3c0 4.5 8.8 10 8.8 10s8.8-5.5 8.8-10z" />
+        </svg><span class="nav-label">Vitals</span></div>
+      <div class="bar-marker tab-marker"></div>
+    </div>
+
+    <!-- AUTOMATION — the former Config > Automation sub-panel, split into
+         AutoPilot and Stash Mover alias tabs (same mechanism as OVERLAY). -->
+    <div class="subtab-row" data-cat="automation">
+      <div class="tab" data-tab="autopilot" onclick="switchTab('autopilot')"><svg viewBox="0 0 24 24">
+          <rect x="5" y="8" width="14" height="11" rx="2" /><line x1="12" y1="4" x2="12" y2="8" /><circle cx="12" cy="3" r="1" />
+          <circle cx="9.5" cy="13" r="1" /><circle cx="14.5" cy="13" r="1" />
+        </svg><span class="nav-label">AutoPilot</span></div>
+      <div class="tab" data-tab="stashmover" onclick="switchTab('stashmover')"><svg viewBox="0 0 24 24">
+          <rect x="3" y="6" width="18" height="14" rx="1" />
+          <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+          <line x1="3" y1="11" x2="21" y2="11" />
+        </svg><span class="nav-label">Stash Mover</span></div>
+      <div class="bar-marker tab-marker"></div>
+    </div>
+
     <!-- RE — live inspection (UI, gameState) | tools (Panel Diff, Memory Diff, Dissector) -->
     <div class="subtab-row" data-cat="re">
       <span class="subtab-group-label">Live</span>
@@ -4613,13 +4652,12 @@
 
     <!-- CONFIG — sub-tabs, mirrors the Game/RE category structure.
          General      — status + integrations
-         Automation   — Stash Mover + AutoPilot
-         Overlay      — Map Hack + Radar + Range Circles + Loot Value Radar
-         Vitals       — Vitals bars editor
          Debug        — Diagnostic / RE-style live panels (incl. the retired
                         RE > Panel Diff content + the General diagnostics)
          Data         — TSV dictionary maintenance + browser (was its own
-                        top-level Data category). -->
+                        top-level Data category).
+         Automation / Overlay / Vitals moved to their own top-level
+         categories (alias tabs onto #panel-config sub-panels). -->
     <div class="subtab-row" data-cat="config">
       <!-- The buttons all map to the same top-level `config` tab-panel
            and just toggle which inner .cfg-subpanel is visible — hence
@@ -4630,16 +4668,8 @@
           <line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" />
           <circle cx="9" cy="7" r="2" /><circle cx="15" cy="12" r="2" /><circle cx="7" cy="17" r="2" />
         </svg><span class="nav-label">General</span></div>
-      <div class="tab" data-cfgtab="automation" onclick="switchConfigSubTab('automation')"><svg viewBox="0 0 24 24">
-          <rect x="5" y="8" width="14" height="11" rx="2" /><line x1="12" y1="4" x2="12" y2="8" /><circle cx="12" cy="3" r="1" />
-          <circle cx="9.5" cy="13" r="1" /><circle cx="14.5" cy="13" r="1" />
-        </svg><span class="nav-label">Automation</span></div>
-      <div class="tab" data-cfgtab="overlay"    onclick="switchConfigSubTab('overlay')"><svg viewBox="0 0 24 24">
-          <polygon points="12 3 21 8 12 13 3 8" /><polyline points="3 13 12 18 21 13" />
-        </svg><span class="nav-label">Overlay</span></div>
-      <div class="tab" data-cfgtab="vitals"     onclick="switchConfigSubTab('vitals')"><svg viewBox="0 0 24 24">
-          <path d="M20.8 6.6a5 5 0 0 0-8.8-3 5 5 0 0 0-8.8 3c0 4.5 8.8 10 8.8 10s8.8-5.5 8.8-10z" />
-        </svg><span class="nav-label">Vitals</span></div>
+      <!-- Automation / Overlay / Vitals moved out to their own top-level
+           categories (alias tabs) — Config keeps General · Debug · Data & Logs. -->
       <div class="tab" data-cfgtab="debug"      onclick="switchConfigSubTab('debug')"><svg viewBox="0 0 24 24">
           <rect x="8" y="6" width="8" height="12" rx="4" /><line x1="12" y1="6" x2="12" y2="3" />
           <line x1="3" y1="9" x2="8" y2="11" /><line x1="3" y1="15" x2="8" y2="14" />
@@ -5062,9 +5092,13 @@
              radar overlay's opacity, not just the circles, but that's
              the closest semantic fit.)
              ════════════════════════════════════════════════════════════ -->
-        <div class="cfg-subpanel" data-cfgtab="automation">
+        <!-- The former single "automation" sub-panel is split in two: the
+             Automation CATEGORY in the top nav shows them as the sub-tabs
+             "Stash Mover" and "AutoPilot" (switchTab aliases both onto
+             #panel-config — see cfgPanelForTab). -->
+        <div class="cfg-subpanel" data-cfgtab="stashmover">
 
-        <!-- ── STASH MOVER (first in Automation, before AutoPilot) ────────
+        <!-- ── STASH MOVER ────────────────────────────────────────────────
              Split horizontally into two equal halves: LEFT = everything for
              stashing, RIGHT = everything for auto-selling at a vendor. The
              options the two sides do NOT share (enable, ignore filter, timing,
@@ -5227,7 +5261,9 @@
             </div>
           </details>
         </div>
+        </div><!-- /cfg-subpanel stashmover -->
 
+        <div class="cfg-subpanel" data-cfgtab="autopilot">
         <div class="cfg-section">
           <details id="det-autopilot" ontoggle="syncCfgSections(); if(this.open) requestAnimationFrame(_sbInitAll)" open>
             <summary>
@@ -5423,7 +5459,7 @@
           </details>
         </div>
 
-        </div><!-- /cfg-subpanel automation -->
+        </div><!-- /cfg-subpanel autopilot -->
 
 
         <!-- ════════════════════════════════════════════════════════════
@@ -6899,10 +6935,11 @@
     // open/closed (sections) or active/idle (nav). Icons sourced from GGG's
     // official poe2-skilltree-export (see tools/build_skillnode_icons.py).
     const SNODE_MAP = {
-      "cat:game":"GlancingBlows","cat:re":"trapdamage","cat:hotkeys":"BowDamage","cat:config":"EnduranceFrenzyPowerChargeNode",
+      "cat:game":"GlancingBlows","cat:re":"trapdamage","cat:hotkeys":"BowDamage","cat:config":"EnduranceFrenzyPowerChargeNode","cat:overlay":"LifeandMana","cat:automation":"PhysicalDamageOverTimeNode",
       "tab:entities":"SorceressInvocationSpellsKeystone","tab:skills":"SmithofKitavaNode","tab:inventory":"SpearsNode1","tab:watchlist":"ArchonGeneric","tab:groups":"FlaskNotableCritStrikeRecharge","tab:alerts":"MinionElementalResistancesNode","tab:loot":"KeystoneUnwaveringStance",
       "tab:ui":"ChannellingAttacksNotable2","tab:gamestate":"auraeffect","tab:memdiff":"flaskstr","tab:dissect":"flaskint","tab:hotkeys":"KeystoneResoluteTechnique",
-      "cfgtab:general":"blankStr","cfgtab:automation":"PhysicalDamageOverTimeNode","cfgtab:overlay":"LifeandMana","cfgtab:vitals":"BloodMageNode","cfgtab:debug":"tempint","cfgtab:data":"ChannellingSpeed",
+      "tab:cfgoverlay":"PressurePoints","tab:cfgvitals":"BloodMageNode","tab:autopilot":"KeystoneAvatarOfFire","tab:stashmover":"KeystonePainAttunement",
+      "cfgtab:general":"blankStr","cfgtab:debug":"tempint","cfgtab:data":"ChannellingSpeed",
       "sec:det-status":"HollowPalmTechniqueKeystone","sec:det-integrations":"KeystoneAvatarOfFire","sec:det-stashmover":"KeystonePainAttunement","sec:sm-stash":"AzmeriPrimalMonkey","sec:sm-stash-ignore":"shieldblock","sec:sm-stash-rnd":"criticalstrikechance","sec:sm-sell":"AzmeriWildBear","sec:sm-sell-ignore":"shieldblock","sec:sm-sell-rnd":"criticalstrikechance","sec:sm-shared":"TemporalistNearbyEnemiesProjectilesSlowed","sec:det-autopilot":"KeystoneAvatarOfFire","sec:ap-status":"WarbringerEncasedInJade","sec:ap-combat":"LightningDamagenode","sec:ap-explore":"MiracleMaker","sec:ap-loot":"energyshield",
       "sec:det-maphack":"ColdAndFireHybridNotable","sec:det-radar":"PressurePoints","sec:det-entitymarkers":"TacticianNode","sec:det-rangecircles":"TemporalistNode","sec:det-lootvalue":"ShieldNodeOffensive","sec:lrv-detection":"Rage","sec:lrv-list":"SpellSuppresionNode","sec:lrv-onmap":"RangedTotemDamage","sec:lrv-trade":"ClawsOfTheMagpie","sec:det-uihoverprice":"projectilespeed","sec:det-ritualvalue":"FlaskNotableCritStrikeRecharge","sec:det-overlay-placement":"MiracleMaker","sec:det-customlandmarks":"PathfinderMultichoicePath",
       "sec:det-vitals-general":"CorpseDamage","sec:det-debug-actions":"axedmgspeed","sec:det-radar-debug":"PathfinderPathoftheWarrior","sec:det-debug-panels":"ColdDamagenode","sec:det-debug-discovery":"LightningDamagenode","sec:det-debug-diff":"ManaLeechThemedNode","sec:det-debug-overlay":"ElementalDamagenode","sec:det-offset-compare":"plusstrengthdexterity",
@@ -7115,7 +7152,27 @@
       dissect:   're',
       config:    'config',
       hotkeys:   'hotkeys',
+      cfgoverlay: 'overlay',
+      cfgvitals:  'overlay',
+      autopilot:  'automation',
+      stashmover: 'automation',
     };
+    // ALIAS tabs: these top-level tabs have no #panel-<key> of their own —
+    // they show #panel-config and flip the mapped inner .cfg-subpanel. The
+    // content stayed inside #panel-config (lots of CSS is scoped to it);
+    // only the navigation moved out of the Config category.
+    const cfgPanelForTab = {
+      cfgoverlay: 'overlay',
+      cfgvitals:  'vitals',
+      autopilot:  'autopilot',
+      stashmover: 'stashmover',
+    };
+    // Shows one inner .cfg-subpanel of #panel-config (shared by the Config
+    // sub-tabs and the alias tabs above).
+    function _cfgShowSubpanel(name) {
+      document.querySelectorAll('#panel-config .cfg-subpanel').forEach(p =>
+        p.classList.toggle('active', p.dataset.cfgtab === name));
+    }
     // The Config tab is one top-level panel split into inner sub-panels
     // (general/automation/overlay/vitals/debug/data); switchConfigSubTab
     // toggles which inner div carries .active. The currently-active sub-
@@ -7124,6 +7181,15 @@
     let activeConfigSubTab = 'general';
 
     function switchConfigSubTab(name) {
+      // Legacy redirect: Automation / Overlay / Vitals are top-level
+      // categories now (alias tabs). A stale persisted value or an old
+      // deep-link lands here — hand it to the tab system instead.
+      const legacyCfg = { automation: 'autopilot', overlay: 'cfgoverlay', vitals: 'cfgvitals' };
+      if (legacyCfg[name]) {
+        activeConfigSubTab = 'general';
+        switchTab(legacyCfg[name]);
+        return;
+      }
       // Ensure we're on the Config top-level tab in case this was
       // invoked from elsewhere (e.g. a future auto-jump on apply error).
       if (activeTab !== 'config')
@@ -7131,8 +7197,7 @@
       activeConfigSubTab = name;
       document.querySelectorAll('[data-cat="config"] .tab').forEach(t =>
         t.classList.toggle('active', t.dataset.cfgtab === name));
-      document.querySelectorAll('.cfg-subpanel').forEach(p =>
-        p.classList.toggle('active', p.dataset.cfgtab === name));
+      _cfgShowSubpanel(name);
       scheduleMarkerUpdate();
       // Data & Logs sub-tab: refresh the unified file list (data TSVs + logs + debug).
       if (name === 'data')
@@ -7145,10 +7210,12 @@
     // Remembered per-category so navigating away and back returns to the
     // last view (e.g. Dissector stays sticky inside RE).
     const lastTabPerCategory = {
-      game:    'entities',
-      re:      'ui',
-      config:  'config',
-      hotkeys: 'hotkeys',
+      game:       'entities',
+      re:         'ui',
+      config:     'config',
+      hotkeys:    'hotkeys',
+      overlay:    'cfgoverlay',
+      automation: 'autopilot',
     };
 
     // These tabs notify AHK (to switch the AHK tree context)
@@ -7463,8 +7530,11 @@
 
     function switchTab(key) {
       const prev = activeTab;
+      // Alias tabs (Overlay/Vitals/AutoPilot/Stash Mover) render inside
+      // #panel-config; everything else has its own #panel-<key>.
+      const panelKey = cfgPanelForTab[key] ? 'config' : key;
       document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === key));
-      document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + key));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'panel-' + panelKey));
 
       // Sync the parent-category highlight + visible sub-tab row.
       const cat = tabCategory[key];
@@ -7482,9 +7552,12 @@
       // When switching INTO Config, re-apply whichever sub-tab was
       // active last (state lives in activeConfigSubTab). Without this
       // the inner .cfg-subpanel.active class wouldn't follow the user
-      // back from another tab.
+      // back from another tab. Alias tabs flip their mapped sub-panel
+      // directly (their state IS the top-level tab, no extra memory).
       if (key === 'config')
         switchConfigSubTab(activeConfigSubTab);
+      else if (cfgPanelForTab[key])
+        _cfgShowSubpanel(cfgPanelForTab[key]);
     }
 
     // AHK-bridge calls + one-time loaders fired on tab activation. Split out so
@@ -10164,8 +10237,12 @@
       // Restore the last active Config sub-tab from the persisted INI
       // value. We only flip if the value actually differs to avoid a
       // re-render loop with the AHK push (which will echo back the
-      // same value we just sent via SetConfigSubTab).
-      const wantedSubTab = (d.configSubTab || 'general');
+      // same value we just sent via SetConfigSubTab). Values persisted
+      // before the nav restructure (automation/overlay/vitals — now
+      // top-level categories) fall back to 'general'.
+      let wantedSubTab = (d.configSubTab || 'general');
+      if (!['general', 'debug', 'data'].includes(wantedSubTab))
+        wantedSubTab = 'general';
       if (wantedSubTab !== activeConfigSubTab) {
         activeConfigSubTab = wantedSubTab;
         // Only physically toggle classes when Config is the visible tab —

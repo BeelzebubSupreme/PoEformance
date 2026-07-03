@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.144`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.145`.
 
 ## Language
 
@@ -1290,6 +1290,34 @@ row. Verified: full-script `AutoHotkey64.exe /validate` passes.
 **Pending in-game verification:** label click walks to Doryani and opens the dialog; the
 window/menu paths resolve on the live client; the final click fires identification; tooltip
 reasons on each abort gate.
+
+## Nav restructure — Overlay + Automation as top-level categories (shipped 0.45.13.145)
+
+Cat bar LEFT: **Game · Overlay · Macro Engine · Automation**; RIGHT: **RE · Config** (RE moved
+right; its sub-tab row is right-aligned like Config's). The former Config sub-tabs moved out:
+**Overlay** category = sub-tabs *Overlay* + *Vitals*; **Automation** category = sub-tabs
+*AutoPilot* + *Stash Mover* (the old single "automation" sub-panel was split into two
+`.cfg-subpanel`s, `stashmover` + `autopilot`). Config keeps **General · Debug · Data & Logs**.
+
+**Mechanism — ALIAS tabs, no DOM moves:** lots of CSS is scoped to `#panel-config`
+(`.hk-num`, `.vrule`, …), so the content stayed inside `#panel-config`. The new categories'
+tabs (`cfgoverlay`, `cfgvitals`, `autopilot`, `stashmover`) are top-level tab KEYS with no own
+panel: `switchTab` resolves them via `cfgPanelForTab` to `#panel-config` and flips the mapped
+inner sub-panel through the shared `_cfgShowSubpanel(name)` (scoped to `#panel-config
+.cfg-subpanel`). `tabCategory`/`lastTabPerCategory` gained the new keys, so the category
+highlight/marker machinery is unchanged. `switchConfigSubTab` keeps handling the remaining
+real Config sub-tabs and REDIRECTS legacy names (`automation`→`autopilot`,
+`overlay`→`cfgoverlay`, `vitals`→`cfgvitals`) to the tab system. Persistence: the
+`configSubTab` whitelist shrank to general/debug/data in BOTH `BridgeDispatch.SetConfigSubTab`
+and `ConfigManager` (old persisted values fall back to `general`; the header-restore in JS
+sanitizes too). Skill-node icons: the orphaned `cfgtab:*` icons were re-keyed
+(`cat:overlay`←LifeandMana, `cat:automation`←PhysicalDamageOverTimeNode,
+`tab:cfgvitals`←BloodMageNode) + `tab:cfgoverlay`=PressurePoints,
+`tab:autopilot`=KeystoneAvatarOfFire, `tab:stashmover`=KeystonePainAttunement (existing
+composited PNGs, mirrored in `tools/skillnode_map.json`).
+**Pending in-game verification:** category/tab switching incl. the sliding marker on the new
+rows, alias tabs showing the right sub-panels, Config remembering general/debug/data, vitals
+edit-mode from the new Vitals tab, snode icons on all new nav chips.
 
 ## Reference
 
