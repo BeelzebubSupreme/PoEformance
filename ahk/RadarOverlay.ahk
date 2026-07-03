@@ -1241,6 +1241,12 @@ class RadarOverlay extends GdiOverlayBase
             }
             lmColorN := 0
 
+            ; Off-screen landmark labels get pinned to the map edge (large map only —
+            ; the minimap's projection legitimately runs far past the window, so edge
+            ; clamping there would be nonsense). Lets the user see where a route leads
+            ; when its destination sits outside the drawn map.
+            clmEdge := clmOn && isLargeMap && CustomLandmarkEdgeLabelsOn()
+
             for idx, target in this._navTargets
             {
                 lmLabel := target.Has("label") ? target["label"] : ""
@@ -1301,8 +1307,17 @@ class RadarOverlay extends GdiOverlayBase
                     ; Curated landmark name (boss + reward / POI / transition dest),
                     ; drawn once at the nearest tile. Outlined so it stays readable
                     ; over the maphack walls. Tinted to its route colour when routes are on.
-                    this._DrawTextOutlined(tSX + tRadius + 3, tSY - 6,
-                        lmLabel " (" distWorld "m)", (lmRouteColor != 0 ? lmRouteColor : RadarOverlay.COLOR_LANDMARK), 0, 1)
+                    lmLabelText  := lmLabel " (" distWorld "m)"
+                    lmLabelColor := (lmRouteColor != 0 ? lmRouteColor : RadarOverlay.COLOR_LANDMARK)
+                    ; If the destination is outside the drawn map, pin the label to the
+                    ; window edge along the player→landmark ray (with an off-screen arrow)
+                    ; so you can still tell where the route / landmark leads.
+                    lmOff := (tSX < 6 || tSX > gameWindowWidth - 6 || tSY < 6 || tSY > gameWindowHeight - 6)
+                    if (clmEdge && lmOff)
+                        this._DrawEdgeLabel(mapCenterX, mapCenterY, tSX, tSY,
+                            gameWindowWidth, gameWindowHeight, lmLabelText, lmLabelColor, isLargeMap)
+                    else
+                        this._DrawTextOutlined(tSX + tRadius + 3, tSY - 6, lmLabelText, lmLabelColor, 0, 1)
                     lmDrawn.Push(Map("gx", srcGX, "gy", srcGY, "exit", navPortal.Has(idx), "color", lmRouteColor))
                 }
                 else if (navOn && (tType = "AreaTransition" || tType = "Waypoint") && !navClaimed.Has(idx))
@@ -1698,6 +1713,48 @@ class RadarOverlay extends GdiOverlayBase
         oldPen := DllCall("SelectObject", "Ptr", this.memDC, "Ptr", pen, "Ptr")
         DllCall("Polyline", "Ptr", this.memDC, "Ptr", pts, "Int", 3)
         DllCall("SelectObject", "Ptr", this.memDC, "Ptr", oldPen)
+    }
+
+    ; Draws an off-screen landmark's label pinned to the window edge, so you can still
+    ; tell where a route/landmark leads when its destination is outside the drawn map.
+    ; The anchor is where the ray from the player (cx,cy) to the target (tSX,tSY) exits
+    ; an inset window rect; an arrow head sits on the edge pointing off-screen and the
+    ; label is placed just inside, fully within the window. Text width is ESTIMATED from
+    ; the character count (measuring the batched font here is not worth the round-trip).
+    _DrawEdgeLabel(cx, cy, tSX, tSY, winW, winH, text, colorBGR, isLargeMap)
+    {
+        m := 6
+        rx1 := m, ry1 := m, rx2 := winW - m, ry2 := winH - m
+        dx := tSX - cx, dy := tSY - cy
+        if (dx = 0 && dy = 0)
+            return
+        ; First inset-rect boundary the outward ray crosses (player is normally inside).
+        tHit := 1.0
+        if (dx > 0)
+            tHit := Min(tHit, (rx2 - cx) / dx)
+        else if (dx < 0)
+            tHit := Min(tHit, (rx1 - cx) / dx)
+        if (dy > 0)
+            tHit := Min(tHit, (ry2 - cy) / dy)
+        else if (dy < 0)
+            tHit := Min(tHit, (ry1 - cy) / dy)
+        if (tHit <= 0 || tHit > 1)
+            tHit := 1.0
+        ex := Round(cx + tHit * dx)
+        ey := Round(cy + tHit * dy)
+        ; Guard degenerate cases (player itself off-screen) so the arrow stays visible.
+        ex := Max(rx1, Min(ex, rx2))
+        ey := Max(ry1, Min(ey, ry2))
+        ; Arrow on the edge, pointing off-screen (the route's direction).
+        this._DrawArrowHead(ex, ey, dx, dy, isLargeMap ? 11 : 9, colorBGR, isLargeMap ? 3 : 2)
+        ; Label just inside the edge; estimate its box so it stays fully on-screen.
+        tw := StrLen(text) * (isLargeMap ? 8 : 7) + 6
+        th := isLargeMap ? 18 : 15
+        lx := (ex > (rx1 + rx2) // 2) ? (ex - 16 - tw) : (ex + 16)
+        ly := ey - (th // 2)
+        lx := Max(rx1 + 2, Min(lx, rx2 - tw))
+        ly := Max(ry1 + 2, Min(ly, ry2 - th))
+        this._DrawTextOutlined(lx, ly, text, colorBGR, 0, 1)
     }
 
     ; Queues a text draw into the text batch. Optional font handle (5th element) lets a few

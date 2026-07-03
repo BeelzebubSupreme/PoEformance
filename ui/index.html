@@ -5862,6 +5862,10 @@
                 <label class="toggle"><input type="checkbox" id="clm-enabled"
                     onchange="ahkCall('SetCustomLandmarks','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
               </div>
+              <div class="cfg-row"><span class="cfg-label">Pin off-screen labels to the map edge (large map)</span>
+                <label class="toggle"><input type="checkbox" id="clm-edgeLabels"
+                    onchange="ahkCall('SetCustomLandmarks','edgeLabels', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
               <div class="cfg-row"><span class="cfg-label">Draw a walkable path to each landmark</span>
                 <label class="toggle"><input type="checkbox" id="clm-showPaths"
                     onchange="ahkCall('SetCustomLandmarks','showPaths', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
@@ -7682,6 +7686,7 @@
       const chk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = truthy(v); };
       const num = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
       chk('clm-enabled', s.enabled);
+      chk('clm-edgeLabels', s.edgeLabels);
       chk('clm-showPaths', s.showPaths);
       chk('clm-pathToExits', s.pathToExits);
       chk('clm-pathToPois', s.pathToPois);
