@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.134`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.135`.
 
 ## Language
 
@@ -1131,6 +1131,16 @@ tile-path pattern → label, matched by SUBSTRING against the tile paths we alre
   `pt["type"] = "AreaTransition"` (Waypoint / Checkpoint excluded). Bone Pits' portal
   `AreaTransition_Animate` is still an AreaTransition (folder `AreaTransitions/` → the classifier matches),
   so it keeps working.
+- **Classifier keyword `areatransition` → `transition` (0.45.13.135):** Lightless Passage still didn't snap
+  because its real exit entity (Entity Inspector: `Name: LightlessPassageTransition, Type: Terrain, Metadata:
+  /Terrain/Gallows/Act2/2_5/Objects/LightlessPassageTransition`) lives in an `Objects/` folder, NOT
+  `AreaTransitions/` — so the `areatransition` keyword never matched it and it was classified `entType=""`
+  (skipped, never in `_navTargets`, no snap candidate). Broadened the transition classifier in all 4 sites
+  (`PoE2EntityReader` deep/tgt/legacy scans + `PoE2MemoryReader` entity scan) from `InStr(path,"areatransition")`
+  to `InStr(path,"transition")` — catches `AreaTransition_*` AND `*Transition` object exits; `waypoint` /
+  `checkpoint` carry no "transition" so they keep their own types. This is the correct semantics (these ARE
+  zone exits) and also improves nav/AutoPilot exit detection. Low over-match risk (decorative "transition"
+  objects are rare and usually not in the radar sample).
 
 ## Reference
 

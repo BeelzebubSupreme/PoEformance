@@ -3573,10 +3573,15 @@ class PoE2GameStateReader extends PoE2InventoryReader
                         if (path = "")
                             continue
 
-                        ; Classify entity type (same logic as deep scan)
+                        ; Classify entity type (same logic as deep scan).
+                        ; Match "transition" (not just "areatransition"): some zone
+                        ; exits are Objects/<Name>Transition (e.g.
+                        ; /Terrain/Gallows/Act2/2_5/Objects/LightlessPassageTransition),
+                        ; NOT in an AreaTransitions/ folder. "waypoint"/"checkpoint"
+                        ; carry no "transition", so they stay their own types.
                         pathLower := StrLower(path)
                         entType := ""
-                        if InStr(pathLower, "areatransition")
+                        if InStr(pathLower, "transition")
                             entType := "AreaTransition"
                         else if InStr(pathLower, "waypoint")
                             entType := "Waypoint"

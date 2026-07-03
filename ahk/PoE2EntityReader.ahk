@@ -1322,7 +1322,7 @@ class PoE2EntityReader extends PoE2ComponentDecoders
             ; Classify entity type
             pathLower := StrLower(path)
             entType := ""
-            if InStr(pathLower, "areatransition")
+            if InStr(pathLower, "transition")
                 entType := "AreaTransition"
             else if InStr(pathLower, "waypoint")
                 entType := "Waypoint"
@@ -1566,7 +1566,7 @@ class PoE2EntityReader extends PoE2ComponentDecoders
 
                 pathLower := StrLower(tgtPath)
                 entType := ""
-                if InStr(pathLower, "areatransition")
+                if InStr(pathLower, "transition")
                     entType := "AreaTransition"
                 else if InStr(pathLower, "waypoint")
                     entType := "Waypoint"
@@ -1682,7 +1682,7 @@ class PoE2EntityReader extends PoE2ComponentDecoders
 
                 pathLower := StrLower(tgtPath)
                 entType := ""
-                if InStr(pathLower, "areatransition")
+                if InStr(pathLower, "transition")
                     entType := "AreaTransition"
                 else if InStr(pathLower, "waypoint")
                     entType := "Waypoint"
