@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.139`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.140`.
 
 ## Language
 
@@ -1186,6 +1186,17 @@ tile-path pattern → label, matched by SUBSTRING against the tile paths we alre
   `g_clmEdgeLabels`, `CustomLandmarkEdgeLabelsOn()`); bridge key `edgeLabels` via the existing
   `SetCustomLandmarks`; header field `edgeLabels`; UI toggle "Pin off-screen labels to the map edge (large
   map)" under the main Custom Landmarks toggle.
+- **Custom Landmarks UI polish (0.45.13.140):** (1) the box now carries a **skill-node icon** like every
+  other section — new slot `sec:det-customlandmarks` → `PathfinderMultichoicePath` (a crossroads notable) in
+  BOTH `tools/skillnode_map.json` and the runtime `SNODE_MAP`; the icon pair was composited into
+  `img/skillnodes/` (the emoji 🗺️ in the header is stripped at runtime by `snodeInit` as usual). (2) The path
+  sub-options are compacted onto two rows via CSS grid: "Line width" + "Max distance" share one row
+  (left-/right-aligned, 2 cols), and "To exits" + "To POIs" + "Arrows" share one row (left/center/right, 3
+  cols) — the long labels were shortened with `title=` tooltips carrying the full meaning. (3) The RE
+  diagnostic buttons are **removed** — the "🔍 Diagnose positions" / "🧭 Probe tile positions" UI buttons,
+  the `CustomLandmarkDiag` / `CustomLandmarkPosProbe` bridge cases, and the `CustomLandmarkDiagnose` /
+  `CustomLandmarkPosProbe` functions in `CustomLandmarks.ahk` (the landmark position bug they helped solve
+  is fixed).
 
 ## Reference
 
