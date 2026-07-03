@@ -1131,6 +1131,51 @@ class RadarOverlay extends GdiOverlayBase
                 }
             }
 
+            ; Snap curated TRANSITION landmarks onto the real portal. Sikaka pins a
+            ; transition label (e.g. "The Bone Pits") to the terrain GATE STRUCTURE,
+            ; whose sub-cell can sit ~1000m+ from the clickable portal ENTITY the nav
+            ; already marks — so the same exit shows twice at two distances. Here each
+            ; labelled AreaTransition/Waypoint/Checkpoint tile is moved onto the nearest
+            ; REFINED same-type entity (the live portal) within a radius, and that
+            ; portal's redundant filename is suppressed. navSnap: landmark idx -> grid
+            ; pos; navClaimed: portal idx -> true.
+            navSnap := Map()
+            navClaimed := Map()
+            if (clmOn)
+            {
+                snapRadiusSq := 276.0 * 276.0   ; ~3000 world units, in grid units
+                for li, lt in this._navTargets
+                {
+                    llabel := lt.Has("label") ? lt["label"] : ""
+                    ltype := lt["type"]
+                    if (llabel = "" || !(ltype = "AreaTransition" || ltype = "Waypoint" || ltype = "Checkpoint"))
+                        continue
+                    if (lt.Has("refined") && lt["refined"])
+                        continue   ; already anchored on a live entity — no snap needed
+                    bestPi := -1, bestPd := snapRadiusSq
+                    for pi, pt in this._navTargets
+                    {
+                        if (pi = li || pt["type"] != ltype)
+                            continue
+                        if !(pt.Has("refined") && pt["refined"])
+                            continue   ; only actual portals (refined entities)
+                        pdx := pt["gridX"] - lt["gridX"]
+                        pdy := pt["gridY"] - lt["gridY"]
+                        pd := pdx * pdx + pdy * pdy
+                        if (pd < bestPd)
+                        {
+                            bestPd := pd
+                            bestPi := pi
+                        }
+                    }
+                    if (bestPi > 0)
+                    {
+                        navSnap[li] := Map("gx", this._navTargets[bestPi]["gridX"], "gy", this._navTargets[bestPi]["gridY"])
+                        navClaimed[bestPi] := true
+                    }
+                }
+            }
+
             for idx, target in this._navTargets
             {
                 lmLabel := target.Has("label") ? target["label"] : ""
@@ -1150,8 +1195,11 @@ class RadarOverlay extends GdiOverlayBase
                 else if (isPureLm && clmShow && !isRep)
                     continue
 
-                dGX := target["gridX"] - playerGX
-                dGY := target["gridY"] - playerGY
+                ; A snapped transition landmark draws at its real portal's position.
+                srcGX := navSnap.Has(idx) ? navSnap[idx]["gx"] : target["gridX"]
+                srcGY := navSnap.Has(idx) ? navSnap[idx]["gy"] : target["gridY"]
+                dGX := srcGX - playerGX
+                dGY := srcGY - playerGY
                 tSX := Round(mapCenterX + (dGX - dGY) * projectionCos)
                 tSY := Round(mapCenterY + (0 - dGX - dGY) * projectionSin)
 
@@ -1178,8 +1226,10 @@ class RadarOverlay extends GdiOverlayBase
                     this._DrawTextOutlined(tSX + tRadius + 3, tSY - 6,
                         lmLabel " (" distWorld "m)", RadarOverlay.COLOR_LANDMARK, 0, 1)
                 }
-                else if (navOn && (tType = "AreaTransition" || tType = "Waypoint"))
+                else if (navOn && (tType = "AreaTransition" || tType = "Waypoint") && !navClaimed.Has(idx))
                 {
+                    ; Skipped when a curated landmark snapped onto this portal — its
+                    ; human-readable name replaces this raw filename.
                     shortName := target["path"]
                     lastSlash := InStr(shortName, "/",, -1)
                     if (lastSlash > 0)
