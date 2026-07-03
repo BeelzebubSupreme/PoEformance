@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.128`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.129`.
 
 ## Language
 
@@ -1080,6 +1080,10 @@ tile-path pattern → label, matched by SUBSTRING against the tile paths we alre
   `tileIdX`) was renamed to `chunkStart` too. This ALSO fixes nav AreaTransition/Waypoint/Checkpoint POI
   positions (they used the same clobbered value; it was only ever masked by the live-entity refine).
   Lesson: never let two locals differ only by letter case in AHK.
+- **Tile-center anchoring (0.45.13.129):** with positions fixed, a small consistent offset remained — the
+  POI was anchored at the top-left CORNER of its ~250-unit tile cell. `_ProcessTgtScanBatch` now anchors
+  at the cell CENTRE (`gridX := (col + 0.5) * tileToGrid`), removing the ~half-tile (~125-unit) shift
+  toward the grid origin.
 
 ## Reference
 

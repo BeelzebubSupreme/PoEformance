@@ -1597,8 +1597,11 @@ class PoE2EntityReader extends PoE2ComponentDecoders
             else
                 tileKey := tgtPath "x:" tileIdY "-y:" tileIdX
 
-            gridX := Mod(tileArrayIdx, this._tgtScanTotalTilesX) * tileToGrid
-            gridY := Floor(tileArrayIdx / this._tgtScanTotalTilesX) * tileToGrid
+            ; Anchor the POI at the CENTER of its ~250-unit tile cell, not the
+            ; top-left corner — the corner is a ~half-tile (~125-unit) offset toward
+            ; the grid origin that showed on the radar as a slight consistent shift.
+            gridX := (Mod(tileArrayIdx, this._tgtScanTotalTilesX) + 0.5) * tileToGrid
+            gridY := (Floor(tileArrayIdx / this._tgtScanTotalTilesX) + 0.5) * tileToGrid
 
             if !results.Has(tileKey)
             {
