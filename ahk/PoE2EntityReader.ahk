@@ -1506,6 +1506,13 @@ class PoE2EntityReader extends PoE2ComponentDecoders
             this._tgtPathTypeCache := Map()
         cache := this._tgtPathTypeCache
 
+        ; Custom-landmark match context (curated boss/POI labels, per area). The
+        ; area code is fixed for the whole zone scan, so resolve it once; labels
+        ; are ALWAYS computed + cached per unique tile (cheap) so the render-time
+        ; toggle stays instant. See CustomLandmarks.ahk.
+        clmAreaCode := (this.HasOwnProp("_radarWorldAreaCache") && IsObject(this._radarWorldAreaCache)
+            && this._radarWorldAreaCache.Has("id")) ? this._radarWorldAreaCache["id"] : ""
+
         ; Time-sliced inner loop: bail early if we exceed maxMs even though
         ; we still have tiles in the prefetched batch buffer. The next tick
         ; resumes from this._tgtScanTileIdx + 1.
@@ -1536,7 +1543,8 @@ class PoE2EntityReader extends PoE2ComponentDecoders
             if cache.Has(tgtFilePtr)
             {
                 cached := cache[tgtFilePtr]
-                if (cached["type"] = "")
+                lmLabel := cached.Has("label") ? cached["label"] : ""
+                if (cached["type"] = "" && lmLabel = "")
                     continue
                 entType := cached["type"]
                 tgtPath := cached["path"]
@@ -1546,7 +1554,7 @@ class PoE2EntityReader extends PoE2ComponentDecoders
                 tgtPath := this.ReadStdWStringAt(tgtFilePtr + PoE2Offsets.TgtFile["TgtPath"], 260)
                 if (tgtPath = "")
                 {
-                    cache[tgtFilePtr] := Map("type", "", "path", "")
+                    cache[tgtFilePtr] := Map("type", "", "path", "", "label", "")
                     continue
                 }
 
@@ -1558,8 +1566,12 @@ class PoE2EntityReader extends PoE2ComponentDecoders
                     entType := "Waypoint"
                 else if InStr(pathLower, "checkpoint")
                     entType := "Checkpoint"
-                cache[tgtFilePtr] := Map("type", entType, "path", tgtPath)
-                if (entType = "")
+                ; Curated landmark label (boss arena + reward, named POI, transition
+                ; destination). Kept ALONGSIDE entType so a labelled transition still
+                ; navigates. A pure landmark (entType="") is still kept via the label.
+                lmLabel := CustomLandmarkMatch(clmAreaCode, tgtPath)
+                cache[tgtFilePtr] := Map("type", entType, "path", tgtPath, "label", lmLabel)
+                if (entType = "" && lmLabel = "")
                     continue
             }
 
@@ -1578,7 +1590,8 @@ class PoE2EntityReader extends PoE2ComponentDecoders
             {
                 results[tileKey] := Map(
                     "path", tgtPath,
-                    "type", entType,
+                    "type", (entType != "" ? entType : "Landmark"),
+                    "label", lmLabel,
                     "gridX", gridX,
                     "gridY", gridY,
                     "worldX", gridX * (250.0 / 0x17),

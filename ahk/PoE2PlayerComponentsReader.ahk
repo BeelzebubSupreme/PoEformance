@@ -64,6 +64,27 @@ class PoE2PlayerComponentsReader extends PoE2EntityReader
         return rawServerDataPtr
     }
 
+    ; Reads the active league name from ServerData (+0x21E0, a std::wstring). This is
+    ; EXACTLY the poe.ninja / poe2scout league value (e.g. "Standard", "Hardcore",
+    ; "HC Runes of Aldur"), so it can be fed straight to the price layer to auto-detect
+    ; the league. Param: areaInstanceAddress - the current AreaInstance pointer.
+    ; Returns: the trimmed league name, or "" when it can't be resolved.
+    ReadCurrentLeague(areaInstanceAddress)
+    {
+        if !this.IsProbablyValidPointer(areaInstanceAddress)
+            return ""
+        league := ""
+        try
+        {
+            playerInfoPtr    := areaInstanceAddress + PoE2Offsets.AreaInstance["PlayerInfo"]
+            serverDataRawPtr := this.Mem.ReadPtr(playerInfoPtr + PoE2Offsets.LocalPlayerStruct["ServerDataPtr"])
+            serverDataPtr    := this.ResolveServerDataPointer(playerInfoPtr, serverDataRawPtr)
+            if this.IsProbablyValidPointer(serverDataPtr)
+                league := Trim(this.ReadStdWStringAt(serverDataPtr + PoE2Offsets.ServerDataStructure["League"], 64))
+        }
+        return league
+    }
+
     ; Scans the area entity map to locate the local player entity.
     ; Identifies the player by the presence of a valid "Player" component.
     ; Params: areaInstanceAddress - pointer to the current AreaInstance

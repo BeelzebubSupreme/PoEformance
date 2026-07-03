@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.121`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.123`.
 
 ## Language
 
@@ -964,6 +964,68 @@ mirrors it into `logs\InGameStateMonitor.autopilot_status.log` for after-the-fac
   `TryAutoPilot` calls `ApStatusLogTick()`; `BridgeDispatch` case `SetAutoPilotStatusLog`;
   `WebViewBridge` pushes `apStatusLog`; UI toggle "📝 Log status to file" in **Config → AutoPilot →
   Live Status**.
+
+## Auto-detect price league (shipped 0.45.13.122)
+
+The price league was manually typed (`g_ltLeague`, default "Standard"); a wrong/stale value gave
+empty prices. The owner supplied a verified pointer: **`ServerData + 0x21E0`** is a `std::wstring`
+holding the active league name — EXACTLY poe.ninja/poe2scout's value (`"Standard"`, `"Hardcore"`,
+`"HC Runes of Aldur"`; the HC/SC prefix disambiguates), so it feeds the price layer directly.
+
+- **`PoE2Offsets.ServerDataStructure["League"] = 0x21E0`** (same base as `PlayerInventories` 0x320).
+- **`PoE2PlayerComponentsReader.ReadCurrentLeague(areaInstanceAddress)`** — resolves ServerData
+  (`PlayerInfo → ServerDataPtr → ResolveServerDataPointer`) and reads the wstring; returns `""` if
+  unresolvable.
+- **`LootTracker`** — new `g_ltAutoLeague` (default ON, persisted `[LootTracker] autoLeague`) +
+  runtime `g_ltDetectedLeague`. `_LtAutoLeagueTick(radarSnap)` (in `TryLootTrackerTick`, throttled
+  15 s, acts only on a CHANGE) reads the league and, when it differs, repoints `g_ltLeague` **and**
+  `g_ltTradeLeague` (trade API, in lock-step), persists both, and kicks a poe.ninja refresh (only
+  when `g_ltEnabled`). Toggling auto on resets `g_ltAutoLeagueNextTick` for an immediate re-detect.
+- **Header/UI:** `BuildLootHeaderJson` pushes `autoLeague` + `detectedLeague`; `_LtApplySetting`
+  handles the `autoLeague` key; UI **Config → Loot** has an "Auto-detect league" toggle that dims
+  the manual `poe.ninja league` field and shows `detected: <league>` when on.
+- **Pending in-game verification:** with auto on, the league field should show the character's real
+  league (e.g. `detected: HC Runes of Aldur`), prices refetch on a league change, no manual entry.
+
+## Custom landmark labels on the radar (shipped 0.45.13.123) — port of Sikaka/POE2Radar `CustomLandmarkData`
+
+Draws curated, human-readable labels on the radar for known terrain tiles — boss arenas (with
+their reward, e.g. "Beira of the Rotten (10% Cold Res)"), named POIs, and area-transition
+destinations. Ports `Sikaka/POE2Radar`'s `CustomLandmarkData.cs`: a big JSON keyed by area code →
+tile-path pattern → label, matched by SUBSTRING against the tile paths we already scan.
+
+- **`data/custom_landmarks.json` (committed source data)** — the full label map shipped verbatim
+  from Sikaka/POE2Radar (`CustomLandmarks.json`): 91 area codes, 272 entries, plus a global `*`
+  bucket. Keys look like
+  `"Metadata/Terrain/Woods/Slash/HagWitchArena_01.tdtx:5-y:0"` → `"Beira of the Rotten (10% Cold Res)"`.
+  Tracked (NOT gitignored). Data credit: Sikaka/POE2Radar.
+- **`ahk/CustomLandmarks.ahk` (new)** — the lookup. `LoadCustomLandmarks()` seeds all globals
+  (init gotcha) — `g_clmEnabled` (default ON, `[CustomLandmarks] enabled`), `g_clmFile`,
+  `g_clmData`, `g_clmCount` — and calls `_ClmLoadData()`. `_ClmLoadData()` parses the JSON with the
+  reference's normalization: strip the `…:x-y:y` tile-coord suffix at the first `:`, map
+  `.tdtx → .tdt` (so `.tdt` is a substring of both our paths and the keys), lowercase; result is
+  `Map(areaCodeLower → [[patternLower,label],…])`. `CustomLandmarkMatch(areaCode, tilePath)` does the
+  case-insensitive substring match — the area's own patterns first, then the global `*` bucket —
+  and returns the label or `""`. `CustomLandmarksOn()` is a cheap accessor for `RadarOverlay.Render`
+  (which can't easily add a `global`). Self-persists via `SaveCustomLandmarks()`;
+  `BuildCustomLandmarksHeaderJson()` exposes `enabled` + `count`.
+- **Area code** = `worldAreaDat["id"]` (e.g. "G1_2", "MapBluff"), read off the reader's
+  `_radarWorldAreaCache["id"]`.
+- **`ahk/PoE2EntityReader.ahk` (`_ProcessTgtScanBatch`)** — the tgt-scan already resolves each tile's
+  `tgtPath`. It now also computes `clmAreaCode` once per batch, matches every tile via
+  `CustomLandmarkMatch`, caches the label alongside the type in `_tgtPathTypeCache` (so a landmark
+  tile with no nav-type is still kept), and emits `label` (+ `type` "Landmark" when there's no nav
+  type) in each `results[tileKey]`.
+- **`ahk/RadarOverlay.ahk`** — new `COLOR_LANDMARK` (amber). The `_navTargets` population is hoisted
+  out of the nav gate so landmarks draw even when AutoPilot nav is off; the draw gate is
+  `this._navEnabled || CustomLandmarksOn()`. Per target, a non-empty `label` with the feature on
+  draws an outlined amber `label " (<dist>m)"`; nav filename labels are unchanged.
+- **Wiring:** `InGameStateMonitor.ahk` `#Include ahk/CustomLandmarks.ahk` + `LoadCustomLandmarks()`;
+  `BridgeDispatch.ahk` case `SetCustomLandmarks`; `WebViewBridge.ahk` pushes `customLandmarks`; UI
+  **Config → Overlay → "🗺️ Custom Landmarks"** (toggle, shows the loaded-label count),
+  `customLandmarksSyncFromHeader`. Default ON.
+- **Pending in-game verification:** confirm labels render at the right tiles (boss arenas / POIs /
+  transitions) for the current area, the amber colour/outline is legible, and toggling off hides them.
 
 ## Reference
 

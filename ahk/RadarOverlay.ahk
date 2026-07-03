@@ -82,6 +82,7 @@ class RadarOverlay extends GdiOverlayBase
     static COLOR_WAYPOINT       := 0xFFD700   ; gold
     static COLOR_AREATRANSITION := 0x00BFFF   ; deep sky blue
     static COLOR_CHECKPOINT     := 0x7FFF00   ; chartreuse
+    static COLOR_LANDMARK       := 0x20B0FF   ; amber (curated custom landmarks)
     static COLOR_MAPHACK        := 0x909090   ; neutral gray (BGR) — matches game map outlines
     static COLOR_WALKABLE       := 0xFF8030   ; blue (BGR) — walkable-grid fill diagnostic overlay
 
@@ -535,13 +536,15 @@ class RadarOverlay extends GdiOverlayBase
         if !(Type(zoneScanResults) = "Array")
             zoneScanResults := []
 
+        ; Keep the render's POI list current regardless of nav — the custom-landmark
+        ; labels (drawn later) read from _navTargets too. Nav AUTO-PATHING (below)
+        ; stays gated on _navEnabled.
+        prevTargetCount := this._navTargets.Length
+        this._navTargets := zoneScanResults
+        targetsChanged := (zoneScanResults.Length != prevTargetCount)
+
         if (this._navEnabled && zoneScanResults.Length > 0)
         {
-            ; Detect new entities added since last tick → force path recompute
-            prevTargetCount := this._navTargets.Length
-            this._navTargets := zoneScanResults
-            targetsChanged := (zoneScanResults.Length != prevTargetCount)
-
             pGX := Round(playerWorldX / RadarOverlay.WORLD_TO_GRID_RATIO)
             pGY := Round(playerWorldY / RadarOverlay.WORLD_TO_GRID_RATIO)
             now := A_TickCount
@@ -1097,12 +1100,23 @@ class RadarOverlay extends GdiOverlayBase
         }
 
         ; ── Zone scan entities: draw discovered sleeping entities from deep scan ──
-        if (this._navEnabled && this._navTargets.Length > 0)
+        ; Draw when nav is on (all POI dots + filenames) OR custom landmarks are on
+        ; (only the curated landmark labels). clmOn gates the landmark half so the
+        ; toggle is instant without a rescan.
+        clmOn := CustomLandmarksOn()
+        if ((this._navEnabled || clmOn) && this._navTargets.Length > 0)
         {
+            navOn     := this._navEnabled
             playerGX  := playerWorldX / RadarOverlay.WORLD_TO_GRID_RATIO
             playerGY  := playerWorldY / RadarOverlay.WORLD_TO_GRID_RATIO
             for idx, target in this._navTargets
             {
+                lmLabel := target.Has("label") ? target["label"] : ""
+                clmShow := (clmOn && lmLabel != "")
+                ; With only landmarks on, skip generic (unlabelled) nav POIs.
+                if !(navOn || clmShow)
+                    continue
+
                 dGX := target["gridX"] - playerGX
                 dGY := target["gridY"] - playerGY
                 tSX := Round(mapCenterX + (dGX - dGY) * projectionCos)
@@ -1114,6 +1128,7 @@ class RadarOverlay extends GdiOverlayBase
                         : (tType = "Checkpoint")     ? RadarOverlay.COLOR_CHECKPOINT
                         : (tType = "Boss")           ? RadarOverlay.COLOR_ENEMY_BOSS
                         : (tType = "NPC")            ? RadarOverlay.COLOR_NPC
+                        : (tType = "Landmark")       ? RadarOverlay.COLOR_LANDMARK
                         :                              0xFFFFFF
                 tRadius := (tType = "AreaTransition" || tType = "Waypoint") ? (isLargeMap ? 7 : 5)
                          : (isLargeMap ? 5 : 3)
@@ -1121,14 +1136,20 @@ class RadarOverlay extends GdiOverlayBase
                 ; Draw a ring (hollow) for zone-scan entities so they're visually distinct from live entities
                 this._DrawDot(tSX, tSY, tColor, tRadius)
 
-                ; Label for AreaTransitions and Waypoints
-                if (tType = "AreaTransition" || tType = "Waypoint")
+                distWorld := Round(Sqrt(dGX * dGX + dGY * dGY) * RadarOverlay.WORLD_TO_GRID_RATIO)
+                if (clmShow)
+                {
+                    ; Curated landmark name (boss + reward / POI / transition dest).
+                    ; Outlined so it stays readable over the maphack walls.
+                    this._DrawTextOutlined(tSX + tRadius + 3, tSY - 6,
+                        lmLabel " (" distWorld "m)", RadarOverlay.COLOR_LANDMARK, 0, 1)
+                }
+                else if (navOn && (tType = "AreaTransition" || tType = "Waypoint"))
                 {
                     shortName := target["path"]
                     lastSlash := InStr(shortName, "/",, -1)
                     if (lastSlash > 0)
                         shortName := SubStr(shortName, lastSlash + 1)
-                    distWorld := Round(Sqrt(dGX * dGX + dGY * dGY) * RadarOverlay.WORLD_TO_GRID_RATIO)
                     this._DrawText(tSX + tRadius + 3, tSY - 6,
                         shortName " (" distWorld "m)", tColor)
                 }
