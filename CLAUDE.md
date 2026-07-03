@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.130`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.131`.
 
 ## Language
 
@@ -1095,6 +1095,16 @@ tile-path pattern → label, matched by SUBSTRING against the tile paths we alre
   loaded within range it falls back to the tile position. Only transition-TYPE landmarks snap (bosses /
   chests / named POIs sit on their own tiles already). The distinguishing signal is the `refined` flag
   (entity-scan entries have it; raw tgt structure tiles don't).
+- **Extended snap to entrance/passage Landmarks (0.45.13.131):** in-game, "The Bone Pits" (type
+  `AreaTransition`) snapped perfectly, but entrance/passage exits that Sikaka classifies as type
+  `Landmark` did NOT — their paths (`Badlands_Entrance_01` → "The Ardura Caravan", `AbyssHole` →
+  "Lightless Passage") carry no "areatransition" keyword, so they stayed on the gate tile beside their
+  live portal (`AreaTransition_Animate (47m)` + `The Ardura Caravan (685m)`). Fix: the snap now considers
+  EVERY labelled landmark, snapping to the nearest refined transition/waypoint/checkpoint portal — but
+  with a TYPE-dependent radius: transition-type tiles get the generous ~3000 m (big gate offset), all
+  other tiles only ~1200 m so a real POI / boss that isn't at an exit (e.g. "Fossilised Memorial") finds
+  no portal in range and stays on its own tile. `RadarOverlay.WORLD_TO_GRID_RATIO` converts the world
+  radius to the grid² threshold.
 
 ## Reference
 
