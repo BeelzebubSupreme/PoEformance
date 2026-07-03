@@ -434,7 +434,10 @@ class PoE2Offsets
 
     static ServerDataStructure := Map(
         "PlayerInventories", 0x320,
-        "PlayerInventoriesLast", 0x328
+        "PlayerInventoriesLast", 0x328,
+        "League", 0x21E0   ; std::wstring — active league name, EXACTLY poe.ninja/poe2scout's
+                           ; value (e.g. "Standard", "Hardcore", "HC Runes of Aldur"). The HC/SC
+                           ; prefix lets the price layer auto-detect the league. Live 2026-06-22.
     )
 
     static InventoryArray := Map(

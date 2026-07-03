@@ -82,6 +82,11 @@ class RadarOverlay extends GdiOverlayBase
     static COLOR_WAYPOINT       := 0xFFD700   ; gold
     static COLOR_AREATRANSITION := 0x00BFFF   ; deep sky blue
     static COLOR_CHECKPOINT     := 0x7FFF00   ; chartreuse
+    static COLOR_LANDMARK       := 0x20B0FF   ; amber (curated custom landmarks)
+    ; Per-route colour cycle for the optional "walkable path to each landmark"
+    ; feature (BGR). Bright + mutually distinct so overlapping routes stay legible.
+    static CLM_PATH_PALETTE := [0x00A5FF, 0x50FF50, 0xF0C000, 0xFF50FF, 0x50FFFF
+                              , 0x6060FF, 0xC0FF00, 0xFF00A0, 0x00FF9B, 0xFF8C40]
     static COLOR_MAPHACK        := 0x909090   ; neutral gray (BGR) — matches game map outlines
     static COLOR_WALKABLE       := 0xFF8030   ; blue (BGR) — walkable-grid fill diagnostic overlay
 
@@ -535,13 +540,15 @@ class RadarOverlay extends GdiOverlayBase
         if !(Type(zoneScanResults) = "Array")
             zoneScanResults := []
 
+        ; Keep the render's POI list current regardless of nav — the custom-landmark
+        ; labels (drawn later) read from _navTargets too. Nav AUTO-PATHING (below)
+        ; stays gated on _navEnabled.
+        prevTargetCount := this._navTargets.Length
+        this._navTargets := zoneScanResults
+        targetsChanged := (zoneScanResults.Length != prevTargetCount)
+
         if (this._navEnabled && zoneScanResults.Length > 0)
         {
-            ; Detect new entities added since last tick → force path recompute
-            prevTargetCount := this._navTargets.Length
-            this._navTargets := zoneScanResults
-            targetsChanged := (zoneScanResults.Length != prevTargetCount)
-
             pGX := Round(playerWorldX / RadarOverlay.WORLD_TO_GRID_RATIO)
             pGY := Round(playerWorldY / RadarOverlay.WORLD_TO_GRID_RATIO)
             now := A_TickCount
@@ -1097,14 +1104,173 @@ class RadarOverlay extends GdiOverlayBase
         }
 
         ; ── Zone scan entities: draw discovered sleeping entities from deep scan ──
-        if (this._navEnabled && this._navTargets.Length > 0)
+        ; Draw when nav is on (all POI dots + filenames) OR custom landmarks are on
+        ; (only the curated landmark labels). clmOn gates the landmark half so the
+        ; toggle is instant without a rescan.
+        clmOn := CustomLandmarksOn()
+        if ((this._navEnabled || clmOn) && this._navTargets.Length > 0)
         {
+            navOn     := this._navEnabled
             playerGX  := playerWorldX / RadarOverlay.WORLD_TO_GRID_RATIO
             playerGY  := playerWorldY / RadarOverlay.WORLD_TO_GRID_RATIO
+
+            ; De-dupe curated landmark labels. One boss arena / wall / POI spans MANY
+            ; terrain tiles that all carry the SAME label (Sikaka's map is per-tile),
+            ; so without this a single landmark stacks its label dozens of times across
+            ; the map. Pre-pass: keep only the tile nearest the player per unique label;
+            ; that representative tile is the one allowed to draw the label + dot.
+            lmRep := Map()   ; label -> Map("idx", nearestIdx, "dsq", distSq)
+            if (clmOn)
+            {
+                for idx, target in this._navTargets
+                {
+                    lmLabel := target.Has("label") ? target["label"] : ""
+                    if (lmLabel = "")
+                        continue
+                    ldGX := target["gridX"] - playerGX
+                    ldGY := target["gridY"] - playerGY
+                    ldSq := ldGX * ldGX + ldGY * ldGY
+                    if (!lmRep.Has(lmLabel) || ldSq < lmRep[lmLabel]["dsq"])
+                        lmRep[lmLabel] := Map("idx", idx, "dsq", ldSq)
+                }
+            }
+
+            ; Snap curated TRANSITION landmarks onto the real portal. Sikaka pins a
+            ; transition label (e.g. "The Bone Pits") to the terrain GATE STRUCTURE,
+            ; whose sub-cell can sit ~1000m+ from the clickable portal ENTITY the nav
+            ; already marks — so the same exit shows twice at two distances. Here each
+            ; labelled AreaTransition/Waypoint/Checkpoint tile is moved onto the nearest
+            ; REFINED same-type entity (the live portal) within a radius, and that
+            ; portal's redundant filename is suppressed. navSnap: landmark idx -> grid
+            ; pos; navClaimed: portal idx -> true.
+            navSnap := Map()
+            navClaimed := Map()
+            navPortal := Map()   ; landmark idx -> true when it snapped to a real exit (vs a POI)
+            if (clmOn)
+            {
+                ; Radius (world units) → grid² threshold. Transition-TYPE curated tiles
+                ; pin to a big gate STRUCTURE (large offset like Bone Pits ~1350) → a
+                ; generous radius. Other curated tiles (entrance/passage Landmarks like
+                ; Ardura Caravan / Lightless Passage) only snap to a CLOSE portal so real
+                ; POIs / bosses that aren't at an exit (e.g. a Memorial) stay on their
+                ; own tile — they simply have no portal within the small radius.
+                ratio := RadarOverlay.WORLD_TO_GRID_RATIO
+                radTransSq := (3000.0 / ratio) * (3000.0 / ratio)
+                radOtherSq := (1000.0 / ratio) * (1000.0 / ratio)
+                for li, lt in this._navTargets
+                {
+                    llabel := lt.Has("label") ? lt["label"] : ""
+                    if (llabel = "")
+                        continue
+                    ltype := lt["type"]
+                    lpath := lt.Has("path") ? lt["path"] : ""
+                    isTransType := (ltype = "AreaTransition" || ltype = "Waypoint" || ltype = "Checkpoint")
+                    bestPi := -1, bestPd := (isTransType ? radTransSq : radOtherSq)
+                    for pi, pt in this._navTargets
+                    {
+                        if (pi = li)
+                            continue
+                        ; A destination landmark is reached via an AREA TRANSITION —
+                        ; NOT a Waypoint / Checkpoint (those are intra-zone features that
+                        ; often sit right next to an exit and would otherwise steal the
+                        ; snap). Only AreaTransition entries are portal candidates.
+                        if (pt["type"] != "AreaTransition")
+                            continue
+                        ; The real portal has a DIFFERENT tile path than the curated
+                        ; landmark (whose own gate/structure spans many SAME-path tiles);
+                        ; that difference — not the `refined` flag — is what separates the
+                        ; clickable portal from the landmark's own decoration tiles (and
+                        ; it also catches portals the entity-refine never reached).
+                        if (lpath != "" && pt.Has("path") && pt["path"] = lpath)
+                            continue
+                        pdx := pt["gridX"] - lt["gridX"]
+                        pdy := pt["gridY"] - lt["gridY"]
+                        pd := pdx * pdx + pdy * pdy
+                        if (pd < bestPd)
+                        {
+                            bestPd := pd
+                            bestPi := pi
+                        }
+                    }
+                    if (bestPi > 0)
+                    {
+                        navSnap[li] := Map("gx", this._navTargets[bestPi]["gridX"], "gy", this._navTargets[bestPi]["gridY"])
+                        navClaimed[bestPi] := true
+                        navPortal[li] := true   ; snapped to a real AreaTransition → this is an EXIT
+                    }
+                }
+
+                ; Walkable nudge: a curated landmark whose tile sits on UNWALKABLE
+                ; terrain (a decorative feature off the playable area, e.g. "Fossilised
+                ; Memorial") and did NOT snap to a portal is pulled onto the nearest
+                ; reachable ground so its marker lands where you can actually stand.
+                ; target["gridX"]/gridY are already walkable-grid cell coords.
+                if (this._pathfinder && this._pathfinder.HasTerrain())
+                {
+                    for li, lt in this._navTargets
+                    {
+                        if (navSnap.Has(li))
+                            continue
+                        llabel := lt.Has("label") ? lt["label"] : ""
+                        if (llabel = "")
+                            continue
+                        wgx := Round(lt["gridX"])
+                        wgy := Round(lt["gridY"])
+                        if this._pathfinder.IsWalkable(wgx, wgy)
+                            continue   ; already on reachable ground
+                        near := this._pathfinder.NearestWalkable(wgx, wgy, 75)
+                        if (near)
+                            navSnap[li] := Map("gx", near[1], "gy", near[2])
+                    }
+                }
+            }
+
+            lmDrawn := []   ; display positions of the drawn landmarks (for the optional path lines)
+
+            ; Landmark-path context (resolved once): when routes are on, each
+            ; ROUTE-ELIGIBLE landmark gets its own palette colour, shared by its
+            ; dot + label + route so they read as one. Eligibility = passes the
+            ; exit/POI filter AND is within the range cap.
+            clmPathsMode := clmOn && CustomLandmarkPathsOn() && this._pathfinder.HasTerrain()
+            clmPO := clmPathsMode ? CustomLandmarkPathOpts() : 0
+            clmCapSq := 0.0
+            if (clmPathsMode)
+            {
+                clmCapG  := clmPO["maxDist"] / RadarOverlay.WORLD_TO_GRID_RATIO
+                clmCapSq := clmCapG * clmCapG
+            }
+            lmColorN := 0
+
+            ; Off-screen landmark labels get pinned to the map edge (large map only —
+            ; the minimap's projection legitimately runs far past the window, so edge
+            ; clamping there would be nonsense). Lets the user see where a route leads
+            ; when its destination sits outside the drawn map.
+            clmEdge := clmOn && isLargeMap && CustomLandmarkEdgeLabelsOn()
+
             for idx, target in this._navTargets
             {
-                dGX := target["gridX"] - playerGX
-                dGY := target["gridY"] - playerGY
+                lmLabel := target.Has("label") ? target["label"] : ""
+                clmShow := (clmOn && lmLabel != "")
+                ; Is this the representative (nearest) tile for its label?
+                isRep    := clmShow && lmRep.Has(lmLabel) && (lmRep[lmLabel]["idx"] = idx)
+                isPureLm := (target["type"] = "Landmark")   ; landmark with no nav value
+
+                ; Landmarks-only (nav off): only representative landmark tiles draw.
+                if (!navOn)
+                {
+                    if (!isRep)
+                        continue
+                }
+                ; Nav on: a pure-landmark DUPLICATE (same label, not the representative)
+                ; carries no nav value → suppress so identical labels/dots don't stack.
+                else if (isPureLm && clmShow && !isRep)
+                    continue
+
+                ; A snapped transition landmark draws at its real portal's position.
+                srcGX := navSnap.Has(idx) ? navSnap[idx]["gx"] : target["gridX"]
+                srcGY := navSnap.Has(idx) ? navSnap[idx]["gy"] : target["gridY"]
+                dGX := srcGX - playerGX
+                dGY := srcGY - playerGY
                 tSX := Round(mapCenterX + (dGX - dGY) * projectionCos)
                 tSY := Round(mapCenterY + (0 - dGX - dGY) * projectionSin)
 
@@ -1114,23 +1280,160 @@ class RadarOverlay extends GdiOverlayBase
                         : (tType = "Checkpoint")     ? RadarOverlay.COLOR_CHECKPOINT
                         : (tType = "Boss")           ? RadarOverlay.COLOR_ENEMY_BOSS
                         : (tType = "NPC")            ? RadarOverlay.COLOR_NPC
+                        : (tType = "Landmark")       ? RadarOverlay.COLOR_LANDMARK
                         :                              0xFFFFFF
                 tRadius := (tType = "AreaTransition" || tType = "Waypoint") ? (isLargeMap ? 7 : 5)
                          : (isLargeMap ? 5 : 3)
 
-                ; Draw a ring (hollow) for zone-scan entities so they're visually distinct from live entities
-                this._DrawDot(tSX, tSY, tColor, tRadius)
-
-                ; Label for AreaTransitions and Waypoints
-                if (tType = "AreaTransition" || tType = "Waypoint")
+                ; Route-eligible landmark → its own palette colour (dot + label +
+                ; route all share it). 0 = not route-eligible (keep normal colours).
+                lmRouteColor := 0
+                if (clmShow && isRep && clmPathsMode)
                 {
+                    routeElig := (navPortal.Has(idx) ? clmPO["toExits"] : clmPO["toPois"])
+                    if (routeElig && (dGX * dGX + dGY * dGY) <= clmCapSq)
+                    {
+                        lmColorN += 1
+                        lmRouteColor := RadarOverlay.CLM_PATH_PALETTE[Mod(lmColorN - 1, RadarOverlay.CLM_PATH_PALETTE.Length) + 1]
+                    }
+                }
+
+                ; Draw a ring (hollow) for zone-scan entities so they're visually distinct from live entities
+                this._DrawDot(tSX, tSY, (lmRouteColor != 0 ? lmRouteColor : tColor), tRadius)
+
+                distWorld := Round(Sqrt(dGX * dGX + dGY * dGY) * RadarOverlay.WORLD_TO_GRID_RATIO)
+                if (clmShow && isRep)
+                {
+                    ; Curated landmark name (boss + reward / POI / transition dest),
+                    ; drawn once at the nearest tile. Outlined so it stays readable
+                    ; over the maphack walls. Tinted to its route colour when routes are on.
+                    lmLabelText  := lmLabel " (" distWorld "m)"
+                    lmLabelColor := (lmRouteColor != 0 ? lmRouteColor : RadarOverlay.COLOR_LANDMARK)
+                    ; If the destination is outside the drawn map, pin the label to the
+                    ; window edge along the player→landmark ray (with an off-screen arrow)
+                    ; so you can still tell where the route / landmark leads.
+                    lmOff := (tSX < 6 || tSX > gameWindowWidth - 6 || tSY < 6 || tSY > gameWindowHeight - 6)
+                    if (clmEdge && lmOff)
+                        this._DrawEdgeLabel(mapCenterX, mapCenterY, tSX, tSY,
+                            gameWindowWidth, gameWindowHeight, lmLabelText, lmLabelColor, isLargeMap)
+                    else
+                        this._DrawTextOutlined(tSX + tRadius + 3, tSY - 6, lmLabelText, lmLabelColor, 0, 1)
+                    lmDrawn.Push(Map("gx", srcGX, "gy", srcGY, "exit", navPortal.Has(idx), "color", lmRouteColor))
+                }
+                else if (navOn && (tType = "AreaTransition" || tType = "Waypoint") && !navClaimed.Has(idx))
+                {
+                    ; Skipped when a curated landmark snapped onto this portal — its
+                    ; human-readable name replaces this raw filename.
                     shortName := target["path"]
                     lastSlash := InStr(shortName, "/",, -1)
                     if (lastSlash > 0)
                         shortName := SubStr(shortName, lastSlash + 1)
-                    distWorld := Round(Sqrt(dGX * dGX + dGY * dGY) * RadarOverlay.WORLD_TO_GRID_RATIO)
                     this._DrawText(tSX + tRadius + 3, tSY - 6,
                         shortName " (" distWorld "m)", tColor)
+                }
+            }
+
+            ; ── Optional: walkable A* path from the player to each landmark ──
+            ; Recompute is THROTTLED (A* is costly) + cached by _clmPathCache; the
+            ; draw runs every frame off the cache. Each route carries its landmark's
+            ; own palette colour (shared with that landmark's dot + label), a
+            ; configurable width + range, an exit/POI filter and optional direction
+            ; chevrons. Drawn UNDER the gold nav / red combat paths.
+            if (clmPathsMode && lmDrawn.Length > 0)
+            {
+                if !this.HasOwnProp("_clmPathCache")
+                {
+                    this._clmPathCache := []
+                    this._clmPathTick  := 0
+                    this._clmPathPGX   := -999999
+                    this._clmPathPGY   := -999999
+                    this._clmPathSig   := ""
+                }
+                pGXi := Round(playerGX)
+                pGYi := Round(playerGY)
+                nowT := A_TickCount
+                ; Re-run A* on player move / timer OR when the exit/POI filter or range
+                ; changed (so toggling an option updates without waiting for the timer).
+                clmSig := clmPO["toExits"] "|" clmPO["toPois"] "|" clmPO["maxDist"] "|" lmDrawn.Length
+                if ((nowT - this._clmPathTick) > 1500 || clmSig != this._clmPathSig
+                    || Abs(pGXi - this._clmPathPGX) > 12 || Abs(pGYi - this._clmPathPGY) > 12)
+                {
+                    fresh := []
+                    for _, lm in lmDrawn
+                    {
+                        ; Only route-eligible landmarks got a colour assigned (0 = filtered
+                        ; out by the exit/POI toggle or the range cap → no route).
+                        if (lm["color"] = 0)
+                            continue
+                        route := this._pathfinder.FindPath(pGXi, pGYi, Round(lm["gx"]), Round(lm["gy"]))
+                        if (route && route.Length >= 2)
+                            fresh.Push(Map("route", route, "color", lm["color"]))
+                    }
+                    this._clmPathCache := fresh
+                    this._clmPathTick  := nowT
+                    this._clmPathPGX   := pGXi
+                    this._clmPathPGY   := pGYi
+                    this._clmPathSig   := clmSig
+                }
+                lmPathWidth := Max(1, clmPO["width"] + (isLargeMap ? 1 : 0))
+                lmArrows    := clmPO["arrows"]
+                arrowSpace  := isLargeMap ? 110 : 85
+                arrowLen    := isLargeMap ? 8 : 6
+                for _, lmpEntry in this._clmPathCache
+                {
+                    lmp := lmpEntry["route"]
+                    ln  := lmp.Length
+                    if (ln < 2)
+                        continue
+                    lmPathColor := lmpEntry["color"]
+                    lmPts := Buffer(ln * 8, 0)
+                    for i, pt in lmp
+                    {
+                        pdGX := pt[1] - playerGX
+                        pdGY := pt[2] - playerGY
+                        NumPut("Int", Round(mapCenterX + (pdGX - pdGY) * projectionCos), lmPts, (i-1)*8)
+                        NumPut("Int", Round(mapCenterY + (0-pdGX-pdGY) * projectionSin), lmPts, (i-1)*8+4)
+                    }
+                    pen    := this._GetPen(lmPathColor, lmPathWidth)
+                    oldPen := DllCall("SelectObject", "Ptr", this.memDC, "Ptr", pen, "Ptr")
+                    DllCall("Polyline", "Ptr", this.memDC, "Ptr", lmPts, "Int", ln)
+                    DllCall("SelectObject", "Ptr", this.memDC, "Ptr", oldPen)
+                    ; Direction chevrons spaced by SCREEN distance along the polyline
+                    ; (not point count — smoothed paths have few, far-apart points, so a
+                    ; per-point step drew nothing). A running accumulator places a ">"
+                    ; every arrowSpace px, interpolated inside long segments, pointing the
+                    ; way the route runs (player → landmark = increasing index).
+                    if (lmArrows)
+                    {
+                        acc := arrowSpace * 0.6   ; first chevron a little in from the player
+                        px  := NumGet(lmPts, 0, "Int")
+                        py  := NumGet(lmPts, 4, "Int")
+                        k   := 2
+                        while (k <= ln)
+                        {
+                            cx := NumGet(lmPts, (k-1)*8, "Int")
+                            cy := NumGet(lmPts, (k-1)*8+4, "Int")
+                            sdx := cx - px
+                            sdy := cy - py
+                            slen := Sqrt(sdx*sdx + sdy*sdy)
+                            if (slen > 0.5)
+                            {
+                                ux := sdx / slen
+                                uy := sdy / slen
+                                acc += slen
+                                while (acc >= arrowSpace)
+                                {
+                                    back := acc - arrowSpace
+                                    this._DrawArrowHead(Round(cx - ux*back), Round(cy - uy*back),
+                                        sdx, sdy, arrowLen, lmPathColor, lmPathWidth)
+                                    acc -= arrowSpace
+                                }
+                            }
+                            px := cx
+                            py := cy
+                            k  += 1
+                        }
+                    }
                 }
             }
         }
@@ -1387,6 +1690,71 @@ class RadarOverlay extends GdiOverlayBase
         if !this._lineBatch.Has(key)
             this._lineBatch[key] := []
         this._lineBatch[key].Push([x1, y1, x2, y2])
+    }
+
+    ; Draws a small ">" chevron IMMEDIATELY at (sx,sy) pointing in direction (dx,dy)
+    ; — used to show which way a landmark route runs. Params: tip screen pos, a
+    ; direction vector (need not be unit), barb length px, colour (BGR), pen width.
+    ; No return.
+    _DrawArrowHead(sx, sy, dx, dy, len, colorBGR, width := 1)
+    {
+        mag := Sqrt(dx * dx + dy * dy)
+        if (mag < 0.001)
+            return
+        ux := dx / mag, uy := dy / mag
+        px := -uy, py := ux                      ; perpendicular
+        b1x := sx - Round(len * (ux * 0.80 + px * 0.60)), b1y := sy - Round(len * (uy * 0.80 + py * 0.60))
+        b2x := sx - Round(len * (ux * 0.80 - px * 0.60)), b2y := sy - Round(len * (uy * 0.80 - py * 0.60))
+        pts := Buffer(3 * 8, 0)
+        NumPut("Int", b1x, pts, 0),  NumPut("Int", b1y, pts, 4)
+        NumPut("Int", sx,  pts, 8),  NumPut("Int", sy,  pts, 12)
+        NumPut("Int", b2x, pts, 16), NumPut("Int", b2y, pts, 20)
+        pen    := this._GetPen(colorBGR, width)
+        oldPen := DllCall("SelectObject", "Ptr", this.memDC, "Ptr", pen, "Ptr")
+        DllCall("Polyline", "Ptr", this.memDC, "Ptr", pts, "Int", 3)
+        DllCall("SelectObject", "Ptr", this.memDC, "Ptr", oldPen)
+    }
+
+    ; Draws an off-screen landmark's label pinned to the window edge, so you can still
+    ; tell where a route/landmark leads when its destination is outside the drawn map.
+    ; The anchor is where the ray from the player (cx,cy) to the target (tSX,tSY) exits
+    ; an inset window rect; an arrow head sits on the edge pointing off-screen and the
+    ; label is placed just inside, fully within the window. Text width is ESTIMATED from
+    ; the character count (measuring the batched font here is not worth the round-trip).
+    _DrawEdgeLabel(cx, cy, tSX, tSY, winW, winH, text, colorBGR, isLargeMap)
+    {
+        m := 6
+        rx1 := m, ry1 := m, rx2 := winW - m, ry2 := winH - m
+        dx := tSX - cx, dy := tSY - cy
+        if (dx = 0 && dy = 0)
+            return
+        ; First inset-rect boundary the outward ray crosses (player is normally inside).
+        tHit := 1.0
+        if (dx > 0)
+            tHit := Min(tHit, (rx2 - cx) / dx)
+        else if (dx < 0)
+            tHit := Min(tHit, (rx1 - cx) / dx)
+        if (dy > 0)
+            tHit := Min(tHit, (ry2 - cy) / dy)
+        else if (dy < 0)
+            tHit := Min(tHit, (ry1 - cy) / dy)
+        if (tHit <= 0 || tHit > 1)
+            tHit := 1.0
+        ex := Round(cx + tHit * dx)
+        ey := Round(cy + tHit * dy)
+        ; Guard degenerate cases (player itself off-screen) so the arrow stays visible.
+        ex := Max(rx1, Min(ex, rx2))
+        ey := Max(ry1, Min(ey, ry2))
+        ; Arrow on the edge, pointing off-screen (the route's direction).
+        this._DrawArrowHead(ex, ey, dx, dy, isLargeMap ? 11 : 9, colorBGR, isLargeMap ? 3 : 2)
+        ; Label just inside the edge; estimate its box so it stays fully on-screen.
+        tw := StrLen(text) * (isLargeMap ? 8 : 7) + 6
+        th := isLargeMap ? 18 : 15
+        lx := (ex > (rx1 + rx2) // 2) ? (ex - 16 - tw) : (ex + 16)
+        ly := ey - (th // 2)
+        lx := Max(rx1 + 2, Min(lx, rx2 - tw))
+        ly := Max(ry1 + 2, Min(ly, ry2 - th))
+        this._DrawTextOutlined(lx, ly, text, colorBGR, 0, 1)
     }
 
     ; Queues a text draw into the text batch. Optional font handle (5th element) lets a few

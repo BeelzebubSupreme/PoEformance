@@ -159,6 +159,7 @@ PushHeaderToWebView()
         . ',"overlayPlacement":' BuildOverlayPlacementHeaderJson()
         . ',"startupTrace":' BuildStartupTraceHeaderJson()
         . ',"apStatusLog":' BuildAutoPilotStatusLogHeaderJson()
+        . ',"customLandmarks":' BuildCustomLandmarksHeaderJson()
         . "}"
     WebViewExec("updateHeader(" json ")")
 }

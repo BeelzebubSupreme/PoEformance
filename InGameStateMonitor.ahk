@@ -42,6 +42,7 @@ SetWorkingDir(A_ScriptDir)
 #Include ahk/StartupTrace.ahk
 #Include ahk/DiagFiles.ahk
 #Include ahk/AutoPilotStatusLog.ahk
+#Include ahk/CustomLandmarks.ahk
 
 /*
 The project and all the files I develop in are located locally at "E:\PoEformance\"
@@ -55,7 +56,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.121"
+POEFORMANCE_VERSION := "0.45.13.140"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -372,6 +373,8 @@ LoadOverlayPlacement()    ; per-overlay free-position overrides ([OverlayPlaceme
 StTrace("LoadOverlayPlacement")
 LoadAutoPilotStatusLog()  ; opt-in file log of the AutoPilot status line ([Diagnostics] apStatusLog)
 StTrace("LoadAutoPilotStatusLog")
+LoadCustomLandmarks()     ; curated tile-path -> label map (Sikaka port) + [CustomLandmarks] config
+StTrace("LoadCustomLandmarks")
 LoadOverlaySystem()       ; build the OverlayManager + all overlays; wire legacy globals
 StTrace("LoadOverlaySystem")
 InitProfiler()            ; QPC profiler singleton (disabled until Shift+F3 enables it)

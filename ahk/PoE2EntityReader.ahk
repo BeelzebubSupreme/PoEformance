@@ -1322,7 +1322,7 @@ class PoE2EntityReader extends PoE2ComponentDecoders
             ; Classify entity type
             pathLower := StrLower(path)
             entType := ""
-            if InStr(pathLower, "areatransition")
+            if InStr(pathLower, "transition")
                 entType := "AreaTransition"
             else if InStr(pathLower, "waypoint")
                 entType := "Waypoint"
@@ -1506,6 +1506,13 @@ class PoE2EntityReader extends PoE2ComponentDecoders
             this._tgtPathTypeCache := Map()
         cache := this._tgtPathTypeCache
 
+        ; Custom-landmark match context (curated boss/POI labels, per area). The
+        ; area code is fixed for the whole zone scan, so resolve it once; labels
+        ; are ALWAYS computed + cached per unique tile (cheap) so the render-time
+        ; toggle stays instant. See CustomLandmarks.ahk.
+        clmAreaCode := (this.HasOwnProp("_radarWorldAreaCache") && IsObject(this._radarWorldAreaCache)
+            && this._radarWorldAreaCache.Has("id")) ? this._radarWorldAreaCache["id"] : ""
+
         ; Time-sliced inner loop: bail early if we exceed maxMs even though
         ; we still have tiles in the prefetched batch buffer. The next tick
         ; resumes from this._tgtScanTileIdx + 1.
@@ -1513,14 +1520,19 @@ class PoE2EntityReader extends PoE2ComponentDecoders
         processed := 0
         Loop endIdx - startIdx
         {
-            tileIdx := startIdx + A_Index - 1
+            ; NOTE: AHK v2 variable names are CASE-INSENSITIVE, so this loop index
+            ; MUST NOT be named `tileIdx` — that collides with the `tileIdX` sub-cell
+            ; byte read below and the sub-cell would clobber the array index, making
+            ; the tile world position `(subCellX*23, 0)` for every tile. Use a
+            ; distinct name.
+            tileArrayIdx := startIdx + A_Index - 1
             bufOff := (A_Index - 1) * tileStructSize
 
             ; Check the deadline every 64 tiles (cheap; sufficiently fine-grained)
             if (Mod(processed, 64) = 0 && A_TickCount > deadline)
             {
                 ; Resume from the NEXT unprocessed tile next tick
-                this._tgtScanTileIdx := tileIdx
+                this._tgtScanTileIdx := tileArrayIdx
                 return false
             }
             processed += 1
@@ -1536,49 +1548,67 @@ class PoE2EntityReader extends PoE2ComponentDecoders
             if cache.Has(tgtFilePtr)
             {
                 cached := cache[tgtFilePtr]
-                if (cached["type"] = "")
-                    continue
                 entType := cached["type"]
                 tgtPath := cached["path"]
+                clmCand := cached["clmCand"]
+                ; Not a nav POI and this tile file can never carry a landmark → skip.
+                if (entType = "" && !clmCand)
+                    continue
             }
             else
             {
                 tgtPath := this.ReadStdWStringAt(tgtFilePtr + PoE2Offsets.TgtFile["TgtPath"], 260)
                 if (tgtPath = "")
                 {
-                    cache[tgtFilePtr] := Map("type", "", "path", "")
+                    cache[tgtFilePtr] := Map("type", "", "path", "", "clmCand", false)
                     continue
                 }
 
                 pathLower := StrLower(tgtPath)
                 entType := ""
-                if InStr(pathLower, "areatransition")
+                if InStr(pathLower, "transition")
                     entType := "AreaTransition"
                 else if InStr(pathLower, "waypoint")
                     entType := "Waypoint"
                 else if InStr(pathLower, "checkpoint")
                     entType := "Checkpoint"
-                cache[tgtFilePtr] := Map("type", entType, "path", tgtPath)
-                if (entType = "")
+                ; Could this tile FILE ever carry a curated landmark (any coordinate)?
+                ; The coordinate-exact match runs per instance below (needs the coords).
+                clmCand := CustomLandmarkPathCandidate(tgtPath)
+                cache[tgtFilePtr] := Map("type", entType, "path", tgtPath, "clmCand", clmCand)
+                if (entType = "" && !clmCand)
                     continue
             }
 
             rotSel  := NumGet(tileBatchBuf.Ptr, bufOff + offRotSel, "UChar")
             tileIdX := NumGet(tileBatchBuf.Ptr, bufOff + offTileIdX, "UChar")
             tileIdY := NumGet(tileBatchBuf.Ptr, bufOff + offTileIdY, "UChar")
+
+            ; Coordinate-exact curated landmark for THIS tile instance (only candidate
+            ; paths reach here). A boss arena / POI / transition is pinned to one sub-cell
+            ; (TileIdX/TileIdY), so a reused wall tile elsewhere no longer picks up the
+            ; label. Kept ALONGSIDE entType so a labelled transition still navigates.
+            lmLabel := clmCand ? CustomLandmarkMatch(clmAreaCode, tgtPath, tileIdX, tileIdY) : ""
+            if (entType = "" && lmLabel = "")
+                continue
+
             if (Mod(rotSel, 2) = 0)
                 tileKey := tgtPath "x:" tileIdX "-y:" tileIdY
             else
                 tileKey := tgtPath "x:" tileIdY "-y:" tileIdX
 
-            gridX := Mod(tileIdx, this._tgtScanTotalTilesX) * tileToGrid
-            gridY := Floor(tileIdx / this._tgtScanTotalTilesX) * tileToGrid
+            ; Anchor the POI at the CENTER of its ~250-unit tile cell, not the
+            ; top-left corner — the corner is a ~half-tile (~125-unit) offset toward
+            ; the grid origin that showed on the radar as a slight consistent shift.
+            gridX := (Mod(tileArrayIdx, this._tgtScanTotalTilesX) + 0.5) * tileToGrid
+            gridY := (Floor(tileArrayIdx / this._tgtScanTotalTilesX) + 0.5) * tileToGrid
 
             if !results.Has(tileKey)
             {
                 results[tileKey] := Map(
                     "path", tgtPath,
-                    "type", entType,
+                    "type", (entType != "" ? entType : "Landmark"),
+                    "label", lmLabel,
                     "gridX", gridX,
                     "gridY", gridY,
                     "worldX", gridX * (250.0 / 0x17),
@@ -1620,23 +1650,26 @@ class PoE2EntityReader extends PoE2ComponentDecoders
         offTileIdY    := PoE2Offsets.TileStruct["TileIdY"]
         offRotSel     := PoE2Offsets.TileStruct["RotationSelector"]
 
-        ; Process in chunks to use batch reads
+        ; Process in chunks to use batch reads.
+        ; NOTE: the chunk cursor must NOT be named `tileIdx` — AHK v2 names are
+        ; case-insensitive, so it would alias the `tileIdX` sub-cell byte read below
+        ; and corrupt the loop/position. Use `chunkStart`.
         chunkSize := 2000
-        tileIdx := 0
-        while (tileIdx < totalTiles)
+        chunkStart := 0
+        while (chunkStart < totalTiles)
         {
-            chunkEnd := Min(tileIdx + chunkSize, totalTiles)
-            chunkBytes := (chunkEnd - tileIdx) * tileStructSize
-            chunkBuf := this.Mem.ReadBytes(tileVecFirst + tileIdx * tileStructSize, chunkBytes)
+            chunkEnd := Min(chunkStart + chunkSize, totalTiles)
+            chunkBytes := (chunkEnd - chunkStart) * tileStructSize
+            chunkBuf := this.Mem.ReadBytes(tileVecFirst + chunkStart * tileStructSize, chunkBytes)
             if !chunkBuf
             {
-                tileIdx := chunkEnd
+                chunkStart := chunkEnd
                 continue
             }
 
-            Loop chunkEnd - tileIdx
+            Loop chunkEnd - chunkStart
             {
-                curIdx := tileIdx + A_Index - 1
+                curIdx := chunkStart + A_Index - 1
                 bufOff := (A_Index - 1) * tileStructSize
 
                 tgtFilePtr := NumGet(chunkBuf.Ptr, bufOff + offTgtFilePtr, "Ptr")
@@ -1649,7 +1682,7 @@ class PoE2EntityReader extends PoE2ComponentDecoders
 
                 pathLower := StrLower(tgtPath)
                 entType := ""
-                if InStr(pathLower, "areatransition")
+                if InStr(pathLower, "transition")
                     entType := "AreaTransition"
                 else if InStr(pathLower, "waypoint")
                     entType := "Waypoint"
@@ -1682,7 +1715,7 @@ class PoE2EntityReader extends PoE2ComponentDecoders
                     )
                 }
             }
-            tileIdx := chunkEnd
+            chunkStart := chunkEnd
         }
         return results
     }

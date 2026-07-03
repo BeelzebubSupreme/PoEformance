@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.121`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.140`.
 
 ## Language
 
@@ -964,6 +964,239 @@ mirrors it into `logs\InGameStateMonitor.autopilot_status.log` for after-the-fac
   `TryAutoPilot` calls `ApStatusLogTick()`; `BridgeDispatch` case `SetAutoPilotStatusLog`;
   `WebViewBridge` pushes `apStatusLog`; UI toggle "📝 Log status to file" in **Config → AutoPilot →
   Live Status**.
+
+## Auto-detect price league (shipped 0.45.13.122)
+
+The price league was manually typed (`g_ltLeague`, default "Standard"); a wrong/stale value gave
+empty prices. The owner supplied a verified pointer: **`ServerData + 0x21E0`** is a `std::wstring`
+holding the active league name — EXACTLY poe.ninja/poe2scout's value (`"Standard"`, `"Hardcore"`,
+`"HC Runes of Aldur"`; the HC/SC prefix disambiguates), so it feeds the price layer directly.
+
+- **`PoE2Offsets.ServerDataStructure["League"] = 0x21E0`** (same base as `PlayerInventories` 0x320).
+- **`PoE2PlayerComponentsReader.ReadCurrentLeague(areaInstanceAddress)`** — resolves ServerData
+  (`PlayerInfo → ServerDataPtr → ResolveServerDataPointer`) and reads the wstring; returns `""` if
+  unresolvable.
+- **`LootTracker`** — new `g_ltAutoLeague` (default ON, persisted `[LootTracker] autoLeague`) +
+  runtime `g_ltDetectedLeague`. `_LtAutoLeagueTick(radarSnap)` (in `TryLootTrackerTick`, throttled
+  15 s, acts only on a CHANGE) reads the league and, when it differs, repoints `g_ltLeague` **and**
+  `g_ltTradeLeague` (trade API, in lock-step), persists both, and kicks a poe.ninja refresh (only
+  when `g_ltEnabled`). Toggling auto on resets `g_ltAutoLeagueNextTick` for an immediate re-detect.
+- **Header/UI:** `BuildLootHeaderJson` pushes `autoLeague` + `detectedLeague`; `_LtApplySetting`
+  handles the `autoLeague` key; UI **Config → Loot** has an "Auto-detect league" toggle that dims
+  the manual `poe.ninja league` field and shows `detected: <league>` when on.
+- **Pending in-game verification:** with auto on, the league field should show the character's real
+  league (e.g. `detected: HC Runes of Aldur`), prices refetch on a league change, no manual entry.
+
+## Custom landmark labels on the radar (shipped 0.45.13.123) — port of Sikaka/POE2Radar `CustomLandmarkData`
+
+Draws curated, human-readable labels on the radar for known terrain tiles — boss arenas (with
+their reward, e.g. "Beira of the Rotten (10% Cold Res)"), named POIs, and area-transition
+destinations. Ports `Sikaka/POE2Radar`'s `CustomLandmarkData.cs`: a big JSON keyed by area code →
+tile-path pattern → label, matched by SUBSTRING against the tile paths we already scan.
+
+- **`data/custom_landmarks.json` (committed source data)** — the full label map shipped verbatim
+  from Sikaka/POE2Radar (`CustomLandmarks.json`): 91 area codes, 272 entries, plus a global `*`
+  bucket. Keys look like
+  `"Metadata/Terrain/Woods/Slash/HagWitchArena_01.tdtx:5-y:0"` → `"Beira of the Rotten (10% Cold Res)"`.
+  Tracked (NOT gitignored). Data credit: Sikaka/POE2Radar.
+- **`ahk/CustomLandmarks.ahk` (new)** — the lookup. `LoadCustomLandmarks()` seeds all globals
+  (init gotcha) — `g_clmEnabled` (default ON, `[CustomLandmarks] enabled`), `g_clmFile`,
+  `g_clmData`, `g_clmCount` — and calls `_ClmLoadData()`. `_ClmLoadData()` parses the JSON with the
+  reference's normalization: strip the `…:x-y:y` tile-coord suffix at the first `:`, map
+  `.tdtx → .tdt` (so `.tdt` is a substring of both our paths and the keys), lowercase; result is
+  `Map(areaCodeLower → [[patternLower,label],…])`. `CustomLandmarkMatch(areaCode, tilePath)` does the
+  case-insensitive substring match — the area's own patterns first, then the global `*` bucket —
+  and returns the label or `""`. `CustomLandmarksOn()` is a cheap accessor for `RadarOverlay.Render`
+  (which can't easily add a `global`). Self-persists via `SaveCustomLandmarks()`;
+  `BuildCustomLandmarksHeaderJson()` exposes `enabled` + `count`.
+- **Area code** = `worldAreaDat["id"]` (e.g. "G1_2", "MapBluff"), read off the reader's
+  `_radarWorldAreaCache["id"]`.
+- **`ahk/PoE2EntityReader.ahk` (`_ProcessTgtScanBatch`)** — the tgt-scan already resolves each tile's
+  `tgtPath`. It now also computes `clmAreaCode` once per batch, matches every tile via
+  `CustomLandmarkMatch`, caches the label alongside the type in `_tgtPathTypeCache` (so a landmark
+  tile with no nav-type is still kept), and emits `label` (+ `type` "Landmark" when there's no nav
+  type) in each `results[tileKey]`.
+- **`ahk/RadarOverlay.ahk`** — new `COLOR_LANDMARK` (amber). The `_navTargets` population is hoisted
+  out of the nav gate so landmarks draw even when AutoPilot nav is off; the draw gate is
+  `this._navEnabled || CustomLandmarksOn()`. Per target, a non-empty `label` with the feature on
+  draws an outlined amber `label " (<dist>m)"`; nav filename labels are unchanged.
+- **Wiring:** `InGameStateMonitor.ahk` `#Include ahk/CustomLandmarks.ahk` + `LoadCustomLandmarks()`;
+  `BridgeDispatch.ahk` case `SetCustomLandmarks`; `WebViewBridge.ahk` pushes `customLandmarks`; UI
+  **Config → Overlay → "🗺️ Custom Landmarks"** (toggle, shows the loaded-label count),
+  `customLandmarksSyncFromHeader`. Default ON.
+- **Pending in-game verification:** confirm labels render at the right tiles (boss arenas / POIs /
+  transitions) for the current area, the amber colour/outline is legible, and toggling off hides them.
+- **Label de-dupe fix (0.45.13.124):** first in-game test showed the SAME label stacked many times
+  across the map (e.g. a wall/arena tile such as Machinarium `BossWall01` → "Boss" is placed at many
+  spots; the zone scan emits ONE POI per tile, so each drew its own "Boss (Nm)" label — a cluttered
+  column spanning 300–5000 m). Fix in `RadarOverlay.ahk`: a per-frame pre-pass groups the POIs by
+  label and keeps only the tile NEAREST the player per unique label (`lmRep`); only that
+  representative draws the label + dot. Nav POIs (AreaTransition/Waypoint filenames) are unaffected;
+  a pure-`Landmark` duplicate is suppressed even with zone-nav on so identical dots don't stack.
+  So each curated landmark now shows exactly once, at its closest tile.
+- **Coordinate-exact matching (0.45.13.125):** de-dupe stopped the stack, but the single remaining
+  "Boss" label sat on the wrong tile — the deduped nearest `BossWall01` was a random reused wall, not
+  the boss room. Root cause: I matched by PATH substring and STRIPPED the `:<A>-y:<B>` tile-coord
+  suffix from each JSON key. That suffix is the tile's sub-cell (`TileIdX`/`TileIdY`) — exactly what
+  the reference pins a landmark to, so a reused tile file (a wall placed all over) matched everywhere.
+  Fix: `CustomLandmarks.ahk` now keeps the FULL normalized key (`<path>.tdt:<A>-y:<B>`) and matches it
+  **exactly** against `<path>:<TileIdX>-y:<TileIdY>` built per tile INSTANCE (both coord orderings
+  tried, since the reader swaps X/Y on odd rotation); the 2 rare coordless keys use a path-only
+  fallback. `g_clmData` is now `area → Map(fullKey→label)` (+ `g_clmPathOnly`, `g_clmPaths`). New
+  `CustomLandmarkPathCandidate(path)` is a cheap pre-filter so the reader only runs the per-instance
+  coord match for tiles whose path could ever be a landmark. `PoE2EntityReader._ProcessTgtScanBatch`
+  caches `{type, path, clmCand}` per tile FILE and computes the label per INSTANCE after reading the
+  tile coords (the label can no longer be cached by `tgtFilePtr`, since it now depends on the coords).
+  Exact matching is a strict SUBSET of the old substring match — it can only REMOVE false matches,
+  never add wrong ones. The de-dupe stays as a safety net for arenas built from several variant tiles.
+- **Position diagnostic (0.45.13.126, WIP):** with coordinate matching correct (in-game it now surfaces
+  exactly the two real G4_10 = "The Excavation" landmarks — the Precursor `BossArena` + `DigSite` chest —
+  no spam), a NEW issue surfaced: in `G2_5_1` ("Mastodon Badlands") the labels render at huge clustered
+  distances (~12000 m, bottom-left) even though the game shows those transitions nearby. Suspected cause:
+  the landmark POI world position comes from the tile's INDEX in the terrain grid
+  (`gridX := Mod(tileIdx, totalTilesX) * 0x17`, `worldX := gridX * 250/23`), which was never used for
+  DISPLAY before — nav AreaTransition/Waypoint POIs always got their position overwritten by the live
+  entity's render position (`_zoneScanAccumulated` refine in `PoE2MemoryReader`), so the raw tile-index
+  position was never validated. Pure-terrain landmarks (and un-refined far transitions) rely on it.
+  `CustomLandmarkDiagnose()` (bridge `CustomLandmarkDiag`, UI "🔍 Diagnose positions" in the Custom
+  Landmarks box) dumps every matched landmark's label + tile coords + computed world pos + `refined`
+  flag + distance from the player to `debug\custom_landmarks_diag_*.txt`.
+- **`CustomLandmarkPosProbe()` (0.45.13.127, RE aid):** deep probe (bridge `CustomLandmarkPosProbe`, UI
+  "🧭 Probe tile positions") that re-walks the raw terrain tile vector and dumps every landmark-candidate
+  tile occurrence with array index, row-major world pos, sub-cell + rotation, distance, and a `SubTileDetailsPtr`
+  int/float dump. It proved the row-major formula is CORRECT: the `AreaTransition_BadlandsToPits`
+  (Bone Pits) tiles sit at world ~(12750, 2250-3750), d≈300-2600 (right next to the player), while the
+  diagnostic's `zoneScanResults` reported them at ~(750, 0), d≈12700 — so the SCAN was corrupting the
+  position, not the formula.
+- **FIXED — AHK case-insensitive variable collision (0.45.13.128):** the root cause. In
+  `PoE2EntityReader._ProcessTgtScanBatch` the tile-array loop index was named `tileIdx` and the tile's
+  sub-cell byte (read from the struct) was named `tileIdX`. **AHK v2 variable names are CASE-INSENSITIVE**,
+  so `tileIdx` and `tileIdX` are the SAME variable — the sub-cell read (`tileIdX := NumGet(...)`, value
+  0-14) CLOBBERED the loop index, and the position line `gridX := Mod(tileIdx, totalTilesX) * 0x17` then
+  computed from the sub-cell instead of the array index → every tile landed at `(subCellX*23, 0)` with
+  `gridY` always 0 (hence all landmarks stacked near the origin corner, two different tiles even colliding
+  on the same `(92,0)`). Fix: rename the loop index to `tileArrayIdx` (distinct from `tileIdX`). The
+  identical latent bug in the dead legacy `ReadTgtTilesLocations` (chunk cursor `tileIdx` vs sub-cell
+  `tileIdX`) was renamed to `chunkStart` too. This ALSO fixes nav AreaTransition/Waypoint/Checkpoint POI
+  positions (they used the same clobbered value; it was only ever masked by the live-entity refine).
+  Lesson: never let two locals differ only by letter case in AHK.
+- **Tile-center anchoring (0.45.13.129):** with positions fixed, a small consistent offset remained — the
+  POI was anchored at the top-left CORNER of its ~250-unit tile cell. `_ProcessTgtScanBatch` now anchors
+  at the cell CENTRE (`gridX := (col + 0.5) * tileToGrid`), removing the ~half-tile (~125-unit) shift
+  toward the grid origin.
+- **Snap transition labels to the real portal (0.45.13.130):** the remaining offset was structural, not a
+  formula bug — Sikaka pins a TRANSITION label (e.g. "The Bone Pits" on `AreaTransition_BadlandsToPits_01`)
+  to the terrain GATE STRUCTURE, whose curated sub-cell can sit ~1000m+ from the clickable portal ENTITY
+  the nav already marks (so the same exit showed twice: `AreaTransition_Animate (82m)` filename + `The Bone
+  Pits (1287m)` curated). Fix in `RadarOverlay` (per-frame pre-pass, gated on `clmOn`): each labelled
+  AreaTransition/Waypoint/Checkpoint tile is snapped onto the nearest REFINED same-type entity (the live
+  portal) within ~3000 world units (`navSnap`), and that portal's redundant filename is suppressed
+  (`navClaimed`). The curated name now lands on the actual portal at the correct distance; if no portal is
+  loaded within range it falls back to the tile position. Only transition-TYPE landmarks snap (bosses /
+  chests / named POIs sit on their own tiles already). The distinguishing signal is the `refined` flag
+  (entity-scan entries have it; raw tgt structure tiles don't).
+- **Extended snap to entrance/passage Landmarks (0.45.13.131):** in-game, "The Bone Pits" (type
+  `AreaTransition`) snapped perfectly, but entrance/passage exits that Sikaka classifies as type
+  `Landmark` did NOT — their paths (`Badlands_Entrance_01` → "The Ardura Caravan", `AbyssHole` →
+  "Lightless Passage") carry no "areatransition" keyword, so they stayed on the gate tile beside their
+  live portal (`AreaTransition_Animate (47m)` + `The Ardura Caravan (685m)`). Fix: the snap now considers
+  EVERY labelled landmark, snapping to the nearest refined transition/waypoint/checkpoint portal — but
+  with a TYPE-dependent radius: transition-type tiles get the generous ~3000 m (big gate offset), all
+  other tiles only ~1200 m so a real POI / boss that isn't at an exit (e.g. "Fossilised Memorial") finds
+  no portal in range and stays on its own tile. `RadarOverlay.WORLD_TO_GRID_RATIO` converts the world
+  radius to the grid² threshold.
+- **Nearest-walkable nudge (0.45.13.132) — port of coussiraty/CoreExile2 `Pathfinder.TryFindNearestWalkable`:**
+  a curated landmark that did NOT portal-snap AND whose tile sits on UNWALKABLE terrain (a decorative
+  feature off the playable area — the "Fossilised Memorial" case) is pulled onto the nearest reachable
+  ground. `TerrainPathfinder.NearestWalkable(gx, gy, maxRadius:=75)` mirrors the reference: an
+  expanding-ring PERIMETER search (only the border of each ring, O(r) per ring) over the walkable nibble
+  grid via the existing `IsWalkable`. The overlay's snap pre-pass, after the portal pass, nudges every
+  still-unplaced labelled landmark that fails `IsWalkable`. `target["gridX"]/gridY` are already
+  walkable-grid cell coords (both = `worldX / WORLD_TO_GRID_RATIO`), so no conversion is needed. Gated on
+  `_pathfinder.HasTerrain()`; landmarks already on walkable ground are left untouched.
+- **Portal match by DIFFERENT-PATH, not `refined` (0.45.13.133):** "Lightless Passage" (on tile
+  `AbyssHole`) still didn't snap — the `refined`-flag requirement was wrong: the real portal
+  `LightlessPassageTransition` either isn't a refined entity, or the `AbyssHole` tile itself got refined
+  to the hole feature (559 m) not the portal (89 m). The robust distinguisher between the clickable portal
+  and the landmark's own gate/structure tiles is that the portal has a DIFFERENT tile path (a gate spans
+  many SAME-path tiles), so the snap now matches "nearest transition-type entry whose `path` differs from
+  the curated tile's path" and dropped the `refined` gate + the "skip already-refined landmark" guard.
+  Non-transition radius tightened 1200 → 1000 m to offset the looser match. Known residual risk: a
+  boss/chest/POI within ~1000 m of an unrelated transition could mis-snap — revisit with a path-keyword
+  gate (entrance/hole/passage/stairs/…) if it shows up in-game.
+- **Portal candidates = AreaTransition only (0.45.13.134):** with the looser different-path match, Lightless
+  Passage / Ardura Caravan snapped to the nearby **Checkpoint / Waypoint** instead of the real exit — those
+  are intra-zone features that often sit right beside a transition. A destination landmark is reached via an
+  AREA TRANSITION, so the portal-candidate filter tightened from any transition-type to
+  `pt["type"] = "AreaTransition"` (Waypoint / Checkpoint excluded). Bone Pits' portal
+  `AreaTransition_Animate` is still an AreaTransition (folder `AreaTransitions/` → the classifier matches),
+  so it keeps working.
+- **Classifier keyword `areatransition` → `transition` (0.45.13.135):** Lightless Passage still didn't snap
+  because its real exit entity (Entity Inspector: `Name: LightlessPassageTransition, Type: Terrain, Metadata:
+  /Terrain/Gallows/Act2/2_5/Objects/LightlessPassageTransition`) lives in an `Objects/` folder, NOT
+  `AreaTransitions/` — so the `areatransition` keyword never matched it and it was classified `entType=""`
+  (skipped, never in `_navTargets`, no snap candidate). Broadened the transition classifier in all 4 sites
+  (`PoE2EntityReader` deep/tgt/legacy scans + `PoE2MemoryReader` entity scan) from `InStr(path,"areatransition")`
+  to `InStr(path,"transition")` — catches `AreaTransition_*` AND `*Transition` object exits; `waypoint` /
+  `checkpoint` carry no "transition" so they keep their own types. This is the correct semantics (these ARE
+  zone exits) and also improves nav/AutoPilot exit detection. Low over-match risk (decorative "transition"
+  objects are rare and usually not in the radar sample).
+- **Walkable path to each landmark (0.45.13.136, opt-in):** new `[CustomLandmarks] showPaths` toggle
+  (default OFF; `g_clmShowPaths`, `CustomLandmarkPathsOn()`, UI "Draw a walkable path to each landmark").
+  In `RadarOverlay.Render`, the drawn landmarks' display positions are collected (`lmDrawn`); a THROTTLED
+  pass (recompute every 1.5 s or on >12-cell player move, cached in `_clmPathCache`) runs
+  `_pathfinder.FindPath(player → landmark)` for each within ~6000 world units (far POIs skipped — A* too
+  costly), and the cached routes draw every frame as thin dim-amber polylines UNDER the gold nav / red
+  combat paths. Wired via the existing `SetCustomLandmarks` bridge case (`_ClmApplySetting` key
+  `showPaths`) + header + `customLandmarksSyncFromHeader`.
+- **Landmark-path options (0.45.13.137):** the path feature is now tunable — `[CustomLandmarks]`
+  `pathWidth` (px), `pathMaxDist` (world units, the range cap), `pathToExits` / `pathToPois` (an
+  exit-vs-POI filter), `pathArrows` (direction chevrons); all in `CustomLandmarkPathOpts()` (a Map read
+  once per frame by the overlay), the header, and UI sub-rows under the path toggle. Each route now gets
+  its OWN colour from `RadarOverlay.CLM_PATH_PALETTE` (cycled by draw index). The exit/POI split uses the
+  new `navPortal[idx]` flag (set when a landmark portal-snapped — those are exits; everything else is a
+  POI), recorded on each `lmDrawn` entry. Direction chevrons draw via `_DrawArrowHead(sx, sy, dx, dy, len,
+  colour, width)` (immediate 3-point Polyline ">" every ~14 path points, pointing player→landmark since
+  `FindPath` returns start→end). The A* recompute also re-runs when the exit/POI/range signature changes
+  (not just on the timer), so toggling an option updates immediately.
+- **Route-coloured dot/label + visible chevrons (0.45.13.138):** two fixes to the landmark paths.
+  (1) The destination DOT and LABEL now share their route's palette colour instead of the generic
+  type/amber colour — the colour is assigned ONCE per route-eligible landmark during the draw loop
+  (`lmRouteColor`, palette-cycled via `lmColorN`) and reused by `_DrawDot` + `_DrawTextOutlined`, then
+  stored on the `lmDrawn` entry (`color`) so the path recompute reads it directly (route colour is no
+  longer derived from the cache index — dots, labels and routes now cycle in lock-step). Route eligibility
+  (exit/POI filter + range cap) is evaluated up front so a filtered-out landmark keeps its normal colour
+  and draws no route (`color = 0`, skipped in the recompute). (2) Direction chevrons were INVISIBLE — the
+  old "every 14th path point" spacing drew nothing because `FindPath` smooths the route down to a few
+  far-apart points. Replaced with SCREEN-distance spacing: a running accumulator walks the projected
+  polyline and drops a `_DrawArrowHead` every ~85–110 px (interpolated INSIDE long segments, first chevron
+  0.6× in from the player), pointing the way the route runs.
+- **Off-screen landmark labels pinned to the map edge (0.45.13.139):** when a curated landmark's
+  destination lies OUTSIDE the drawn large map (e.g. a route leading off the top edge), its label was
+  simply invisible. New `RadarOverlay._DrawEdgeLabel(cx, cy, tSX, tSY, winW, winH, text, colour, isLargeMap)`
+  clamps the label to the window edge along the player→landmark ray: it intersects that ray with an inset
+  window rect (parametric first-boundary crossing, player normally inside), drops a `_DrawArrowHead` on the
+  edge pointing off-screen (in the route's direction + route colour), and places the outlined label just
+  inside, kept fully on-screen (text width ESTIMATED from character count — measuring the batched font
+  isn't worth the DC round-trip). In the landmark draw loop a landmark whose projected `(tSX,tSY)` is
+  off-screen (`lmOff`) uses the edge label instead of the normal `tSX+…` placement; it shares the route
+  colour so the edge label matches its route. Gated on `clmEdge := clmOn && isLargeMap &&
+  CustomLandmarkEdgeLabelsOn()` — **large map only** (the minimap projection legitimately runs far past the
+  window, so edge-clamping there would be nonsense). New toggle `[CustomLandmarks] edgeLabels` (default ON;
+  `g_clmEdgeLabels`, `CustomLandmarkEdgeLabelsOn()`); bridge key `edgeLabels` via the existing
+  `SetCustomLandmarks`; header field `edgeLabels`; UI toggle "Pin off-screen labels to the map edge (large
+  map)" under the main Custom Landmarks toggle.
+- **Custom Landmarks UI polish (0.45.13.140):** (1) the box now carries a **skill-node icon** like every
+  other section — new slot `sec:det-customlandmarks` → `PathfinderMultichoicePath` (a crossroads notable) in
+  BOTH `tools/skillnode_map.json` and the runtime `SNODE_MAP`; the icon pair was composited into
+  `img/skillnodes/` (the emoji 🗺️ in the header is stripped at runtime by `snodeInit` as usual). (2) The path
+  sub-options are compacted onto two rows via CSS grid: "Line width" + "Max distance" share one row
+  (left-/right-aligned, 2 cols), and "To exits" + "To POIs" + "Arrows" share one row (left/center/right, 3
+  cols) — the long labels were shortened with `title=` tooltips carrying the full meaning. (3) The RE
+  diagnostic buttons are **removed** — the "🔍 Diagnose positions" / "🧭 Probe tile positions" UI buttons,
+  the `CustomLandmarkDiag` / `CustomLandmarkPosProbe` bridge cases, and the `CustomLandmarkDiagnose` /
+  `CustomLandmarkPosProbe` functions in `CustomLandmarks.ahk` (the landmark position bug they helped solve
+  is fixed).
 
 ## Reference
 

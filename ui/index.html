@@ -4860,6 +4860,10 @@
                 <label class="toggle"><input type="checkbox" id="lt-showKills" onchange="lootChk('showKills',this)"><span class="toggle-slider"></span></label></div>
               <div class="cfg-row"><span class="cfg-label">Hide while a UI panel is open</span>
                 <label class="toggle"><input type="checkbox" id="tog-panel-hidelootbars" onchange="ahkCall('SetPanelRespect','loot', this.checked?1:0)"><span class="toggle-slider"></span></label></div>
+              <div class="cfg-row"><span class="cfg-label">Auto-detect league</span>
+                <label class="toggle"><input type="checkbox" id="lt-autoLeague" onchange="lootChk('autoLeague',this)"><span class="toggle-slider"></span></label>
+                <span id="lt-detected-league" style="margin-left:12px;font-size:11px;color:var(--subtext)"></span></div>
+              <div class="cfg-help">Reads the active league from the game (matches poe.ninja / poe2scout exactly, incl. the HC/SC prefix) and points the price layers at it automatically. Turn off to enter the league by hand.</div>
               <div class="cfg-row"><span class="cfg-label">poe.ninja league</span>
                 <input type="text" class="cfg-input" id="lt-league" placeholder="e.g. Standard" style="width:200px" onchange="lootStr('league',this)"></div>
               <div class="cfg-row"><span class="cfg-label">Price refresh (min)</span>
@@ -5836,6 +5840,62 @@
               <div class="cfg-row">
                 <span class="cfg-label">Min. value to show (ex)</span>
                 <span class="hk-num"><input type="number" id="rvb-minEx" min="0" max="100000" step="0.5" onchange="ahkCall('SetRitualValueBadges','minEx',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <div class="cfg-section">
+          <details id="det-customlandmarks" ontoggle="syncCfgSections()">
+            <summary>
+              <div class="cfg-header">🗺️ Custom Landmarks</div>
+            </summary>
+            <div class="cfg-subsection">
+              <div class="cfg-help">
+                Draws curated, human-readable labels on the radar for known terrain tiles —
+                boss arenas (with their reward), named points of interest, and where an
+                area-transition leads. The label map is matched against the tile paths the
+                radar already scans, keyed by the current area. Data credit:
+                <em>Sikaka/POE2Radar</em> (CustomLandmarks.json). <span id="clm-count"></span>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Show custom landmark labels</span>
+                <label class="toggle"><input type="checkbox" id="clm-enabled"
+                    onchange="ahkCall('SetCustomLandmarks','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Pin off-screen labels to the map edge (large map)</span>
+                <label class="toggle"><input type="checkbox" id="clm-edgeLabels"
+                    onchange="ahkCall('SetCustomLandmarks','edgeLabels', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row"><span class="cfg-label">Draw a walkable path to each landmark</span>
+                <label class="toggle"><input type="checkbox" id="clm-showPaths"
+                    onchange="ahkCall('SetCustomLandmarks','showPaths', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-row" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:center">
+                <span style="display:flex;align-items:center;gap:8px;justify-content:flex-start">
+                  <span class="cfg-label" style="white-space:nowrap">↳ Line width (px)</span>
+                  <span class="hk-num"><input type="number" id="clm-pathWidth" min="1" max="8" step="1" onchange="ahkCall('SetCustomLandmarks','pathWidth',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
+                </span>
+                <span style="display:flex;align-items:center;gap:8px;justify-content:flex-end">
+                  <span class="cfg-label" style="white-space:nowrap" title="Skip landmarks farther than this (world units)">Max distance</span>
+                  <span class="hk-num"><input type="number" id="clm-pathMaxDist" min="500" max="40000" step="500" onchange="ahkCall('SetCustomLandmarks','pathMaxDist',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,500)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-500)">▼</button></span></span>
+                </span>
+              </div>
+              <div class="cfg-row" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;align-items:center">
+                <span style="display:flex;align-items:center;gap:6px;justify-content:flex-start">
+                  <span class="cfg-label" style="white-space:nowrap" title="Draw routes to area-transition / exit landmarks">↳ To exits</span>
+                  <label class="toggle"><input type="checkbox" id="clm-pathToExits"
+                      onchange="ahkCall('SetCustomLandmarks','pathToExits', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+                </span>
+                <span style="display:flex;align-items:center;gap:6px;justify-content:center">
+                  <span class="cfg-label" style="white-space:nowrap" title="Draw routes to POI / boss / chest / feature landmarks">To POIs</span>
+                  <label class="toggle"><input type="checkbox" id="clm-pathToPois"
+                      onchange="ahkCall('SetCustomLandmarks','pathToPois', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+                </span>
+                <span style="display:flex;align-items:center;gap:6px;justify-content:flex-end">
+                  <span class="cfg-label" style="white-space:nowrap" title="Direction chevrons along each route">Arrows</span>
+                  <label class="toggle"><input type="checkbox" id="clm-pathArrows"
+                      onchange="ahkCall('SetCustomLandmarks','pathArrows', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
+                </span>
               </div>
             </div>
           </details>
@@ -6843,7 +6903,7 @@
       "tab:ui":"ChannellingAttacksNotable2","tab:gamestate":"auraeffect","tab:memdiff":"flaskstr","tab:dissect":"flaskint","tab:hotkeys":"KeystoneResoluteTechnique",
       "cfgtab:general":"blankStr","cfgtab:automation":"PhysicalDamageOverTimeNode","cfgtab:overlay":"LifeandMana","cfgtab:vitals":"BloodMageNode","cfgtab:debug":"tempint","cfgtab:data":"ChannellingSpeed",
       "sec:det-status":"HollowPalmTechniqueKeystone","sec:det-integrations":"KeystoneAvatarOfFire","sec:det-stashmover":"KeystonePainAttunement","sec:sm-stash":"AzmeriPrimalMonkey","sec:sm-stash-ignore":"shieldblock","sec:sm-stash-rnd":"criticalstrikechance","sec:sm-sell":"AzmeriWildBear","sec:sm-sell-ignore":"shieldblock","sec:sm-sell-rnd":"criticalstrikechance","sec:sm-shared":"TemporalistNearbyEnemiesProjectilesSlowed","sec:det-autopilot":"KeystoneAvatarOfFire","sec:ap-status":"WarbringerEncasedInJade","sec:ap-combat":"LightningDamagenode","sec:ap-explore":"MiracleMaker","sec:ap-loot":"energyshield",
-      "sec:det-maphack":"ColdAndFireHybridNotable","sec:det-radar":"PressurePoints","sec:det-entitymarkers":"TacticianNode","sec:det-rangecircles":"TemporalistNode","sec:det-lootvalue":"ShieldNodeOffensive","sec:lrv-detection":"Rage","sec:lrv-list":"SpellSuppresionNode","sec:lrv-onmap":"RangedTotemDamage","sec:lrv-trade":"ClawsOfTheMagpie","sec:det-uihoverprice":"projectilespeed","sec:det-ritualvalue":"FlaskNotableCritStrikeRecharge","sec:det-overlay-placement":"MiracleMaker",
+      "sec:det-maphack":"ColdAndFireHybridNotable","sec:det-radar":"PressurePoints","sec:det-entitymarkers":"TacticianNode","sec:det-rangecircles":"TemporalistNode","sec:det-lootvalue":"ShieldNodeOffensive","sec:lrv-detection":"Rage","sec:lrv-list":"SpellSuppresionNode","sec:lrv-onmap":"RangedTotemDamage","sec:lrv-trade":"ClawsOfTheMagpie","sec:det-uihoverprice":"projectilespeed","sec:det-ritualvalue":"FlaskNotableCritStrikeRecharge","sec:det-overlay-placement":"MiracleMaker","sec:det-customlandmarks":"PathfinderMultichoicePath",
       "sec:det-vitals-general":"CorpseDamage","sec:det-debug-actions":"axedmgspeed","sec:det-radar-debug":"PathfinderPathoftheWarrior","sec:det-debug-panels":"ColdDamagenode","sec:det-debug-discovery":"LightningDamagenode","sec:det-debug-diff":"ManaLeechThemedNode","sec:det-debug-overlay":"ElementalDamagenode","sec:det-offset-compare":"plusstrengthdexterity",
       "sec:det-al-conditions":"blankDex","sec:det-al-timing":"blankInt","sec:det-al-output":"blankStr","sec:det-lt-settings":"KeystoneWhispersOfDoom","sec:det-blacklist":"ArmourAndEvasionNode",
       "sec:det-vitals-life":"IncreasedMaximumLifeNotable","sec:det-vitals-mana":"MineManaReservationNotable","sec:det-vitals-es":"EnergyShieldNode",
@@ -7490,7 +7550,17 @@
       const val = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
       chk('lt-enabled', s.enabled);
       chk('lt-showKills', s.showKills);
+      chk('lt-autoLeague', s.autoLeague);
       val('lt-league', s.league);
+      // When auto-detect is on, the league is driven from memory: dim the manual
+      // field and surface the detected league next to the toggle.
+      {
+        const auto = (s.autoLeague === true || s.autoLeague === 1 || s.autoLeague === '1' || s.autoLeague === 'true');
+        const inp = document.getElementById('lt-league');
+        if (inp) inp.disabled = auto;
+        const det = document.getElementById('lt-detected-league');
+        if (det) det.textContent = auto ? (s.detectedLeague ? ('detected: ' + s.detectedLeague) : 'detecting…') : '';
+      }
       val('lt-cacheTtlMin', s.cacheTtlMin);
       val('lt-historySize', s.historySize);
       val('lt-maxSessions', s.maxSessions);
@@ -7609,6 +7679,23 @@
       const val = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
       chk('rvb-enabled', s.enabled);
       val('rvb-minEx', s.minEx);
+    }
+
+    function customLandmarksSyncFromHeader(s) {
+      if (!s) return;
+      const truthy = v => v === true || v === 1 || v === '1' || v === 'true';
+      const chk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = truthy(v); };
+      const num = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
+      chk('clm-enabled', s.enabled);
+      chk('clm-edgeLabels', s.edgeLabels);
+      chk('clm-showPaths', s.showPaths);
+      chk('clm-pathToExits', s.pathToExits);
+      chk('clm-pathToPois', s.pathToPois);
+      chk('clm-pathArrows', s.pathArrows);
+      num('clm-pathWidth', s.pathWidth);
+      num('clm-pathMaxDist', s.pathMaxDist);
+      const c = document.getElementById('clm-count');
+      if (c) c.textContent = (s.count > 0) ? (s.count + ' labels loaded.') : '';
     }
 
     function lootLabelClearSyncFromHeader(s) {
@@ -9843,6 +9930,7 @@
       if (d.lootRadarValue !== undefined) lootRadarValueSyncFromHeader(d.lootRadarValue);
       if (d.uiHoverPrice !== undefined) uiHoverPriceSyncFromHeader(d.uiHoverPrice);
       if (d.ritualValueBadges !== undefined) ritualValueBadgesSyncFromHeader(d.ritualValueBadges);
+      if (d.customLandmarks !== undefined) customLandmarksSyncFromHeader(d.customLandmarks);
       if (d.lootLabelClear !== undefined) lootLabelClearSyncFromHeader(d.lootLabelClear);
       if (d.lootTradePricing !== undefined) lootTradePricingSyncFromHeader(d.lootTradePricing);
       if (d.overlayPlacement !== undefined) overlayPlaceSync(d.overlayPlacement);
@@ -12058,7 +12146,7 @@
     // ═══════════════════════════════════════════════════════════════════
     //  CONFIG HELPERS
     // ═══════════════════════════════════════════════════════════════════
-    const _cfgSectionIds = ['status', 'integrations', 'autoflask', 'autopilot', 'stashmover', 'rangecircles', 'radar', 'lootvalue', 'uihoverprice', 'maphack', 'blacklist', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
+    const _cfgSectionIds = ['status', 'integrations', 'autoflask', 'autopilot', 'stashmover', 'rangecircles', 'radar', 'lootvalue', 'uihoverprice', 'customlandmarks', 'maphack', 'blacklist', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
     let _cfgSectionsGuard = 0;
     let _cfgSectionsLoaded = false;
 
