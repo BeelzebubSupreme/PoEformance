@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.148`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.149`.
 
 ## Language
 
@@ -1293,6 +1293,29 @@ row. Verified: full-script `AutoHotkey64.exe /validate` passes.
 **Pending in-game verification:** label click walks to Doryani and opens the dialog; the
 window/menu paths resolve on the live client; the final click fires identification; tooltip
 reasons on each abort gate.
+
+## Price liquidity gates (shipped 0.45.13.149) — fixes wildly inflated prices
+
+Report: "völlig überzogene Preise" from poe.ninja / the trade API. Root cause verified against
+the LIVE API: the math is correct (exchange `primaryValue` IS in Divine — `divine=1.0`,
+`exalted=1/rate` — and `× core.rates.exalted` is right), but poe.ninja's RAW API includes
+**illiquid / price-fixed lines its own website hides**. Seen live: a junk unique ("The Gnashing
+Sash", `listingCount=3`) at 6257 div → 4.3M ex in our TSV; exchange lines with
+`volumePrimaryValue` < 1 divine of total volume priced at fantasy asks. Young/HC leagues are
+full of these. The trade API was worse: `_LtTradeRobustPrice`'s "median of the cheapest ≤8"
+accepted a SINGLE listing as the market price.
+
+- **`tools/poe_ninja_prices.ps1`** — new params `MinVolume` (default 1.0; exchange lines below
+  this `volumePrimaryValue` [divine traded] are skipped) and `MinListings` (default 5; item
+  lines below this `listingCount` are skipped). Both fail OPEN when the API omits the field, so
+  a schema change can never blank the TSV. Skip count is appended to the `#meta` errors field
+  ("thin-market lines skipped: N"). Verified live against "Runes of Aldur": 264 lines skipped,
+  Gnashing Sash gone, Mageblood correctly 348 850 ex (= 500 div), Greater Exalted Orb 7.8 ex.
+- **`ahk/LootTradePricing.ahk`** — `_LtTradeRobustPrice` returns unpriced (`ex=0`) below 3
+  priceable listings; the caller's cache then acts as a negative entry (`LtTradePriceForName`
+  gates on `ex > 0`), so the unique stays untagged instead of carrying a troll ask.
+- Residual (not a bug): early-league div→ex rates swing hard between snapshots (sparkline
+  `totalChange` ±45% on day 1), so absolute ex values move until the economy settles.
 
 ## Nav restructure — Overlay + Automation as top-level categories (shipped 0.45.13.145)
 

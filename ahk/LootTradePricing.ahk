@@ -451,8 +451,12 @@ _LtTradeRobustPrice(listings)
         }
     }
     n := vals.Length
-    if (n = 0)
-        return Map("ex", 0.0, "count", 0)
+    ; Fewer than 3 real listings is not a market — the "median" of 1-2
+    ; listings IS a single (possibly troll) ask. Return unpriced instead;
+    ; the caller caches it like a negative result, so the item simply
+    ; stays untagged rather than carrying a fantasy price.
+    if (n < 3)
+        return Map("ex", 0.0, "count", n)
     _LtTradeSortAsc(vals)
     take := Min(8, n)
     mid := (take // 2) + 1   ; 1-based median index of the cheapest `take`

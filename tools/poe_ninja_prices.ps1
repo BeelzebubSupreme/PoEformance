@@ -26,7 +26,14 @@
 #>
 param(
     [Parameter(Mandatory = $true)] [string] $League,
-    [Parameter(Mandatory = $true)] [string] $Out
+    [Parameter(Mandatory = $true)] [string] $Out,
+    # Liquidity gates — poe.ninja's RAW API includes illiquid / price-fixed
+    # lines its own website hides (e.g. a unique with 3 troll listings at
+    # 6257 div). Exchange lines below MinVolume (divine traded) and item
+    # lines below MinListings are skipped; both fail OPEN when the API
+    # omits the field, so a schema change can never blank the whole TSV.
+    [double] $MinVolume = 1.0,
+    [int] $MinListings = 5
 )
 
 $ErrorActionPreference = 'Stop'
@@ -90,6 +97,7 @@ $artName  = @{}   # normalized art key -> poe.ninja English name
 $namePrice = @{}  # normalized display name -> unit price in Exalted
 $divToEx = 0.0
 $errors = @()
+$skippedThin = 0  # lines dropped by the liquidity gates (reported in #meta)
 
 $leagueParam = ([uri]::EscapeDataString($League.Trim())) -replace '%20', '+'
 $headers = @{ 'User-Agent' = 'PoEformance-LootTracker/1.0' }
@@ -141,6 +149,11 @@ foreach ($type in $ExchangeTypes) {
                 $id = $ln.id
                 $primary = 0.0; if ($ln.primaryValue) { $primary = [double]$ln.primaryValue }
                 if (-not $id -or $primary -le 0) { continue }
+                # Liquidity gate: volumePrimaryValue = divine traded through the
+                # in-game exchange. Thin lines are ask-fantasy, not prices.
+                if ($ln.PSObject.Properties['volumePrimaryValue']) {
+                    if ([double]$ln.volumePrimaryValue -lt $MinVolume) { $skippedThin++; continue }
+                }
                 $price = $primary * $localRate
                 if ($nameById.ContainsKey($id)) {
                     $k = Normalize $nameById[$id]; if ($k) { $namePrice[$k] = $price }
@@ -174,6 +187,11 @@ foreach ($type in $ItemTypes) {
                 $name = $ln.name
                 $primary = 0.0; if ($ln.primaryValue) { $primary = [double]$ln.primaryValue }
                 if (-not $name -or $primary -le 0 -or $rate -le 0) { continue }
+                # Liquidity gate: a handful of listings is a price-fix magnet
+                # (seen live: a junk unique with listingCount=3 at 6257 div).
+                if ($ln.PSObject.Properties['listingCount']) {
+                    if ([int]$ln.listingCount -lt $MinListings) { $skippedThin++; continue }
+                }
                 $price = $primary * $rate
                 $variant = $ln.variant
 
@@ -210,6 +228,7 @@ if ($namePrice.Count -eq 0 -and $artPrice.Count -eq 0) {
 
 # ── Emit TSV ────────────────────────────────────────────────────────────────────
 $epoch = [int64][DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
+if ($skippedThin -gt 0) { $errors += "thin-market lines skipped: $skippedThin" }
 $errText = Clean ($errors -join '; ')
 $sb = New-Object System.Text.StringBuilder
 [void]$sb.Append("#meta`t$divToEx`t$epoch`t$errText`n")
