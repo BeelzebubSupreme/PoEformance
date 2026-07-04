@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.165`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.166`.
 
 ## Language
 
@@ -1501,6 +1501,23 @@ correct for the backpack.
   Safe everywhere (never below Count), no fragile tab-id hardcode (#143 is the owner's tab
   POSITION, not a game constant). Tiny stacks in a currency tab show the normal cap — harmless;
   a StashType signal would refine only that case. Logic in `WebViewBridge` (`stkM28`/`stkM20`).
+
+## Currency tab 1:1 layout — RE + bake (WIP, 0.45.13.166)
+
+The currency stash tab is NOT a normal grid: the inventory struct only exposes a LINEAR slot
+index (dims 53×4, all items in row y=0, x = fixed per-currency index 0–52, gaps = group
+separators). The real 2D layout lives in the **game UI element tree** — owner-found: the slot
+container at UI path `[35][2][0][0][0][1][1][0][0][1][1][0][0][1]` (74 children) has one
+UiElement per slot carrying its `UnscaledPos` + `Size` and the item at `+0x4F8` (→ currency
+metadata path). Since the layout is game-fixed (identical for everyone), reading it once bakes
+it. `ahk/CurrencyLayoutProbe.ahk` (`CurrencyLayoutProbeRun`, bridge `CurrencyLayoutProbeRun`,
+UI "🪙 Bake Currency Layout" in Config → Debug) navigates that path, collects every
+Metadata/Items/Currency slot's absolute unscaled pos + size, and writes
+`data/currency_tab_layout.json` (`{container:{x,y,w,h}, slots:[{path,x,y,w,h}]}`, TRACKED
+shipped data) + a readable log. **Pending:** the owner runs it once (currency tab open) → then
+wire the WebView inventory renderer to detect a currency tab (items match the layout map) and
+position each currency at its baked coords (normalized against the container) instead of the
+linear grid. Emit the item metadata path in the inventory JSON for matching.
 
 ## Reference
 
