@@ -1341,7 +1341,12 @@ buttons present only under `det-debug-actions`.
   Nav bars (`.subtab-row`), pill containers (`.filter-row`) and rows that already carry their
   own hover (tables, tree/entity/prop rows, UI-browser rows) are deliberately excluded.
   `background-COLOR` only, so the `.ap-live-rule` ledger hairline (a `background-image`
-  gradient) survives underneath.
+  gradient) survives underneath. Tuned 0.45.13.158: tint softened `0.06 → 0.03`, and the
+  highlighted rows get 8px horizontal padding cancelled by an equal `-8px` margin — the text
+  keeps its exact position but the tint's padding box extends 8px past it on each side, so
+  text never touches the tint edge (horizontal-only, vertical rhythm untouched). Verified in
+  the preview: text position unchanged, tint extends +8px, no horizontal overflow on
+  `.cfg-scroll` or the document.
 - **AutoPilot page: standard boxes + inline Live Status (0.45.13.155):** the three
   sub-sections became STANDARD category boxes like Overlay's Map Hack/Radar — sibling
   `.cfg-section > <details id="det-ap-combat|det-ap-explore|det-ap-loot">` blocks after
