@@ -7130,7 +7130,20 @@
 
     // Notify AHK we are ready
     window.addEventListener('load', () => ahkCall('PageReady'));
-    window.onerror = (msg, src, line) => console.error(`[JS] ${msg} @ ${src}:${line}`);
+    // Forward JS errors to the AHK error log (logs\*_error.log, readable in
+    // Config > Data & Logs) — the WebView has no visible console, so silent
+    // exceptions were invisible until now.
+    function _jsReport(msg) {
+      console.error('[JS] ' + msg);
+      try { ahkCall('JsError', String(msg).slice(0, 600)); } catch (e) { }
+    }
+    window.onerror = (msg, src, line) => _jsReport(`${msg} @ ${src}:${line}`);
+    // Runs one updateHeader feature-sync isolated: one failing block must
+    // never starve the blocks after it (a single throw used to kill the rest
+    // of the header sync — e.g. the vitals sections silently never built).
+    function _hdrTry(name, fn) {
+      try { fn(); } catch (e) { _jsReport('updateHeader.' + name + ': ' + (e && e.message || e)); }
+    }
 
     // ═══════════════════════════════════════════════════════════════════
     //  TAB SWITCHING — two-level (category → sub-tab)
@@ -9997,17 +10010,19 @@
     // ═══════════════════════════════════════════════════════════════════
     function updateHeader(json) {
       let d; try { d = typeof json === 'string' ? JSON.parse(json) : json; } catch (e) { return; }
-      if (d.groups !== undefined) applyGroupsFromHeader(d.groups);
-      if (d.alerts !== undefined) applyAlertsFromHeader(d.alerts);
-      if (d.loot !== undefined) lootSyncFromHeader(d.loot);
-      if (d.stashMover !== undefined) stashMoverSyncFromHeader(d.stashMover);
-      if (d.lootRadarValue !== undefined) lootRadarValueSyncFromHeader(d.lootRadarValue);
-      if (d.uiHoverPrice !== undefined) uiHoverPriceSyncFromHeader(d.uiHoverPrice);
-      if (d.ritualValueBadges !== undefined) ritualValueBadgesSyncFromHeader(d.ritualValueBadges);
-      if (d.customLandmarks !== undefined) customLandmarksSyncFromHeader(d.customLandmarks);
-      if (d.lootLabelClear !== undefined) lootLabelClearSyncFromHeader(d.lootLabelClear);
-      if (d.lootTradePricing !== undefined) lootTradePricingSyncFromHeader(d.lootTradePricing);
-      if (d.overlayPlacement !== undefined) overlayPlaceSync(d.overlayPlacement);
+      // Each feature sync runs isolated (_hdrTry): one block throwing on bad
+      // data must never starve the ones after it, and the error gets logged.
+      if (d.groups !== undefined) _hdrTry('groups', () => applyGroupsFromHeader(d.groups));
+      if (d.alerts !== undefined) _hdrTry('alerts', () => applyAlertsFromHeader(d.alerts));
+      if (d.loot !== undefined) _hdrTry('loot', () => lootSyncFromHeader(d.loot));
+      if (d.stashMover !== undefined) _hdrTry('stashMover', () => stashMoverSyncFromHeader(d.stashMover));
+      if (d.lootRadarValue !== undefined) _hdrTry('lootRadarValue', () => lootRadarValueSyncFromHeader(d.lootRadarValue));
+      if (d.uiHoverPrice !== undefined) _hdrTry('uiHoverPrice', () => uiHoverPriceSyncFromHeader(d.uiHoverPrice));
+      if (d.ritualValueBadges !== undefined) _hdrTry('ritualValueBadges', () => ritualValueBadgesSyncFromHeader(d.ritualValueBadges));
+      if (d.customLandmarks !== undefined) _hdrTry('customLandmarks', () => customLandmarksSyncFromHeader(d.customLandmarks));
+      if (d.lootLabelClear !== undefined) _hdrTry('lootLabelClear', () => lootLabelClearSyncFromHeader(d.lootLabelClear));
+      if (d.lootTradePricing !== undefined) _hdrTry('lootTradePricing', () => lootTradePricingSyncFromHeader(d.lootTradePricing));
+      if (d.overlayPlacement !== undefined) _hdrTry('overlayPlacement', () => overlayPlaceSync(d.overlayPlacement));
 
       // Version tags
       const verApp = document.getElementById('ver-app');
@@ -10152,7 +10167,7 @@
       setChk('tog-npcsync', d.npcSync);
       setChk('tog-radar', d.radarEnabled !== undefined ? d.radarEnabled : true);
       setChk('tog-vitals', d.vitalsEnabled !== undefined ? d.vitalsEnabled : true);
-      if (d.vitals) vitalsSyncFromHeader(d.vitals);
+      if (d.vitals) _hdrTry('vitals', () => vitalsSyncFromHeader(d.vitals));
       setChk('tog-overlay-status', d.overlayStatusText !== undefined ? d.overlayStatusText : true);
       setChk('tog-localapi', d.localApi !== undefined ? d.localApi : false);
       if (d.localApiPort !== undefined) { const lp = document.getElementById('localapi-port'); if (lp) lp.textContent = d.localApiPort; }

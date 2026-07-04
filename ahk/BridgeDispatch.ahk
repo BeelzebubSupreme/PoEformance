@@ -816,6 +816,11 @@ _DispatchBridgeCall(method, args)
             SetTimer(() => UiBrowserHoverHighlight(hex), -1)
         case "NpcIdentifyRun":
             SetTimer(() => NpcIdentifyRun("ui"), -1)
+        case "JsError":
+            ; WebView JS exceptions forwarded by _jsReport (the WebView has no
+            ; visible console) — one line per error in the error log.
+            if (args.Length >= 1)
+                LogError("WebViewJS: " String(args[1]))
         case "UiBrowserClearHighlight":
             SetTimer(() => UiBrowserClearHighlight(), -1)
         case "UiBrowseScanStrings":

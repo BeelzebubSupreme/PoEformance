@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.146`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.147`.
 
 ## Language
 
@@ -1321,6 +1321,18 @@ composited PNGs, mirrored in `tools/skillnode_map.json`).
 **Pending in-game verification:** category/tab switching incl. the sliding marker on the new
 rows, alias tabs showing the right sub-panels, Config remembering general/debug/data, vitals
 edit-mode from the new Vitals tab, snode icons on all new nav chips.
+- **Header-sync isolation + JS→AHK error log (0.45.13.147):** follow-up to a "Vitals Life/
+  Mana/ES boxes missing" report. Browser repro (static `http-server` + driving `updateHeader`
+  with a realistic payload) shows the CURRENT code builds and shows all three `det-vitals-*`
+  sections — the likely in-app cause is a JS exception in an EARLIER `updateHeader` feature
+  block (real data) starving `vitalsSyncFromHeader` (which is the only `renderVitalsBars`
+  trigger). Hardening: every feature-sync call in `updateHeader` now runs isolated via
+  `_hdrTry(name, fn)` (one throwing block can no longer kill the rest, the error is logged),
+  and `_jsReport(msg)` forwards JS errors — incl. `window.onerror` — over the bridge (new
+  `JsError` case → `LogError("WebViewJS: …")`), so WebView exceptions finally show up in the
+  error log (readable in Config → Data & Logs). Note: the vitals sections may also simply be
+  COLLAPSED (their open state persists in `[…] cfgSections`, and the default list doesn't
+  include `vitals-life/mana/es`).
 
 ## Reference
 
