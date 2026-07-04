@@ -374,16 +374,15 @@ _DispatchBridgeCall(method, args)
                 }
             }
         case "SetConfigSubTab":
-            ; args[1] = one of general / automation / overlay / vitals /
-            ; debug / data. Anything else is silently ignored so a
-            ; bad WebView call can't corrupt the persisted value.
+            ; args[1] = one of general / debug / data (automation, overlay
+            ; and vitals are top-level nav categories since 0.45.13.145).
+            ; Anything else is silently ignored so a bad WebView call
+            ; can't corrupt the persisted value.
             global g_configSubTab
             if (args.Length >= 1)
             {
                 v := args[1]
-                if (v = "general" || v = "automation" || v = "overlay"
-                    || v = "vitals" || v = "debug"
-                    || v = "data")
+                if (v = "general" || v = "debug" || v = "data")
                 {
                     g_configSubTab := v
                     SetTimer(SaveConfig, -100)
@@ -812,6 +811,16 @@ _DispatchBridgeCall(method, args)
         case "UiBrowseSearch":
             q := (args.Length >= 1) ? String(args[1]) : ""
             SetTimer(() => UiBrowseSearch(q), -1)
+        case "UiBrowseHover":
+            hex := (args.Length >= 1) ? String(args[1]) : ""
+            SetTimer(() => UiBrowserHoverHighlight(hex), -1)
+        case "NpcIdentifyRun":
+            SetTimer(() => NpcIdentifyRun("ui"), -1)
+        case "JsError":
+            ; WebView JS exceptions forwarded by _jsReport (the WebView has no
+            ; visible console) — one line per error in the error log.
+            if (args.Length >= 1)
+                LogError("WebViewJS: " String(args[1]))
         case "UiBrowserClearHighlight":
             SetTimer(() => UiBrowserClearHighlight(), -1)
         case "UiBrowseScanStrings":

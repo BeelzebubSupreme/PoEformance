@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.141`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.148`.
 
 ## Language
 
@@ -1197,6 +1197,142 @@ tile-path pattern → label, matched by SUBSTRING against the tile paths we alre
   the `CustomLandmarkDiag` / `CustomLandmarkPosProbe` bridge cases, and the `CustomLandmarkDiagnose` /
   `CustomLandmarkPosProbe` functions in `CustomLandmarks.ahk` (the landmark position bug they helped solve
   is fixed).
+
+## Scale-aware UI→screen conversion (shipped 0.45.13.141) — fixes the "slight offset" on all UI rects/labels
+
+Every UI-rect consumer (UI-browser highlight, hover-price badge, ritual badges, loot-label
+clear/click, stash-mover grid) converted UI coords with ONE global scale (`clientH/1600` on
+both axes, no cull, no per-element multiplier) — a systematic slight offset on everything.
+The C# reference (GameHelper2 `UiElementBase.GetUnScaledPosition` + `GameWindowScale` +
+`GameCull`) does three things we didn't:
+
+- **Per-element scale conversion in the parent chain:** each UiElement carries `ScaleIndex`
+  (0x18A) + `LocalScaleMultiplier` (0x130); when parent and child differ, the accumulated
+  position converts between their scale spaces (`parentPos * parentScale / childScale`, per axis).
+- **Per-axis final scale:** `v1 = (clientW − 2·cull)/2560` (width), `v2 = clientH/1600`
+  (height); ScaleIndex picks the pair (1→v1/v1, 2→v2/v2, 3→v1/v2, else 1/1) × localMult.
+- **Cull + client rect:** screen X shifts by `+cull` (the letterbox bar width, an int at the
+  `GameCullSize` static address — our pattern scanner already found it, nobody read it) and the
+  origin is the CLIENT area (GetClientRect), never WinGetPos.
+
+Implementation (`ahk/UiTreeBrowser.ahk`): `UiTree_ScaleCtx(reader, hwnd)` (client rect + cull
++ v1/v2, one cheap ReadInt; cull sanity-clamped to 0), `_UiScalePair(idx, mult, sc)`,
+`UiTree_GetScreenPos(reader, elem, sc:=0)` (faithful GetUnScaledPosition port; now also returns
+the leaf's `scaleIndex`/`localMult`; degrades to the old plain sum without a window),
+`UiTree_ScreenRectOf(reader, elem, sc:=0, sizeW:="", sizeH:="")` (absolute screen-px rect =
+leaf pos × own pair + cull + client origin), and a scale-aware `UiTree_HitTest(reader, root,
+px, py, sc:=0)` — SIGNATURE CHANGE: takes absolute screen px now, not pre-divided UI coords.
+Consumers switched to `UiTree_ScreenRectOf`: `UiHoverPrice` (+ hit test in px),
+`RitualValueBadges`, `LootLabelClear` (abs px − window origin for the overlay-local rects),
+`LootPickup._LootFindLabelNear`, `StashMover._SmInventoryGridRect` (manual offsets kept on
+top), `UiBrowserHandler` (props now client-local px + cull; per-element localMult respected).
+`g_uiBrowserHighlight` now stores ABSOLUTE screen px; `RadarOverlay._FinishFrame` shifts it by
+the overlay window origin (`this._lastX/_lastY`) instead of re-scaling with the WINDOW height.
+On a 16:10 window with cull 0 and uniform scale chains the new math reduces exactly to the old
+formula — differences appear only where the old math was wrong (mixed scale spaces, non-16:10
+aspects, windowed mode, localMult ≠ 1).
+**Pending in-game verification:** UI-browser highlight sits exactly on the selected element
+(e.g. Guild Stash), hover-price/ritual badges pixel-exact on their cells, loot-label click
+accuracy, stash-mover button/grid anchor (existing offsetX/offsetY calibrations may now
+double-correct — re-zero them if the grid is offset the other way).
+- **Hotfix 0.45.13.142 — hover-price died; hardened against bad memory scale data:** first
+  in-game test broke price-on-hover entirely. An OFFLINE harness (fake reader + synthetic
+  UiElement tree, 35 checks incl. hand-computed C#-reference values) proved the core math
+  correct — so the in-game breakage comes from the MEMORY values, with two prime suspects:
+  (a) the `GameCullSize` static was never consumed before, so a mis-resolved pattern
+  (garbage cull int) silently poisons `v1` and collapses every width-scaled rect — the
+  root is ScaleIndex 3, killing the whole descent; (b) the ScaleIndex/LocalScaleMultiplier
+  offsets (0x18A/0x130) are from the 0.4.x reference layout and other UiElement fields HAVE
+  drifted in 0.5.x (StringId 0x140→0x098), so they may read garbage. Hardening (all in
+  `UiTreeBrowser.ahk`): `UiTree_ScaleCtx` clamps v1 into a plausibility band (0.7–1.3 × v2;
+  outside → distrust the cull, then fall back to v1=v2); `_UiScalePair` sanitizes
+  localMult (accept 0.2–5.0, else 1.0), unknown ScaleIndex → uniform (v2,v2), and honors a
+  `sc["uniform"]` legacy-override flag (exact pre-scale-aware behavior); `UiTree_HitTest`
+  retries once in uniform mode when the descent never leaves the root (descent split into
+  `_UiHitDescend`). `UiHoverPrice._UhpResolveHoveredItem` retries its hit test + chain scan
+  once with `sc["uniform"] := true` when NO item slot was found (partial-chain failures the
+  root-level fallback can't see); scan extracted into `_UhpScanChainForItem`. The
+  UIHover probe (`Ctrl+Alt+Shift+H`) now prints per-chain-element `scIdx`/`lMult` and the
+  ctx `v1/v2/cull` — capture it over an inventory item to see the REAL memory values if
+  anything still misbehaves. (0.45.13.146: the probe threads its ONE scale ctx through every
+  report line — `_UiHoverChainLine(reader, addr, sc)` — and prints the `scaleMode`, so when
+  the hit test flips the uniform fallback the printed positions match the hit geometry.)
+  Offline harness lives in the session scratchpad
+  (`ui_scale_test.ahk`), validated: uniform 16:10 ≡ old math, 16:9 + client offset, mixed
+  scale-space conversion, real cull (+128), poisoned cull (700 → rejected), garbage
+  index/mult leaf (→ uniform behavior), partial-chain + uniform retry.
+- **UI Browser hover highlight (0.45.13.143):** hovering a node in the CHILDREN list (and in
+  the search-results list) draws a BLUE rect (BGR `0xFF0000`) on that element's live screen
+  rect, alongside the red selection rect. `ui/index.html`: `onmouseenter`/`onmouseleave` on
+  `.uib-child-row` + `.uib-sr-row` → `ahkCall('UiBrowseHover', ptr)` ('' clears; the static
+  `#uib-children-list` also clears on `onmouseleave` as a safety net against re-renders).
+  `BridgeDispatch` case `UiBrowseHover` → `UiBrowserHoverHighlight(hex)`
+  (`UiBrowserHandler.ahk`): resolves the ptr, caches the ABSOLUTE screen-px rect
+  (`UiTree_ScreenRectOf`) in `g_uiBrowserHoverHighlight` (0 clears; also cleared by
+  `UiBrowserClearHighlight`). `OverlayManager` counts the hover rect toward
+  `ctx.inspectOverride`; `RadarOverlay._FinishFrame` draws it after the red rect.
+
+## NPC "Identify Items" hotkey (TEST, shipped 0.45.13.144) — `ahk/NpcIdentify.ahk`
+
+One hotkey (default **F9**, only while PoE2 is focused): in the HIDEOUT, click the NPC
+"Doryani" via his floating hideout label, wait for his dialog window to open, then click its
+"Identify Items" row. UI paths are owner-provided from the UI Browser (root-relative index
+paths) and INI-tunable in `[NpcIdentify]` (`hotkey`, `npcName`, `menuText`, `labelsPath=8,0,0`
+[container of ALL hideout labels — the NPC's child index shifts, so the label is found by its
+displayed TEXT], `windowPath=23` [NPC dialog window], `menuPath=1,0,2,1,0,0` [window → the
+"Identify Items" row]). Flow: hideout gate (`reader._radarWorldAreaCache.isHideout`) → find
+the VISIBLE label child by text → `UiTree_ScreenRectOf` + `NavClickAt` centre (char walks,
+game opens the dialog) → 150 ms poll (9 s deadline) until `windowPath` is
+`UiTree_HierarchicallyVisible` → resolve `menuPath`, require its displayed text to contain
+`menuText` (path-drift guard; aborts with the actual text otherwise) → click it. Every gate
+aborts with a `ToolTip` reason. The section is written back on load so the keys are
+discoverable in `poeformance_config.ini`. Wiring: `#Include ahk/NpcIdentify.ahk`;
+`LoadNpcIdentify()` + `RegisterNpcIdentifyHotkey()` at startup (HotIf-gated to the PoE window,
+StashMover pattern); bridge case `NpcIdentifyRun`; "🪄 Doryani Identify" button in the RE-tools
+row. Verified: full-script `AutoHotkey64.exe /validate` passes.
+**Pending in-game verification:** label click walks to Doryani and opens the dialog; the
+window/menu paths resolve on the live client; the final click fires identification; tooltip
+reasons on each abort gate.
+
+## Nav restructure — Overlay + Automation as top-level categories (shipped 0.45.13.145)
+
+Cat bar LEFT: **Game · Overlay · Macro Engine · Automation**; RIGHT: **RE · Config** (RE moved
+right; its sub-tab row is right-aligned like Config's). The former Config sub-tabs moved out:
+**Overlay** category = sub-tabs *Overlay* + *Vitals*; **Automation** category = sub-tabs
+*AutoPilot* + *Stash Mover* (the old single "automation" sub-panel was split into two
+`.cfg-subpanel`s, `stashmover` + `autopilot`). Config keeps **General · Debug · Data & Logs**.
+
+**Mechanism — ALIAS tabs, no DOM moves:** lots of CSS is scoped to `#panel-config`
+(`.hk-num`, `.vrule`, …), so the content stayed inside `#panel-config`. The new categories'
+tabs (`cfgoverlay`, `cfgvitals`, `autopilot`, `stashmover`) are top-level tab KEYS with no own
+panel: `switchTab` resolves them via `cfgPanelForTab` to `#panel-config` and flips the mapped
+inner sub-panel through the shared `_cfgShowSubpanel(name)` (scoped to `#panel-config
+.cfg-subpanel`). `tabCategory`/`lastTabPerCategory` gained the new keys, so the category
+highlight/marker machinery is unchanged. `switchConfigSubTab` keeps handling the remaining
+real Config sub-tabs and REDIRECTS legacy names (`automation`→`autopilot`,
+`overlay`→`cfgoverlay`, `vitals`→`cfgvitals`) to the tab system. Persistence: the
+`configSubTab` whitelist shrank to general/debug/data in BOTH `BridgeDispatch.SetConfigSubTab`
+and `ConfigManager` (old persisted values fall back to `general`; the header-restore in JS
+sanitizes too). Skill-node icons: the orphaned `cfgtab:*` icons were re-keyed
+(`cat:overlay`←LifeandMana, `cat:automation`←PhysicalDamageOverTimeNode,
+`tab:cfgvitals`←BloodMageNode) + `tab:cfgoverlay`=PressurePoints,
+`tab:autopilot`=KeystoneAvatarOfFire, `tab:stashmover`=KeystonePainAttunement (existing
+composited PNGs, mirrored in `tools/skillnode_map.json`).
+**Pending in-game verification:** category/tab switching incl. the sliding marker on the new
+rows, alias tabs showing the right sub-panels, Config remembering general/debug/data, vitals
+edit-mode from the new Vitals tab, snode icons on all new nav chips.
+- **Header-sync isolation + JS→AHK error log (0.45.13.147):** follow-up to a "Vitals Life/
+  Mana/ES boxes missing" report. Browser repro (static `http-server` + driving `updateHeader`
+  with a realistic payload) shows the CURRENT code builds and shows all three `det-vitals-*`
+  sections — the likely in-app cause is a JS exception in an EARLIER `updateHeader` feature
+  block (real data) starving `vitalsSyncFromHeader` (which is the only `renderVitalsBars`
+  trigger). Hardening: every feature-sync call in `updateHeader` now runs isolated via
+  `_hdrTry(name, fn)` (one throwing block can no longer kill the rest, the error is logged),
+  and `_jsReport(msg)` forwards JS errors — incl. `window.onerror` — over the bridge (new
+  `JsError` case → `LogError("WebViewJS: …")`), so WebView exceptions finally show up in the
+  error log (readable in Config → Data & Logs). Note: the vitals sections may also simply be
+  COLLAPSED (their open state persists in `[…] cfgSections`, and the default list doesn't
+  include `vitals-life/mana/es`).
 
 ## Reference
 

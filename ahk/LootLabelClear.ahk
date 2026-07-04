@@ -106,23 +106,21 @@ LootLabelRectsRefresh(reader, gw, gh)
     if !(root && reader.IsProbablyValidPointer(root))
         return
 
-    ; Convert UI coords → overlay-local px EXACTLY like the verified Price-on-Hover / Ritual
-    ; badges (which sit perfectly on items of any size): the CLIENT rect (NavClientRect) gives
-    ; the origin + the scale (cr.h/1600, used for BOTH axes). RadarOverlay's memDC is
-    ; window-local, so subtract the window origin from the client origin (offX/offY) to land in
-    ; the same space as the maphack blit. This matters whenever the window rect != the client
-    ; rect (the overlay context's gw/gh come from WinGetPos = the window rect, not the client).
+    ; Convert UI coords → overlay-local px via the shared scale-aware helper
+    ; (UiTree_ScreenRectOf: per-element ScaleIndex/LocalScaleMultiplier + cull +
+    ; client origin, the C#-reference math). RadarOverlay's memDC is
+    ; window-local, so subtract the WINDOW origin (WinGetPos) from the absolute
+    ; screen-px rect to land in the same space as the maphack blit.
     gameHwnd := ResolvePoEWindow()
-    cr := gameHwnd ? NavClientRect(gameHwnd) : 0
-    if !IsObject(cr)
+    sc := gameHwnd ? UiTree_ScaleCtx(reader, gameHwnd) : 0
+    if !IsObject(sc)
     {
         g_llcRects := []
         return
     }
-    hScale := (cr["h"] > 0) ? (cr["h"] / 1600.0) : 1.0
+    hScale := sc["v2"]   ; height scale, for the cheap pre-filter size cap only
     wx := 0, wy := 0, ww := 0, wh := 0
     try WinGetPos(&wx, &wy, &ww, &wh, "ahk_id " gameHwnd)
-    offX := cr["x"] - wx, offY := cr["y"] - wy
     maxW := gw * 0.6, maxH := gh * 0.5   ; a label is never this big → skip (anti whole-map clear)
     sidOff := PoE2Offsets.UiElementBase["StringIdPtr"]
     txtOff := PoE2Offsets.UiElementBase["TextPtr"]
@@ -170,9 +168,9 @@ LootLabelRectsRefresh(reader, gw, gh)
                 try txt := reader.ReadStdWStringAt(ptr + txtOff, 64)
                 if (Trim(txt) != "")
                 {
-                    sp := UiTree_GetScreenPos(reader, ptr)
-                    x := Round(sp["x"] * hScale + offX), y := Round(sp["y"] * hScale + offY)
-                    w := Round(g["sizeW"] * hScale), h := Round(g["sizeH"] * hScale)
+                    r := UiTree_ScreenRectOf(reader, ptr, sc, g["sizeW"], g["sizeH"])
+                    x := Round(r["x"] - wx), y := Round(r["y"] - wy)
+                    w := Round(r["w"]), h := Round(r["h"])
                     ; Keep only labels that land on screen.
                     if (w > 0 && h > 0 && x < gw && y < gh && x + w > 0 && y + h > 0)
                         rects.Push([x, y, w, h])

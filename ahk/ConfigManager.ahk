@@ -185,10 +185,10 @@ LoadConfig()
     g_maphackBackgroundHex := _NormalizeHex8(_Ini("Radar", "maphackBackgroundHex", "66FF6619"), "66FF6619")
     ; Config sub-tab persistence — coerce to the whitelist so a bad
     ; INI value (typo, leftover from older builds) doesn't break the UI.
+    ; automation/overlay/vitals are top-level categories since 0.45.13.145,
+    ; so an old persisted value falls back to "general".
     rawSubTab := _Ini("ConfigUI", "activeSubTab", "general")
-    if (rawSubTab = "general" || rawSubTab = "automation" || rawSubTab = "overlay"
-        || rawSubTab = "vitals" || rawSubTab = "debug"
-        || rawSubTab = "data")
+    if (rawSubTab = "general" || rawSubTab = "debug" || rawSubTab = "data")
         g_configSubTab := rawSubTab
     else
         g_configSubTab := "general"

@@ -214,13 +214,12 @@ TryRitualValueBadges(radarSnap)
     }
 
     gameHwnd := ResolvePoEWindow()
-    cr := gameHwnd ? NavClientRect(gameHwnd) : 0
-    if !IsObject(cr)
+    sc := gameHwnd ? UiTree_ScaleCtx(reader, gameHwnd) : 0
+    if !IsObject(sc)
     {
         g_rvbBadges := []
         return
     }
-    hScale := (cr["h"] > 0) ? (cr["h"] / 1600.0) : 1.0
 
     ; BFS the window subtree for +0x4F8 item cells; price + collect the valuable ones.
     badges := []
@@ -244,11 +243,11 @@ TryRitualValueBadges(radarSnap)
             pr := _RvbPrice(reader, ip)
             if (IsObject(pr) && pr["valueEx"] > 0 && pr["valueEx"] >= g_rvbMinEx && IsObject(pr["parts"]))
             {
-                sp := UiTree_GetScreenPos(reader, ptr)
-                badges.Push(Map(
-                    "sx", cr["x"] + sp["x"] * hScale, "sy", cr["y"] + sp["y"] * hScale,
-                    "sw", g["sizeW"] * hScale, "sh", g["sizeH"] * hScale,
-                    "parts", pr["parts"], "valueEx", pr["valueEx"]))
+                r := UiTree_ScreenRectOf(reader, ptr, sc, g["sizeW"], g["sizeH"])
+                if IsObject(r)
+                    badges.Push(Map(
+                        "sx", r["x"], "sy", r["y"], "sw", r["w"], "sh", r["h"],
+                        "parts", pr["parts"], "valueEx", pr["valueEx"]))
             }
         }
 

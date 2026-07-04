@@ -4,7 +4,8 @@
 global g_uiBrowserCurrentPtr := 0
 global g_uiBrowserHistory := []
 global g_uiBrowserRootPtr := 0
-global g_uiBrowserHighlight := 0   ; Map(x,y,w,h) in UI coords, or 0 when inactive
+global g_uiBrowserHighlight := 0   ; Map(x,y,w,h) in ABSOLUTE screen px, or 0 when inactive
+global g_uiBrowserHoverHighlight := 0   ; blue mouse-over rect (children list), same format
 
 ; Formats a float for JSON — always uses "." regardless of Windows locale.
 _UibF(n, decimals := 2)
@@ -334,37 +335,41 @@ PushUiBrowserState()
         }
         ipJson .= "]"
 
-        ; Compute Screen Pos and per-axis scale factors (need game window size)
-        gwW := 0, gwH := 0
-        try {
-            gameHwnd := ResolvePoEWindow()
-            if gameHwnd
-                WinGetPos(, , &gwW, &gwH, "ahk_id " gameHwnd)
-        }
+        ; Scale context (client rect + cull + v1/v2) — the C#-reference math.
+        sc := 0
+        try sc := UiTree_ScaleCtx(g_reader)
         screenPosX := 0.0, screenPosY := 0.0
         try {
-            sp := UiTree_GetScreenPos(g_reader, g_uiBrowserCurrentPtr)
+            sp := UiTree_GetScreenPos(g_reader, g_uiBrowserCurrentPtr, sc)
             screenPosX := sp["x"]
             screenPosY := sp["y"]
         }
-        ; Computed scale based on Scale Index. PoE2 design res = 2560x1600.
-        sf := (gwH > 0) ? (gwH / 1600.0) : 1.0
-        sfX := (gwW > 0) ? (gwW / 2560.0) : 1.0
+        ; Per-axis scale from the element's own Scale Index + LocalScaleMultiplier.
+        ; An unknown index is not "no scaling": _UiScalePair degrades it to the
+        ; uniform height scale (v2,v2) — label it as exactly that.
         scIdx := elem["scaleIndex"]
         if (scIdx = 1)
-            cs := sfX, csY := sfX, scLabel := "Width/Width"
+            scLabel := "Width/Width"
         else if (scIdx = 2)
-            cs := sf,  csY := sf,  scLabel := "Height/Height"
+            scLabel := "Height/Height"
         else if (scIdx = 3)
-            cs := sfX, csY := sf,  scLabel := "Width/Height"
+            scLabel := "Width/Height"
         else
-            cs := 1.0, csY := 1.0, scLabel := "None"
+            scLabel := "Unknown → Height/Height fallback"
+        if IsObject(sc)
+        {
+            pair := _UiScalePair(scIdx, elem["localMult"], sc)
+            cs := pair[1], csY := pair[2], cull := sc["cull"]
+        }
+        else
+            cs := 1.0, csY := 1.0, cull := 0
 
         screenSizeW := elem["sizeW"] * cs
         screenSizeH := elem["sizeH"] * csY
-        ; Screen Pos in pixels = computed UI-space pos * height-scale (matches game projection)
-        screenPxX := screenPosX * sf
-        screenPxY := screenPosY * sf
+        ; Screen Pos in CLIENT-AREA pixels = unscaled pos × the element's own
+        ; per-axis scale, + the cull bar on X (matches the game's projection).
+        screenPxX := cull + screenPosX * cs
+        screenPxY := screenPosY * csY
 
         ; Effective (hierarchical) visibility: own bit AND every ancestor's bit,
         ; walked up to the browser root. Distinguishes "locally flagged visible"
@@ -436,10 +441,13 @@ PushUiBrowserState()
             . '}'
 
         ; Update overlay highlight BEFORE WebViewExec so outer catch can't clear it.
+        ; Stored in ABSOLUTE screen px (UiTree_ScreenRectOf — scale-aware, incl.
+        ; cull + client origin); RadarOverlay shifts by its own window origin.
         try {
-            pos := UiTree_GetScreenPos(g_reader, g_uiBrowserCurrentPtr)
-            g_uiBrowserHighlight := Map("x", pos["x"], "y", pos["y"],
-                                        "w", elem["sizeW"], "h", elem["sizeH"])
+            r := UiTree_ScreenRectOf(g_reader, g_uiBrowserCurrentPtr, sc,
+                                     elem["sizeW"], elem["sizeH"])
+            g_uiBrowserHighlight := IsObject(r)
+                ? Map("x", r["x"], "y", r["y"], "w", r["w"], "h", r["h"]) : 0
         } catch {
             g_uiBrowserHighlight := 0
         }
@@ -455,8 +463,28 @@ PushUiBrowserState()
 ; Clears the UI Browser overlay highlight (call when leaving the UI tab).
 UiBrowserClearHighlight()
 {
-    global g_uiBrowserHighlight
+    global g_uiBrowserHighlight, g_uiBrowserHoverHighlight
     g_uiBrowserHighlight := 0
+    g_uiBrowserHoverHighlight := 0
+}
+
+; Sets/clears the BLUE mouse-over highlight rect for the UI Browser children
+; list. ptrStr: hex address string of the hovered element ("" / invalid clears).
+; Computes the absolute screen-px rect once via UiTree_ScreenRectOf; the
+; overlay just draws whatever is cached here. Bridge case: UiBrowseHover.
+UiBrowserHoverHighlight(ptrStr)
+{
+    global g_uiBrowserHoverHighlight, g_reader
+    ptr := 0
+    try ptr := Integer(ptrStr)
+    if !(ptr && IsObject(g_reader) && g_reader.IsProbablyValidPointer(ptr))
+    {
+        g_uiBrowserHoverHighlight := 0
+        return
+    }
+    r := 0
+    try r := UiTree_ScreenRectOf(g_reader, ptr)
+    g_uiBrowserHoverHighlight := IsObject(r) ? r : 0
 }
 
 ; RE aid: dumps every readable wide-string field of the currently-selected UI

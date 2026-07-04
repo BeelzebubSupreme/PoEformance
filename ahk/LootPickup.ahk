@@ -683,10 +683,9 @@ _LootFindLabelNear(reader, targetSx, targetSy, gameHwnd)
     root := _UiBrowser_GetGameUiPtr()
     if !(root && reader.IsProbablyValidPointer(root))
         return 0
-    cr := NavClientRect(gameHwnd)
-    if !IsObject(cr)
+    sc := UiTree_ScaleCtx(reader, gameHwnd)
+    if !IsObject(sc)
         return 0
-    hScale := (cr["h"] > 0) ? (cr["h"] / 1600.0) : 1.0
     sidOff := PoE2Offsets.UiElementBase["StringIdPtr"]
     txtOff := PoE2Offsets.UiElementBase["TextPtr"]
 
@@ -728,9 +727,9 @@ _LootFindLabelNear(reader, targetSx, targetSy, gameHwnd)
                 try txt := reader.ReadStdWStringAt(ptr + txtOff, 64)
                 if (Trim(txt) != "")
                 {
-                    lsp := UiTree_GetScreenPos(reader, ptr)
-                    cxp := cr["x"] + (lsp["x"] + g["sizeW"] / 2) * hScale
-                    cyp := cr["y"] + (lsp["y"] + g["sizeH"] / 2) * hScale
+                    r := UiTree_ScreenRectOf(reader, ptr, sc, g["sizeW"], g["sizeH"])
+                    cxp := r["x"] + r["w"] / 2
+                    cyp := r["y"] + r["h"] / 2
                     dx := cxp - targetSx, dy := cyp - targetSy
                     d := dx * dx + dy * dy
                     if (d < bestD)
