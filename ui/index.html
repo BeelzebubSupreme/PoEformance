@@ -9948,14 +9948,19 @@
         // Quality (cols 6-8, rows 2-3)
         CurrencyMagicQuality: [6,2], CurrencyArmourQuality: [7,2], CurrencyWeaponQuality: [8,2],
         CurrencyFlaskQuality: [7,3], CurrencyGemQuality: [8,3],
-        // Identification (col 8) — sits ~level with the quality block bottom
-        CurrencyIdentification: [8,4],
         // Shards (row 7)
         CurrencyUpgradeToMagicShard: [2,7], CurrencyUpgradeMagicToRareShard: [3,7], CurrencyUpgradeRandomlyShard: [4,7],
       },
+      // Always-empty framed slots the game shows without a bound currency type
+      // (e.g. the cell below the Vaal/Corrupt orb).
+      emptySlots: [[4,1]],
+      // Identification (col 8) — a fixed currency, but positioned below the
+      // quality block with a small gap (not part of the tight grid).
+      ident: { col: 8, gap: 20 },
       // The central item slot: a 2-wide × 4-tall slot for NORMAL items (weapons /
-      // gear), NOT currency. Horizontally centered; here as {w,h,rowStart}.
-      bigSlot: { w: 2, h: 4, rowStart: 3 },
+      // gear), NOT currency. Horizontally centered; small gap below the two
+      // empty frames above it.
+      bigSlot: { w: 2, h: 4, rowStart: 3, gap: 8 },
       // Two always-empty framed slots directly above the central slot (centered),
       // one row below the middle block.
       emptyAbove: { count: 2, row: 2 },
@@ -10001,14 +10006,20 @@
         bump(x, y, w, h);
       };
 
-      // Split the items: currency with a fixed slot, generic currency, non-currency.
+      // Split the items: fixed-slot currency, the identify slot, generic
+      // (stackable, not fixed) currency, and non-currency gear. "Stackable" (a
+      // Stack component → smax>0, or a shown count, or a /Currency/ path) is the
+      // reliable "belongs in the currency area" signal — essences/runes live
+      // outside /Currency/ so the flag alone misses them.
       const byMp = new Map(), generics = [], normals = [];
+      let identItem = null;
       for (const it of items) {
         if (!it) continue;
-        if (it.cur) {
-          if (it.mp && L.slots[it.mp]) byMp.set(it.mp, it);
-          else generics.push(it);
-        } else normals.push(it);
+        if (it.mp === 'CurrencyIdentification') { identItem = it; continue; }
+        const stackable = (it.smax > 0) || (it.s > 1) || it.cur;
+        if (it.mp && L.slots[it.mp]) byMp.set(it.mp, it);
+        else if (stackable) generics.push(it);
+        else normals.push(it);
       }
 
       // 1) Fixed currency slots — frame every one; draw the item when present.
@@ -10017,13 +10028,20 @@
         const it = byMp.get(path);
         if (it) itemCell(it, p.x, p.y, C, C); else frame(p.x, p.y, C, C);
       }
+      // Always-empty framed slots (no bound currency type).
+      for (const e of (L.emptySlots || [])) { const p = _curPos(e[0], e[1]); frame(p.x, p.y, C, C); }
+      // Identification: below the quality block with a gap.
+      const idp = _curPos(L.ident.col, 3);
+      const idY = idp.y + C + L.ident.gap;
+      if (identItem) itemCell(identItem, idp.x, idY, C, C); else frame(idp.x, idY, C, C);
       // Content width so far (defines the centering axis for the middle column).
       const rightEdge = maxX;
 
-      // 2) Central big slot (centered) + the item in it (first non-currency item).
+      // 2) Central big slot (centered, small gap below the empty frames above) +
+      //    the tab's non-currency gear item.
       const bigW = L.bigSlot.w * C, bigH = L.bigSlot.h * C;
       const bigX = Math.round((rightEdge - bigW) / 2);
-      const bigY = _curPos(0, L.bigSlot.rowStart).y;
+      const bigY = _curPos(0, L.bigSlot.rowStart).y + (L.bigSlot.gap || 0);
       const bigIt = normals.shift();
       if (bigIt) itemCell(bigIt, bigX, bigY, bigW, bigH); else frame(bigX, bigY, bigW, bigH);
 
