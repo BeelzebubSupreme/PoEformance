@@ -9948,9 +9948,10 @@
         // Quality (cols 6-8, rows 2-3)
         CurrencyMagicQuality: [6,2], CurrencyArmourQuality: [7,2], CurrencyWeaponQuality: [8,2],
         CurrencyFlaskQuality: [7,3], CurrencyGemQuality: [8,3],
-        // Shards (row 7)
-        CurrencyUpgradeToMagicShard: [2,7], CurrencyUpgradeMagicToRareShard: [3,7], CurrencyUpgradeRandomlyShard: [4,7],
       },
+      // Shard row (above the misc grid): a centered row of 4 slots holding any
+      // shard-type currency (base name contains "Shard"), filled in slot order.
+      shardRow: { count: 4, row: 7 },
       // Always-empty framed slots the game shows without a bound currency type
       // (e.g. the cell below the Vaal/Corrupt orb).
       emptySlots: [[4,1]],
@@ -10006,20 +10007,22 @@
         bump(x, y, w, h);
       };
 
-      // Split the items: fixed-slot currency, the identify slot, generic
-      // (stackable, not fixed) currency, and non-currency gear. "Stackable" (a
-      // Stack component → smax>0, or a shown count, or a /Currency/ path) is the
-      // reliable "belongs in the currency area" signal — essences/runes live
-      // outside /Currency/ so the flag alone misses them.
-      const byMp = new Map(), generics = [], normals = [];
+      // Split the items by what the currency tab allows where:
+      //  - the central big slot holds ONLY normal gear (weapon/armour/jewellery/
+      //    flask/jewel → it.gear); everything else is "currency-area".
+      //  - fixed-slot currencies go to their curated cell.
+      //  - shard-type currencies (mp contains "Shard") go to the centered shard row.
+      //  - the identify slot is special-positioned.
+      //  - every other non-gear item goes to the generic misc grid.
+      const byMp = new Map(), generics = [], shards = [], normals = [];
       let identItem = null;
       for (const it of items) {
         if (!it) continue;
+        if (it.gear) { normals.push(it); continue; }
         if (it.mp === 'CurrencyIdentification') { identItem = it; continue; }
-        const stackable = (it.smax > 0) || (it.s > 1) || it.cur;
         if (it.mp && L.slots[it.mp]) byMp.set(it.mp, it);
-        else if (stackable) generics.push(it);
-        else normals.push(it);
+        else if (it.mp && it.mp.indexOf('Shard') >= 0) shards.push(it);
+        else generics.push(it);
       }
 
       // 1) Fixed currency slots — frame every one; draw the item when present.
@@ -10051,7 +10054,16 @@
       const eay = _curPos(0, L.emptyAbove.row).y;
       for (let i = 0; i < L.emptyAbove.count; i++) { frame(eax, eay, C, C); eax += C + 2; }
 
-      // 4) Generic misc-currency grid at the bottom (centered). Frame all cells,
+      // 4) Shard row (centered) — the shard-type currencies, in slot order.
+      shards.sort((a, b) => (a.sx | 0) - (b.sx | 0));
+      const shW = L.shardRow.count * C, shX0 = Math.round((rightEdge - shW) / 2);
+      const shY = _curPos(0, L.shardRow.row).y;
+      for (let i = 0; i < L.shardRow.count; i++) {
+        const it = shards[i];
+        if (it) itemCell(it, shX0 + i * C, shY, C, C); else frame(shX0 + i * C, shY, C, C);
+      }
+
+      // 5) Generic misc-currency grid at the bottom (centered). Frame all cells,
       //    fill row-major with the generic currency items in slot (sx) order.
       generics.sort((a, b) => (a.sx | 0) - (b.sx | 0));
       const gW = L.generic.cols * C, gX0 = Math.round((rightEdge - gW) / 2);
@@ -10064,9 +10076,9 @@
           if (it) itemCell(it, x, y, C, C); else frame(x, y, C, C);
         }
       }
-      // Any leftover generic/normal items beyond the grid — trailing row (safety net).
+      // Any leftover items beyond their region — trailing row (safety net).
       let ux = 0, uy = maxY + 14;
-      for (const it of generics.slice(gi).concat(normals)) { itemCell(it, ux, uy, C, C); ux += C + 2; }
+      for (const it of generics.slice(gi).concat(shards.slice(L.shardRow.count)).concat(normals)) { itemCell(it, ux, uy, C, C); ux += C + 2; }
 
       const namePart = _isStashTabId(inv.id) ? (inv.tn || 'Stash Tab') : _inventoryLabel(inv.id);
       return `<div class="inv-section">

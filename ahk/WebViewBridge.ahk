@@ -1416,12 +1416,24 @@ _BuildInventoryArrayJson(invs)
             ; + an "is currency" flag — the currency-tab layout places currency
             ; items by name and puts non-currency items (weapons/gear) in the
             ; central slot.
-            mp := "", isCur := 0
+            ; isGear = a "normal" equippable item (weapon / armour / jewellery /
+            ; flask / jewel). The currency tab's central slot only accepts gear;
+            ; everything else (currency, essences, runes, fragments, shards, …)
+            ; belongs in the misc grid, so gear-by-path is the reliable split.
+            mp := "", isCur := 0, isGear := 0
             if (d.Has("metadataPath") && d["metadataPath"] != "")
             {
                 fullPath := String(d["metadataPath"])
                 mp := RegExReplace(fullPath, ".*/", "")
                 isCur := InStr(fullPath, "/Currency/") ? 1 : 0
+                for _, cat in ["/Weapons/", "/Armours/", "/Rings/", "/Amulets/", "/Belts/", "/Flasks/", "/Jewels/", "/Quivers/"]
+                {
+                    if InStr(fullPath, cat)
+                    {
+                        isGear := 1
+                        break
+                    }
+                }
             }
             modsJson := _BuildItemModsJson(d.Has("modsInfo") ? d["modsInfo"] : 0)
             itemsJson .= "{"
@@ -1431,6 +1443,7 @@ _BuildInventoryArrayJson(invs)
                 . '"ey":' Integer(it["slotEndY"]) ","
                 . '"mp":' _JsStr(mp) ","
                 . '"cur":' isCur ","
+                . '"gear":' isGear ","
                 . '"n":' _JsStr(name) ","
                 . '"b":' _JsStr(base) ","
                 . '"r":' rarId ","
