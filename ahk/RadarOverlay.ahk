@@ -1191,11 +1191,11 @@ class RadarOverlay extends GdiOverlayBase
                     searchB := Max(1, Ceil(searchG / bucketCell))
                     Loop (searchB * 2 + 1)
                     {
-                        bo := A_Index - (searchB + 1)
+                        bucketOffsetX := A_Index - (searchB + 1)
                         Loop (searchB * 2 + 1)
                         {
-                            by := A_Index - (searchB + 1)
-                            key := (lbx + bo) "|" (lby + by)
+                            bucketOffsetY := A_Index - (searchB + 1)
+                            key := (lbx + bucketOffsetX) "|" (lby + bucketOffsetY)
                             if (!portalBuckets.Has(key))
                                 continue
                             bucketIdx := portalBuckets[key]
