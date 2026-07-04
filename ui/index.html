@@ -4384,21 +4384,32 @@
        closed, instead of the open-only .cfg-header line (which stopped
        before the status). Drawn as a bottom gradient inset past the icon,
        same trick as the Entities junk boxes. ── */
+    /* Symmetric vertical padding so the flex-centered summary content (heading
+       + status string) sits on the same axis as the 50%-anchored caret. */
     #det-autopilot > summary {
       background-image: linear-gradient(var(--codex-rule), var(--codex-rule));
       background-repeat: no-repeat;
       background-position: right bottom;
       background-size: calc(100% - 26px) 1px;
+      padding-top: 5px;
       padding-bottom: 5px;
     }
     #det-autopilot > summary > .cfg-header { border-bottom: none; padding-bottom: 0 }
 
-    /* Live-Status rows (Combat / Explore / Loot): 3-column grid — label left,
-       state truly centered, reason/readout right. */
+    /* Live-Status rows (State / Combat / Explore / Loot): 3-column grid — label
+       left, state truly centered, reason/readout right. .ap-live-rule adds the
+       ledger-style hairline under the row (centered, middle ~70% of the width);
+       the last row goes without so the block doesn't end on a stray line. */
     #det-autopilot .ap-live-row { display: grid; grid-template-columns: 1fr auto 1fr; }
     #det-autopilot .ap-live-row > :first-child { justify-self: start }
     #det-autopilot .ap-live-row > :nth-child(2) { justify-self: center }
     #det-autopilot .ap-live-row > :last-child { justify-self: end }
+    #det-autopilot .ap-live-rule {
+      background-image: linear-gradient(var(--codex-rule), var(--codex-rule));
+      background-repeat: no-repeat;
+      background-position: center bottom;
+      background-size: 70% 1px;
+    }
 
     /* ── Entities tab (#4): the same icon + open-underline rhythm for the boxed
        Entity Classes / Junk Filter summaries and the junk sub-categories. These
@@ -5338,12 +5349,13 @@
                   <!-- ap-live-row: true 3-column grid (1fr auto 1fr) so the middle
                        status is CENTERED no matter how wide the right readout is
                        (flex space-between shifted it with the right column). -->
-                  <div class="cfg-row"><span class="cfg-label">State</span><span id="cfg-autopilot-state"
-                      class="cfg-status idle">idle</span></div>
-                  <div class="cfg-row ap-live-row"><span class="cfg-label">Combat</span><span id="cfg-combat-state"
+                  <div class="cfg-row ap-live-row ap-live-rule"><span class="cfg-label">State</span><span id="cfg-autopilot-state"
+                      class="cfg-status idle">idle</span><span id="cfg-autopilot-enabled"
+                      class="cfg-status idle" style="opacity:.8">disabled</span></div>
+                  <div class="cfg-row ap-live-row ap-live-rule"><span class="cfg-label">Combat</span><span id="cfg-combat-state"
                       class="cfg-status idle">idle</span><span id="cfg-combat-reason"
                       class="cfg-status idle" style="opacity:.8">—</span></div>
-                  <div class="cfg-row ap-live-row"><span class="cfg-label">Explore</span><span id="cfg-explore-pct" class="cfg-status"
+                  <div class="cfg-row ap-live-row ap-live-rule"><span class="cfg-label">Explore</span><span id="cfg-explore-pct" class="cfg-status"
                       style="color:#7ec8e3;font-weight:600">0%</span><span id="cfg-explore-reason"
                       class="cfg-status idle" style="opacity:.8">idle</span></div>
                   <div class="cfg-row ap-live-row"><span class="cfg-label">Loot</span><span id="cfg-loot-status"
@@ -9238,6 +9250,14 @@
       return (e.key && e.key.length === 1) ? e.key.toLowerCase() : '';
     }
     document.addEventListener('keydown', function (e) {
+      // A held modifier fires its OWN keydown (key = "Alt"/"Shift"/…) BEFORE the
+      // actual key arrives — that used to cancel the capture, making modifier
+      // combos impossible. Ignore pure-modifier presses and keep waiting.
+      const pureModifier = (e.key === 'Alt' || e.key === 'Shift' || e.key === 'Control' || e.key === 'Meta');
+      if ((apHotkeyCapturing || smHotkeyCapturing || hkCapture) && pureModifier) {
+        e.preventDefault();
+        return;
+      }
       if (apHotkeyCapturing) {                 // AutoPilot capture takes precedence
         e.preventDefault();
         const nm = hkKeyName(e);
@@ -10399,6 +10419,12 @@
         const st = d.autoPilotState || 'idle';
         apState.textContent = st;
         apState.className = 'cfg-status ' + (st === 'combat' ? 'warning' : st === 'explore' ? 'info' : 'idle');
+      }
+      const apEnabled = document.getElementById('cfg-autopilot-enabled');
+      if (apEnabled && d.autoPilot !== undefined) {
+        const apOn = d.autoPilot === true || d.autoPilot === 'true';
+        apEnabled.textContent = apOn ? 'enabled' : 'disabled';
+        apEnabled.className = 'cfg-status ' + (apOn ? 'info' : 'idle');
       }
       if (apReason && d.autoPilotReason !== undefined) apReason.textContent = d.autoPilotReason || '—';
       const apReasonSum = document.getElementById('cfg-autopilot-reason-summary');

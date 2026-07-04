@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.150`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.151`.
 
 ## Language
 
@@ -1315,6 +1315,17 @@ Four owner-requested tweaks to Automation → AutoPilot:
 Verified in the browser preview: middle spans pixel-centered (row/mid centers identical),
 underline present open+closed, capture flow (Ctrl+F9 → "Ctrl + F9", Escape cancels), diagnose
 buttons present only under `det-debug-actions`.
+- **Follow-up (0.45.13.151):** (1) the summary got symmetric vertical padding so the
+  heading/status sit on the caret's axis (the one-sided padding-bottom had pushed them above
+  the 50%-anchored diamond). (2) Modifier combos (Alt/Shift/Ctrl + key) now work in ALL hotkey
+  captures — a held modifier fires its OWN keydown (`key="Alt"`…), which used to hit the
+  "unmappable → cancel" path before the real key arrived; pure-modifier presses are now
+  ignored while capturing (ap/sm/hkCapture alike). (3) Live Status restyled as a ledger: the
+  State row is a 3-column `.ap-live-row` too, with a new right-column `#cfg-autopilot-enabled`
+  (enabled/disabled, synced from `d.autoPilot`), and the first three rows carry
+  `.ap-live-rule` — a centered 70%-width hairline under the row (the last row goes without).
+  Verified in the preview: status center == summary center, Alt+F5 → "Alt + F5",
+  Shift+X → "Shift + X", 3 rule lines, state value pixel-centered.
 
 ## Price liquidity gates (shipped 0.45.13.149) — fixes wildly inflated prices
 
