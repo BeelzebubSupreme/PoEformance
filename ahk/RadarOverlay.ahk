@@ -1168,8 +1168,14 @@ class RadarOverlay extends GdiOverlayBase
                 ; POIs / bosses that aren't at an exit (e.g. a Memorial) stay on their
                 ; own tile — they simply have no portal within the small radius.
                 ratio := RadarOverlay.WORLD_TO_GRID_RATIO
-                radTransSq := (3000.0 / ratio) * (3000.0 / ratio)
-                radOtherSq := (1000.0 / ratio) * (1000.0 / ratio)
+                radTransG := 3000.0 / ratio
+                radOtherG := 1000.0 / ratio
+                radTransSq := radTransG * radTransG
+                radOtherSq := radOtherG * radOtherG
+                ; Build a spatial hash of AreaTransition targets once, then query only
+                ; nearby buckets per landmark (instead of scanning all _navTargets).
+                bucketCell := radTransG
+                portalBuckets := this._BuildAreaTransitionBuckets(this._navTargets, bucketCell)
                 for li, lt in this._navTargets
                 {
                     llabel := lt.Has("label") ? lt["label"] : ""
@@ -1179,30 +1185,41 @@ class RadarOverlay extends GdiOverlayBase
                     lpath := lt.Has("path") ? lt["path"] : ""
                     isTransType := (ltype = "AreaTransition" || ltype = "Waypoint" || ltype = "Checkpoint")
                     bestPi := -1, bestPd := (isTransType ? radTransSq : radOtherSq)
-                    for pi, pt in this._navTargets
+                    lbx := Floor(lt["gridX"] / bucketCell)
+                    lby := Floor(lt["gridY"] / bucketCell)
+                    searchG := (isTransType ? radTransG : radOtherG)
+                    searchB := Max(1, Ceil(searchG / bucketCell))
+                    Loop (searchB * 2 + 1)
                     {
-                        if (pi = li)
-                            continue
-                        ; A destination landmark is reached via an AREA TRANSITION —
-                        ; NOT a Waypoint / Checkpoint (those are intra-zone features that
-                        ; often sit right next to an exit and would otherwise steal the
-                        ; snap). Only AreaTransition entries are portal candidates.
-                        if (pt["type"] != "AreaTransition")
-                            continue
-                        ; The real portal has a DIFFERENT tile path than the curated
-                        ; landmark (whose own gate/structure spans many SAME-path tiles);
-                        ; that difference — not the `refined` flag — is what separates the
-                        ; clickable portal from the landmark's own decoration tiles (and
-                        ; it also catches portals the entity-refine never reached).
-                        if (lpath != "" && pt.Has("path") && pt["path"] = lpath)
-                            continue
-                        pdx := pt["gridX"] - lt["gridX"]
-                        pdy := pt["gridY"] - lt["gridY"]
-                        pd := pdx * pdx + pdy * pdy
-                        if (pd < bestPd)
+                        bucketOffsetX := A_Index - (searchB + 1)
+                        Loop (searchB * 2 + 1)
                         {
-                            bestPd := pd
-                            bestPi := pi
+                            bucketOffsetY := A_Index - (searchB + 1)
+                            key := (lbx + bucketOffsetX) "|" (lby + bucketOffsetY)
+                            if (!portalBuckets.Has(key))
+                                continue
+                            bucketIdx := portalBuckets[key]
+                            for _, pi in bucketIdx
+                            {
+                                if (pi = li)
+                                    continue
+                                pt := this._navTargets[pi]
+                                ; The real portal has a DIFFERENT tile path than the curated
+                                ; landmark (whose own gate/structure spans many SAME-path tiles);
+                                ; that difference — not the `refined` flag — is what separates the
+                                ; clickable portal from the landmark's own decoration tiles (and
+                                ; it also catches portals the entity-refine never reached).
+                                if (lpath != "" && pt.Has("path") && pt["path"] = lpath)
+                                    continue
+                                pdx := pt["gridX"] - lt["gridX"]
+                                pdy := pt["gridY"] - lt["gridY"]
+                                pd := pdx * pdx + pdy * pdy
+                                if (pd < bestPd)
+                                {
+                                    bestPd := pd
+                                    bestPi := pi
+                                }
+                            }
                         }
                     }
                     if (bestPi > 0)
@@ -1768,6 +1785,30 @@ class RadarOverlay extends GdiOverlayBase
         lx := Max(rx1 + 2, Min(lx, rx2 - tw))
         ly := Max(ry1 + 2, Min(ly, ry2 - th))
         this._DrawTextOutlined(lx, ly, text, colorBGR, 0, 1)
+    }
+
+    ; Builds a spatial hash of AreaTransition nav targets for fast local lookup.
+    ; Params: navTargets (Array), cellSize (grid units). Returns: Map bucketKey -> [targetIdx...].
+    _BuildAreaTransitionBuckets(navTargets, cellSize)
+    {
+        buckets := Map()
+        for idx, target in navTargets
+        {
+            if (target["type"] != "AreaTransition")
+                continue
+            key := this._ClmBucketKey(target["gridX"], target["gridY"], cellSize)
+            if (!buckets.Has(key))
+                buckets[key] := []
+            buckets[key].Push(idx)
+        }
+        return buckets
+    }
+
+    ; Converts a grid coordinate to a deterministic spatial-hash bucket key.
+    ; Params: gx, gy (grid coords), cellSize (grid units). Returns: "bucketX|bucketY".
+    _ClmBucketKey(gx, gy, cellSize)
+    {
+        return Floor(gx / cellSize) "|" Floor(gy / cellSize)
     }
 
     ; Queues a text draw into the text batch. Optional font handle (5th element) lets a few
