@@ -1392,13 +1392,16 @@ _BuildInventoryArrayJson(invs)
             base := d.Has("baseType") ? String(d["baseType"]) : ""
             rarId := d.Has("rarityId") ? Integer(d["rarityId"]) : -1
             stkCnt := d.Has("stackCount") ? Integer(d["stackCount"]) : 0
-            ; Container-dependent max stack: the backpack (inventoryId 1) uses the
-            ; normal cap; every stash tab uses the expanded cap (StackSizeData
-            ; +0x20). See PoE2Offsets.StackSizeData. invId is the current inventory.
-            invIdForStack := inv.Has("inventoryId") ? Integer(inv["inventoryId"]) : 0
-            stkMax := (invIdForStack = 1)
-                ? (d.Has("stackMax") ? Integer(d["stackMax"]) : 0)
-                : (d.Has("stackMaxTab") ? Integer(d["stackMaxTab"]) : 0)
+            ; Max stack: use the NORMAL cap (StackSizeData +0x28) everywhere — it's
+            ; correct for the backpack AND normal stash tabs (a "white" tab caps
+            ; Scroll of Wisdom at 40/40, confirmed in-game). Only a CURRENCY stash
+            ; tab uses the expanded +0x20 cap, but the container type is NOT in the
+            ; inventory struct (backpack + currency tab read identical +0x00/+0x04),
+            ; so we can't detect a currency tab yet — using +0x20 for every tab
+            ; wrongly showed "40 → 5000" on normal tabs. The UI guard hides the max
+            ; when Count > it, so a currency-tab overflow shows just the count (no
+            ; wrong "/40"). stackMaxTab is kept for when currency-tab detection lands.
+            stkMax := d.Has("stackMax") ? Integer(d["stackMax"]) : 0
             idf := d.Has("identified") ? Integer(d["identified"]) : -1
             art := d.Has("artPath") ? String(d["artPath"]) : ""
             modsJson := _BuildItemModsJson(d.Has("modsInfo") ? d["modsInfo"] : 0)

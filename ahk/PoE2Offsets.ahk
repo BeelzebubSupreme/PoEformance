@@ -375,13 +375,15 @@ class PoE2Offsets
 
     ; StackSizeData — the per-base-type descriptor the Stack component points at
     ; (Stack + 0x10). Shared across every stack of the same base item (two
-    ; Scroll-of-Wisdom stacks resolve to the same pointer). It holds per-CONTAINER
-    ; stack caps; the container the item sits in selects which applies (verified
-    ; in-game 2026-07-04 across a full currency tab):
-    ;   +0x28 MaxStack    — NORMAL inventory / backpack cap (Wisdom = 40)
-    ;   +0x20 MaxStackTab — expanded stash / currency-tab cap (Wisdom = 5000)
-    ; (+0x24 = 100 is a third field, not used for display.) The caller reads
-    ; MaxStack for the backpack (inventoryId 1) and MaxStackTab for stash tabs.
+    ; Scroll-of-Wisdom stacks resolve to the same pointer). It holds per-CONTEXT
+    ; stack caps (verified in-game 2026-07-04):
+    ;   +0x28 MaxStack    — NORMAL cap: backpack AND normal stash tabs (Wisdom = 40)
+    ;   +0x20 MaxStackTab — CURRENCY stash tab cap (Wisdom = 5000)
+    ; (+0x24 = 100 is a third field, unused for display.) The consumer currently
+    ; uses MaxStack everywhere: it's correct for the backpack + normal tabs, and a
+    ; currency tab's overflow is hidden by the UI's "Count <= max" guard. Using
+    ; MaxStackTab needs a reliable CURRENCY-TAB signal, which is NOT in the
+    ; inventory struct (backpack + currency tab read identical +0x00/+0x04) — TODO.
     static StackSizeData := Map(
         "MaxStack", 0x28,
         "MaxStackTab", 0x20
