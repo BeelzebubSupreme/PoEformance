@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.151`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.152`.
 
 ## Language
 
@@ -1326,6 +1326,12 @@ buttons present only under `det-debug-actions`.
   `.ap-live-rule` — a centered 70%-width hairline under the row (the last row goes without).
   Verified in the preview: status center == summary center, Alt+F5 → "Alt + F5",
   Shift+X → "Shift + X", 3 rule lines, state value pixel-centered.
+- **Status seeded at startup (0.45.13.152):** the summary/status strings showed the stale
+  "idle" seed until the game loop first ran (per-tick reasons only update while connected).
+  `InGameStateMonitor` now re-seeds `g_autoPilotReason` / `g_combatLastReason` /
+  `g_exploreLastReason` to enabled/disabled from the loaded flag right after the sub-flag
+  mirroring, and BOTH AutoPilot toggles (bridge `ToggleAutoPilot` + the hotkey handler) set
+  them to "enabled" when switching ON (previously only the OFF branch wrote "disabled").
 
 ## Price liquidity gates (shipped 0.45.13.149) — fixes wildly inflated prices
 

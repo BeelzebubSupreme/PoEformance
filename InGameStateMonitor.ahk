@@ -56,7 +56,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.151"
+POEFORMANCE_VERSION := "0.45.13.152"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -411,6 +411,13 @@ SetTimer(() => GgpkToolBridge.MaybeAutoRefresh(), -8000)
 ; vice-versa from a stale config from before the unification).
 g_combatAutoEnabled := g_autoPilotEnabled
 g_exploreEnabled := g_autoPilotEnabled
+; Seed the status/reason strings from the loaded enabled flag so the UI shows
+; enabled/disabled right from the first header push — the per-tick reasons
+; only start updating once the game is connected and the loop runs (until
+; then the old "idle" seed sat in the header forever).
+g_autoPilotReason   := g_autoPilotEnabled ? "enabled" : "disabled"
+g_combatLastReason  := g_autoPilotEnabled ? "enabled" : "disabled"
+g_exploreLastReason := g_autoPilotEnabled ? "enabled" : "disabled"
 RegisterCombatHotkey()
 RegisterStashMoverHotkey() ; configurable "dump backpack to stash" hotkey (only while PoE2 is focused)
 RegisterNpcIdentifyHotkey() ; TEST: hideout NPC-identify hotkey (default F9, only while PoE2 is focused)

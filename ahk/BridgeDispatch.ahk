@@ -411,6 +411,14 @@ _DispatchBridgeCall(method, args)
                 g_combatLastReason := "disabled"
                 g_exploreLastReason := "disabled"
             }
+            else
+            {
+                ; Instant feedback; the per-tick reasons take over once the
+                ; game loop actually runs (they stay "enabled" until then).
+                g_autoPilotReason   := "enabled"
+                g_combatLastReason  := "enabled"
+                g_exploreLastReason := "enabled"
+            }
             SetTimer(SaveConfig, -100)
             SetTimer(() => SaveCombatAutoConfig(), -100)
             SetTimer(() => SaveExplorationConfig(), -100)
