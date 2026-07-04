@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.153`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.154`.
 
 ## Language
 
@@ -1332,6 +1332,18 @@ buttons present only under `det-debug-actions`.
   `g_exploreLastReason` to enabled/disabled from the loaded flag right after the sub-flag
   mirroring, and BOTH AutoPilot toggles (bridge `ToggleAutoPilot` + the hotkey handler) set
   them to "enabled" when switching ON (previously only the OFF branch wrote "disabled").
+- **AutoPilot category box removed (0.45.13.154):** with AutoPilot on its own sub-tab the
+  outer collapsible box was redundant. The `det-autopilot` details + summary (incl. the
+  status string, which lives on in the Live-Status State row) are gone; the content sits in
+  `#ap-panel`, which KEEPS the `.cfg-section` class (the nested summaries' caret/flex styling
+  is scoped to it) but drops the box chrome via CSS. `_sbInitAll` runs from
+  `_runTabSideEffects` on entering the `autopilot` tab (was the removed details' ontoggle);
+  the `.ap-live-*` CSS re-scoped `#det-autopilot` → `#ap-panel`; 'autopilot' left
+  `_cfgSectionIds`; `sec:det-autopilot` left SNODE_MAP + `tools/skillnode_map.json`; the
+  `cfg-autopilot-reason-summary` header sync was removed. NOTE for preview testing: a
+  collapsed Launch-preview panel reports `window.innerWidth = 0` and every rect collapses —
+  force `body{min-width}` before measuring (this also explains earlier "transient 0-width"
+  readings).
 - **Closed boxes vertically centered (0.45.13.153):** `.cfg-section` carries 4px top / 10px
   bottom padding (right for an OPEN body) which pushed icon + heading + caret ~3px above the
   middle in every COLLAPSED box; the `.cfg-header`'s own 4px/6px padding added another 1px.

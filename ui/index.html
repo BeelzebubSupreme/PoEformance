@@ -4388,32 +4388,27 @@
     .cfg-section:has(> details:not([open])) { padding-top: 7px; padding-bottom: 7px }
     .cfg-section > details:not([open]) > summary > .cfg-header { padding-top: 5px; padding-bottom: 5px }
 
-    /* ── AutoPilot box: its summary carries a live status string next to the
-       caret — underline the WHOLE header row (heading + status), open AND
-       closed, instead of the open-only .cfg-header line (which stopped
-       before the status). Drawn as a bottom gradient inset past the icon,
-       same trick as the Entities junk boxes. ── */
-    /* Symmetric vertical padding so the flex-centered summary content (heading
-       + status string) sits on the same axis as the 50%-anchored caret. */
-    #det-autopilot > summary {
-      background-image: linear-gradient(var(--codex-rule), var(--codex-rule));
-      background-repeat: no-repeat;
-      background-position: right bottom;
-      background-size: calc(100% - 26px) 1px;
-      padding-top: 5px;
-      padding-bottom: 5px;
+    /* ── AutoPilot page (#ap-panel): the sub-tab IS the page now — the old
+       collapsible category box is gone. The wrapper keeps the .cfg-section
+       CLASS (the nested summaries' caret/flex styling is scoped to it) but
+       drops the box chrome entirely. ── */
+    #ap-panel {
+      border: none;
+      background: none;
+      box-shadow: none;
+      padding: 0;
+      margin: 0;
     }
-    #det-autopilot > summary > .cfg-header { border-bottom: none; padding-bottom: 0 }
 
     /* Live-Status rows (State / Combat / Explore / Loot): 3-column grid — label
        left, state truly centered, reason/readout right. .ap-live-rule adds the
        ledger-style hairline under the row (centered, middle ~70% of the width);
        the last row goes without so the block doesn't end on a stray line. */
-    #det-autopilot .ap-live-row { display: grid; grid-template-columns: 1fr auto 1fr; }
-    #det-autopilot .ap-live-row > :first-child { justify-self: start }
-    #det-autopilot .ap-live-row > :nth-child(2) { justify-self: center }
-    #det-autopilot .ap-live-row > :last-child { justify-self: end }
-    #det-autopilot .ap-live-rule {
+    #ap-panel .ap-live-row { display: grid; grid-template-columns: 1fr auto 1fr; }
+    #ap-panel .ap-live-row > :first-child { justify-self: start }
+    #ap-panel .ap-live-row > :nth-child(2) { justify-self: center }
+    #ap-panel .ap-live-row > :last-child { justify-self: end }
+    #ap-panel .ap-live-rule {
       background-image: linear-gradient(var(--codex-rule), var(--codex-rule));
       background-repeat: no-repeat;
       background-position: center bottom;
@@ -5305,12 +5300,13 @@
         </div><!-- /cfg-subpanel stashmover -->
 
         <div class="cfg-subpanel" data-cfgtab="autopilot">
-        <div class="cfg-section">
-          <details id="det-autopilot" ontoggle="syncCfgSections(); if(this.open) requestAnimationFrame(_sbInitAll)" open>
-            <summary>
-              <div class="cfg-header">🤖 AutoPilot</div>
-              <span id="cfg-autopilot-reason-summary" class="cfg-summary-status">—</span>
-            </summary>
+        <!-- AutoPilot IS the sub-tab now — the old collapsible category box
+             (det-autopilot + its summary) is gone. #ap-panel keeps the
+             .cfg-section CLASS because the nested summaries' caret/flex
+             styling is scoped to it, but its box chrome is disabled in CSS.
+             _sbInitAll (skill-slot sliders) runs on tab switch instead of the
+             removed details' ontoggle. -->
+        <div id="ap-panel" class="cfg-section">
             <div class="cfg-subsection">
               <!-- Master toggle + hotkey on a single row to save vertical
                    space. The hotkey is a capture button (StashMover pattern):
@@ -5488,8 +5484,7 @@
                 </div>
               </details>
             </div>
-          </details>
-        </div>
+        </div><!-- /ap-panel -->
 
         </div><!-- /cfg-subpanel autopilot -->
 
@@ -6988,7 +6983,7 @@
       "tab:ui":"ChannellingAttacksNotable2","tab:gamestate":"auraeffect","tab:memdiff":"flaskstr","tab:dissect":"flaskint","tab:hotkeys":"KeystoneResoluteTechnique",
       "tab:cfgoverlay":"PressurePoints","tab:cfgvitals":"BloodMageNode","tab:autopilot":"KeystoneAvatarOfFire","tab:stashmover":"KeystonePainAttunement",
       "cfgtab:general":"blankStr","cfgtab:debug":"tempint","cfgtab:data":"ChannellingSpeed",
-      "sec:det-status":"HollowPalmTechniqueKeystone","sec:det-integrations":"KeystoneAvatarOfFire","sec:det-stashmover":"KeystonePainAttunement","sec:sm-stash":"AzmeriPrimalMonkey","sec:sm-stash-ignore":"shieldblock","sec:sm-stash-rnd":"criticalstrikechance","sec:sm-sell":"AzmeriWildBear","sec:sm-sell-ignore":"shieldblock","sec:sm-sell-rnd":"criticalstrikechance","sec:sm-shared":"TemporalistNearbyEnemiesProjectilesSlowed","sec:det-autopilot":"KeystoneAvatarOfFire","sec:ap-status":"WarbringerEncasedInJade","sec:ap-combat":"LightningDamagenode","sec:ap-explore":"MiracleMaker","sec:ap-loot":"energyshield",
+      "sec:det-status":"HollowPalmTechniqueKeystone","sec:det-integrations":"KeystoneAvatarOfFire","sec:det-stashmover":"KeystonePainAttunement","sec:sm-stash":"AzmeriPrimalMonkey","sec:sm-stash-ignore":"shieldblock","sec:sm-stash-rnd":"criticalstrikechance","sec:sm-sell":"AzmeriWildBear","sec:sm-sell-ignore":"shieldblock","sec:sm-sell-rnd":"criticalstrikechance","sec:sm-shared":"TemporalistNearbyEnemiesProjectilesSlowed","sec:ap-status":"WarbringerEncasedInJade","sec:ap-combat":"LightningDamagenode","sec:ap-explore":"MiracleMaker","sec:ap-loot":"energyshield",
       "sec:det-maphack":"ColdAndFireHybridNotable","sec:det-radar":"PressurePoints","sec:det-entitymarkers":"TacticianNode","sec:det-rangecircles":"TemporalistNode","sec:det-lootvalue":"ShieldNodeOffensive","sec:lrv-detection":"Rage","sec:lrv-list":"SpellSuppresionNode","sec:lrv-onmap":"RangedTotemDamage","sec:lrv-trade":"ClawsOfTheMagpie","sec:det-uihoverprice":"projectilespeed","sec:det-ritualvalue":"FlaskNotableCritStrikeRecharge","sec:det-overlay-placement":"MiracleMaker","sec:det-customlandmarks":"PathfinderMultichoicePath",
       "sec:det-vitals-general":"CorpseDamage","sec:det-debug-actions":"axedmgspeed","sec:det-radar-debug":"PathfinderPathoftheWarrior","sec:det-debug-panels":"ColdDamagenode","sec:det-debug-discovery":"LightningDamagenode","sec:det-debug-diff":"ManaLeechThemedNode","sec:det-debug-overlay":"ElementalDamagenode","sec:det-offset-compare":"plusstrengthdexterity",
       "sec:det-al-conditions":"blankDex","sec:det-al-timing":"blankInt","sec:det-al-output":"blankStr","sec:det-lt-settings":"KeystoneWhispersOfDoom","sec:det-blacklist":"ArmourAndEvasionNode",
@@ -7642,6 +7637,10 @@
         ahkCall('LootRequestLive');
         ahkCall('LootLoadSessions');
       }
+      // AutoPilot page: init the skill-slot sliders (this used to run from the
+      // removed det-autopilot details' ontoggle).
+      if (key === 'autopilot')
+        requestAnimationFrame(_sbInitAll);
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -10436,8 +10435,6 @@
         apEnabled.className = 'cfg-status ' + (apOn ? 'info' : 'idle');
       }
       if (apReason && d.autoPilotReason !== undefined) apReason.textContent = d.autoPilotReason || '—';
-      const apReasonSum = document.getElementById('cfg-autopilot-reason-summary');
-      if (apReasonSum && d.autoPilotReason !== undefined) apReasonSum.textContent = d.autoPilotReason || '—';
 
       // Inventory diagnostics — pointer-chain logging toggle (Config > Debug).
       if (d.invChainDump !== undefined) setChk('inv-chain-dump', d.invChainDump);
@@ -12335,7 +12332,7 @@
     // ═══════════════════════════════════════════════════════════════════
     //  CONFIG HELPERS
     // ═══════════════════════════════════════════════════════════════════
-    const _cfgSectionIds = ['status', 'integrations', 'autoflask', 'autopilot', 'stashmover', 'rangecircles', 'radar', 'lootvalue', 'uihoverprice', 'customlandmarks', 'maphack', 'blacklist', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
+    const _cfgSectionIds = ['status', 'integrations', 'autoflask', 'stashmover', 'rangecircles', 'radar', 'lootvalue', 'uihoverprice', 'customlandmarks', 'maphack', 'blacklist', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
     let _cfgSectionsGuard = 0;
     let _cfgSectionsLoaded = false;
 
