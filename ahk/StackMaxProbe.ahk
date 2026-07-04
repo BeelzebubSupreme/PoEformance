@@ -93,8 +93,9 @@ StackMaxProbeRun()
     ; Per stackable item: base path, live Count, and the three StackSizeData caps
     ; (+0x20 / +0x24 / +0x28). Correlating the current container's type/slot with
     ; which cap ≥ Count pins the selection rule.
-    rpt .= "=== CONTAINER-SELECTOR SUMMARY ===" nl
-    rpt .= "inv | type | struct+0x00 | struct+0x04 | item base | Count | +0x20 | +0x24 | +0x28" nl
+    rpt .= "=== CONTAINER-SELECTOR + LAYOUT SUMMARY ===" nl
+    rpt .= "Per inventory: id, type, grid dims (TotalBoxes 0x150/0x154), struct+0x00/+0x04." nl
+    rpt .= "Per item: base | slot(x,y)->(x,y) | Count | caps +0x20/+0x24/+0x28" nl
     for _, inv in invs
     {
         if !(inv && IsObject(inv) && inv.Has("inventoryId"))
@@ -102,15 +103,18 @@ StackMaxProbeRun()
         invId := inv["inventoryId"]
         invType := inv.Has("inventoryType") ? inv["inventoryType"] : ""
         structPtr := inv.Has("invStructPtr") ? inv["invStructPtr"] : 0
-        st00 := "?", st04 := "?"
+        st00 := "?", st04 := "?", boxX := "?", boxY := "?"
         if (structPtr && reader.IsProbablyValidPointer(structPtr))
         {
             try st00 := reader.Mem.ReadInt(structPtr + 0x00)
             try st04 := reader.Mem.ReadInt(structPtr + 0x04)
+            try boxX := reader.Mem.ReadInt(structPtr + PoE2Offsets.Inventory["TotalBoxes"])
+            try boxY := reader.Mem.ReadInt(structPtr + PoE2Offsets.Inventory["TotalBoxesY"])
         }
         items := inv.Has("items") ? inv["items"] : 0
         if !(items && Type(items) = "Array")
             continue
+        rpt .= nl "-- inv " invId " type=" invType " dims=" boxX "x" boxY " struct+0x00=" st00 " +0x04=" st04 nl
         for __, it in items
         {
             if !(it && IsObject(it) && it.Has("itemEntityPtr"))
@@ -133,7 +137,12 @@ StackMaxProbeRun()
                         base := RegExReplace(p2, ".*/", "")
                 }
             }
-            c := "?", d := 0, sdp := 0, c20 := "?", c24 := "?", c28 := "?"
+            ; Slot rectangle (game-reported placement) — for the currency-tab layout question.
+            ssx := it.Has("slotStartX") ? it["slotStartX"] : "?"
+            ssy := it.Has("slotStartY") ? it["slotStartY"] : "?"
+            sex := it.Has("slotEndX") ? it["slotEndX"] : "?"
+            sey := it.Has("slotEndY") ? it["slotEndY"] : "?"
+            c := "?", sdp := 0, c20 := "?", c24 := "?", c28 := "?"
             try c := reader.Mem.ReadInt(sp2 + stackOff)
             try sdp := reader.Mem.ReadPtr(sp2 + unkOff)
             if (sdp && reader.IsProbablyValidPointer(sdp))
@@ -142,7 +151,7 @@ StackMaxProbeRun()
                 try c24 := reader.Mem.ReadInt(sdp + 0x24)
                 try c28 := reader.Mem.ReadInt(sdp + 0x28)
             }
-            rpt .= Format("{} | {} | {} | {} | {} | {} | {} | {} | {}", invId, invType, st00, st04, base, c, c20, c24, c28) nl
+            rpt .= Format("  {} | slot({},{})->({},{}) | Count {} | {}/{}/{}", base, ssx, ssy, sex, sey, c, c20, c24, c28) nl
         }
     }
     rpt .= nl
