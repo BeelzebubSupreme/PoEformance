@@ -68,49 +68,80 @@ CurrencyLayoutProbeRun()
     }
     cx := cPos["x"], cy := cPos["y"], cw := cGeom["sizeW"], ch := cGeom["sizeH"]
 
-    ; Iterate every child; a currency SLOT is one holding a Metadata/Items/Currency
-    ; item pointer at +0x4F8. Record its absolute unscaled pos + size + path.
-    itemOff := PoE2Offsets.UiElementBase["ItemPtr"]
-    hdr := reader.Mem.ReadBytes(container, 0x20)
-    cf := hdr ? NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr") : 0
-    cl := hdr ? NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr") : 0
-    n := (cf && cl > cf) ? ((cl - cf) // A_PtrSize) : 0
-    n := Min(n, 256)
-
-    slots := []       ; array of Map(path,x,y,w,h)
     nl := "`r`n"
     log := "=== Currency tab layout probe ===" nl
     log .= "path: " steps nl
-    log .= Format("container=0x{:X}  unscaledPos=({},{})  size=({},{})  children={}", container, Round(cx,1), Round(cy,1), Round(cw,1), Round(ch,1), n) nl nl
+    log .= Format("container=0x{:X}  unscaledPos=({},{})  size=({},{})", container, Round(cx,1), Round(cy,1), Round(cw,1), Round(ch,1)) nl nl
 
-    Loop n
+    ; DFS the container subtree: a currency SLOT is any element holding a
+    ; Metadata/Items/Currency item at +0x4F8. The item is NOT on the container's
+    ; direct children — each child is a wrapper and the slot sits one level
+    ; deeper (confirmed: the slot element's parent is a child of the container),
+    ; so we walk a few levels down. Dedup by item pointer.
+    itemOff := PoE2Offsets.UiElementBase["ItemPtr"]
+    slots := []       ; array of Map(path,x,y,w,h)
+    seenItem := Map()
+    stack := [{ptr: container, depth: 0}]
+    nodes := 0
+    while (stack.Length > 0 && nodes < 4000)
     {
-        childPtr := UiTree_GetChildByIndex(reader, container, A_Index - 1)
-        if !(childPtr && reader.IsProbablyValidPointer(childPtr))
+        it := stack.Pop()
+        p := it.ptr, depth := it.depth
+        if !(p && reader.IsProbablyValidPointer(p))
             continue
-        ip := 0
-        try ip := reader.Mem.ReadPtr(childPtr + itemOff)
-        if !(ip && reader.IsProbablyValidPointer(ip))
-            continue    ; empty slot / non-item child
-        path := ""
-        try {
-            det := reader.Mem.ReadPtr(ip + PoE2Offsets.Entity["EntityDetailsPtr"])
-            if (det && reader.IsProbablyValidPointer(det))
-                path := reader.ReadStdWStringAt(det + PoE2Offsets.EntityDetails["Path"])
-        }
-        if (SubStr(path, 1, 22) != "Metadata/Items/Currenc")
-            continue    ; not a currency slot
+        nodes += 1
 
-        g := _UiHitGeom(reader, childPtr)
-        sp := UiTree_GetScreenPos(reader, childPtr)
-        if !(IsObject(g) && IsObject(sp))
-            continue
-        sx := sp["x"], sy := sp["y"], sw := g["sizeW"], sh := g["sizeH"]
-        slots.Push(Map("path", path, "x", sx, "y", sy, "w", sw, "h", sh))
-        log .= Format("  child[{}]  ({},{}) {}x{}  {}", A_Index - 1, Round(sx,1), Round(sy,1), Round(sw,1), Round(sh,1), path) nl
+        ; Does THIS element carry a currency item?
+        ip := 0
+        try ip := reader.Mem.ReadPtr(p + itemOff)
+        if (ip && reader.IsProbablyValidPointer(ip) && !seenItem.Has(ip))
+        {
+            path := ""
+            try {
+                det := reader.Mem.ReadPtr(ip + PoE2Offsets.Entity["EntityDetailsPtr"])
+                if (det && reader.IsProbablyValidPointer(det))
+                    path := reader.ReadStdWStringAt(det + PoE2Offsets.EntityDetails["Path"])
+            }
+            if (SubStr(path, 1, 22) = "Metadata/Items/Currenc")
+            {
+                seenItem[ip] := true
+                g := _UiHitGeom(reader, p)
+                sp := UiTree_GetScreenPos(reader, p)
+                if (IsObject(g) && IsObject(sp))
+                {
+                    slots.Push(Map("path", path, "x", sp["x"], "y", sp["y"], "w", g["sizeW"], "h", g["sizeH"]))
+                    log .= Format("  d{} ({},{}) {}x{}  {}", depth, Round(sp["x"],1), Round(sp["y"],1), Round(g["sizeW"],1), Round(g["sizeH"],1), path) nl
+                }
+            }
+        }
+
+        ; Descend a few levels (the slot nesting is shallow).
+        if (depth < 4)
+        {
+            hdr := reader.Mem.ReadBytes(p, 0x20)
+            if hdr
+            {
+                cf := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenFirst"], "Ptr")
+                cl := NumGet(hdr.Ptr, PoE2Offsets.UiElementBase["ChildrenLast"], "Ptr")
+                if (reader.IsProbablyValidPointer(cf) && cl > cf)
+                {
+                    cn := Min((cl - cf) // A_PtrSize, 256)
+                    buf := reader.Mem.ReadBytes(cf, cn * A_PtrSize)
+                    if buf
+                    {
+                        Loop cn
+                        {
+                            cp := NumGet(buf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
+                            if (cp && reader.IsProbablyValidPointer(cp))
+                                stack.Push({ptr: cp, depth: depth + 1})
+                        }
+                    }
+                }
+            }
+        }
     }
 
-    log .= nl "slots found: " slots.Length nl
+    log .= nl "slots found: " slots.Length "   nodes walked: " nodes nl
 
     ; ── Emit the JSON layout file (absolute unscaled coords; renderer normalizes) ──
     js := '{' nl
