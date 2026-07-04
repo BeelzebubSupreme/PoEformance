@@ -9931,7 +9931,7 @@
     // count→currency mapping (2026-07-04). If a slot lands wrong, fix its
     // [col,row] here. Columns 0-2 = tier (base / greater "2" / perfect "3").
     const CURRENCY_TAB_LAYOUT = {
-      cols: 9, rows: 9,
+      // Fixed currency slots (bound to a specific currency type). base name → [col,row].
       slots: {
         // Transmute families × tiers (cols 0-2, rows 0-4)
         CurrencyUpgradeToMagic: [0,0], CurrencyUpgradeToMagic2: [1,0], CurrencyUpgradeToMagic3: [2,0],
@@ -9948,24 +9948,22 @@
         // Quality (cols 6-8, rows 2-3)
         CurrencyMagicQuality: [6,2], CurrencyArmourQuality: [7,2], CurrencyWeaponQuality: [8,2],
         CurrencyFlaskQuality: [7,3], CurrencyGemQuality: [8,3],
-        // Identification (col 8, row 5)
-        CurrencyIdentification: [8,5],
-        // Shards (row 6)
-        CurrencyUpgradeToMagicShard: [2,6], CurrencyUpgradeMagicToRareShard: [3,6], CurrencyUpgradeRandomlyShard: [4,6],
-        // Abyss tickets + omens, row A (row 7)
-        AbyssalBenchTicketWeapon: [1,7], AbyssalBenchTicketJewelleryLow: [2,7], AbyssalBenchTicketArmour: [3,7],
-        AbyssalBenchTicketWaystone: [4,7], OmenOnAbyssVeilAllAndCorrupt: [5,7], OmenOnAbyssGuarenteeLichTypeMod3: [6,7],
-        OmenOnAbyssRerollOptions: [7,7],
-        // Abyss row B (row 8)
-        AbyssalBenchTicketArmourLow: [1,8], AbyssalBenchTicketWeaponLow: [2,8], AbyssalBenchTicketJewellery: [3,8],
-        OmenOnAbyssAddPrefixes: [5,8], OmenOnAbyssAddSuffixes: [6,8], OmenOnAnnulRemoveAbyssMod: [7,8],
+        // Identification (col 8) — sits ~level with the quality block bottom
+        CurrencyIdentification: [8,4],
+        // Shards (row 7)
+        CurrencyUpgradeToMagicShard: [2,7], CurrencyUpgradeMagicToRareShard: [3,7], CurrencyUpgradeRandomlyShard: [4,7],
       },
-      // Always-empty framed slots the game shows but that hold no currency type.
-      emptySlots: [[3,2],[4,2]],
-      // Large multi-cell slots (the central item slot). {col,row,w,h}.
-      bigSlots: [{col:3, row:3, w:2, h:4}],
+      // The central item slot: a 2-wide × 4-tall slot for NORMAL items (weapons /
+      // gear), NOT currency. Horizontally centered; here as {w,h,rowStart}.
+      bigSlot: { w: 2, h: 4, rowStart: 3 },
+      // Two always-empty framed slots directly above the central slot (centered),
+      // one row below the middle block.
+      emptyAbove: { count: 2, row: 2 },
+      // Generic misc-currency area (bottom): any currency the player parks here,
+      // not bound to a type. A cols×rows grid; centered; filled by slot order.
+      generic: { cols: 7, rows: 2, rowStart: 8 },
       // Pixel gaps between visual groups: added AFTER these col/row indices.
-      colGapAfter: {2:12, 5:12}, rowGapAfter: {1:12, 4:12, 6:12},
+      colGapAfter: {2:12, 5:12}, rowGapAfter: {1:12, 4:12, 7:12},
     };
     const _CUR_CELL = 36;
     // Absolute pixel top-left of a currency-tab cell (col,row), inter-group gaps
@@ -9984,60 +9982,77 @@
       for (const it of items) if (it && it.mp && CURRENCY_TAB_LAYOUT.slots[it.mp]) { if (++hits >= 5) return true; }
       return false;
     }
-    // Renders the currency tab 1:1: an absolutely-positioned slot per curated
-    // cell (frame + item when present), the extra empty frames, and the big
-    // central slot — with inter-group gaps. Only real slots are framed (no full
-    // background grid). Unmapped/new currencies park in a trailing row.
+    // Renders the currency tab 1:1. Fixed currency slots go to their curated
+    // cell; the central big slot (centered) holds the tab's NON-currency item;
+    // the two empty frames sit above it; a bottom generic grid holds any currency
+    // not bound to a fixed slot (filled in slot order). Only real slots framed.
     function _renderCurrencyTab(inv) {
       const L = CURRENCY_TAB_LAYOUT, C = _CUR_CELL;
       const items = Array.isArray(inv.items) ? inv.items : [];
-      const byMp = new Map();
-      for (const it of items) if (it && it.mp) byMp.set(it.mp, it);
-      let maxX = 0, maxY = 0, parts = '';
+      let parts = '', maxX = 0, maxY = 0;
       const bump = (x, y, w, h) => { maxX = Math.max(maxX, x + w); maxY = Math.max(maxY, y + h); };
-      // Big central slots first (behind the currency slots).
-      for (const b of (L.bigSlots || [])) {
-        const p = _curPos(b.col, b.row), w = b.w * C, h = b.h * C;
-        parts += `<div class="inv-cell" style="position:absolute;left:${p.x}px;top:${p.y}px;width:${w}px;height:${h}px"></div>`;
-        bump(p.x, p.y, w, h);
-      }
-      // Extra always-empty framed slots.
-      for (const e of (L.emptySlots || [])) {
-        const p = _curPos(e[0], e[1]);
-        parts += `<div class="inv-cell" style="position:absolute;left:${p.x}px;top:${p.y}px;width:${C}px;height:${C}px"></div>`;
-        bump(p.x, p.y, C, C);
-      }
-      // One slot per curated currency cell: frame, plus the item if present.
-      for (const path in L.slots) {
-        const cell = L.slots[path], p = _curPos(cell[0], cell[1]);
-        bump(p.x, p.y, C, C);
-        const it = byMp.get(path);
-        if (it) {
-          const rarity = (typeof it.r === 'number' && it.r >= 0 && it.r <= 3) ? it.r : 0;
-          const tip = _buildItemTooltipPayload(it);
-          parts += `<div class="inv-item rarity-${rarity}" style="position:absolute;left:${p.x}px;top:${p.y}px;width:${C}px;height:${C}px" `
-                 + `onmouseenter="_invShowTip(event,'${tip}')" onmouseleave="_invHideTip()" onmousemove="_invMoveTip(event)">`
-                 + _itemVisual(it, 1, 1) + `</div>`;
-        } else {
-          parts += `<div class="inv-cell" style="position:absolute;left:${p.x}px;top:${p.y}px;width:${C}px;height:${C}px"></div>`;
-        }
-      }
-      // Unmapped / unknown currencies — park them in a trailing row so nothing hides.
-      let ux = 0;
-      const uy = maxY + 14;
-      for (const it of items) {
-        if (it && it.mp && L.slots[it.mp]) continue;
+      const frame = (x, y, w, h) => { parts += `<div class="inv-cell" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px"></div>`; bump(x, y, w, h); };
+      const itemCell = (it, x, y, w, h) => {
         const rarity = (typeof it.r === 'number' && it.r >= 0 && it.r <= 3) ? it.r : 0;
         const tip = _buildItemTooltipPayload(it);
-        parts += `<div class="inv-item rarity-${rarity}" style="position:absolute;left:${ux}px;top:${uy}px;width:${C}px;height:${C}px" `
+        parts += `<div class="inv-item rarity-${rarity}" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px" `
                + `onmouseenter="_invShowTip(event,'${tip}')" onmouseleave="_invHideTip()" onmousemove="_invMoveTip(event)">`
-               + _itemVisual(it, 1, 1) + `</div>`;
-        bump(ux, uy, C, C); ux += C + 2;
+               + _itemVisual(it, Math.round(w/C), Math.round(h/C)) + `</div>`;
+        bump(x, y, w, h);
+      };
+
+      // Split the items: currency with a fixed slot, generic currency, non-currency.
+      const byMp = new Map(), generics = [], normals = [];
+      for (const it of items) {
+        if (!it) continue;
+        if (it.cur) {
+          if (it.mp && L.slots[it.mp]) byMp.set(it.mp, it);
+          else generics.push(it);
+        } else normals.push(it);
       }
-      const meta = `${items.length} items`;
+
+      // 1) Fixed currency slots — frame every one; draw the item when present.
+      for (const path in L.slots) {
+        const cell = L.slots[path], p = _curPos(cell[0], cell[1]);
+        const it = byMp.get(path);
+        if (it) itemCell(it, p.x, p.y, C, C); else frame(p.x, p.y, C, C);
+      }
+      // Content width so far (defines the centering axis for the middle column).
+      const rightEdge = maxX;
+
+      // 2) Central big slot (centered) + the item in it (first non-currency item).
+      const bigW = L.bigSlot.w * C, bigH = L.bigSlot.h * C;
+      const bigX = Math.round((rightEdge - bigW) / 2);
+      const bigY = _curPos(0, L.bigSlot.rowStart).y;
+      const bigIt = normals.shift();
+      if (bigIt) itemCell(bigIt, bigX, bigY, bigW, bigH); else frame(bigX, bigY, bigW, bigH);
+
+      // 3) Two empty frames directly above the central slot (centered).
+      const eaW = L.emptyAbove.count * C + (L.emptyAbove.count - 1) * 2;
+      let eax = Math.round((rightEdge - eaW) / 2);
+      const eay = _curPos(0, L.emptyAbove.row).y;
+      for (let i = 0; i < L.emptyAbove.count; i++) { frame(eax, eay, C, C); eax += C + 2; }
+
+      // 4) Generic misc-currency grid at the bottom (centered). Frame all cells,
+      //    fill row-major with the generic currency items in slot (sx) order.
+      generics.sort((a, b) => (a.sx | 0) - (b.sx | 0));
+      const gW = L.generic.cols * C, gX0 = Math.round((rightEdge - gW) / 2);
+      const gY0 = _curPos(0, L.generic.rowStart).y;
+      let gi = 0;
+      for (let gy = 0; gy < L.generic.rows; gy++) {
+        for (let gx = 0; gx < L.generic.cols; gx++) {
+          const x = gX0 + gx * C, y = gY0 + gy * C;
+          const it = generics[gi++];
+          if (it) itemCell(it, x, y, C, C); else frame(x, y, C, C);
+        }
+      }
+      // Any leftover generic/normal items beyond the grid — trailing row (safety net).
+      let ux = 0, uy = maxY + 14;
+      for (const it of generics.slice(gi).concat(normals)) { itemCell(it, ux, uy, C, C); ux += C + 2; }
+
       const namePart = _isStashTabId(inv.id) ? (inv.tn || 'Stash Tab') : _inventoryLabel(inv.id);
       return `<div class="inv-section">
-        <div class="inv-section-header">${escHtml('#' + inv.id + ' ' + namePart)}<span class="inv-section-meta">Currency · ${meta}</span></div>
+        <div class="inv-section-header">${escHtml('#' + inv.id + ' ' + namePart)}<span class="inv-section-meta">Currency · ${items.length} items</span></div>
         <div class="inv-grid-cur" style="position:relative;width:${maxX}px;height:${maxY}px">${parts}</div>
       </div>`;
     }

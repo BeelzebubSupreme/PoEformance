@@ -1413,10 +1413,16 @@ _BuildInventoryArrayJson(invs)
             idf := d.Has("identified") ? Integer(d["identified"]) : -1
             art := d.Has("artPath") ? String(d["artPath"]) : ""
             ; Metadata base name (last path segment, e.g. "CurrencyUpgradeToMagic")
-            ; — lets the UI place currency-tab items via the curated layout map.
-            mp := ""
+            ; + an "is currency" flag — the currency-tab layout places currency
+            ; items by name and puts non-currency items (weapons/gear) in the
+            ; central slot.
+            mp := "", isCur := 0
             if (d.Has("metadataPath") && d["metadataPath"] != "")
-                mp := RegExReplace(String(d["metadataPath"]), ".*/", "")
+            {
+                fullPath := String(d["metadataPath"])
+                mp := RegExReplace(fullPath, ".*/", "")
+                isCur := InStr(fullPath, "/Currency/") ? 1 : 0
+            }
             modsJson := _BuildItemModsJson(d.Has("modsInfo") ? d["modsInfo"] : 0)
             itemsJson .= "{"
                 . '"sx":' Integer(it["slotStartX"]) ","
@@ -1424,6 +1430,7 @@ _BuildInventoryArrayJson(invs)
                 . '"ex":' Integer(it["slotEndX"]) ","
                 . '"ey":' Integer(it["slotEndY"]) ","
                 . '"mp":' _JsStr(mp) ","
+                . '"cur":' isCur ","
                 . '"n":' _JsStr(name) ","
                 . '"b":' _JsStr(base) ","
                 . '"r":' rarId ","

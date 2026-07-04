@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.168`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.169`.
 
 ## Language
 
@@ -1532,7 +1532,13 @@ slot per curated cell — framing ONLY real slots (no full background grid), wit
 pixel gaps (`colGapAfter`/`rowGapAfter`) and the central multi-cell slot (`bigSlots`) + the
 extra always-empty frames (`emptySlots`). `_itemVisual(it,w,h)` was factored out of
 `_invItemCellHtml` and reused. Verified in the preview: 44 items + 5 empty frames, compact
-348×360, gaps applied (col 3 at x=120 = 3·36+12). **Pending in-game verification:** open the
+348×360, gaps applied (col 3 at x=120 = 3·36+12). **Refined 0.45.13.169** per feedback: the bottom two rows are a
+GENERIC 7×2 misc-currency grid (not bound to specific currencies) filled by slot order (`it.sx`)
+— the abyss/omen entries left the fixed `slots` map; the central slot is a 2×4 slot for the
+tab's NON-currency item (weapons/gear; `WebViewBridge` now emits an `it.cur` flag from the
+`/Currency/` path) and is HORIZONTALLY CENTERED, as are the two empty frames above it;
+Identification moved up a row. Verified: big slot centered (x=138, center 174 == grid 174),
+2×4, non-currency item placed there, generics in the bottom grid. **Pending in-game verification:** open the
 currency tab in the tool's Inventory tab — it should mirror the game grid; report any
 mis-placed slot and I fix its [col,row] in `CURRENCY_TAB_LAYOUT`. The probe stays as the
 re-bake aid.
