@@ -692,20 +692,28 @@ class PoE2InventoryReader extends PoE2PlayerReader
         rarityId := (modsInfo && modsInfo.Has("rarityId")) ? modsInfo["rarityId"] : -1
         displayName := this.ComposeItemDisplayName(metadataPath, baseType, modsInfo, rarityId, itemEntityPtr)
 
-        ; Stack count (for stackable items like scrolls, currency, gold).
-        ; Reads the Stack component's Count field when present; non-stackable
-        ; items don't have this component and report 0 (UI hides the badge).
-        ; Max stack size isn't on the Stack component — it lives on BaseItemTypes.dat
-        ; which isn't schema-mapped yet, so we show only the current count for now.
-        stackCount := 0
+        ; Stack count + max size (for stackable items like scrolls, currency).
+        ; The Stack component's Count is +0x18; its +0x10 points at a shared
+        ; per-base-type StackSizeData descriptor whose +0x28 is the normal
+        ; inventory max stack (verified in-game: Scroll of Wisdom = 40). Both
+        ; are 0 for non-stackable items (no Stack component) so the UI hides
+        ; the badge.
+        stackCount := 0, stackMax := 0
         try
         {
             stackPtr := this.FindEntityComponentAddress(itemEntityPtr, "Stack")
             if this.IsProbablyValidPointer(stackPtr)
+            {
                 stackCount := this.Mem.ReadInt(stackPtr + PoE2Offsets.Stack["Count"])
+                sizeDataPtr := this.Mem.ReadPtr(stackPtr + PoE2Offsets.Stack["StackSizeDataPtr"])
+                if this.IsProbablyValidPointer(sizeDataPtr)
+                    stackMax := this.Mem.ReadInt(sizeDataPtr + PoE2Offsets.StackSizeData["MaxStack"])
+            }
         }
         catch
-            stackCount := 0
+        {
+            stackCount := 0, stackMax := 0
+        }
 
         ; Identified flag (from the Mods component) and the 2D inventory-art path
         ; (from the RenderItem component) — both for the inventory UI. identified
@@ -720,6 +728,7 @@ class PoE2InventoryReader extends PoE2PlayerReader
             "rarityId", rarityId,
             "rarity", this.RarityNameFromId(rarityId),
             "stackCount", stackCount,
+            "stackMax", stackMax,
             "identified", identified,
             "artPath", artPath,
             "modsInfo", modsInfo

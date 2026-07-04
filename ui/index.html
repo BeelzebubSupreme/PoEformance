@@ -3003,6 +3003,47 @@
       gap: 10px
     }
 
+    /* ── Global row hover highlight ─────────────────────────────────────────
+       A subtle warm-gold tint on whichever content row the cursor is over,
+       across the whole UI. Curated list of the leaf "row" classes (nav bars,
+       pill containers and rows that already carry their own hover — tables,
+       tree/entity/prop rows, UI-browser rows — are deliberately excluded).
+       background-COLOR only, so the .ap-live-rule ledger hairline (a
+       background-image gradient) survives underneath. */
+    .cfg-row:hover,
+    .cfg-slider-row:hover,
+    .cfg-sub-row:hover,
+    .ap-live-row:hover,
+    .hk-row:hover,
+    .lt-row:hover,
+    .re-row:hover,
+    .re-hex-row:hover,
+    .ovp-row:hover,
+    .diag-file-row:hover,
+    .dbg-overlay-row:hover,
+    .junk-pat-row:hover,
+    .combat-slot-row:hover,
+    .combat-slot-adv-row:hover,
+    .sm-rnd-row:hover,
+    .ei-prop-row:hover {
+      background-color: rgba(200, 168, 90, 0.03);
+      border-radius: 3px;
+    }
+    /* 8px horizontal padding cancelled by an equal negative margin: the row
+       content (text) keeps its exact position, but the hover tint's padding
+       box now extends 8px past the text on each side — so the text never
+       touches the tint edge. Horizontal-only, so vertical rhythm is untouched. */
+    .cfg-row, .cfg-slider-row, .cfg-sub-row, .ap-live-row, .hk-row, .lt-row,
+    .re-row, .re-hex-row, .ovp-row, .diag-file-row, .dbg-overlay-row,
+    .junk-pat-row, .combat-slot-row, .combat-slot-adv-row, .sm-rnd-row,
+    .ei-prop-row {
+      transition: background-color .12s ease-out;
+      padding-left: 8px;
+      padding-right: 8px;
+      margin-left: -8px;
+      margin-right: -8px;
+    }
+
     /* Sub-rows (rendered indented under a parent toggle, like
        "↳ Source" beneath the Map Hack switch) sit left-aligned next
        to their label rather than getting flushed against the right
@@ -4379,6 +4420,42 @@
     /* Box body lines up under the text (icon width + gap ≈ 26px), not the icon. */
     .cfg-section > details[open] > :not(summary) { padding-left: 26px }
 
+    /* ── CLOSED boxes: center the header row vertically ─────────────────────
+       .cfg-section carries 4px top / 10px bottom padding — right for an OPEN
+       body, but collapsed it pushed icon + heading + caret above the middle.
+       Symmetrize both the box padding (4+10 → 7+7) and the header's own
+       4px/6px padding (→ 5px/5px) while a box is closed; the totals are
+       unchanged, so collapsed boxes keep their exact height. */
+    .cfg-section:has(> details:not([open])) { padding-top: 7px; padding-bottom: 7px }
+    .cfg-section > details:not([open]) > summary > .cfg-header { padding-top: 5px; padding-bottom: 5px }
+
+    /* ── AutoPilot page (#ap-panel): the sub-tab IS the page now — the old
+       collapsible category box is gone. The wrapper keeps the .cfg-section
+       CLASS (the nested summaries' caret/flex styling is scoped to it) but
+       drops the box chrome entirely. ── */
+    #ap-panel {
+      border: none;
+      background: none;
+      box-shadow: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    /* Live-Status rows (State / Combat / Explore / Loot): 3-column grid — label
+       left, state truly centered, reason/readout right. .ap-live-rule adds the
+       ledger-style hairline under the row (centered, middle ~70% of the width);
+       the last row goes without so the block doesn't end on a stray line. */
+    #ap-panel .ap-live-row { display: grid; grid-template-columns: 1fr auto 1fr; }
+    #ap-panel .ap-live-row > :first-child { justify-self: start }
+    #ap-panel .ap-live-row > :nth-child(2) { justify-self: center }
+    #ap-panel .ap-live-row > :last-child { justify-self: end }
+    #ap-panel .ap-live-rule {
+      background-image: linear-gradient(var(--codex-rule), var(--codex-rule));
+      background-repeat: no-repeat;
+      background-position: center bottom;
+      background-size: 70% 1px;
+    }
+
     /* ── Entities tab (#4): the same icon + open-underline rhythm for the boxed
        Entity Classes / Junk Filter summaries and the junk sub-categories. These
        are .ent-junkbox / .junk-cat <details>, not .cfg-section, so the underline
@@ -5264,24 +5341,28 @@
         </div><!-- /cfg-subpanel stashmover -->
 
         <div class="cfg-subpanel" data-cfgtab="autopilot">
-        <div class="cfg-section">
-          <details id="det-autopilot" ontoggle="syncCfgSections(); if(this.open) requestAnimationFrame(_sbInitAll)" open>
-            <summary>
-              <div class="cfg-header">🤖 AutoPilot</div>
-              <span id="cfg-autopilot-reason-summary" class="cfg-summary-status">—</span>
-            </summary>
+        <!-- AutoPilot IS the sub-tab now — the old collapsible category box
+             (det-autopilot + its summary) is gone. #ap-panel keeps the
+             .cfg-section CLASS because the nested summaries' caret/flex
+             styling is scoped to it, but its box chrome is disabled in CSS.
+             _sbInitAll (skill-slot sliders) runs on tab switch instead of the
+             removed details' ontoggle. -->
+        <div id="ap-panel" class="cfg-section">
             <div class="cfg-subsection">
               <!-- Master toggle + hotkey on a single row to save vertical
-                   space. The hotkey label is informational only — the
-                   actual binding lives in the AHK source. -->
+                   space. The hotkey is a capture button (StashMover pattern):
+                   click, press a key/combo, bound + persisted via
+                   SetCombatHotkey. -->
               <div class="cfg-row">
                 <span class="cfg-label">Enable AutoPilot</span>
                 <label class="toggle"><input type="checkbox" id="tog-autopilot"
                     onchange="ahkCall('ToggleAutoPilot'); updateRangeCircleVisibility()"><span
                     class="toggle-slider"></span></label>
-                <span style="margin-left:14px;font-size:11px;color:var(--subtext)">
-                  Hotkey: <span id="cfg-combat-hotkey" class="cfg-status"
-                                style="color:#7ec8e3;font-weight:600">F10</span>
+                <span style="margin-left:14px;font-size:11px;color:var(--subtext);display:flex;gap:6px;align-items:center">
+                  Hotkey:
+                  <button class="hk-btn hk-key-btn" id="cfg-combat-hotkey"
+                          title="Click, then press a key or key combo" onclick="apCaptureHotkey()">F10</button>
+                  <button class="hk-btn" title="Clear hotkey" onclick="ahkCall('SetCombatHotkey','')">✕</button>
                 </span>
               </div>
               <div class="cfg-help">
@@ -5301,66 +5382,48 @@
               <input type="checkbox" id="tog-combat"  style="display:none">
               <input type="checkbox" id="tog-explore" style="display:none">
 
-              <!-- ════════════════════════════════════════════════════
-                   📊 LIVE STATUS — quick glance at what AutoPilot is
-                   doing right now. Loot status + cache count live here
-                   too because they're a live readout, not a setting.
-                   ════════════════════════════════════════════════════ -->
-              <details class="cfg-subsection" open>
-                <summary>
-                  <div class="cfg-header" data-snodekey="ap-status">📊 Live Status</div>
-                </summary>
-                <div class="cfg-subsection-body">
-                  <div class="cfg-row"><span class="cfg-label">State</span><span id="cfg-autopilot-state"
-                      class="cfg-status idle">idle</span></div>
-                  <div class="cfg-row"><span class="cfg-label">Combat</span><span id="cfg-combat-state"
-                      class="cfg-status idle">idle</span><span id="cfg-combat-reason"
-                      class="cfg-status idle" style="margin-left:8px;opacity:.8">—</span></div>
-                  <div class="cfg-row"><span class="cfg-label">Explore</span><span id="cfg-explore-pct" class="cfg-status"
-                      style="color:#7ec8e3;font-weight:600">0%</span><span id="cfg-explore-reason"
-                      class="cfg-status idle" style="margin-left:8px;opacity:.8">idle</span></div>
-                  <div class="cfg-row"><span class="cfg-label">Loot</span><span id="cfg-loot-status"
-                      class="cfg-status idle">idle</span><span style="margin-left:8px;color:var(--subtext);font-size:11px">
-                      pickup • cache <span id="cfg-loot-cache-count">0</span></span></div>
-                  <!-- One-click projection triage (issue #158): dumps the full
-                       world→screen chain (matrix, player projection, anchor,
-                       enemy aim) to debug\autopilot_diag_*.txt so a
-                       "doesn't move / fires at screen centre" report can be
-                       root-caused without reading the live overlay. -->
-                  <div class="cfg-row">
-                    <span class="cfg-label">Diagnose</span>
-                    <button class="hk-btn" onclick="ahkCall('AutoPilotDiag')">🔍 Diagnose projection</button>
-                    <button class="hk-btn" onclick="ahkCall('AutoPilotMatrixScan')" style="margin-left:6px">🧭 Scan matrix offset</button>
-                  </div>
-                  <div class="cfg-help">If AutoPilot won't move or fires skills at the middle of the screen,
-                    turn it on, stand near a monster, then click <b>Diagnose projection</b>. It writes the
-                    camera-matrix / projection chain to <code>debug\autopilot_diag_*.txt</code> (readable under
-                    Data &amp; Logs). If that report shows the matrix is present but a far enemy projects onto the
-                    same pixel as you, click <b>Scan matrix offset</b> — it searches for the correct camera-matrix
-                    offset and writes <code>debug\autopilot_matrixscan_*.txt</code>.</div>
-                  <!-- Mirror this Live-Status readout into a file so it can be reviewed while the
-                       game (not the tool) is in the foreground. -->
-                  <div class="cfg-row">
-                    <span class="cfg-label">📝 Log status to file</span>
-                    <label class="toggle"><input type="checkbox" id="ap-status-log"
-                        onchange="ahkCall('SetAutoPilotStatusLog', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label>
-                  </div>
-                  <div class="cfg-help">Writes the live status line (state · loot · combat · explore reasons) to
-                    <code>logs\InGameStateMonitor.autopilot_status.log</code> on every change — review it under
-                    <b>Data &amp; Logs</b> after playing. Persistent (stays on across restarts); deduped, throttled,
-                    and auto-rotated at ~2&nbsp;MB.</div>
-                </div>
-              </details>
+              <!-- Mirror the Live-Status readout below into a file so it can be
+                   reviewed while the game (not the tool) is in the foreground. -->
+              <div class="cfg-row">
+                <span class="cfg-label">📝 Log status to file</span>
+                <label class="toggle"><input type="checkbox" id="ap-status-log"
+                    onchange="ahkCall('SetAutoPilotStatusLog', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Writes the live status line (state · loot · combat · explore reasons) to
+                <code>logs\InGameStateMonitor.autopilot_status.log</code> on every change — review it under
+                <b>Data &amp; Logs</b> after playing. Persistent (stays on across restarts); deduped, throttled,
+                and auto-rotated at ~2&nbsp;MB.</div>
 
-              <!-- ════════════════════════════════════════════════════
-                   ⚔ COMBAT — engage / disengage ranges, GCD, world-to-
-                   screen scale, plus the dynamic skill-slot list.
-                   ════════════════════════════════════════════════════ -->
-              <details class="cfg-subsection" ontoggle="if(this.open) requestAnimationFrame(_sbInitAll)">
-                <summary>
-                  <div class="cfg-header" data-snodekey="ap-combat">⚔ Combat</div>
-                </summary>
-                <div class="cfg-subsection-body">
+              <!-- ── LIVE STATUS readout, inline (its own box was dissolved) ──
+                   ap-live-row: true 3-column grid (1fr auto 1fr) so the middle
+                   status is CENTERED no matter how wide the right readout is
+                   (flex space-between shifted it with the right column). -->
+              <div class="cfg-row ap-live-row ap-live-rule"><span class="cfg-label">State</span><span id="cfg-autopilot-state"
+                  class="cfg-status idle">idle</span><span id="cfg-autopilot-enabled"
+                  class="cfg-status idle" style="opacity:.8">disabled</span></div>
+              <div class="cfg-row ap-live-row ap-live-rule"><span class="cfg-label">Combat</span><span id="cfg-combat-state"
+                  class="cfg-status idle">idle</span><span id="cfg-combat-reason"
+                  class="cfg-status idle" style="opacity:.8">—</span></div>
+              <div class="cfg-row ap-live-row ap-live-rule"><span class="cfg-label">Explore</span><span id="cfg-explore-pct" class="cfg-status"
+                  style="color:#7ec8e3;font-weight:600">0%</span><span id="cfg-explore-reason"
+                  class="cfg-status idle" style="opacity:.8">idle</span></div>
+              <div class="cfg-row ap-live-row"><span class="cfg-label">Loot</span><span id="cfg-loot-status"
+                  class="cfg-status idle">idle</span><span style="color:var(--subtext);font-size:11px">
+                  pickup • cache <span id="cfg-loot-cache-count">0</span></span></div>
+            </div>
+        </div><!-- /ap-panel -->
+
+        <!-- ════════════════════════════════════════════════════
+             ⚔ COMBAT — engage / disengage ranges, GCD, world-to-
+             screen scale, plus the dynamic skill-slot list. A standard
+             category box (like Overlay's Map Hack / Radar).
+             ════════════════════════════════════════════════════ -->
+        <div class="cfg-section">
+          <details id="det-ap-combat" ontoggle="syncCfgSections(); if(this.open) requestAnimationFrame(_sbInitAll)">
+            <summary>
+              <div class="cfg-header" data-snodekey="ap-combat">⚔ Combat</div>
+            </summary>
+            <div class="cfg-subsection">
                   <div class="cfg-slider-pair">
                     <div class="cfg-slider-item">
                       <span class="cfg-label">Engage</span>
@@ -5400,17 +5463,19 @@
 
                   <div style="margin-top:12px;font-size:11px;color:var(--accent);font-weight:600">Skill Slots</div>
                   <div id="combat-slots-cfg" style="margin-top:4px"></div>
-                </div>
-              </details>
+            </div>
+          </details>
+        </div>
 
-              <!-- ════════════════════════════════════════════════════
-                   🧭 EXPLORATION — target coverage %.
-                   ════════════════════════════════════════════════════ -->
-              <details class="cfg-subsection" ontoggle="if(this.open) requestAnimationFrame(_sbInitAll)">
-                <summary>
-                  <div class="cfg-header" data-snodekey="ap-explore">🧭 Exploration</div>
-                </summary>
-                <div class="cfg-subsection-body">
+        <!-- ════════════════════════════════════════════════════
+             🧭 EXPLORATION — target coverage %. A standard category box.
+             ════════════════════════════════════════════════════ -->
+        <div class="cfg-section">
+          <details id="det-ap-explore" ontoggle="syncCfgSections(); if(this.open) requestAnimationFrame(_sbInitAll)">
+            <summary>
+              <div class="cfg-header" data-snodekey="ap-explore">🧭 Exploration</div>
+            </summary>
+            <div class="cfg-subsection">
                   <div class="cfg-slider-row">
                     <span class="cfg-label">Explore Ziel %</span>
                     <div class="slider-wrap">
@@ -5423,20 +5488,22 @@
                     AutoPilot stops the exploration phase once this fraction of the area has
                     been visited. Higher = more thorough sweep, lower = faster zone clears.
                   </div>
-                </div>
-              </details>
+            </div>
+          </details>
+        </div>
 
-              <!-- ════════════════════════════════════════════════════
-                   💎 LOOT PICKUP — rarity filter for what to grab. Live
-                   status (idle/picking up) + cache count moved up into
-                   Live Status above; this sub-section is only for
-                   *configuring* the pickup behaviour.
-                   ════════════════════════════════════════════════════ -->
-              <details class="cfg-subsection">
-                <summary>
-                  <div class="cfg-header" data-snodekey="ap-loot">💎 Loot Pickup</div>
-                </summary>
-                <div class="cfg-subsection-body">
+        <!-- ════════════════════════════════════════════════════
+             💎 LOOT PICKUP — rarity filter for what to grab. The live
+             status (idle/picking up) + cache count sit in the inline
+             Live-Status readout above; this box is only for
+             *configuring* the pickup behaviour. A standard category box.
+             ════════════════════════════════════════════════════ -->
+        <div class="cfg-section">
+          <details id="det-ap-loot" ontoggle="syncCfgSections()">
+            <summary>
+              <div class="cfg-header" data-snodekey="ap-loot">💎 Loot Pickup</div>
+            </summary>
+            <div class="cfg-subsection">
                   <div class="cfg-help">
                     Picks up ground items matching the selected rarities. Cached items persist
                     across ticks — drops noticed during combat are collected once the area is safe.
@@ -5453,8 +5520,6 @@
                     <label class="filter-pill"><input type="checkbox" id="loot-rar-currency"
                         onchange="ahkCall('SetLootRarity','Currency',this.checked)" checked> Currency</label>
                   </div>
-                </div>
-              </details>
             </div>
           </details>
         </div>
@@ -6022,6 +6087,22 @@
               <button class="cfg-btn" onclick="ahkCall('F3Dump')">📷 F3 Dump</button>
               <button class="cfg-btn" onclick="ahkCall('DumpEntities')">💾 Dump Entities</button>
               <button class="cfg-btn" onclick="ahkCall('LootValueDiag')" title="RE test for the value-aware loot radar: open over ground loot (ideally a unique) to check if drops can be priced">🔍 Loot value diagnose</button>
+              <!-- One-click AutoPilot projection triage (issue #158) — moved here
+                   from Automation > AutoPilot > Live Status: dumps the full
+                   world→screen chain (matrix, player projection, anchor, enemy
+                   aim) so a "doesn't move / fires at screen centre" report can
+                   be root-caused without reading the live overlay. -->
+              <div class="cfg-row" style="justify-content:flex-start;gap:8px;flex-wrap:wrap">
+                <span class="cfg-label">🧭 AutoPilot projection</span>
+                <button class="hk-btn" onclick="ahkCall('AutoPilotDiag')">🔍 Diagnose projection</button>
+                <button class="hk-btn" onclick="ahkCall('AutoPilotMatrixScan')">🧭 Scan matrix offset</button>
+              </div>
+              <div class="cfg-help">If AutoPilot won't move or fires skills at the middle of the screen,
+                turn it on, stand near a monster, then click <b>Diagnose projection</b>. It writes the
+                camera-matrix / projection chain to <code>debug\autopilot_diag_*.txt</code> (readable under
+                Data &amp; Logs). If that report shows the matrix is present but a far enemy projects onto the
+                same pixel as you, click <b>Scan matrix offset</b> — it searches for the correct camera-matrix
+                offset and writes <code>debug\autopilot_matrixscan_*.txt</code>.</div>
               <div class="cfg-row"><span class="cfg-label">🔗 Log inventory pointer chain</span>
                 <label class="toggle"><input type="checkbox" id="inv-chain-dump" onchange="ahkCall('ToggleInventoryChainDump')"><span class="toggle-slider"></span></label>
               </div>
@@ -6138,6 +6219,7 @@
               <button class="tree-tbtn" onclick="ahkCall('SkillProbeRun')" style="font-size:11px" title="Post-patch diagnostic: trace the player's skill-name DAT chain (Actor->ActiveSkills->GrantedEffectsPerLevel->GrantedEffects->name) to find why skill names fall back to Skill_<hex>. Writes logs\InGameStateMonitor.skill_probe.log">✨ Probe Skills</button>
               <button class="tree-tbtn" onclick="ahkCall('ComponentDumpProbeRun')" style="font-size:11px" title="Diagnostic: dump ALL components + raw field bytes of the currently highlighted entity (highlight one in the tree first). Basis for the systematic component-offset pass. Also Ctrl+Alt+Shift+D. Writes logs\InGameStateMonitor.component_dump.log">🧩 Dump Components</button>
               <button class="tree-tbtn" onclick="ahkCall('PathfindingProbeRun')" style="font-size:11px" title="Diagnostic: enumerate awake monsters, resolve their Pathfinding component and dump the candidate Flying (0xE5) / BaseSpeed (0xEC) fields plus raw hex, to verify the hypothesis offsets cross-referenced from Sikaka/POE2Radar. Stand in a populated area. Writes logs\InGameStateMonitor.pathfinding_probe.log">🏃 Probe Pathfinding</button>
+              <button class="tree-tbtn" onclick="ahkCall('StackMaxProbeRun')" style="font-size:11px" title="Diagnostic: for every backpack item with a Stack component, dump the int32 table around the component base (flagging Count +0x18 and the max-size candidate +0x20) and deref UnknownPtr (+0x10), to test whether +0x20 holds the maximum stack size. STAND WITH A STACKABLE ITEM IN YOUR INVENTORY, then click. Writes logs\InGameStateMonitor.stack_max_probe.log">📦 Probe Stack Max</button>
               <button class="tree-tbtn" onclick="ahkCall('RitualProbeRun')" style="font-size:11px" title="RE diagnostic for the Ritual (Favours) reward window: finds the RitualWindow element by StringId, walks its subtree and reports every reward slot (StringId / rect / item at +0x4F8), plus a struct pointer-scan fallback. OPEN THE FAVOURS WINDOW FIRST, then click. Basis for value badges on ritual rewards. Writes logs\InGameStateMonitor.ritual_probe.log">🎲 Probe Ritual</button>
               <button class="tree-tbtn" onclick="ahkCall('NpcIdentifyRun')" style="font-size:11px" title="TEST: in the hideout, click the NPC 'Doryani' label, wait for his dialog window, then click 'Identify Items'. Also on hotkey F9 (while PoE2 is focused); tune via [NpcIdentify] in poeformance_config.ini (hotkey, npcName, menuText, UI paths).">🪄 Doryani Identify</button>
               <button class="tree-tbtn" onclick="ahkCall('LootLabelProbeRun')" style="font-size:11px" title="RE diagnostic for ground-item (loot) labels: sweeps the UI for effectively-visible text elements and reports StringId / parent StringId / text / screen rect (+ any item at +0x4F8). STAND NEAR SEVERAL GROUND DROPS so their labels show, then click. Basis for keeping loot labels clear of the large-map maphack walls. Writes logs\InGameStateMonitor.lootlabel_probe.log">🏷 Probe Loot Labels</button>
@@ -6940,7 +7022,7 @@
       "tab:ui":"ChannellingAttacksNotable2","tab:gamestate":"auraeffect","tab:memdiff":"flaskstr","tab:dissect":"flaskint","tab:hotkeys":"KeystoneResoluteTechnique",
       "tab:cfgoverlay":"PressurePoints","tab:cfgvitals":"BloodMageNode","tab:autopilot":"KeystoneAvatarOfFire","tab:stashmover":"KeystonePainAttunement",
       "cfgtab:general":"blankStr","cfgtab:debug":"tempint","cfgtab:data":"ChannellingSpeed",
-      "sec:det-status":"HollowPalmTechniqueKeystone","sec:det-integrations":"KeystoneAvatarOfFire","sec:det-stashmover":"KeystonePainAttunement","sec:sm-stash":"AzmeriPrimalMonkey","sec:sm-stash-ignore":"shieldblock","sec:sm-stash-rnd":"criticalstrikechance","sec:sm-sell":"AzmeriWildBear","sec:sm-sell-ignore":"shieldblock","sec:sm-sell-rnd":"criticalstrikechance","sec:sm-shared":"TemporalistNearbyEnemiesProjectilesSlowed","sec:det-autopilot":"KeystoneAvatarOfFire","sec:ap-status":"WarbringerEncasedInJade","sec:ap-combat":"LightningDamagenode","sec:ap-explore":"MiracleMaker","sec:ap-loot":"energyshield",
+      "sec:det-status":"HollowPalmTechniqueKeystone","sec:det-integrations":"KeystoneAvatarOfFire","sec:det-stashmover":"KeystonePainAttunement","sec:sm-stash":"AzmeriPrimalMonkey","sec:sm-stash-ignore":"shieldblock","sec:sm-stash-rnd":"criticalstrikechance","sec:sm-sell":"AzmeriWildBear","sec:sm-sell-ignore":"shieldblock","sec:sm-sell-rnd":"criticalstrikechance","sec:sm-shared":"TemporalistNearbyEnemiesProjectilesSlowed","sec:ap-combat":"LightningDamagenode","sec:ap-explore":"MiracleMaker","sec:ap-loot":"energyshield",
       "sec:det-maphack":"ColdAndFireHybridNotable","sec:det-radar":"PressurePoints","sec:det-entitymarkers":"TacticianNode","sec:det-rangecircles":"TemporalistNode","sec:det-lootvalue":"ShieldNodeOffensive","sec:lrv-detection":"Rage","sec:lrv-list":"SpellSuppresionNode","sec:lrv-onmap":"RangedTotemDamage","sec:lrv-trade":"ClawsOfTheMagpie","sec:det-uihoverprice":"projectilespeed","sec:det-ritualvalue":"FlaskNotableCritStrikeRecharge","sec:det-overlay-placement":"MiracleMaker","sec:det-customlandmarks":"PathfinderMultichoicePath",
       "sec:det-vitals-general":"CorpseDamage","sec:det-debug-actions":"axedmgspeed","sec:det-radar-debug":"PathfinderPathoftheWarrior","sec:det-debug-panels":"ColdDamagenode","sec:det-debug-discovery":"LightningDamagenode","sec:det-debug-diff":"ManaLeechThemedNode","sec:det-debug-overlay":"ElementalDamagenode","sec:det-offset-compare":"plusstrengthdexterity",
       "sec:det-al-conditions":"blankDex","sec:det-al-timing":"blankInt","sec:det-al-output":"blankStr","sec:det-lt-settings":"KeystoneWhispersOfDoom","sec:det-blacklist":"ArmourAndEvasionNode",
@@ -7594,6 +7676,10 @@
         ahkCall('LootRequestLive');
         ahkCall('LootLoadSessions');
       }
+      // AutoPilot page: init the skill-slot sliders (this used to run from the
+      // removed det-autopilot details' ontoggle).
+      if (key === 'autopilot')
+        requestAnimationFrame(_sbInitAll);
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -7858,11 +7944,43 @@
       stashRenderIgnore('sell');
     }
 
+    // Clears EVERY hotkey-capture state (AutoPilot / Stash Mover / Hotkeys tab)
+    // and hides the shared overlay. Called at the start of every capture starter
+    // so at most ONE capture is ever armed — otherwise clicking a second capture
+    // button would leave the first flag set, and a single key press would bind it
+    // AND leave the other armed for the next input (Copilot #164).
+    function _resetAllHotkeyCaptures() {
+      apHotkeyCapturing = false;
+      smHotkeyCapturing = false;
+      hkCapture = null;
+      document.getElementById('hk-capture').style.display = 'none';
+    }
+
+    // ── AutoPilot hotkey capture (same pattern as the Stash Mover one below) ──
+    let apHotkeyCapturing = false;
+    function apCaptureHotkey() {
+      _resetAllHotkeyCaptures();
+      apHotkeyCapturing = true;
+      document.getElementById('hk-capture').style.display = 'flex';
+    }
+    function apHotkeyCancel() {
+      apHotkeyCapturing = false;
+      document.getElementById('hk-capture').style.display = 'none';
+    }
+    function apHotkeyApply(ahk) {
+      apHotkeyCapturing = false;
+      document.getElementById('hk-capture').style.display = 'none';
+      ahkCall('SetCombatHotkey', ahk);
+      const b = document.getElementById('cfg-combat-hotkey');
+      if (b) b.textContent = smPrettyHotkey(ahk);   // optimistic; header confirms
+    }
+
     // ── Stash Mover hotkey capture (reuses the Hotkeys-tab #hk-capture overlay) ──
     // Click the hotkey button → "Press a key…" overlay → the next key/mouse combo is
     // stored as an AHK hotkey string (e.g. "^d") via SetStashMover.
     let smHotkeyCapturing = false;
     function smCaptureHotkey() {
+      _resetAllHotkeyCaptures();
       smHotkeyCapturing = true;
       document.getElementById('hk-capture').style.display = 'flex';
     }
@@ -9143,16 +9261,19 @@
 
     // ── Key capture ────────────────────────────────────────────────────
     function hkCaptureKey(gi, hi) {
+      _resetAllHotkeyCaptures();
       hkCapture = { gi, hi, target: 'trigger' };
       document.getElementById('hk-capture').style.display = 'flex';
     }
     function hkCaptureOutputKey(gi, hi) {
+      _resetAllHotkeyCaptures();
       hkCapture = { gi, hi, target: 'output' };
       document.getElementById('hk-capture').style.display = 'flex';
     }
     // Like hkCaptureOutputKey, but for a Skill-slot output: set only the key and KEEP
     // kind 'skill' (so the skill dropdown / cooldown gate stay intact).
     function hkCaptureSkillKey(gi, hi) {
+      _resetAllHotkeyCaptures();
       hkCapture = { gi, hi, target: 'skillKey' };
       document.getElementById('hk-capture').style.display = 'flex';
     }
@@ -9193,6 +9314,21 @@
       return (e.key && e.key.length === 1) ? e.key.toLowerCase() : '';
     }
     document.addEventListener('keydown', function (e) {
+      // A held modifier fires its OWN keydown (key = "Alt"/"Shift"/…) BEFORE the
+      // actual key arrives — that used to cancel the capture, making modifier
+      // combos impossible. Ignore pure-modifier presses and keep waiting.
+      const pureModifier = (e.key === 'Alt' || e.key === 'Shift' || e.key === 'Control' || e.key === 'Meta');
+      if ((apHotkeyCapturing || smHotkeyCapturing || hkCapture) && pureModifier) {
+        e.preventDefault();
+        return;
+      }
+      if (apHotkeyCapturing) {                 // AutoPilot capture takes precedence
+        e.preventDefault();
+        const nm = hkKeyName(e);
+        if (nm === '') { apHotkeyCancel(); return; }   // Escape / unmappable → cancel
+        apHotkeyApply(smBuildAhkHotkey(nm, { ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey }));
+        return;
+      }
       if (smHotkeyCapturing) {                 // Stash Mover capture takes precedence
         e.preventDefault();
         const nm = hkKeyName(e);
@@ -9212,6 +9348,12 @@
     }, true);
     document.addEventListener('mousedown', function (e) {
       const btnMap = { 0: 'LButton', 1: 'MButton', 2: 'RButton', 3: 'XButton1', 4: 'XButton2' };
+      if (apHotkeyCapturing) {
+        e.preventDefault();
+        const nm = btnMap[e.button];
+        if (nm) apHotkeyApply(nm);             // mouse buttons carry no modifiers here
+        return;
+      }
       if (smHotkeyCapturing) {
         e.preventDefault();
         const nm = btnMap[e.button];
@@ -9853,6 +9995,7 @@
         b: it.b || '',
         r: it.r,
         s: (typeof it.s === 'number' && it.s > 0) ? it.s : 0,
+        smax: (typeof it.smax === 'number' && it.smax > 0) ? it.smax : 0,
         a: it.a || '',
         idf: (typeof it.idf === 'number') ? it.idf : -1,
         m: Array.isArray(it.m) ? it.m : []
@@ -9876,7 +10019,7 @@
       let html = ttIcon + `<div class="inv-tt-name inv-item ${rarityCls}" style="border:none;background:none;padding:0;display:block;text-align:left">${escHtml(p.n || p.b || '?')}</div>`;
       if (p.b && p.b !== p.n) html += `<div class="inv-tt-base">${escHtml(p.b)}</div>`;
       if (p.idf === 0) html += `<div class="inv-tt-base" style="color:#e0533b">Unidentified</div>`;
-      if (p.s && p.s > 1) html += `<div class="inv-tt-base">Stack Size: ${p.s}</div>`;
+      if (p.s && p.s > 1) html += `<div class="inv-tt-base">Stack Size: ${p.s}${p.smax > 0 ? ' / ' + p.smax : ''}</div>`;
       // Mods are objects {c: category, t: text}. Implicits + enchants render
       // first (with separators), then explicits — matches the in-game tooltip order.
       const mods = Array.isArray(p.m) ? p.m : [];
@@ -10342,9 +10485,13 @@
         apState.textContent = st;
         apState.className = 'cfg-status ' + (st === 'combat' ? 'warning' : st === 'explore' ? 'info' : 'idle');
       }
+      const apEnabled = document.getElementById('cfg-autopilot-enabled');
+      if (apEnabled && d.autoPilot !== undefined) {
+        const apOn = d.autoPilot === true || d.autoPilot === 'true';
+        apEnabled.textContent = apOn ? 'enabled' : 'disabled';
+        apEnabled.className = 'cfg-status ' + (apOn ? 'info' : 'idle');
+      }
       if (apReason && d.autoPilotReason !== undefined) apReason.textContent = d.autoPilotReason || '—';
-      const apReasonSum = document.getElementById('cfg-autopilot-reason-summary');
-      if (apReasonSum && d.autoPilotReason !== undefined) apReasonSum.textContent = d.autoPilotReason || '—';
 
       // Inventory diagnostics — pointer-chain logging toggle (Config > Debug).
       if (d.invChainDump !== undefined) setChk('inv-chain-dump', d.invChainDump);
@@ -10358,7 +10505,8 @@
       setChk('tog-combat', d.combatAuto);
       const nowCombatEnabled = document.getElementById('tog-combat')?.checked || false;
       const combatHotkeyEl = document.getElementById('cfg-combat-hotkey');
-      if (combatHotkeyEl && d.combatHotkey) combatHotkeyEl.textContent = d.combatHotkey;
+      if (combatHotkeyEl && d.combatHotkey !== undefined)
+        combatHotkeyEl.textContent = smPrettyHotkey(d.combatHotkey);
       const combatState = document.getElementById('cfg-combat-state');
       const combatReason = document.getElementById('cfg-combat-reason');
       if (combatState) {
@@ -12241,7 +12389,7 @@
     // ═══════════════════════════════════════════════════════════════════
     //  CONFIG HELPERS
     // ═══════════════════════════════════════════════════════════════════
-    const _cfgSectionIds = ['status', 'integrations', 'autoflask', 'autopilot', 'stashmover', 'rangecircles', 'radar', 'lootvalue', 'uihoverprice', 'customlandmarks', 'maphack', 'blacklist', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
+    const _cfgSectionIds = ['status', 'integrations', 'autoflask', 'ap-combat', 'ap-explore', 'ap-loot', 'stashmover', 'rangecircles', 'radar', 'lootvalue', 'uihoverprice', 'customlandmarks', 'maphack', 'blacklist', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
     let _cfgSectionsGuard = 0;
     let _cfgSectionsLoaded = false;
 

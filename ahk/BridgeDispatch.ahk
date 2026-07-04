@@ -411,6 +411,14 @@ _DispatchBridgeCall(method, args)
                 g_combatLastReason := "disabled"
                 g_exploreLastReason := "disabled"
             }
+            else
+            {
+                ; Instant feedback; the per-tick reasons take over once the
+                ; game loop actually runs (they stay "enabled" until then).
+                g_autoPilotReason   := "enabled"
+                g_combatLastReason  := "enabled"
+                g_exploreLastReason := "enabled"
+            }
             SetTimer(SaveConfig, -100)
             SetTimer(() => SaveCombatAutoConfig(), -100)
             SetTimer(() => SaveExplorationConfig(), -100)
@@ -698,6 +706,14 @@ _DispatchBridgeCall(method, args)
         case "SetCombatSlot":
             ; args: [slotNum, key, priority, skillName, type, cooldownMs, enabled, skillRange]
             _ApplyCombatSlotConfig(args)
+        case "SetCombatHotkey":
+            ; args: [ahkHotkeyString] — "" clears the binding. Persist +
+            ; re-register (RegisterCombatHotkey unbinds the previous key).
+            global g_combatToggleHotkey
+            g_combatToggleHotkey := (args.Length >= 1) ? Trim(String(args[1])) : ""
+            SaveCombatAutoConfig()
+            RegisterCombatHotkey()
+            SetTimer(PushHeaderToWebView, -50)
 
             ; ── Loot Pickup rarity filter (no toggle — empty filter = off) ─
         case "SetLootRarity":
@@ -897,6 +913,9 @@ _DispatchBridgeCall(method, args)
         case "PathfindingProbeRun":
             ; TEMP diagnostic: verify Pathfinding Flying/BaseSpeed offsets.
             SetTimer(() => PathfindingProbeRun(), -1)
+        case "StackMaxProbeRun":
+            ; TEMP diagnostic: test whether Stack +0x20 is the max stack size.
+            SetTimer(() => StackMaxProbeRun(), -1)
         case "ComponentDumpProbeRun":
             ; TEMP diagnostic: dump all components + raw fields of the highlighted entity.
             SetTimer(() => ComponentDumpProbeRun(), -1)

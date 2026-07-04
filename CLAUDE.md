@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.148`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.161`.
 
 ## Language
 
@@ -1294,6 +1294,113 @@ row. Verified: full-script `AutoHotkey64.exe /validate` passes.
 window/menu paths resolve on the live client; the final click fires identification; tooltip
 reasons on each abort gate.
 
+## AutoPilot panel polish (shipped 0.45.13.150)
+
+Four owner-requested tweaks to Automation → AutoPilot:
+- **Summary underline incl. status:** `#det-autopilot > summary` draws a bottom-gradient rule
+  (junkbox trick, inset 26px past the icon, ending at the right edge) in BOTH open and closed
+  state, covering the live-status string next to the caret; the box's open-only `.cfg-header`
+  border is disabled (ID-specificity override).
+- **Configurable AutoPilot hotkey:** the informational "Hotkey: F10" label is now a capture
+  button (StashMover pattern — `apCaptureHotkey`/`apHotkeyApply` trio reusing `#hk-capture` +
+  `hkKeyName`; the keydown/mousedown listeners got an `apHotkeyCapturing` branch) plus a ✕
+  clear button. New bridge case `SetCombatHotkey` → set `g_combatToggleHotkey`,
+  `SaveCombatAutoConfig()`, `RegisterCombatHotkey()` (re-binds/unbinds), header re-push. The
+  header sync renders the pretty label via `smPrettyHotkey` and handles "" (→ "none").
+- **Live-Status centering:** the Combat/Explore/Loot rows are `.ap-live-row` — a 3-column grid
+  (`1fr auto 1fr`: label start / state CENTERED / reason-readout end); flex space-between had
+  shifted the middle with the right column's width (the Loot row's "pickup · cache N").
+- **Diagnose buttons moved:** "🔍 Diagnose projection" + "🧭 Scan matrix offset" (+ help text)
+  moved from AutoPilot → Live Status to **Config → Debug → Diagnostic Actions**.
+Verified in the browser preview: middle spans pixel-centered (row/mid centers identical),
+underline present open+closed, capture flow (Ctrl+F9 → "Ctrl + F9", Escape cancels), diagnose
+buttons present only under `det-debug-actions`.
+- **Follow-up (0.45.13.151):** (1) the summary got symmetric vertical padding so the
+  heading/status sit on the caret's axis (the one-sided padding-bottom had pushed them above
+  the 50%-anchored diamond). (2) Modifier combos (Alt/Shift/Ctrl + key) now work in ALL hotkey
+  captures — a held modifier fires its OWN keydown (`key="Alt"`…), which used to hit the
+  "unmappable → cancel" path before the real key arrived; pure-modifier presses are now
+  ignored while capturing (ap/sm/hkCapture alike). (3) Live Status restyled as a ledger: the
+  State row is a 3-column `.ap-live-row` too, with a new right-column `#cfg-autopilot-enabled`
+  (enabled/disabled, synced from `d.autoPilot`), and the first three rows carry
+  `.ap-live-rule` — a centered 70%-width hairline under the row (the last row goes without).
+  Verified in the preview: status center == summary center, Alt+F5 → "Alt + F5",
+  Shift+X → "Shift + X", 3 rule lines, state value pixel-centered.
+- **Status seeded at startup (0.45.13.152):** the summary/status strings showed the stale
+  "idle" seed until the game loop first ran (per-tick reasons only update while connected).
+  `InGameStateMonitor` now re-seeds `g_autoPilotReason` / `g_combatLastReason` /
+  `g_exploreLastReason` to enabled/disabled from the loaded flag right after the sub-flag
+  mirroring, and BOTH AutoPilot toggles (bridge `ToggleAutoPilot` + the hotkey handler) set
+  them to "enabled" when switching ON (previously only the OFF branch wrote "disabled").
+- **Global row hover highlight (0.45.13.157):** whichever content row the cursor is over
+  now gets a subtle warm-gold tint (`background-color: rgba(200,168,90,0.06)` + 3px radius,
+  120ms fade) across the whole UI. One curated `:hover` block in the `<style>` covering the
+  leaf row classes (`.cfg-row`, `.cfg-slider-row`, `.cfg-sub-row`, `.ap-live-row`, `.hk-row`,
+  `.lt-row`, `.re-row`, `.re-hex-row`, `.ovp-row`, `.diag-file-row`, `.dbg-overlay-row`,
+  `.junk-pat-row`, `.combat-slot-row`, `.combat-slot-adv-row`, `.sm-rnd-row`, `.ei-prop-row`).
+  Nav bars (`.subtab-row`), pill containers (`.filter-row`) and rows that already carry their
+  own hover (tables, tree/entity/prop rows, UI-browser rows) are deliberately excluded.
+  `background-COLOR` only, so the `.ap-live-rule` ledger hairline (a `background-image`
+  gradient) survives underneath. Tuned 0.45.13.158: tint softened `0.06 → 0.03`, and the
+  highlighted rows get 8px horizontal padding cancelled by an equal `-8px` margin — the text
+  keeps its exact position but the tint's padding box extends 8px past it on each side, so
+  text never touches the tint edge (horizontal-only, vertical rhythm untouched). Verified in
+  the preview: text position unchanged, tint extends +8px, no horizontal overflow on
+  `.cfg-scroll` or the document.
+- **AutoPilot page: standard boxes + inline Live Status (0.45.13.155):** the three
+  sub-sections became STANDARD category boxes like Overlay's Map Hack/Radar — sibling
+  `.cfg-section > <details id="det-ap-combat|det-ap-explore|det-ap-loot">` blocks after
+  `#ap-panel`, wired into `syncCfgSections` (ids `ap-combat`/`ap-explore`/`ap-loot` in
+  `_cfgSectionIds`; combat/explore keep the `_sbInitAll` ontoggle for their sliders). The
+  "Live Status" box was dissolved: its rows (State/Combat/Explore/Loot + the log-to-file
+  toggle) sit inline in `#ap-panel` directly under "Pause while a UI panel is open".
+  `sec:ap-status` left SNODE_MAP + `tools/skillnode_map.json` (the box summaries keep their
+  icons via `data-snodekey`). Verified in the preview: subpanel top level = #ap-panel + 3
+  cfg-sections, cfgSections open-state restore works for the new ids, live rows centered,
+  icons present.
+- **AutoPilot category box removed (0.45.13.154):** with AutoPilot on its own sub-tab the
+  outer collapsible box was redundant. The `det-autopilot` details + summary (incl. the
+  status string, which lives on in the Live-Status State row) are gone; the content sits in
+  `#ap-panel`, which KEEPS the `.cfg-section` class (the nested summaries' caret/flex styling
+  is scoped to it) but drops the box chrome via CSS. `_sbInitAll` runs from
+  `_runTabSideEffects` on entering the `autopilot` tab (was the removed details' ontoggle);
+  the `.ap-live-*` CSS re-scoped `#det-autopilot` → `#ap-panel`; 'autopilot' left
+  `_cfgSectionIds`; `sec:det-autopilot` left SNODE_MAP + `tools/skillnode_map.json`; the
+  `cfg-autopilot-reason-summary` header sync was removed. NOTE for preview testing: a
+  collapsed Launch-preview panel reports `window.innerWidth = 0` and every rect collapses —
+  force `body{min-width}` before measuring (this also explains earlier "transient 0-width"
+  readings).
+- **Closed boxes vertically centered (0.45.13.153):** `.cfg-section` carries 4px top / 10px
+  bottom padding (right for an OPEN body) which pushed icon + heading + caret ~3px above the
+  middle in every COLLAPSED box; the `.cfg-header`'s own 4px/6px padding added another 1px.
+  Both are symmetrized while a box is closed (`:has(> details:not([open]))` → 7px/7px box,
+  5px/5px header) with unchanged totals, so collapsed boxes keep their exact height. Verified
+  in the preview: header/icon/caret centers == box center for det-vitals-life, det-radar and
+  det-autopilot.
+
+## Price liquidity gates (shipped 0.45.13.149) — fixes wildly inflated prices
+
+Report: "völlig überzogene Preise" from poe.ninja / the trade API. Root cause verified against
+the LIVE API: the math is correct (exchange `primaryValue` IS in Divine — `divine=1.0`,
+`exalted=1/rate` — and `× core.rates.exalted` is right), but poe.ninja's RAW API includes
+**illiquid / price-fixed lines its own website hides**. Seen live: a junk unique ("The Gnashing
+Sash", `listingCount=3`) at 6257 div → 4.3M ex in our TSV; exchange lines with
+`volumePrimaryValue` < 1 divine of total volume priced at fantasy asks. Young/HC leagues are
+full of these. The trade API was worse: `_LtTradeRobustPrice`'s "median of the cheapest ≤8"
+accepted a SINGLE listing as the market price.
+
+- **`tools/poe_ninja_prices.ps1`** — new params `MinVolume` (default 1.0; exchange lines below
+  this `volumePrimaryValue` [divine traded] are skipped) and `MinListings` (default 5; item
+  lines below this `listingCount` are skipped). Both fail OPEN when the API omits the field, so
+  a schema change can never blank the TSV. Skip count is appended to the `#meta` errors field
+  ("thin-market lines skipped: N"). Verified live against "Runes of Aldur": 264 lines skipped,
+  Gnashing Sash gone, Mageblood correctly 348 850 ex (= 500 div), Greater Exalted Orb 7.8 ex.
+- **`ahk/LootTradePricing.ahk`** — `_LtTradeRobustPrice` returns unpriced (`ex=0`) below 3
+  priceable listings; the caller's cache then acts as a negative entry (`LtTradePriceForName`
+  gates on `ex > 0`), so the unique stays untagged instead of carrying a troll ask.
+- Residual (not a bug): early-league div→ex rates swing hard between snapshots (sparkline
+  `totalChange` ±45% on day 1), so absolute ex values move until the economy settles.
+
 ## Nav restructure — Overlay + Automation as top-level categories (shipped 0.45.13.145)
 
 Cat bar LEFT: **Game · Overlay · Macro Engine · Automation**; RIGHT: **RE · Config** (RE moved
@@ -1333,6 +1440,30 @@ edit-mode from the new Vitals tab, snode icons on all new nav chips.
   error log (readable in Config → Data & Logs). Note: the vitals sections may also simply be
   COLLAPSED (their open state persists in `[…] cfgSections`, and the default list doesn't
   include `vitals-life/mana/es`).
+
+## Stack max-size probe (0.45.13.159) — testing Stack +0x20
+
+Owner hypothesis: a stackable item's MAXIMUM stack size lives on the Stack component at
+**+0x20** (the known `Count` is +0x18). The C# reference (`StackOffsets`) maps only
+`Header`/`UnknownPtr(0x10)`/`Count(0x18)` and notes max size lives elsewhere, so this needs a
+live check. `ahk/StackMaxProbe.ahk` (`StackMaxProbeRun`, bridge `StackMaxProbeRun`, UI
+"📦 Probe Stack Max" in Config → Debug → Diagnostic Actions) enumerates backpack items via
+`ReadAllPlayerInventories`, and for each with a Stack component dumps an interpreted int32
+table around the component base (flagging `Count +0x18` and the `+0x20` max-size candidate) +
+raw hex, and derefs `UnknownPtr(+0x10)` (the max size may instead live in a referenced
+StackData/dat row). Writes `logs\InGameStateMonitor.stack_max_probe.log` (readable in Data &
+Logs) + a summary MsgBox. Owner test case: one stack of 19 Scrolls of Wisdom (real max 40).
+Reuses `_HPP_HexDump` / `_SmResolveServerData`.
+- **RESULT (confirmed in-game 2026-07-04):** the max size is NOT on the Stack component
+  directly (its +0x20 is a pointer, +0x28 is ~always 0). It lives in the struct the Stack
+  component points to at **+0x10** (a SHARED per-base-type `StackSizeData` descriptor — two
+  Scroll-of-Wisdom stacks resolved to the same pointer), at **+0x28**: Scroll of Wisdom read
+  40, and across a full currency tab the field only ever yielded the real PoE2 caps
+  10/20/30/40. (In that descriptor +0x20=5000 = currency-tab cap and +0x24=100 are other
+  fields, not the per-item max.) **Wired 0.45.13.160:** `PoE2Offsets.Stack` renamed
+  `UnknownPtr`→`StackSizeDataPtr` (0x10) + new `PoE2Offsets.StackSizeData` (`MaxStack` 0x28);
+  `PoE2InventoryReader` reads `stackMax` alongside `stackCount` (deref +0x10 → +0x28);
+  `WebViewBridge` emits `smax`; the inventory tooltip shows "Stack Size: 19 / 40".
 
 ## Reference
 
