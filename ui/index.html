@@ -10019,7 +10019,14 @@
       let html = ttIcon + `<div class="inv-tt-name inv-item ${rarityCls}" style="border:none;background:none;padding:0;display:block;text-align:left">${escHtml(p.n || p.b || '?')}</div>`;
       if (p.b && p.b !== p.n) html += `<div class="inv-tt-base">${escHtml(p.b)}</div>`;
       if (p.idf === 0) html += `<div class="inv-tt-base" style="color:#e0533b">Unidentified</div>`;
-      if (p.s && p.s > 1) html += `<div class="inv-tt-base">Stack Size: ${p.s}${p.smax > 0 ? ' / ' + p.smax : ''}</div>`;
+      // "/ max" only when the count actually fits the shown max — the +0x28
+      // descriptor field is the NORMAL-inventory cap (e.g. 40), which a currency
+      // stash tab legitimately exceeds (e.g. 1231), so "1231 / 40" would be
+      // nonsense. Container-dependent caps are a TODO (see StackMaxProbe).
+      if (p.s && p.s > 1) {
+        const showMax = p.smax > 0 && p.s <= p.smax;
+        html += `<div class="inv-tt-base">Stack Size: ${p.s}${showMax ? ' / ' + p.smax : ''}</div>`;
+      }
       // Mods are objects {c: category, t: text}. Implicits + enchants render
       // first (with separators), then explicits — matches the in-game tooltip order.
       const mods = Array.isArray(p.m) ? p.m : [];

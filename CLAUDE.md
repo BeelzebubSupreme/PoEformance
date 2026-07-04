@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.161`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.162`.
 
 ## Language
 
@@ -1464,6 +1464,24 @@ Reuses `_HPP_HexDump` / `_SmResolveServerData`.
   `UnknownPtr`→`StackSizeDataPtr` (0x10) + new `PoE2Offsets.StackSizeData` (`MaxStack` 0x28);
   `PoE2InventoryReader` reads `stackMax` alongside `stackCount` (deref +0x10 → +0x28);
   `WebViewBridge` emits `smax`; the inventory tooltip shows "Stack Size: 19 / 40".
+
+## Max stack size is container-dependent (WIP, 0.45.13.162)
+
+Follow-up to the max-stack wiring: the StackSizeData descriptor (shared per base type) holds
+THREE caps — +0x20=5000, +0x24=100, +0x28=40 for Scroll of Wisdom — and the CURRENT container
+selects which applies. The normal inventory uses +0x28 (40); a **currency stash tab** holds
+far more (the owner's tab #143 had a Wisdom stack of 1231, and every currency there with
+Count > 100 has +0x20=5000), so it selects **+0x20**. So `stackMax` (the +0x28 read) is only
+correct for the backpack.
+- **Interim UI fix (shipped):** the inventory tooltip shows "/ max" ONLY when Count ≤ max, so
+  the nonsensical "1231 / 40" is gone (it now shows just "1231" until the container cap is
+  wired). "19 / 40" in the backpack is unaffected.
+- **StackMaxProbe extended:** a CONTAINER-SELECTOR SUMMARY table now prints, per inventory,
+  the resolved type + the raw `InventoryStruct` +0x00 (InventoryType) / +0x04 (InventorySlot),
+  and per stackable item the base path, Count and the three caps — to pin how the container
+  selects the field. `PoE2InventoryReader` now exposes `invStructPtr` per inventory for this.
+- **Pending:** run the probe once (backpack + the currency tab visible), correlate the
+  container type/slot with which cap ≥ Count, then wire the container-appropriate max.
 
 ## Reference
 

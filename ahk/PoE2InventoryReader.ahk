@@ -206,6 +206,7 @@ class PoE2InventoryReader extends PoE2PlayerReader
                 continue
             inv["inventoryId"] := invId
             inv["inventoryType"] := this.GetInventoryType(invId)
+            inv["invStructPtr"] := invPtr   ; raw container struct (for +0x00 type / +0x04 slot reads)
             result.Push(inv)
         }
 

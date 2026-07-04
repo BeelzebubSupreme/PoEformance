@@ -77,13 +77,75 @@ StackMaxProbeRun()
 
     nl := "`r`n"
     rpt := "=== Stack max-size probe ===" nl
-    rpt .= "Hypothesis: Stack component +0x20 = maximum stack size (Count is +0x18)." nl
+    rpt .= "Confirmed: max size lives in StackSizeData (Stack+0x10) — normal cap at +0x28." nl
+    rpt .= "Open question: which StackSizeData field the CURRENT container selects" nl
+    rpt .= "(backpack uses +0x28; a currency stash tab holds far more — +0x20?)." nl
     rpt .= "ServerData=0x" Format("{:X}", sdPtr) nl nl
 
     stackOff := PoE2Offsets.Stack["Count"]              ; 0x18
     unkOff   := PoE2Offsets.Stack["StackSizeDataPtr"]   ; 0x10 -> StackSizeData
     found := 0
     summary := ""
+
+    ; ── CONTAINER-SELECTOR SUMMARY ────────────────────────────────────────────
+    ; Per inventory: id, resolved type, and the raw InventoryStruct +0x00
+    ; (InventoryType) / +0x04 (InventorySlot) — candidates for the field selector.
+    ; Per stackable item: base path, live Count, and the three StackSizeData caps
+    ; (+0x20 / +0x24 / +0x28). Correlating the current container's type/slot with
+    ; which cap ≥ Count pins the selection rule.
+    rpt .= "=== CONTAINER-SELECTOR SUMMARY ===" nl
+    rpt .= "inv | type | struct+0x00 | struct+0x04 | item base | Count | +0x20 | +0x24 | +0x28" nl
+    for _, inv in invs
+    {
+        if !(inv && IsObject(inv) && inv.Has("inventoryId"))
+            continue
+        invId := inv["inventoryId"]
+        invType := inv.Has("inventoryType") ? inv["inventoryType"] : ""
+        structPtr := inv.Has("invStructPtr") ? inv["invStructPtr"] : 0
+        st00 := "?", st04 := "?"
+        if (structPtr && reader.IsProbablyValidPointer(structPtr))
+        {
+            try st00 := reader.Mem.ReadInt(structPtr + 0x00)
+            try st04 := reader.Mem.ReadInt(structPtr + 0x04)
+        }
+        items := inv.Has("items") ? inv["items"] : 0
+        if !(items && Type(items) = "Array")
+            continue
+        for __, it in items
+        {
+            if !(it && IsObject(it) && it.Has("itemEntityPtr"))
+                continue
+            ip := it["itemEntityPtr"]
+            if !(ip && reader.IsProbablyValidPointer(ip))
+                continue
+            sp2 := 0
+            try sp2 := reader.FindEntityComponentAddress(ip, "Stack")
+            if !(sp2 && reader.IsProbablyValidPointer(sp2))
+                continue
+            base := "?"
+            try {
+                det2 := reader.Mem.ReadPtr(ip + PoE2Offsets.Entity["EntityDetailsPtr"])
+                if (det2 && reader.IsProbablyValidPointer(det2))
+                {
+                    p2 := reader.ReadStdWStringAt(det2 + PoE2Offsets.EntityDetails["Path"])
+                    ; keep just the last path segment to stay compact
+                    if (p2 != "")
+                        base := RegExReplace(p2, ".*/", "")
+                }
+            }
+            c := "?", d := 0, sdp := 0, c20 := "?", c24 := "?", c28 := "?"
+            try c := reader.Mem.ReadInt(sp2 + stackOff)
+            try sdp := reader.Mem.ReadPtr(sp2 + unkOff)
+            if (sdp && reader.IsProbablyValidPointer(sdp))
+            {
+                try c20 := reader.Mem.ReadInt(sdp + 0x20)
+                try c24 := reader.Mem.ReadInt(sdp + 0x24)
+                try c28 := reader.Mem.ReadInt(sdp + 0x28)
+            }
+            rpt .= Format("{} | {} | {} | {} | {} | {} | {} | {} | {}", invId, invType, st00, st04, base, c, c20, c24, c28) nl
+        }
+    }
+    rpt .= nl
 
     for _, inv in invs
     {
