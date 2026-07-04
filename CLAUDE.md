@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.162`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.163`.
 
 ## Language
 
@@ -1465,7 +1465,7 @@ Reuses `_HPP_HexDump` / `_SmResolveServerData`.
   `PoE2InventoryReader` reads `stackMax` alongside `stackCount` (deref +0x10 → +0x28);
   `WebViewBridge` emits `smax`; the inventory tooltip shows "Stack Size: 19 / 40".
 
-## Max stack size is container-dependent (WIP, 0.45.13.162)
+## Max stack size is container-dependent (resolved 0.45.13.163)
 
 Follow-up to the max-stack wiring: the StackSizeData descriptor (shared per base type) holds
 THREE caps — +0x20=5000, +0x24=100, +0x28=40 for Scroll of Wisdom — and the CURRENT container
@@ -1480,8 +1480,15 @@ correct for the backpack.
   the resolved type + the raw `InventoryStruct` +0x00 (InventoryType) / +0x04 (InventorySlot),
   and per stackable item the base path, Count and the three caps — to pin how the container
   selects the field. `PoE2InventoryReader` now exposes `invStructPtr` per inventory for this.
-- **Pending:** run the probe once (backpack + the currency tab visible), correlate the
-  container type/slot with which cap ≥ Count, then wire the container-appropriate max.
+- **RESOLVED (probe run 2026-07-04):** the InventoryStruct +0x00/+0x04 read the SAME value
+  in every container (a vtable pointer 0x00007FF6…), so they are NOT the selector. The reliable
+  signal is the inventoryId: **inv 1 = "MainInventory1" (backpack) → +0x28; every stash tab →
+  +0x20.** Confirmed across the full currency tab — every Count fits its container's field
+  (Wisdom 1231 ≤ +0x20=5000; shards 9 ≤ +0x20=10; backpack Wisdom 19 ≤ +0x28=40), no
+  contradictions. **Wired:** `PoE2Offsets.StackSizeData` gains `MaxStackTab` (0x20);
+  `PoE2InventoryReader` reads both `stackMax` (+0x28) and `stackMaxTab` (+0x20);
+  `WebViewBridge` emits `smax = (inventoryId==1) ? stackMax : stackMaxTab`. The
+  interim "show / max only when Count ≤ max" guard stays as a safety net.
 
 ## Reference
 

@@ -1392,7 +1392,13 @@ _BuildInventoryArrayJson(invs)
             base := d.Has("baseType") ? String(d["baseType"]) : ""
             rarId := d.Has("rarityId") ? Integer(d["rarityId"]) : -1
             stkCnt := d.Has("stackCount") ? Integer(d["stackCount"]) : 0
-            stkMax := d.Has("stackMax") ? Integer(d["stackMax"]) : 0
+            ; Container-dependent max stack: the backpack (inventoryId 1) uses the
+            ; normal cap; every stash tab uses the expanded cap (StackSizeData
+            ; +0x20). See PoE2Offsets.StackSizeData. invId is the current inventory.
+            invIdForStack := inv.Has("inventoryId") ? Integer(inv["inventoryId"]) : 0
+            stkMax := (invIdForStack = 1)
+                ? (d.Has("stackMax") ? Integer(d["stackMax"]) : 0)
+                : (d.Has("stackMaxTab") ? Integer(d["stackMaxTab"]) : 0)
             idf := d.Has("identified") ? Integer(d["identified"]) : -1
             art := d.Has("artPath") ? String(d["artPath"]) : ""
             modsJson := _BuildItemModsJson(d.Has("modsInfo") ? d["modsInfo"] : 0)

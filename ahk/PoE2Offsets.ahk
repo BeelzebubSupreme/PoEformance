@@ -375,13 +375,16 @@ class PoE2Offsets
 
     ; StackSizeData — the per-base-type descriptor the Stack component points at
     ; (Stack + 0x10). Shared across every stack of the same base item (two
-    ; Scroll-of-Wisdom stacks resolve to the same pointer). +0x28 is the normal
-    ; inventory max stack size — verified in-game 2026-07-04: Scroll of Wisdom
-    ; reads 40, and across a full currency tab the field only ever yields the
-    ; real PoE2 caps 10/20/30/40. (+0x20 = 5000 currency-tab cap, +0x24 = 100 are
-    ; other fields, not the per-item max.)
+    ; Scroll-of-Wisdom stacks resolve to the same pointer). It holds per-CONTAINER
+    ; stack caps; the container the item sits in selects which applies (verified
+    ; in-game 2026-07-04 across a full currency tab):
+    ;   +0x28 MaxStack    — NORMAL inventory / backpack cap (Wisdom = 40)
+    ;   +0x20 MaxStackTab — expanded stash / currency-tab cap (Wisdom = 5000)
+    ; (+0x24 = 100 is a third field, not used for display.) The caller reads
+    ; MaxStack for the backpack (inventoryId 1) and MaxStackTab for stash tabs.
     static StackSizeData := Map(
-        "MaxStack", 0x28
+        "MaxStack", 0x28,
+        "MaxStackTab", 0x20
     )
 
     ; Item "Base" component. For unique items, +0x30 points to the item's
