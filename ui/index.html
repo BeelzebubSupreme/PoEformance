@@ -10146,7 +10146,10 @@
       const icon = _iconUrl(it.a);
       const imgLayer = icon ? `<img class="inv-item-img" src="${escAttr(icon)}" loading="lazy" onerror="this.style.display='none';var l=this.parentElement.querySelector('.inv-item-label');if(l)l.style.display=''">` : '';
       const label = `<span class="inv-item-label"${icon ? ' style="display:none"' : ''}>${escHtml(_truncateForCell(name, w * h))}</span>`;
-      const unidBadge = (it.idf === 0) ? '<span class="inv-unid-badge" title="Unidentified">?</span>' : '';
+      // "Unidentified" is an equippable-gear state only. Some currency base types
+      // still expose a Mods component whose Identified byte reads 0, so the reader
+      // reports idf=0 for them — gate on it.gear so currency never shows a "?".
+      const unidBadge = (it.gear && it.idf === 0) ? '<span class="inv-unid-badge" title="Unidentified">?</span>' : '';
       return imgLayer + label + unidBadge + stackBadge;
     }
 
