@@ -9659,6 +9659,8 @@
       let data;
       try { data = JSON.parse(jsonStr); }
       catch (e) { el.innerHTML = '<div class="no-data-msg">⚠ Parse error</div>'; _invResetCache(); return; }
+      // Remap currency stash tabs onto their curated 1:1 grid before rendering.
+      try { _applyCurrencyLayouts(data); } catch (e) {}
       try {
         _invIncrementalRender(data, el, status);
         _invLastJson = jsonStr;
@@ -9911,6 +9913,76 @@
         <div class="inv-section-header">Equipped Items <span class="inv-section-meta">${filled}/${ordered.length} slots filled</span></div>
         <div class="eq-grid">${cards}</div>
       </div>`;
+    }
+
+    // ═══════════════════════════════════════════════════════════════════
+    //  CURRENCY STASH TAB — 1:1 layout
+    // ═══════════════════════════════════════════════════════════════════
+    // The currency tab is NOT a normal grid (memory gives a linear 53-slot
+    // index; the UI tree gives a scattered internal layout). Its VISUAL grid is
+    // game-fixed for everyone, so it's transcribed here: currency base name
+    // (item metadata last segment, sent as `it.mp`) → [col, row]. Built by
+    // cross-referencing the in-game currency tab against the probe's
+    // count→currency mapping (2026-07-04). If a slot lands wrong, fix its
+    // [col,row] here. Columns 0-2 = tier (base / greater "2" / perfect "3").
+    const CURRENCY_TAB_LAYOUT = {
+      cols: 9, rows: 9,
+      slots: {
+        // Transmute families × tiers (cols 0-2, rows 0-4)
+        CurrencyUpgradeToMagic: [0,0], CurrencyUpgradeToMagic2: [1,0], CurrencyUpgradeToMagic3: [2,0],
+        CurrencyAddModToMagic: [0,1], CurrencyAddModToMagic2: [1,1], CurrencyAddModToMagic3: [2,1],
+        CurrencyUpgradeMagicToRare: [0,2], CurrencyUpgradeMagicToRare2: [1,2], CurrencyUpgradeMagicToRare3: [2,2],
+        CurrencyAddModToRare: [0,3], CurrencyAddModToRare2: [1,3], CurrencyAddModToRare3: [2,3],
+        CurrencyRerollRare: [0,4], CurrencyRerollRare2: [1,4], CurrencyRerollRare3: [2,4],
+        // Middle block (cols 3-5, rows 0-1)
+        CurrencyUpgradeToRare: [3,0], CurrencyCorrupt: [4,0], CurrencyModValues: [5,0],
+        CurrencyUpgradeRandomly: [3,1], CurrencyRemoveMod: [5,1],
+        // Sockets (cols 6-8, rows 0-1)
+        CurrencyAddSkillGemSocket3: [6,0], CurrencyAddSkillGemSocket4: [7,0], CurrencyAddSkillGemSocket5: [8,0],
+        CurrencyAddEquipmentSocket: [8,1],
+        // Quality (cols 6-8, rows 2-3)
+        CurrencyMagicQuality: [6,2], CurrencyArmourQuality: [7,2], CurrencyWeaponQuality: [8,2],
+        CurrencyFlaskQuality: [7,3], CurrencyGemQuality: [8,3],
+        // Identification (col 8, row 5)
+        CurrencyIdentification: [8,5],
+        // Shards (row 6)
+        CurrencyUpgradeToMagicShard: [2,6], CurrencyUpgradeMagicToRareShard: [3,6], CurrencyUpgradeRandomlyShard: [4,6],
+        // Abyss tickets + omens, row A (row 7)
+        AbyssalBenchTicketWeapon: [1,7], AbyssalBenchTicketJewelleryLow: [2,7], AbyssalBenchTicketArmour: [3,7],
+        AbyssalBenchTicketWaystone: [4,7], OmenOnAbyssVeilAllAndCorrupt: [5,7], OmenOnAbyssGuarenteeLichTypeMod3: [6,7],
+        OmenOnAbyssRerollOptions: [7,7],
+        // Abyss row B (row 8)
+        AbyssalBenchTicketArmourLow: [1,8], AbyssalBenchTicketWeaponLow: [2,8], AbyssalBenchTicketJewellery: [3,8],
+        OmenOnAbyssAddPrefixes: [5,8], OmenOnAbyssAddSuffixes: [6,8], OmenOnAnnulRemoveAbyssMod: [7,8],
+      }
+    };
+    // A tab is the currency tab if enough of its items map into the layout.
+    function _isCurrencyTab(inv) {
+      const items = Array.isArray(inv.items) ? inv.items : [];
+      let hits = 0;
+      for (const it of items) if (it && it.mp && CURRENCY_TAB_LAYOUT.slots[it.mp]) { if (++hits >= 5) return true; }
+      return false;
+    }
+    // Rewrites each currency tab's items onto the curated grid cells (and sets the
+    // tab's bx/by to the layout size), so the normal grid renderer + patcher draw
+    // it 1:1 like the game. Unmapped items (unknown / new currencies) get parked
+    // in trailing rows so nothing is hidden. Mutates the data in place.
+    function _applyCurrencyLayouts(data) {
+      const invs = Array.isArray(data && data.player) ? data.player : [];
+      for (const inv of invs) {
+        if (!_isCurrencyTab(inv)) continue;
+        const L = CURRENCY_TAB_LAYOUT;
+        inv.bx = L.cols;
+        let extra = 0;                       // overflow cursor for unmapped items
+        for (const it of inv.items) {
+          const cell = it.mp ? L.slots[it.mp] : null;
+          let cx, cy;
+          if (cell) { cx = cell[0]; cy = cell[1]; }
+          else { cx = extra % L.cols; cy = L.rows + Math.floor(extra / L.cols); extra++; }  // park below the grid
+          it.sx = cx; it.sy = cy; it.ex = cx + 1; it.ey = cy + 1;
+        }
+        inv.by = L.rows + (extra > 0 ? Math.ceil(extra / L.cols) : 0);
+      }
     }
 
     // Header line ("#id name · meta") for one inventory section — shared by the

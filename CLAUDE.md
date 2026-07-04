@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.166`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.167`.
 
 ## Language
 
@@ -1514,10 +1514,21 @@ it. `ahk/CurrencyLayoutProbe.ahk` (`CurrencyLayoutProbeRun`, bridge `CurrencyLay
 UI "🪙 Bake Currency Layout" in Config → Debug) navigates that path, collects every
 Metadata/Items/Currency slot's absolute unscaled pos + size, and writes
 `data/currency_tab_layout.json` (`{container:{x,y,w,h}, slots:[{path,x,y,w,h}]}`, TRACKED
-shipped data) + a readable log. **Pending:** the owner runs it once (currency tab open) → then
-wire the WebView inventory renderer to detect a currency tab (items match the layout map) and
-position each currency at its baked coords (normalized against the container) instead of the
-linear grid. Emit the item metadata path in the inventory JSON for matching.
+shipped data) + a readable log. **RESULT (probe run 2026-07-04):** the UI-tree positions turned out to be a wide/scattered
+INTERNAL layout (base tier far left, greater/perfect far right ~x3400, families keyed by y),
+NOT the compact visual grid — the game re-arranges before drawing, so the raw coords can't
+drive a 1:1 render. Instead the visual grid was TRANSCRIBED from a clean currency-tab
+screenshot cross-referenced with the probe's count→currency mapping (the count=1 ambiguities
+in the abyss/omen rows resolved via the probe's collection order, which matches the visual
+left-to-right). **Shipped 0.45.13.167:** `WebViewBridge` emits each item's metadata base name
+(`it.mp`, last path segment); `ui/index.html` holds the curated `CURRENCY_TAB_LAYOUT`
+(base-name → [col,row], cols 0-2 = tier base/greater/perfect) and `_applyCurrencyLayouts(data)`
+rewrites each detected currency tab's item sx/sy onto those cells (+ tab bx/by) BEFORE render,
+so the existing grid renderer + patcher draw it 1:1 (unmapped/new currencies park in trailing
+rows). Detection: ≥5 items match the layout map. **Pending in-game verification:** open the
+currency tab in the tool's Inventory tab — it should mirror the game grid; report any
+mis-placed slot and I fix its [col,row] in `CURRENCY_TAB_LAYOUT`. The probe stays as the
+re-bake aid.
 
 ## Reference
 

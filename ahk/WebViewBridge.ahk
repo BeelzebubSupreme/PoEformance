@@ -1412,12 +1412,18 @@ _BuildInventoryArrayJson(invs)
                 stkMax := stkM28
             idf := d.Has("identified") ? Integer(d["identified"]) : -1
             art := d.Has("artPath") ? String(d["artPath"]) : ""
+            ; Metadata base name (last path segment, e.g. "CurrencyUpgradeToMagic")
+            ; — lets the UI place currency-tab items via the curated layout map.
+            mp := ""
+            if (d.Has("metadataPath") && d["metadataPath"] != "")
+                mp := RegExReplace(String(d["metadataPath"]), ".*/", "")
             modsJson := _BuildItemModsJson(d.Has("modsInfo") ? d["modsInfo"] : 0)
             itemsJson .= "{"
                 . '"sx":' Integer(it["slotStartX"]) ","
                 . '"sy":' Integer(it["slotStartY"]) ","
                 . '"ex":' Integer(it["slotEndX"]) ","
                 . '"ey":' Integer(it["slotEndY"]) ","
+                . '"mp":' _JsStr(mp) ","
                 . '"n":' _JsStr(name) ","
                 . '"b":' _JsStr(base) ","
                 . '"r":' rarId ","
