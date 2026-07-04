@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.149`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.150`.
 
 ## Language
 
@@ -1293,6 +1293,28 @@ row. Verified: full-script `AutoHotkey64.exe /validate` passes.
 **Pending in-game verification:** label click walks to Doryani and opens the dialog; the
 window/menu paths resolve on the live client; the final click fires identification; tooltip
 reasons on each abort gate.
+
+## AutoPilot panel polish (shipped 0.45.13.150)
+
+Four owner-requested tweaks to Automation → AutoPilot:
+- **Summary underline incl. status:** `#det-autopilot > summary` draws a bottom-gradient rule
+  (junkbox trick, inset 26px past the icon, ending at the right edge) in BOTH open and closed
+  state, covering the live-status string next to the caret; the box's open-only `.cfg-header`
+  border is disabled (ID-specificity override).
+- **Configurable AutoPilot hotkey:** the informational "Hotkey: F10" label is now a capture
+  button (StashMover pattern — `apCaptureHotkey`/`apHotkeyApply` trio reusing `#hk-capture` +
+  `hkKeyName`; the keydown/mousedown listeners got an `apHotkeyCapturing` branch) plus a ✕
+  clear button. New bridge case `SetCombatHotkey` → set `g_combatToggleHotkey`,
+  `SaveCombatAutoConfig()`, `RegisterCombatHotkey()` (re-binds/unbinds), header re-push. The
+  header sync renders the pretty label via `smPrettyHotkey` and handles "" (→ "none").
+- **Live-Status centering:** the Combat/Explore/Loot rows are `.ap-live-row` — a 3-column grid
+  (`1fr auto 1fr`: label start / state CENTERED / reason-readout end); flex space-between had
+  shifted the middle with the right column's width (the Loot row's "pickup · cache N").
+- **Diagnose buttons moved:** "🔍 Diagnose projection" + "🧭 Scan matrix offset" (+ help text)
+  moved from AutoPilot → Live Status to **Config → Debug → Diagnostic Actions**.
+Verified in the browser preview: middle spans pixel-centered (row/mid centers identical),
+underline present open+closed, capture flow (Ctrl+F9 → "Ctrl + F9", Escape cancels), diagnose
+buttons present only under `det-debug-actions`.
 
 ## Price liquidity gates (shipped 0.45.13.149) — fixes wildly inflated prices
 

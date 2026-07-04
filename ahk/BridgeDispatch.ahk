@@ -698,6 +698,14 @@ _DispatchBridgeCall(method, args)
         case "SetCombatSlot":
             ; args: [slotNum, key, priority, skillName, type, cooldownMs, enabled, skillRange]
             _ApplyCombatSlotConfig(args)
+        case "SetCombatHotkey":
+            ; args: [ahkHotkeyString] — "" clears the binding. Persist +
+            ; re-register (RegisterCombatHotkey unbinds the previous key).
+            global g_combatToggleHotkey
+            g_combatToggleHotkey := (args.Length >= 1) ? Trim(String(args[1])) : ""
+            SaveCombatAutoConfig()
+            RegisterCombatHotkey()
+            SetTimer(PushHeaderToWebView, -50)
 
             ; ── Loot Pickup rarity filter (no toggle — empty filter = off) ─
         case "SetLootRarity":

@@ -4379,6 +4379,27 @@
     /* Box body lines up under the text (icon width + gap ≈ 26px), not the icon. */
     .cfg-section > details[open] > :not(summary) { padding-left: 26px }
 
+    /* ── AutoPilot box: its summary carries a live status string next to the
+       caret — underline the WHOLE header row (heading + status), open AND
+       closed, instead of the open-only .cfg-header line (which stopped
+       before the status). Drawn as a bottom gradient inset past the icon,
+       same trick as the Entities junk boxes. ── */
+    #det-autopilot > summary {
+      background-image: linear-gradient(var(--codex-rule), var(--codex-rule));
+      background-repeat: no-repeat;
+      background-position: right bottom;
+      background-size: calc(100% - 26px) 1px;
+      padding-bottom: 5px;
+    }
+    #det-autopilot > summary > .cfg-header { border-bottom: none; padding-bottom: 0 }
+
+    /* Live-Status rows (Combat / Explore / Loot): 3-column grid — label left,
+       state truly centered, reason/readout right. */
+    #det-autopilot .ap-live-row { display: grid; grid-template-columns: 1fr auto 1fr; }
+    #det-autopilot .ap-live-row > :first-child { justify-self: start }
+    #det-autopilot .ap-live-row > :nth-child(2) { justify-self: center }
+    #det-autopilot .ap-live-row > :last-child { justify-self: end }
+
     /* ── Entities tab (#4): the same icon + open-underline rhythm for the boxed
        Entity Classes / Junk Filter summaries and the junk sub-categories. These
        are .ent-junkbox / .junk-cat <details>, not .cfg-section, so the underline
@@ -5272,16 +5293,19 @@
             </summary>
             <div class="cfg-subsection">
               <!-- Master toggle + hotkey on a single row to save vertical
-                   space. The hotkey label is informational only — the
-                   actual binding lives in the AHK source. -->
+                   space. The hotkey is a capture button (StashMover pattern):
+                   click, press a key/combo, bound + persisted via
+                   SetCombatHotkey. -->
               <div class="cfg-row">
                 <span class="cfg-label">Enable AutoPilot</span>
                 <label class="toggle"><input type="checkbox" id="tog-autopilot"
                     onchange="ahkCall('ToggleAutoPilot'); updateRangeCircleVisibility()"><span
                     class="toggle-slider"></span></label>
-                <span style="margin-left:14px;font-size:11px;color:var(--subtext)">
-                  Hotkey: <span id="cfg-combat-hotkey" class="cfg-status"
-                                style="color:#7ec8e3;font-weight:600">F10</span>
+                <span style="margin-left:14px;font-size:11px;color:var(--subtext);display:flex;gap:6px;align-items:center">
+                  Hotkey:
+                  <button class="hk-btn hk-key-btn" id="cfg-combat-hotkey"
+                          title="Click, then press a key or key combo" onclick="apCaptureHotkey()">F10</button>
+                  <button class="hk-btn" title="Clear hotkey" onclick="ahkCall('SetCombatHotkey','')">✕</button>
                 </span>
               </div>
               <div class="cfg-help">
@@ -5311,33 +5335,20 @@
                   <div class="cfg-header" data-snodekey="ap-status">📊 Live Status</div>
                 </summary>
                 <div class="cfg-subsection-body">
+                  <!-- ap-live-row: true 3-column grid (1fr auto 1fr) so the middle
+                       status is CENTERED no matter how wide the right readout is
+                       (flex space-between shifted it with the right column). -->
                   <div class="cfg-row"><span class="cfg-label">State</span><span id="cfg-autopilot-state"
                       class="cfg-status idle">idle</span></div>
-                  <div class="cfg-row"><span class="cfg-label">Combat</span><span id="cfg-combat-state"
+                  <div class="cfg-row ap-live-row"><span class="cfg-label">Combat</span><span id="cfg-combat-state"
                       class="cfg-status idle">idle</span><span id="cfg-combat-reason"
-                      class="cfg-status idle" style="margin-left:8px;opacity:.8">—</span></div>
-                  <div class="cfg-row"><span class="cfg-label">Explore</span><span id="cfg-explore-pct" class="cfg-status"
+                      class="cfg-status idle" style="opacity:.8">—</span></div>
+                  <div class="cfg-row ap-live-row"><span class="cfg-label">Explore</span><span id="cfg-explore-pct" class="cfg-status"
                       style="color:#7ec8e3;font-weight:600">0%</span><span id="cfg-explore-reason"
-                      class="cfg-status idle" style="margin-left:8px;opacity:.8">idle</span></div>
-                  <div class="cfg-row"><span class="cfg-label">Loot</span><span id="cfg-loot-status"
-                      class="cfg-status idle">idle</span><span style="margin-left:8px;color:var(--subtext);font-size:11px">
+                      class="cfg-status idle" style="opacity:.8">idle</span></div>
+                  <div class="cfg-row ap-live-row"><span class="cfg-label">Loot</span><span id="cfg-loot-status"
+                      class="cfg-status idle">idle</span><span style="color:var(--subtext);font-size:11px">
                       pickup • cache <span id="cfg-loot-cache-count">0</span></span></div>
-                  <!-- One-click projection triage (issue #158): dumps the full
-                       world→screen chain (matrix, player projection, anchor,
-                       enemy aim) to debug\autopilot_diag_*.txt so a
-                       "doesn't move / fires at screen centre" report can be
-                       root-caused without reading the live overlay. -->
-                  <div class="cfg-row">
-                    <span class="cfg-label">Diagnose</span>
-                    <button class="hk-btn" onclick="ahkCall('AutoPilotDiag')">🔍 Diagnose projection</button>
-                    <button class="hk-btn" onclick="ahkCall('AutoPilotMatrixScan')" style="margin-left:6px">🧭 Scan matrix offset</button>
-                  </div>
-                  <div class="cfg-help">If AutoPilot won't move or fires skills at the middle of the screen,
-                    turn it on, stand near a monster, then click <b>Diagnose projection</b>. It writes the
-                    camera-matrix / projection chain to <code>debug\autopilot_diag_*.txt</code> (readable under
-                    Data &amp; Logs). If that report shows the matrix is present but a far enemy projects onto the
-                    same pixel as you, click <b>Scan matrix offset</b> — it searches for the correct camera-matrix
-                    offset and writes <code>debug\autopilot_matrixscan_*.txt</code>.</div>
                   <!-- Mirror this Live-Status readout into a file so it can be reviewed while the
                        game (not the tool) is in the foreground. -->
                   <div class="cfg-row">
@@ -6022,6 +6033,22 @@
               <button class="cfg-btn" onclick="ahkCall('F3Dump')">📷 F3 Dump</button>
               <button class="cfg-btn" onclick="ahkCall('DumpEntities')">💾 Dump Entities</button>
               <button class="cfg-btn" onclick="ahkCall('LootValueDiag')" title="RE test for the value-aware loot radar: open over ground loot (ideally a unique) to check if drops can be priced">🔍 Loot value diagnose</button>
+              <!-- One-click AutoPilot projection triage (issue #158) — moved here
+                   from Automation > AutoPilot > Live Status: dumps the full
+                   world→screen chain (matrix, player projection, anchor, enemy
+                   aim) so a "doesn't move / fires at screen centre" report can
+                   be root-caused without reading the live overlay. -->
+              <div class="cfg-row" style="justify-content:flex-start;gap:8px;flex-wrap:wrap">
+                <span class="cfg-label">🧭 AutoPilot projection</span>
+                <button class="hk-btn" onclick="ahkCall('AutoPilotDiag')">🔍 Diagnose projection</button>
+                <button class="hk-btn" onclick="ahkCall('AutoPilotMatrixScan')">🧭 Scan matrix offset</button>
+              </div>
+              <div class="cfg-help">If AutoPilot won't move or fires skills at the middle of the screen,
+                turn it on, stand near a monster, then click <b>Diagnose projection</b>. It writes the
+                camera-matrix / projection chain to <code>debug\autopilot_diag_*.txt</code> (readable under
+                Data &amp; Logs). If that report shows the matrix is present but a far enemy projects onto the
+                same pixel as you, click <b>Scan matrix offset</b> — it searches for the correct camera-matrix
+                offset and writes <code>debug\autopilot_matrixscan_*.txt</code>.</div>
               <div class="cfg-row"><span class="cfg-label">🔗 Log inventory pointer chain</span>
                 <label class="toggle"><input type="checkbox" id="inv-chain-dump" onchange="ahkCall('ToggleInventoryChainDump')"><span class="toggle-slider"></span></label>
               </div>
@@ -7858,6 +7885,24 @@
       stashRenderIgnore('sell');
     }
 
+    // ── AutoPilot hotkey capture (same pattern as the Stash Mover one below) ──
+    let apHotkeyCapturing = false;
+    function apCaptureHotkey() {
+      apHotkeyCapturing = true;
+      document.getElementById('hk-capture').style.display = 'flex';
+    }
+    function apHotkeyCancel() {
+      apHotkeyCapturing = false;
+      document.getElementById('hk-capture').style.display = 'none';
+    }
+    function apHotkeyApply(ahk) {
+      apHotkeyCapturing = false;
+      document.getElementById('hk-capture').style.display = 'none';
+      ahkCall('SetCombatHotkey', ahk);
+      const b = document.getElementById('cfg-combat-hotkey');
+      if (b) b.textContent = smPrettyHotkey(ahk);   // optimistic; header confirms
+    }
+
     // ── Stash Mover hotkey capture (reuses the Hotkeys-tab #hk-capture overlay) ──
     // Click the hotkey button → "Press a key…" overlay → the next key/mouse combo is
     // stored as an AHK hotkey string (e.g. "^d") via SetStashMover.
@@ -9193,6 +9238,13 @@
       return (e.key && e.key.length === 1) ? e.key.toLowerCase() : '';
     }
     document.addEventListener('keydown', function (e) {
+      if (apHotkeyCapturing) {                 // AutoPilot capture takes precedence
+        e.preventDefault();
+        const nm = hkKeyName(e);
+        if (nm === '') { apHotkeyCancel(); return; }   // Escape / unmappable → cancel
+        apHotkeyApply(smBuildAhkHotkey(nm, { ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey }));
+        return;
+      }
       if (smHotkeyCapturing) {                 // Stash Mover capture takes precedence
         e.preventDefault();
         const nm = hkKeyName(e);
@@ -9212,6 +9264,12 @@
     }, true);
     document.addEventListener('mousedown', function (e) {
       const btnMap = { 0: 'LButton', 1: 'MButton', 2: 'RButton', 3: 'XButton1', 4: 'XButton2' };
+      if (apHotkeyCapturing) {
+        e.preventDefault();
+        const nm = btnMap[e.button];
+        if (nm) apHotkeyApply(nm);             // mouse buttons carry no modifiers here
+        return;
+      }
       if (smHotkeyCapturing) {
         e.preventDefault();
         const nm = btnMap[e.button];
@@ -10358,7 +10416,8 @@
       setChk('tog-combat', d.combatAuto);
       const nowCombatEnabled = document.getElementById('tog-combat')?.checked || false;
       const combatHotkeyEl = document.getElementById('cfg-combat-hotkey');
-      if (combatHotkeyEl && d.combatHotkey) combatHotkeyEl.textContent = d.combatHotkey;
+      if (combatHotkeyEl && d.combatHotkey !== undefined)
+        combatHotkeyEl.textContent = smPrettyHotkey(d.combatHotkey);
       const combatState = document.getElementById('cfg-combat-state');
       const combatReason = document.getElementById('cfg-combat-reason');
       if (combatState) {
