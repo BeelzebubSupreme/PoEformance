@@ -150,10 +150,11 @@ foreach ($type in $ExchangeTypes) {
                 $primary = 0.0; if ($ln.primaryValue) { $primary = [double]$ln.primaryValue }
                 if (-not $id -or $primary -le 0) { continue }
                 # Liquidity gate: volumePrimaryValue = divine traded through the
-                # in-game exchange. Thin lines are ask-fantasy, not prices.
-                if ($ln.PSObject.Properties['volumePrimaryValue']) {
-                    if ([double]$ln.volumePrimaryValue -lt $MinVolume) { $skippedThin++; continue }
-                }
+                # in-game exchange. Thin lines are ask-fantasy, not prices. Fails
+                # OPEN when the field is absent OR present-but-null ($null -ne
+                # guards both — a null would otherwise cast to 0 and wrongly skip).
+                $vol = $ln.volumePrimaryValue
+                if ($null -ne $vol -and [double]$vol -lt $MinVolume) { $skippedThin++; continue }
                 $price = $primary * $localRate
                 if ($nameById.ContainsKey($id)) {
                     $k = Normalize $nameById[$id]; if ($k) { $namePrice[$k] = $price }
@@ -188,10 +189,11 @@ foreach ($type in $ItemTypes) {
                 $primary = 0.0; if ($ln.primaryValue) { $primary = [double]$ln.primaryValue }
                 if (-not $name -or $primary -le 0 -or $rate -le 0) { continue }
                 # Liquidity gate: a handful of listings is a price-fix magnet
-                # (seen live: a junk unique with listingCount=3 at 6257 div).
-                if ($ln.PSObject.Properties['listingCount']) {
-                    if ([int]$ln.listingCount -lt $MinListings) { $skippedThin++; continue }
-                }
+                # (seen live: a junk unique with listingCount=3 at 6257 div). Fails
+                # OPEN when the field is absent OR present-but-null ($null -ne
+                # guards both — a null would otherwise cast to 0 and wrongly skip).
+                $lc = $ln.listingCount
+                if ($null -ne $lc -and [int]$lc -lt $MinListings) { $skippedThin++; continue }
                 $price = $primary * $rate
                 $variant = $ln.variant
 

@@ -7944,9 +7944,22 @@
       stashRenderIgnore('sell');
     }
 
+    // Clears EVERY hotkey-capture state (AutoPilot / Stash Mover / Hotkeys tab)
+    // and hides the shared overlay. Called at the start of every capture starter
+    // so at most ONE capture is ever armed — otherwise clicking a second capture
+    // button would leave the first flag set, and a single key press would bind it
+    // AND leave the other armed for the next input (Copilot #164).
+    function _resetAllHotkeyCaptures() {
+      apHotkeyCapturing = false;
+      smHotkeyCapturing = false;
+      hkCapture = null;
+      document.getElementById('hk-capture').style.display = 'none';
+    }
+
     // ── AutoPilot hotkey capture (same pattern as the Stash Mover one below) ──
     let apHotkeyCapturing = false;
     function apCaptureHotkey() {
+      _resetAllHotkeyCaptures();
       apHotkeyCapturing = true;
       document.getElementById('hk-capture').style.display = 'flex';
     }
@@ -7967,6 +7980,7 @@
     // stored as an AHK hotkey string (e.g. "^d") via SetStashMover.
     let smHotkeyCapturing = false;
     function smCaptureHotkey() {
+      _resetAllHotkeyCaptures();
       smHotkeyCapturing = true;
       document.getElementById('hk-capture').style.display = 'flex';
     }
@@ -9247,16 +9261,19 @@
 
     // ── Key capture ────────────────────────────────────────────────────
     function hkCaptureKey(gi, hi) {
+      _resetAllHotkeyCaptures();
       hkCapture = { gi, hi, target: 'trigger' };
       document.getElementById('hk-capture').style.display = 'flex';
     }
     function hkCaptureOutputKey(gi, hi) {
+      _resetAllHotkeyCaptures();
       hkCapture = { gi, hi, target: 'output' };
       document.getElementById('hk-capture').style.display = 'flex';
     }
     // Like hkCaptureOutputKey, but for a Skill-slot output: set only the key and KEEP
     // kind 'skill' (so the skill dropdown / cooldown gate stay intact).
     function hkCaptureSkillKey(gi, hi) {
+      _resetAllHotkeyCaptures();
       hkCapture = { gi, hi, target: 'skillKey' };
       document.getElementById('hk-capture').style.display = 'flex';
     }
