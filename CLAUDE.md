@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.156`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.157`.
 
 ## Language
 
@@ -1332,6 +1332,16 @@ buttons present only under `det-debug-actions`.
   `g_exploreLastReason` to enabled/disabled from the loaded flag right after the sub-flag
   mirroring, and BOTH AutoPilot toggles (bridge `ToggleAutoPilot` + the hotkey handler) set
   them to "enabled" when switching ON (previously only the OFF branch wrote "disabled").
+- **Global row hover highlight (0.45.13.157):** whichever content row the cursor is over
+  now gets a subtle warm-gold tint (`background-color: rgba(200,168,90,0.06)` + 3px radius,
+  120ms fade) across the whole UI. One curated `:hover` block in the `<style>` covering the
+  leaf row classes (`.cfg-row`, `.cfg-slider-row`, `.cfg-sub-row`, `.ap-live-row`, `.hk-row`,
+  `.lt-row`, `.re-row`, `.re-hex-row`, `.ovp-row`, `.diag-file-row`, `.dbg-overlay-row`,
+  `.junk-pat-row`, `.combat-slot-row`, `.combat-slot-adv-row`, `.sm-rnd-row`, `.ei-prop-row`).
+  Nav bars (`.subtab-row`), pill containers (`.filter-row`) and rows that already carry their
+  own hover (tables, tree/entity/prop rows, UI-browser rows) are deliberately excluded.
+  `background-COLOR` only, so the `.ap-live-rule` ledger hairline (a `background-image`
+  gradient) survives underneath.
 - **AutoPilot page: standard boxes + inline Live Status (0.45.13.155):** the three
   sub-sections became STANDARD category boxes like Overlay's Map Hack/Radar — sibling
   `.cfg-section > <details id="det-ap-combat|det-ap-explore|det-ap-loot">` blocks after

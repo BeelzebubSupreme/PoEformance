@@ -3003,6 +3003,39 @@
       gap: 10px
     }
 
+    /* ── Global row hover highlight ─────────────────────────────────────────
+       A subtle warm-gold tint on whichever content row the cursor is over,
+       across the whole UI. Curated list of the leaf "row" classes (nav bars,
+       pill containers and rows that already carry their own hover — tables,
+       tree/entity/prop rows, UI-browser rows — are deliberately excluded).
+       background-COLOR only, so the .ap-live-rule ledger hairline (a
+       background-image gradient) survives underneath. */
+    .cfg-row:hover,
+    .cfg-slider-row:hover,
+    .cfg-sub-row:hover,
+    .ap-live-row:hover,
+    .hk-row:hover,
+    .lt-row:hover,
+    .re-row:hover,
+    .re-hex-row:hover,
+    .ovp-row:hover,
+    .diag-file-row:hover,
+    .dbg-overlay-row:hover,
+    .junk-pat-row:hover,
+    .combat-slot-row:hover,
+    .combat-slot-adv-row:hover,
+    .sm-rnd-row:hover,
+    .ei-prop-row:hover {
+      background-color: rgba(200, 168, 90, 0.06);
+      border-radius: 3px;
+    }
+    .cfg-row, .cfg-slider-row, .cfg-sub-row, .ap-live-row, .hk-row, .lt-row,
+    .re-row, .re-hex-row, .ovp-row, .diag-file-row, .dbg-overlay-row,
+    .junk-pat-row, .combat-slot-row, .combat-slot-adv-row, .sm-rnd-row,
+    .ei-prop-row {
+      transition: background-color .12s ease-out;
+    }
+
     /* Sub-rows (rendered indented under a parent toggle, like
        "↳ Source" beneath the Map Hack switch) sit left-aligned next
        to their label rather than getting flushed against the right
