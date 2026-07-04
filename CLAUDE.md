@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.158`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.159`.
 
 ## Language
 
@@ -1440,6 +1440,21 @@ edit-mode from the new Vitals tab, snode icons on all new nav chips.
   error log (readable in Config → Data & Logs). Note: the vitals sections may also simply be
   COLLAPSED (their open state persists in `[…] cfgSections`, and the default list doesn't
   include `vitals-life/mana/es`).
+
+## Stack max-size probe (0.45.13.159) — testing Stack +0x20
+
+Owner hypothesis: a stackable item's MAXIMUM stack size lives on the Stack component at
+**+0x20** (the known `Count` is +0x18). The C# reference (`StackOffsets`) maps only
+`Header`/`UnknownPtr(0x10)`/`Count(0x18)` and notes max size lives elsewhere, so this needs a
+live check. `ahk/StackMaxProbe.ahk` (`StackMaxProbeRun`, bridge `StackMaxProbeRun`, UI
+"📦 Probe Stack Max" in Config → Debug → Diagnostic Actions) enumerates backpack items via
+`ReadAllPlayerInventories`, and for each with a Stack component dumps an interpreted int32
+table around the component base (flagging `Count +0x18` and the `+0x20` max-size candidate) +
+raw hex, and derefs `UnknownPtr(+0x10)` (the max size may instead live in a referenced
+StackData/dat row). Writes `logs\InGameStateMonitor.stack_max_probe.log` (readable in Data &
+Logs) + a summary MsgBox. Owner test case: one stack of 19 Scrolls of Wisdom (real max 40) —
+a correct max field reads 40. Reuses `_HPP_HexDump` / `_SmResolveServerData`. Diagnostic only
+— no offset added to `PoE2Offsets` until the value is confirmed in-game.
 
 ## Reference
 

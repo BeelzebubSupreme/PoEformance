@@ -913,6 +913,9 @@ _DispatchBridgeCall(method, args)
         case "PathfindingProbeRun":
             ; TEMP diagnostic: verify Pathfinding Flying/BaseSpeed offsets.
             SetTimer(() => PathfindingProbeRun(), -1)
+        case "StackMaxProbeRun":
+            ; TEMP diagnostic: test whether Stack +0x20 is the max stack size.
+            SetTimer(() => StackMaxProbeRun(), -1)
         case "ComponentDumpProbeRun":
             ; TEMP diagnostic: dump all components + raw fields of the highlighted entity.
             SetTimer(() => ComponentDumpProbeRun(), -1)
