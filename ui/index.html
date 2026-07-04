@@ -4379,6 +4379,15 @@
     /* Box body lines up under the text (icon width + gap ≈ 26px), not the icon. */
     .cfg-section > details[open] > :not(summary) { padding-left: 26px }
 
+    /* ── CLOSED boxes: center the header row vertically ─────────────────────
+       .cfg-section carries 4px top / 10px bottom padding — right for an OPEN
+       body, but collapsed it pushed icon + heading + caret above the middle.
+       Symmetrize both the box padding (4+10 → 7+7) and the header's own
+       4px/6px padding (→ 5px/5px) while a box is closed; the totals are
+       unchanged, so collapsed boxes keep their exact height. */
+    .cfg-section:has(> details:not([open])) { padding-top: 7px; padding-bottom: 7px }
+    .cfg-section > details:not([open]) > summary > .cfg-header { padding-top: 5px; padding-bottom: 5px }
+
     /* ── AutoPilot box: its summary carries a live status string next to the
        caret — underline the WHOLE header row (heading + status), open AND
        closed, instead of the open-only .cfg-header line (which stopped

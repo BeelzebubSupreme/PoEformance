@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.152`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.153`.
 
 ## Language
 
@@ -1332,6 +1332,13 @@ buttons present only under `det-debug-actions`.
   `g_exploreLastReason` to enabled/disabled from the loaded flag right after the sub-flag
   mirroring, and BOTH AutoPilot toggles (bridge `ToggleAutoPilot` + the hotkey handler) set
   them to "enabled" when switching ON (previously only the OFF branch wrote "disabled").
+- **Closed boxes vertically centered (0.45.13.153):** `.cfg-section` carries 4px top / 10px
+  bottom padding (right for an OPEN body) which pushed icon + heading + caret ~3px above the
+  middle in every COLLAPSED box; the `.cfg-header`'s own 4px/6px padding added another 1px.
+  Both are symmetrized while a box is closed (`:has(> details:not([open]))` → 7px/7px box,
+  5px/5px header) with unchanged totals, so collapsed boxes keep their exact height. Verified
+  in the preview: header/icon/caret centers == box center for det-vitals-life, det-radar and
+  det-autopilot.
 
 ## Price liquidity gates (shipped 0.45.13.149) — fixes wildly inflated prices
 
