@@ -369,8 +369,19 @@ class PoE2Offsets
     )
 
     static Stack := Map(
-        "UnknownPtr", 0x10,
+        "StackSizeDataPtr", 0x10,   ; -> shared per-base-type StackSizeData descriptor
         "Count", 0x18
+    )
+
+    ; StackSizeData — the per-base-type descriptor the Stack component points at
+    ; (Stack + 0x10). Shared across every stack of the same base item (two
+    ; Scroll-of-Wisdom stacks resolve to the same pointer). +0x28 is the normal
+    ; inventory max stack size — verified in-game 2026-07-04: Scroll of Wisdom
+    ; reads 40, and across a full currency tab the field only ever yields the
+    ; real PoE2 caps 10/20/30/40. (+0x20 = 5000 currency-tab cap, +0x24 = 100 are
+    ; other fields, not the per-item max.)
+    static StackSizeData := Map(
+        "MaxStack", 0x28
     )
 
     ; Item "Base" component. For unique items, +0x30 points to the item's

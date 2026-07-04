@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.159`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.160`.
 
 ## Language
 
@@ -1452,9 +1452,18 @@ live check. `ahk/StackMaxProbe.ahk` (`StackMaxProbeRun`, bridge `StackMaxProbeRu
 table around the component base (flagging `Count +0x18` and the `+0x20` max-size candidate) +
 raw hex, and derefs `UnknownPtr(+0x10)` (the max size may instead live in a referenced
 StackData/dat row). Writes `logs\InGameStateMonitor.stack_max_probe.log` (readable in Data &
-Logs) + a summary MsgBox. Owner test case: one stack of 19 Scrolls of Wisdom (real max 40) —
-a correct max field reads 40. Reuses `_HPP_HexDump` / `_SmResolveServerData`. Diagnostic only
-— no offset added to `PoE2Offsets` until the value is confirmed in-game.
+Logs) + a summary MsgBox. Owner test case: one stack of 19 Scrolls of Wisdom (real max 40).
+Reuses `_HPP_HexDump` / `_SmResolveServerData`.
+- **RESULT (confirmed in-game 2026-07-04):** the max size is NOT on the Stack component
+  directly (its +0x20 is a pointer, +0x28 is ~always 0). It lives in the struct the Stack
+  component points to at **+0x10** (a SHARED per-base-type `StackSizeData` descriptor — two
+  Scroll-of-Wisdom stacks resolved to the same pointer), at **+0x28**: Scroll of Wisdom read
+  40, and across a full currency tab the field only ever yielded the real PoE2 caps
+  10/20/30/40. (In that descriptor +0x20=5000 = currency-tab cap and +0x24=100 are other
+  fields, not the per-item max.) **Wired 0.45.13.160:** `PoE2Offsets.Stack` renamed
+  `UnknownPtr`→`StackSizeDataPtr` (0x10) + new `PoE2Offsets.StackSizeData` (`MaxStack` 0x28);
+  `PoE2InventoryReader` reads `stackMax` alongside `stackCount` (deref +0x10 → +0x28);
+  `WebViewBridge` emits `smax`; the inventory tooltip shows "Stack Size: 19 / 40".
 
 ## Reference
 

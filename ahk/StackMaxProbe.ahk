@@ -80,8 +80,8 @@ StackMaxProbeRun()
     rpt .= "Hypothesis: Stack component +0x20 = maximum stack size (Count is +0x18)." nl
     rpt .= "ServerData=0x" Format("{:X}", sdPtr) nl nl
 
-    stackOff := PoE2Offsets.Stack["Count"]        ; 0x18
-    unkOff   := PoE2Offsets.Stack["UnknownPtr"]   ; 0x10
+    stackOff := PoE2Offsets.Stack["Count"]              ; 0x18
+    unkOff   := PoE2Offsets.Stack["StackSizeDataPtr"]   ; 0x10 -> StackSizeData
     found := 0
     summary := ""
 
