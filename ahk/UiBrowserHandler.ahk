@@ -345,6 +345,8 @@ PushUiBrowserState()
             screenPosY := sp["y"]
         }
         ; Per-axis scale from the element's own Scale Index + LocalScaleMultiplier.
+        ; An unknown index is not "no scaling": _UiScalePair degrades it to the
+        ; uniform height scale (v2,v2) — label it as exactly that.
         scIdx := elem["scaleIndex"]
         if (scIdx = 1)
             scLabel := "Width/Width"
@@ -353,7 +355,7 @@ PushUiBrowserState()
         else if (scIdx = 3)
             scLabel := "Width/Height"
         else
-            scLabel := "None"
+            scLabel := "Unknown → Height/Height fallback"
         if IsObject(sc)
         {
             pair := _UiScalePair(scIdx, elem["localMult"], sc)
