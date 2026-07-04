@@ -9659,8 +9659,6 @@
       let data;
       try { data = JSON.parse(jsonStr); }
       catch (e) { el.innerHTML = '<div class="no-data-msg">⚠ Parse error</div>'; _invResetCache(); return; }
-      // Remap currency stash tabs onto their curated 1:1 grid before rendering.
-      try { _applyCurrencyLayouts(data); } catch (e) {}
       try {
         _invIncrementalRender(data, el, status);
         _invLastJson = jsonStr;
@@ -9698,10 +9696,17 @@
       stash.sort((a, b) => a.id - b.id);
       others.sort((a, b) => (a.id === 1 ? -1 : b.id === 1 ? 1 : a.id - b.id));
 
+      // A section descriptor for one inventory. Currency tabs render via a
+      // dedicated 1:1 layout (kind 'html', cached by string) instead of the
+      // generic grid (kind 'grid', cell-patched).
+      const _invDesc = (inv) => _isCurrencyTab(inv)
+        ? { key: 'inv:' + inv.id, kind: 'html', html: _renderCurrencyTab(inv) }
+        : { key: 'inv:' + inv.id, kind: 'grid', inv };
+
       const descs = [];
       let equippedPlaced = false;
       for (const inv of others) {
-        descs.push({ key: 'inv:' + inv.id, kind: 'grid', inv });
+        descs.push(_invDesc(inv));
         if (inv.id === 1 && equipped.length) { descs.push({ key: 'equipped', kind: 'html', html: _renderEquippedGroup(equipped) }); equippedPlaced = true; }
       }
       if (equipped.length && !equippedPlaced) descs.unshift({ key: 'equipped', kind: 'html', html: _renderEquippedGroup(equipped) });
@@ -9710,7 +9715,7 @@
       const stashEmpty = stash.filter(i => (i.items || []).length === 0);
       if (stashFull.length || stashEmpty.length) {
         descs.push({ key: 'stash-header', kind: 'html', html: `<div class="inv-section-header" style="margin-top:14px">Stash <span class="inv-section-meta">${stashFull.length} populated · ${stashEmpty.length} empty · ${stash.length} total</span></div>` });
-        for (const inv of stashFull) descs.push({ key: 'inv:' + inv.id, kind: 'grid', inv });
+        for (const inv of stashFull) descs.push(_invDesc(inv));
         if (stashEmpty.length) {
           const labels = stashEmpty.map(i => i.tn ? i.tn : ('#' + i.id)).join(', ');
           descs.push({ key: 'stash-empty', kind: 'html', html: `<div class="inv-section" style="opacity:.55;font-size:11px;color:var(--subtext);padding:6px 8px;border:1px dashed var(--border);border-radius:4px">Empty stash tabs: ${escHtml(labels)}</div>` });
@@ -9954,8 +9959,24 @@
         // Abyss row B (row 8)
         AbyssalBenchTicketArmourLow: [1,8], AbyssalBenchTicketWeaponLow: [2,8], AbyssalBenchTicketJewellery: [3,8],
         OmenOnAbyssAddPrefixes: [5,8], OmenOnAbyssAddSuffixes: [6,8], OmenOnAnnulRemoveAbyssMod: [7,8],
-      }
+      },
+      // Always-empty framed slots the game shows but that hold no currency type.
+      emptySlots: [[3,2],[4,2]],
+      // Large multi-cell slots (the central item slot). {col,row,w,h}.
+      bigSlots: [{col:3, row:3, w:2, h:4}],
+      // Pixel gaps between visual groups: added AFTER these col/row indices.
+      colGapAfter: {2:12, 5:12}, rowGapAfter: {1:12, 4:12, 6:12},
     };
+    const _CUR_CELL = 36;
+    // Absolute pixel top-left of a currency-tab cell (col,row), inter-group gaps
+    // folded in (colGapAfter / rowGapAfter).
+    function _curPos(col, row) {
+      const L = CURRENCY_TAB_LAYOUT;
+      let x = col * _CUR_CELL, y = row * _CUR_CELL;
+      for (const g in L.colGapAfter) if (col > +g) x += L.colGapAfter[g];
+      for (const g in L.rowGapAfter) if (row > +g) y += L.rowGapAfter[g];
+      return { x, y };
+    }
     // A tab is the currency tab if enough of its items map into the layout.
     function _isCurrencyTab(inv) {
       const items = Array.isArray(inv.items) ? inv.items : [];
@@ -9963,26 +9984,62 @@
       for (const it of items) if (it && it.mp && CURRENCY_TAB_LAYOUT.slots[it.mp]) { if (++hits >= 5) return true; }
       return false;
     }
-    // Rewrites each currency tab's items onto the curated grid cells (and sets the
-    // tab's bx/by to the layout size), so the normal grid renderer + patcher draw
-    // it 1:1 like the game. Unmapped items (unknown / new currencies) get parked
-    // in trailing rows so nothing is hidden. Mutates the data in place.
-    function _applyCurrencyLayouts(data) {
-      const invs = Array.isArray(data && data.player) ? data.player : [];
-      for (const inv of invs) {
-        if (!_isCurrencyTab(inv)) continue;
-        const L = CURRENCY_TAB_LAYOUT;
-        inv.bx = L.cols;
-        let extra = 0;                       // overflow cursor for unmapped items
-        for (const it of inv.items) {
-          const cell = it.mp ? L.slots[it.mp] : null;
-          let cx, cy;
-          if (cell) { cx = cell[0]; cy = cell[1]; }
-          else { cx = extra % L.cols; cy = L.rows + Math.floor(extra / L.cols); extra++; }  // park below the grid
-          it.sx = cx; it.sy = cy; it.ex = cx + 1; it.ey = cy + 1;
-        }
-        inv.by = L.rows + (extra > 0 ? Math.ceil(extra / L.cols) : 0);
+    // Renders the currency tab 1:1: an absolutely-positioned slot per curated
+    // cell (frame + item when present), the extra empty frames, and the big
+    // central slot — with inter-group gaps. Only real slots are framed (no full
+    // background grid). Unmapped/new currencies park in a trailing row.
+    function _renderCurrencyTab(inv) {
+      const L = CURRENCY_TAB_LAYOUT, C = _CUR_CELL;
+      const items = Array.isArray(inv.items) ? inv.items : [];
+      const byMp = new Map();
+      for (const it of items) if (it && it.mp) byMp.set(it.mp, it);
+      let maxX = 0, maxY = 0, parts = '';
+      const bump = (x, y, w, h) => { maxX = Math.max(maxX, x + w); maxY = Math.max(maxY, y + h); };
+      // Big central slots first (behind the currency slots).
+      for (const b of (L.bigSlots || [])) {
+        const p = _curPos(b.col, b.row), w = b.w * C, h = b.h * C;
+        parts += `<div class="inv-cell" style="position:absolute;left:${p.x}px;top:${p.y}px;width:${w}px;height:${h}px"></div>`;
+        bump(p.x, p.y, w, h);
       }
+      // Extra always-empty framed slots.
+      for (const e of (L.emptySlots || [])) {
+        const p = _curPos(e[0], e[1]);
+        parts += `<div class="inv-cell" style="position:absolute;left:${p.x}px;top:${p.y}px;width:${C}px;height:${C}px"></div>`;
+        bump(p.x, p.y, C, C);
+      }
+      // One slot per curated currency cell: frame, plus the item if present.
+      for (const path in L.slots) {
+        const cell = L.slots[path], p = _curPos(cell[0], cell[1]);
+        bump(p.x, p.y, C, C);
+        const it = byMp.get(path);
+        if (it) {
+          const rarity = (typeof it.r === 'number' && it.r >= 0 && it.r <= 3) ? it.r : 0;
+          const tip = _buildItemTooltipPayload(it);
+          parts += `<div class="inv-item rarity-${rarity}" style="position:absolute;left:${p.x}px;top:${p.y}px;width:${C}px;height:${C}px" `
+                 + `onmouseenter="_invShowTip(event,'${tip}')" onmouseleave="_invHideTip()" onmousemove="_invMoveTip(event)">`
+                 + _itemVisual(it, 1, 1) + `</div>`;
+        } else {
+          parts += `<div class="inv-cell" style="position:absolute;left:${p.x}px;top:${p.y}px;width:${C}px;height:${C}px"></div>`;
+        }
+      }
+      // Unmapped / unknown currencies — park them in a trailing row so nothing hides.
+      let ux = 0;
+      const uy = maxY + 14;
+      for (const it of items) {
+        if (it && it.mp && L.slots[it.mp]) continue;
+        const rarity = (typeof it.r === 'number' && it.r >= 0 && it.r <= 3) ? it.r : 0;
+        const tip = _buildItemTooltipPayload(it);
+        parts += `<div class="inv-item rarity-${rarity}" style="position:absolute;left:${ux}px;top:${uy}px;width:${C}px;height:${C}px" `
+               + `onmouseenter="_invShowTip(event,'${tip}')" onmouseleave="_invHideTip()" onmousemove="_invMoveTip(event)">`
+               + _itemVisual(it, 1, 1) + `</div>`;
+        bump(ux, uy, C, C); ux += C + 2;
+      }
+      const meta = `${items.length} items`;
+      const namePart = _isStashTabId(inv.id) ? (inv.tn || 'Stash Tab') : _inventoryLabel(inv.id);
+      return `<div class="inv-section">
+        <div class="inv-section-header">${escHtml('#' + inv.id + ' ' + namePart)}<span class="inv-section-meta">Currency · ${meta}</span></div>
+        <div class="inv-grid-cur" style="position:relative;width:${maxX}px;height:${maxY}px">${parts}</div>
+      </div>`;
     }
 
     // Header line ("#id name · meta") for one inventory section — shared by the
@@ -10008,6 +10065,20 @@
     // at a glance whether the cell needs replacing. Returns '' if the item
     // projects outside the grid (defensive — some non-grid inventories do this,
     // e.g. trinket holsters where slotEnd > totalBoxes).
+    // Inner visual of an item (icon layer + fallback name label + unid/stack
+    // badges) — shared by the grid cell and the currency-tab absolute slot so
+    // both look identical. w/h are the cell span (for the name truncation only).
+    function _itemVisual(it, w, h) {
+      const name = it.n || it.b || '?';
+      const stack = (typeof it.s === 'number' && it.s > 1) ? it.s : 0;
+      const stackBadge = stack ? `<span class="inv-stack">${stack}</span>` : '';
+      const icon = _iconUrl(it.a);
+      const imgLayer = icon ? `<img class="inv-item-img" src="${escAttr(icon)}" loading="lazy" onerror="this.style.display='none';var l=this.parentElement.querySelector('.inv-item-label');if(l)l.style.display=''">` : '';
+      const label = `<span class="inv-item-label"${icon ? ' style="display:none"' : ''}>${escHtml(_truncateForCell(name, w * h))}</span>`;
+      const unidBadge = (it.idf === 0) ? '<span class="inv-unid-badge" title="Unidentified">?</span>' : '';
+      return imgLayer + label + unidBadge + stackBadge;
+    }
+
     function _invItemCellHtml(it, bx, by) {
       const sx = (it.sx | 0), sy = (it.sy | 0);
       const ex = Math.max(sx + 1, (it.ex | 0));
@@ -10016,24 +10087,15 @@
       const w = Math.max(1, ex - sx);
       const h = Math.max(1, ey - sy);
       const rarity = (typeof it.r === 'number' && it.r >= 0 && it.r <= 3) ? it.r : 0;
-      const name = it.n || it.b || '?';
-      const stack = (typeof it.s === 'number' && it.s > 1) ? it.s : 0;
-      const stackBadge = stack ? `<span class="inv-stack">${stack}</span>` : '';
       const tip = _buildItemTooltipPayload(it);
-      // Real item art (RenderItem ResourcePath via poe2db). The icon fills the
-      // cell; the name label sits behind it and is revealed again if the CDN
-      // has no art for this path. idf===0 → unidentified corner glyph.
-      const icon = _iconUrl(it.a);
-      const imgLayer = icon ? `<img class="inv-item-img" src="${escAttr(icon)}" loading="lazy" onerror="this.style.display='none';var l=this.parentElement.querySelector('.inv-item-label');if(l)l.style.display=''">` : '';
-      const label = `<span class="inv-item-label"${icon ? ' style="display:none"' : ''}>${escHtml(_truncateForCell(name, w * h))}</span>`;
-      const unidBadge = (it.idf === 0) ? '<span class="inv-unid-badge" title="Unidentified">?</span>' : '';
       return `<div class="inv-item rarity-${rarity}" data-slot="${sx},${sy}" data-sig="${escAttr(_invSig(it))}" `
             + `style="grid-column:${sx + 1} / span ${w};grid-row:${sy + 1} / span ${h}" `
             + `onmouseenter="_invShowTip(event,'${tip}')" onmouseleave="_invHideTip()" onmousemove="_invMoveTip(event)">`
-            + imgLayer + label + unidBadge + stackBadge + `</div>`;
+            + _itemVisual(it, w, h) + `</div>`;
     }
 
     function _renderInvSection(inv) {
+      if (_isCurrencyTab(inv)) return _renderCurrencyTab(inv);
       const bx = Math.max(1, inv.bx || 12);
       const by = Math.max(1, inv.by || 5);
       const items = Array.isArray(inv.items) ? inv.items : [];
