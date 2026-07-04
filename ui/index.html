@@ -141,7 +141,13 @@
        so users perceived a jump straight from normal → stage 2.
        Using @media (viewport) instead of @container — container
        queries on a flex:1 1 auto item were not measuring reliably. */
-    @media (max-width: 1300px) {
+    /* PILLS compact one stage EARLIER (<=1500px) than the nav bars. With
+       white-space:nowrap a pill can no longer absorb a tight row by wrapping
+       its label onto a second line, so the normal 10px label — which stops
+       fitting on one line around ~1470px — must switch to the denser 8px pill
+       style by 1500px, or the labels would overflow the row into the window
+       controls. The cat-bar / sub-tabs still compact at 1300px below. */
+    @media (max-width: 1500px) {
       #header-pills .pill {
         padding: 1px 6px;
         font-size: 8px;
@@ -156,6 +162,9 @@
         gap: 4px;
         row-gap: 3px;
       }
+    }
+
+    @media (max-width: 1300px) {
       /* Category + sub-tab bars track the same compaction as the pills, so a
          narrow window shrinks all three rows in lockstep. */
       #cat-bar .cat {
@@ -424,6 +433,11 @@
       font-weight: 600;
       letter-spacing: .12em;
       text-transform: uppercase;
+      /* Never break a pill's label across two lines. Flex-shrink can squeeze a
+         pill down to its longest word, at which point the label wraps ("AUTOPILOT
+         / OFF"); nowrap keeps every label on one line and lets the responsive
+         breakpoints (font-shrink ≤1300px, icon-only ≤1080px) handle tight widths. */
+      white-space: nowrap;
       background: linear-gradient(180deg, rgba(28,18,10,0.85), rgba(20,12,6,0.95));
       border: 1px solid rgba(90,62,34,0.7);
       color: var(--codex-text-dim);
