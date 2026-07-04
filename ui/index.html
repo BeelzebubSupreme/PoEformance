@@ -1529,6 +1529,25 @@
       margin: 0 auto;
       position: relative
     }
+    /* Currency tab: the grid is absolutely positioned (a fixed pixel canvas),
+       so it can't use the .inv-grid display:grid frame directly. This wrapper
+       gives it the SAME parchment frame and centers it like every other tab;
+       the inner .inv-grid-cur (position:relative) sits inside the padding so
+       its absolute children land correctly. */
+    .inv-frame-cur {
+      padding: 12px;
+      background:
+        radial-gradient(ellipse at center, rgba(232,220,184,0.04), transparent 70%),
+        linear-gradient(180deg, var(--codex-parchment) 0%, var(--codex-vellum) 100%);
+      border: 1px solid var(--codex-rule);
+      box-shadow:
+        inset 0 0 0 1px rgba(200,168,90,0.18),
+        inset 0 0 24px rgba(0,0,0,0.45),
+        0 2px 6px rgba(0,0,0,0.5);
+      border-radius: 1px;
+      width: max-content;
+      margin: 0 auto
+    }
     /* Empty cell — hand-drawn-feeling parchment square. Subtle inset border
        made of two layered hair-lines (dark inner, gold-tinged outer) so the
        grid reads as embossed rather than punched out. */
@@ -10081,9 +10100,11 @@
       for (const it of generics.slice(gi).concat(shards.slice(L.shardRow.count)).concat(normals)) { itemCell(it, ux, uy, C, C); ux += C + 2; }
 
       const namePart = _isStashTabId(inv.id) ? (inv.tn || 'Stash Tab') : _inventoryLabel(inv.id);
+      // Title shows the description ("Currency · N items"); the "#id name" label
+      // drops to the small subtitle line (swapped, like every stash tab).
       return `<div class="inv-section">
-        <div class="inv-section-header">${escHtml('#' + inv.id + ' ' + namePart)}<span class="inv-section-meta">Currency · ${items.length} items</span></div>
-        <div class="inv-grid-cur" style="position:relative;width:${maxX}px;height:${maxY}px">${parts}</div>
+        <div class="inv-section-header">Currency · ${items.length} items<span class="inv-section-meta">${escHtml('#' + inv.id + ' ' + namePart)}</span></div>
+        <div class="inv-frame-cur"><div class="inv-grid-cur" style="position:relative;width:${maxX}px;height:${maxY}px">${parts}</div></div>
       </div>`;
     }
 
@@ -10102,6 +10123,11 @@
       // Keep the raw internal type (e.g. "LakeTabletInventory1") in the meta line.
       const metaType = rawType ? `${escHtml(rawType)} · ` : '';
       const meta = `${metaType}${bx}×${by} · ${items.length} items` + (inv.src ? ' · ' + escHtml(inv.src) : '');
+      // Stash tabs: title = the description, "#id name" drops to the subtitle
+      // line (swapped). Non-stash sections (backpack/equipped) keep the label
+      // as the title.
+      if (_isStashTabId(id))
+        return `${meta}<span class="inv-section-meta">${escHtml(labelBase)}</span>`;
       return `${escHtml(labelBase)}<span class="inv-section-meta">${meta}</span>`;
     }
 
