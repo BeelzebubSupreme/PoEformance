@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.154`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.155`.
 
 ## Language
 
@@ -1332,6 +1332,17 @@ buttons present only under `det-debug-actions`.
   `g_exploreLastReason` to enabled/disabled from the loaded flag right after the sub-flag
   mirroring, and BOTH AutoPilot toggles (bridge `ToggleAutoPilot` + the hotkey handler) set
   them to "enabled" when switching ON (previously only the OFF branch wrote "disabled").
+- **AutoPilot page: standard boxes + inline Live Status (0.45.13.155):** the three
+  sub-sections became STANDARD category boxes like Overlay's Map Hack/Radar — sibling
+  `.cfg-section > <details id="det-ap-combat|det-ap-explore|det-ap-loot">` blocks after
+  `#ap-panel`, wired into `syncCfgSections` (ids `ap-combat`/`ap-explore`/`ap-loot` in
+  `_cfgSectionIds`; combat/explore keep the `_sbInitAll` ontoggle for their sliders). The
+  "Live Status" box was dissolved: its rows (State/Combat/Explore/Loot + the log-to-file
+  toggle) sit inline in `#ap-panel` directly under "Pause while a UI panel is open".
+  `sec:ap-status` left SNODE_MAP + `tools/skillnode_map.json` (the box summaries keep their
+  icons via `data-snodekey`). Verified in the preview: subpanel top level = #ap-panel + 3
+  cfg-sections, cfgSections open-state restore works for the new ids, live rows centered,
+  icons present.
 - **AutoPilot category box removed (0.45.13.154):** with AutoPilot on its own sub-tab the
   outer collapsible box was redundant. The `det-autopilot` details + summary (incl. the
   status string, which lives on in the Live-Status State row) are gone; the content sits in

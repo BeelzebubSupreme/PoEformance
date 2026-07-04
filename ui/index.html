@@ -5341,54 +5341,47 @@
               <input type="checkbox" id="tog-combat"  style="display:none">
               <input type="checkbox" id="tog-explore" style="display:none">
 
-              <!-- ════════════════════════════════════════════════════
-                   📊 LIVE STATUS — quick glance at what AutoPilot is
-                   doing right now. Loot status + cache count live here
-                   too because they're a live readout, not a setting.
-                   ════════════════════════════════════════════════════ -->
-              <details class="cfg-subsection" open>
-                <summary>
-                  <div class="cfg-header" data-snodekey="ap-status">📊 Live Status</div>
-                </summary>
-                <div class="cfg-subsection-body">
-                  <!-- ap-live-row: true 3-column grid (1fr auto 1fr) so the middle
-                       status is CENTERED no matter how wide the right readout is
-                       (flex space-between shifted it with the right column). -->
-                  <div class="cfg-row ap-live-row ap-live-rule"><span class="cfg-label">State</span><span id="cfg-autopilot-state"
-                      class="cfg-status idle">idle</span><span id="cfg-autopilot-enabled"
-                      class="cfg-status idle" style="opacity:.8">disabled</span></div>
-                  <div class="cfg-row ap-live-row ap-live-rule"><span class="cfg-label">Combat</span><span id="cfg-combat-state"
-                      class="cfg-status idle">idle</span><span id="cfg-combat-reason"
-                      class="cfg-status idle" style="opacity:.8">—</span></div>
-                  <div class="cfg-row ap-live-row ap-live-rule"><span class="cfg-label">Explore</span><span id="cfg-explore-pct" class="cfg-status"
-                      style="color:#7ec8e3;font-weight:600">0%</span><span id="cfg-explore-reason"
-                      class="cfg-status idle" style="opacity:.8">idle</span></div>
-                  <div class="cfg-row ap-live-row"><span class="cfg-label">Loot</span><span id="cfg-loot-status"
-                      class="cfg-status idle">idle</span><span style="color:var(--subtext);font-size:11px">
-                      pickup • cache <span id="cfg-loot-cache-count">0</span></span></div>
-                  <!-- Mirror this Live-Status readout into a file so it can be reviewed while the
-                       game (not the tool) is in the foreground. -->
-                  <div class="cfg-row">
-                    <span class="cfg-label">📝 Log status to file</span>
-                    <label class="toggle"><input type="checkbox" id="ap-status-log"
-                        onchange="ahkCall('SetAutoPilotStatusLog', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label>
-                  </div>
-                  <div class="cfg-help">Writes the live status line (state · loot · combat · explore reasons) to
-                    <code>logs\InGameStateMonitor.autopilot_status.log</code> on every change — review it under
-                    <b>Data &amp; Logs</b> after playing. Persistent (stays on across restarts); deduped, throttled,
-                    and auto-rotated at ~2&nbsp;MB.</div>
-                </div>
-              </details>
+              <!-- ── LIVE STATUS readout, inline (its own box was dissolved) ──
+                   ap-live-row: true 3-column grid (1fr auto 1fr) so the middle
+                   status is CENTERED no matter how wide the right readout is
+                   (flex space-between shifted it with the right column). -->
+              <div class="cfg-row ap-live-row ap-live-rule"><span class="cfg-label">State</span><span id="cfg-autopilot-state"
+                  class="cfg-status idle">idle</span><span id="cfg-autopilot-enabled"
+                  class="cfg-status idle" style="opacity:.8">disabled</span></div>
+              <div class="cfg-row ap-live-row ap-live-rule"><span class="cfg-label">Combat</span><span id="cfg-combat-state"
+                  class="cfg-status idle">idle</span><span id="cfg-combat-reason"
+                  class="cfg-status idle" style="opacity:.8">—</span></div>
+              <div class="cfg-row ap-live-row ap-live-rule"><span class="cfg-label">Explore</span><span id="cfg-explore-pct" class="cfg-status"
+                  style="color:#7ec8e3;font-weight:600">0%</span><span id="cfg-explore-reason"
+                  class="cfg-status idle" style="opacity:.8">idle</span></div>
+              <div class="cfg-row ap-live-row"><span class="cfg-label">Loot</span><span id="cfg-loot-status"
+                  class="cfg-status idle">idle</span><span style="color:var(--subtext);font-size:11px">
+                  pickup • cache <span id="cfg-loot-cache-count">0</span></span></div>
+              <!-- Mirror this Live-Status readout into a file so it can be reviewed while the
+                   game (not the tool) is in the foreground. -->
+              <div class="cfg-row">
+                <span class="cfg-label">📝 Log status to file</span>
+                <label class="toggle"><input type="checkbox" id="ap-status-log"
+                    onchange="ahkCall('SetAutoPilotStatusLog', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Writes the live status line (state · loot · combat · explore reasons) to
+                <code>logs\InGameStateMonitor.autopilot_status.log</code> on every change — review it under
+                <b>Data &amp; Logs</b> after playing. Persistent (stays on across restarts); deduped, throttled,
+                and auto-rotated at ~2&nbsp;MB.</div>
+            </div>
+        </div><!-- /ap-panel -->
 
-              <!-- ════════════════════════════════════════════════════
-                   ⚔ COMBAT — engage / disengage ranges, GCD, world-to-
-                   screen scale, plus the dynamic skill-slot list.
-                   ════════════════════════════════════════════════════ -->
-              <details class="cfg-subsection" ontoggle="if(this.open) requestAnimationFrame(_sbInitAll)">
-                <summary>
-                  <div class="cfg-header" data-snodekey="ap-combat">⚔ Combat</div>
-                </summary>
-                <div class="cfg-subsection-body">
+        <!-- ════════════════════════════════════════════════════
+             ⚔ COMBAT — engage / disengage ranges, GCD, world-to-
+             screen scale, plus the dynamic skill-slot list. A standard
+             category box (like Overlay's Map Hack / Radar).
+             ════════════════════════════════════════════════════ -->
+        <div class="cfg-section">
+          <details id="det-ap-combat" ontoggle="syncCfgSections(); if(this.open) requestAnimationFrame(_sbInitAll)">
+            <summary>
+              <div class="cfg-header" data-snodekey="ap-combat">⚔ Combat</div>
+            </summary>
+            <div class="cfg-subsection">
                   <div class="cfg-slider-pair">
                     <div class="cfg-slider-item">
                       <span class="cfg-label">Engage</span>
@@ -5428,17 +5421,19 @@
 
                   <div style="margin-top:12px;font-size:11px;color:var(--accent);font-weight:600">Skill Slots</div>
                   <div id="combat-slots-cfg" style="margin-top:4px"></div>
-                </div>
-              </details>
+            </div>
+          </details>
+        </div>
 
-              <!-- ════════════════════════════════════════════════════
-                   🧭 EXPLORATION — target coverage %.
-                   ════════════════════════════════════════════════════ -->
-              <details class="cfg-subsection" ontoggle="if(this.open) requestAnimationFrame(_sbInitAll)">
-                <summary>
-                  <div class="cfg-header" data-snodekey="ap-explore">🧭 Exploration</div>
-                </summary>
-                <div class="cfg-subsection-body">
+        <!-- ════════════════════════════════════════════════════
+             🧭 EXPLORATION — target coverage %. A standard category box.
+             ════════════════════════════════════════════════════ -->
+        <div class="cfg-section">
+          <details id="det-ap-explore" ontoggle="syncCfgSections(); if(this.open) requestAnimationFrame(_sbInitAll)">
+            <summary>
+              <div class="cfg-header" data-snodekey="ap-explore">🧭 Exploration</div>
+            </summary>
+            <div class="cfg-subsection">
                   <div class="cfg-slider-row">
                     <span class="cfg-label">Explore Ziel %</span>
                     <div class="slider-wrap">
@@ -5451,20 +5446,22 @@
                     AutoPilot stops the exploration phase once this fraction of the area has
                     been visited. Higher = more thorough sweep, lower = faster zone clears.
                   </div>
-                </div>
-              </details>
+            </div>
+          </details>
+        </div>
 
-              <!-- ════════════════════════════════════════════════════
-                   💎 LOOT PICKUP — rarity filter for what to grab. Live
-                   status (idle/picking up) + cache count moved up into
-                   Live Status above; this sub-section is only for
-                   *configuring* the pickup behaviour.
-                   ════════════════════════════════════════════════════ -->
-              <details class="cfg-subsection">
-                <summary>
-                  <div class="cfg-header" data-snodekey="ap-loot">💎 Loot Pickup</div>
-                </summary>
-                <div class="cfg-subsection-body">
+        <!-- ════════════════════════════════════════════════════
+             💎 LOOT PICKUP — rarity filter for what to grab. The live
+             status (idle/picking up) + cache count sit in the inline
+             Live-Status readout above; this box is only for
+             *configuring* the pickup behaviour. A standard category box.
+             ════════════════════════════════════════════════════ -->
+        <div class="cfg-section">
+          <details id="det-ap-loot" ontoggle="syncCfgSections()">
+            <summary>
+              <div class="cfg-header" data-snodekey="ap-loot">💎 Loot Pickup</div>
+            </summary>
+            <div class="cfg-subsection">
                   <div class="cfg-help">
                     Picks up ground items matching the selected rarities. Cached items persist
                     across ticks — drops noticed during combat are collected once the area is safe.
@@ -5481,10 +5478,9 @@
                     <label class="filter-pill"><input type="checkbox" id="loot-rar-currency"
                         onchange="ahkCall('SetLootRarity','Currency',this.checked)" checked> Currency</label>
                   </div>
-                </div>
-              </details>
             </div>
-        </div><!-- /ap-panel -->
+          </details>
+        </div>
 
         </div><!-- /cfg-subpanel autopilot -->
 
@@ -6983,7 +6979,7 @@
       "tab:ui":"ChannellingAttacksNotable2","tab:gamestate":"auraeffect","tab:memdiff":"flaskstr","tab:dissect":"flaskint","tab:hotkeys":"KeystoneResoluteTechnique",
       "tab:cfgoverlay":"PressurePoints","tab:cfgvitals":"BloodMageNode","tab:autopilot":"KeystoneAvatarOfFire","tab:stashmover":"KeystonePainAttunement",
       "cfgtab:general":"blankStr","cfgtab:debug":"tempint","cfgtab:data":"ChannellingSpeed",
-      "sec:det-status":"HollowPalmTechniqueKeystone","sec:det-integrations":"KeystoneAvatarOfFire","sec:det-stashmover":"KeystonePainAttunement","sec:sm-stash":"AzmeriPrimalMonkey","sec:sm-stash-ignore":"shieldblock","sec:sm-stash-rnd":"criticalstrikechance","sec:sm-sell":"AzmeriWildBear","sec:sm-sell-ignore":"shieldblock","sec:sm-sell-rnd":"criticalstrikechance","sec:sm-shared":"TemporalistNearbyEnemiesProjectilesSlowed","sec:ap-status":"WarbringerEncasedInJade","sec:ap-combat":"LightningDamagenode","sec:ap-explore":"MiracleMaker","sec:ap-loot":"energyshield",
+      "sec:det-status":"HollowPalmTechniqueKeystone","sec:det-integrations":"KeystoneAvatarOfFire","sec:det-stashmover":"KeystonePainAttunement","sec:sm-stash":"AzmeriPrimalMonkey","sec:sm-stash-ignore":"shieldblock","sec:sm-stash-rnd":"criticalstrikechance","sec:sm-sell":"AzmeriWildBear","sec:sm-sell-ignore":"shieldblock","sec:sm-sell-rnd":"criticalstrikechance","sec:sm-shared":"TemporalistNearbyEnemiesProjectilesSlowed","sec:ap-combat":"LightningDamagenode","sec:ap-explore":"MiracleMaker","sec:ap-loot":"energyshield",
       "sec:det-maphack":"ColdAndFireHybridNotable","sec:det-radar":"PressurePoints","sec:det-entitymarkers":"TacticianNode","sec:det-rangecircles":"TemporalistNode","sec:det-lootvalue":"ShieldNodeOffensive","sec:lrv-detection":"Rage","sec:lrv-list":"SpellSuppresionNode","sec:lrv-onmap":"RangedTotemDamage","sec:lrv-trade":"ClawsOfTheMagpie","sec:det-uihoverprice":"projectilespeed","sec:det-ritualvalue":"FlaskNotableCritStrikeRecharge","sec:det-overlay-placement":"MiracleMaker","sec:det-customlandmarks":"PathfinderMultichoicePath",
       "sec:det-vitals-general":"CorpseDamage","sec:det-debug-actions":"axedmgspeed","sec:det-radar-debug":"PathfinderPathoftheWarrior","sec:det-debug-panels":"ColdDamagenode","sec:det-debug-discovery":"LightningDamagenode","sec:det-debug-diff":"ManaLeechThemedNode","sec:det-debug-overlay":"ElementalDamagenode","sec:det-offset-compare":"plusstrengthdexterity",
       "sec:det-al-conditions":"blankDex","sec:det-al-timing":"blankInt","sec:det-al-output":"blankStr","sec:det-lt-settings":"KeystoneWhispersOfDoom","sec:det-blacklist":"ArmourAndEvasionNode",
@@ -12332,7 +12328,7 @@
     // ═══════════════════════════════════════════════════════════════════
     //  CONFIG HELPERS
     // ═══════════════════════════════════════════════════════════════════
-    const _cfgSectionIds = ['status', 'integrations', 'autoflask', 'stashmover', 'rangecircles', 'radar', 'lootvalue', 'uihoverprice', 'customlandmarks', 'maphack', 'blacklist', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
+    const _cfgSectionIds = ['status', 'integrations', 'autoflask', 'ap-combat', 'ap-explore', 'ap-loot', 'stashmover', 'rangecircles', 'radar', 'lootvalue', 'uihoverprice', 'customlandmarks', 'maphack', 'blacklist', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
     let _cfgSectionsGuard = 0;
     let _cfgSectionsLoaded = false;
 
