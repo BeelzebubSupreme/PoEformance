@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.164`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.165`.
 
 ## Language
 
@@ -1493,6 +1493,14 @@ correct for the backpack.
   just the count, never a wrong "/40". `MaxStackTab` (+0x20) is read + kept for when detection
   lands. **Next:** probe a wider inventory-struct range with a currency tab AND a normal tab
   open to locate the differing field (or read the tab's StashType from the tab-metadata vector).
+- **RESOLVED without detection (0.45.13.165):** instead of detecting the container type, the
+  consumer shows the SMALLEST descriptor cap that still fits the current Count — normal cap
+  (+0x28) when Count ≤ it, else the currency-tab cap (+0x20). Since normal ≤ tab, the backpack
+  and normal tabs (Count ≤ normal cap) show the normal cap ("19/40", "40/40"), and only a stack
+  that already exceeds it (a currency tab, e.g. 1231) escalates to the tab cap ("1231/5000").
+  Safe everywhere (never below Count), no fragile tab-id hardcode (#143 is the owner's tab
+  POSITION, not a game constant). Tiny stacks in a currency tab show the normal cap — harmless;
+  a StashType signal would refine only that case. Logic in `WebViewBridge` (`stkM28`/`stkM20`).
 
 ## Reference
 

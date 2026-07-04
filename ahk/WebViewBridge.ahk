@@ -1392,16 +1392,24 @@ _BuildInventoryArrayJson(invs)
             base := d.Has("baseType") ? String(d["baseType"]) : ""
             rarId := d.Has("rarityId") ? Integer(d["rarityId"]) : -1
             stkCnt := d.Has("stackCount") ? Integer(d["stackCount"]) : 0
-            ; Max stack: use the NORMAL cap (StackSizeData +0x28) everywhere — it's
-            ; correct for the backpack AND normal stash tabs (a "white" tab caps
-            ; Scroll of Wisdom at 40/40, confirmed in-game). Only a CURRENCY stash
-            ; tab uses the expanded +0x20 cap, but the container type is NOT in the
-            ; inventory struct (backpack + currency tab read identical +0x00/+0x04),
-            ; so we can't detect a currency tab yet — using +0x20 for every tab
-            ; wrongly showed "40 → 5000" on normal tabs. The UI guard hides the max
-            ; when Count > it, so a currency-tab overflow shows just the count (no
-            ; wrong "/40"). stackMaxTab is kept for when currency-tab detection lands.
-            stkMax := d.Has("stackMax") ? Integer(d["stackMax"]) : 0
+            ; Container-aware max stack WITHOUT container detection: the descriptor
+            ; carries the normal cap (+0x28, e.g. 40) and the currency-tab cap
+            ; (+0x20, e.g. 5000), with normal <= tab. Show the SMALLEST cap that
+            ; still fits the current Count. So a normal tab / backpack (Count <=
+            ; normal cap) shows the normal cap ("40/40", "19/40"), and only a stack
+            ; that already exceeds it (a currency tab, e.g. 1231) escalates to the
+            ; tab cap ("1231/5000"). Safe everywhere (never below Count) and needs
+            ; no fragile tab-id / tab-type detection. (Tiny stacks in a currency tab
+            ; show the normal cap — harmless; a proper currency-tab StashType signal
+            ; would refine only that case.)
+            stkM28 := d.Has("stackMax") ? Integer(d["stackMax"]) : 0
+            stkM20 := d.Has("stackMaxTab") ? Integer(d["stackMaxTab"]) : 0
+            if (stkM28 > 0 && stkCnt <= stkM28)
+                stkMax := stkM28
+            else if (stkM20 > 0)
+                stkMax := stkM20
+            else
+                stkMax := stkM28
             idf := d.Has("identified") ? Integer(d["identified"]) : -1
             art := d.Has("artPath") ? String(d["artPath"]) : ""
             modsJson := _BuildItemModsJson(d.Has("modsInfo") ? d["modsInfo"] : 0)
