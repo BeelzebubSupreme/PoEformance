@@ -196,6 +196,92 @@ Each stage is independently shippable and reversible.
 5. **DPS sampler** — the first real payoff of the infrastructure: the detailed DPS meter / death
    recap as its own sampler process.
 
+## Stage 3 design — moving the radar snapshot (the high-stakes step)
+
+This is the step that touches the one structure EVERYTHING consumes (`g_radarLastSnap`: RadarOverlay,
+AutoPilot/Combat/Exploration, EntityAlerts, LootTracker, LootRadarValue, the Entities browser, …). A
+wrong move here breaks the whole tool, so the design is built around three safety principles.
+
+### Safety principle 1 — reconstruct the shape; consumers do NOT change
+Dozens of consumers read the nested Map shape
+(`g_radarLastSnap["inGameState"]["areaInstance"]["awakeEntities"]["sample"][i]["entity"]
+["decodedComponents"]["render"]["worldPosition"]["x"]`, …). We do NOT rewrite them. The reader
+publishes FLAT records; **Main reconstructs the exact same nested-Map shape from those records** and
+assigns it to `g_radarLastSnap`. Only the SOURCE of the snapshot changes (from Main's own
+`ReadRadarSnapshot` to "rebuild from the reader's flat records") — every consumer is byte-for-byte
+untouched. The reconstruction is pure Main-side CPU (Maps from a buffer, no RPM); the RPM+decode it
+replaces was the expensive part, so it is a net win. Hot consumers can later be adapted to read the
+flat records directly — an optimisation, not a prerequisite.
+
+### Safety principle 2 — move ONLY the entity scan first, not "everything"
+The measured cost is almost entirely `read.entities` (~40 ms; the BFS + decode + cheap-update). The
+rest of `ReadRadarSnapshot` is now cheap (`read.world`≈2 ms, `read.ui`≈2 ms, `read.filter`≈4 ms,
+terrain cached ≈0, zoneScan throttled/area-gated). So the FIRST cut moves ONLY the awake-entity scan
+into the reader; **Main keeps everything else local** (player, area facts, matrix, terrain, zoneScan,
+UI). Main's `tick.read` drops ~49 → ~9 ms with a far smaller, safer change than moving the whole
+snapshot. Terrain/zoneScan/on-demand can migrate in later cuts.
+
+This requires a refactor: extract the awake-entity scan (currently inline in `ReadRadarSnapshot`,
+`PoE2MemoryReader.ahk` ~3211–3560) into a reusable method, e.g. `ReadAwakeEntitiesFlat(areaInstance)`
+→ an array of flat records, callable by BOTH the reader (publishes it) and, transitionally, Main
+(fallback). The zone-scan / terrain / area code stays where it is.
+
+### Safety principle 3 — opt-in with a guaranteed fallback (never worse)
+Gated on the same `[Diagnostics] readerProcess` toggle. When the reader snapshot is fresh + area-hash
+matches, Main uses it; otherwise (reader down/stale/area-mismatch/wireVersion-mismatch) **Main falls
+back to its own `ReadRadarSnapshot`** exactly as today. So the worst case is current behaviour. This
+is the same posture that made the anim-fishing pilot safe (proc → inproc fallback).
+
+### The flat entity record (hot stream)
+Fixed-size record per awake entity; variable data (paths) via an interned string heap (the reader
+keeps a persistent `path→index` dict so the heap is stable). Fields = exactly what the hot consumers
+read:
+
+    u32  entityId
+    i64  entityPtr          ; some consumers key on the address (junk rawPtr, LrvAnnot, on-demand)
+    i64  entityRawPtr
+    u32  pathIndex          ; → string heap (metadata path); Main derives group/junk/metaGroup from it
+    f32  worldX, worldY, worldZ, terrainHeight
+    i32  rarityId
+    u32  flags              ; bit0 alive, bit1 targetable, bit2 friendly, bit3 monster, …
+    i32  animationId        ; hot-path enemy animation
+    i32  lifeCur, lifeMax, esCur, esMax
+    f32  distance
+    i32  priority
+
+~80 bytes × cap 512 records (log truncation if exceeded) + a string heap. The **feature-derived,
+config-dependent** data (junk verdict, EntityGroups color, CustomLandmark match, alerts) is NOT in
+the record — Main derives it on consume from `pathIndex`, keeping all config logic (which reads
+`g_junkActive`, `g_entityGroups`, …) in Main where the config lives. Consequence: the reader decodes
+even entities Main will junk-filter — but that decode is now OFF Main's thread entirely, so it costs
+Main nothing (the junk pre-filter only helped the reader's own throughput; publishing the junk config
+to the reader to restore it is a later refinement). The reader seeds an empty junk config so the
+shared scan code runs its pre-filter as a no-op (publishes everything).
+
+### Shared-memory snapshot region
+Extends `PoefReaderProto` with a seqlock double-buffer (the header/status from stage 2 stays):
+
+    per buffer (seqlock): frameSeq, areaHash, playerX/Y/Z, recordCount, record[512], stringHeap
+    header: + snapshotWireVersion, epoch
+
+Main reads a buffer under the seqlock (staleness on a mid-write collision → reuse last, never torn),
+checks `areaHash` against its own current area (skip/last if mismatched — the reader may be one zone
+transition ahead/behind), then rebuilds the `awakeEntities.sample` array of nested Maps and splices
+it into the otherwise-locally-read snapshot.
+
+### On-demand / secondary reads
+The Entities inspector / hover-price do deeper per-entity reads (full component dump, mods). For the
+first cut Main does these locally (it keeps its own PoE handle for its local reads anyway). The
+WM_COPYDATA on-demand channel (stage 4) can take them over later.
+
+### Open Stage-3 questions (resolve before/while building)
+- Exact `flags` bit assignments + whether lifeCur/Max etc. are all actually read by a hot consumer
+  (trim the record to what's used).
+- Record cap (512?) + truncation policy (log it; `raw` hit 182 in dense combat, headroom is fine).
+- Whether Main re-reads player position locally for click-timing freshness (principle: latency-
+  critical tiny reads stay local) or trusts the snapshot's playerX/Y/Z.
+- Area-hash gating edge cases across a zone transition (brief entity blank is acceptable).
+
 ## Risks / open questions
 
 - **Wire-struct maintenance** — the one real recurring cost; mitigated by `wireVersion` + a single
