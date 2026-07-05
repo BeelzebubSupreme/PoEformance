@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.208`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.209`.
 
 ## Language
 
@@ -1864,7 +1864,7 @@ yet #Included by the running app, so it touches zero hot-path code.
   interpreter refuses function definitions interspersed between top-level executable statements —
   group all `func(){}` defs before the executable body (or the whole script fails to load with no
   runtime error / OnError never fires).
-### Stage 3b: reader publishes the awake sample + parity diagnostic (0.45.13.208)
+### Stage 3b: reader publishes the awake sample + parity diagnostic (0.45.13.209)
 
 The reader now PACKS the awake-entity sample into the radar block each tick, and Main cross-checks it
 against its own live sample — the gate before stage 3c flips Main to CONSUME it. Same safe posture as
