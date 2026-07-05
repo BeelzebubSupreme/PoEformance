@@ -3417,10 +3417,10 @@ class PoE2GameStateReader extends PoE2InventoryReader
         }
 
         ; ── Phase 2: Decode new + changed entities (priority budget) ─────
-        Profiler.Begin("read.ent.decode")
         decodeDeadline := A_TickCount + decodeBudgetMs
         this._radarMode := true
 
+        Profiler.Begin("read.ent.decode.new")
         for _, item in newEntityList
         {
             if (A_TickCount >= decodeDeadline)
@@ -3449,7 +3449,9 @@ class PoE2GameStateReader extends PoE2InventoryReader
             catch as err
                 cacheErrors += 1
         }
+        Profiler.End("read.ent.decode.new")
 
+        Profiler.Begin("read.ent.decode.changed")
         for _, item in changedEntityList
         {
             if (A_TickCount >= decodeDeadline)
@@ -3476,7 +3478,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
                 cacheErrors += 1
         }
 
-        Profiler.End("read.ent.decode")
+        Profiler.End("read.ent.decode.changed")
 
         ; ── Phase 3: Cheap updates (time-budgeted, round-robin) ──────────
         Profiler.Begin("read.ent.cheap")

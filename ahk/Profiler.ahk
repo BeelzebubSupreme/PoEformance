@@ -193,7 +193,8 @@ _ProfilerDumpToFile(table)
         h := FileOpen(path, "a", "UTF-8")
         if IsObject(h) {
             h.Write("`r`n===== Profiler window " FormatTime(, "yyyy-MM-dd HH:mm:ss")
-                . " | v" ver " | area=" ctx["area"] " | awake=" ctx["entities"] " =====`r`n")
+                . " | v" ver " | area=" ctx["area"] " | awake=" ctx["entities"]
+                . " | raw=" ctx["raw"] " =====`r`n")
             ; Summary() joins rows with "`n"; normalize to CRLF for a Windows log file.
             h.Write(StrReplace(table, "`n", "`r`n") "`r`n")
             h.Close()
@@ -216,6 +217,11 @@ _ProfilerAreaContext()
                 area .= " (" wc["name"] ")"
         }
     }
-    try ecount := g_radarLastSnap["inGameState"]["areaInstance"]["awakeEntities"]["sample"].Length
-    return Map("area", area, "entities", ecount)
+    raw := "?"
+    try {
+        ae := g_radarLastSnap["inGameState"]["areaInstance"]["awakeEntities"]
+        ecount := ae["sample"].Length
+        raw := ae["size"]   ; raw awake-map entity count (pre junk-filter) — vs awake= (post-filter)
+    }
+    return Map("area", area, "entities", ecount, "raw", raw)
 }
