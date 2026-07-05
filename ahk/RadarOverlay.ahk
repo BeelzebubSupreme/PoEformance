@@ -89,6 +89,12 @@ class RadarOverlay extends GdiOverlayBase
                               , 0x6060FF, 0xC0FF00, 0xFF00A0, 0x00FF9B, 0xFF8C40]
     static COLOR_MAPHACK        := 0x909090   ; neutral gray (BGR) — matches game map outlines
     static COLOR_WALKABLE       := 0xFF8030   ; blue (BGR) — walkable-grid fill diagnostic overlay
+    ; Terrain-layer scroll cache (see _DrawMapLayersCached): the maphack/walk layers are rendered
+    ; once into a padded off-screen cache via the expensive rotated PlgBlt, then copied to the
+    ; back-buffer each frame with a cheap translated TransparentBlt. MARGIN = how far (screen px)
+    ; the view may scroll before a rebuild; KEY = a colour no layer uses, treated as transparent.
+    static MASK_CACHE_MARGIN    := 128
+    static MASK_CACHE_KEY       := 0xFF00FF   ; magenta (BGR) — transparent key, unused by any layer
 
     ; Creates the transparent, click-through overlay GUI window and initialises all GDI state fields.
     __New()
@@ -183,6 +189,19 @@ class RadarOverlay extends GdiOverlayBase
         this._mapHackGridH        := 0     ; grid height covered by bitmap
         this._mapHackTerrainSz    := 0     ; terrain data size — only updated on successful generate
         this._mapHackRetryTick    := 0     ; tick of last regenerate attempt (for retry throttle)
+
+        ; Terrain-layer scroll cache (see _DrawMapLayersCached). Composited maphack+walk layers
+        ; rendered once per scroll-margin into a padded off-screen DC, then blitted per frame.
+        this._maskCacheDC     := 0         ; padded cache memory DC (window + 2*MARGIN)
+        this._maskCacheBmp    := 0         ; cache bitmap handle
+        this._maskCacheW      := 0         ; current cache bitmap width  (= bufW + 2*MARGIN)
+        this._maskCacheH      := 0         ; current cache bitmap height (= bufH + 2*MARGIN)
+        this._maskCacheOX     := 0.0       ; player grid X when the cache was built (scroll origin)
+        this._maskCacheOY     := 0.0       ; player grid Y when the cache was built
+        this._maskCacheCos    := 0.0       ; projection cos at build time (rebuild on change)
+        this._maskCacheSin    := 0.0       ; projection sin at build time
+        this._maskCacheLayers := ""        ; which layers are baked ("w"/"h"/"wh") — rebuild on change
+        this._maskCacheValid  := false     ; false → force a rebuild next frame
 
         ; Walkable-grid fill overlay (diagnostic): same pre-rendered bitmap
         ; pass as the border maphack, but the mask carries 1-bits for ALL
@@ -811,21 +830,12 @@ class RadarOverlay extends GdiOverlayBase
         }
 
         ; ── Maphack / walkable-grid overlays (large map only, before entities) ──
-        ; Walkable fill goes first so the wall-border outline draws on top.
-        if (isLargeMap && this._walkGridEnabled && this._mapWalkColorDC && this._mapWalkMask)
-        {
-            Profiler.Begin("radar.mask.walk")
-            this._BlitMaskLayer(this._mapWalkColorDC, this._mapWalkMask,
+        ; Walkable fill goes under the wall-border outline. Both layers share one scroll cache:
+        ; rendered once via the expensive rotated PlgBlt, then copied per frame with a cheap
+        ; translated TransparentBlt (rotation is frame-constant; only the player position moves).
+        if isLargeMap
+            this._DrawMapLayersCached(this._walkGridEnabled, this._mapHackEnabled,
                 mapCenterX, mapCenterY, playerWorldX, playerWorldY, projectionCos, projectionSin)
-            Profiler.End("radar.mask.walk")
-        }
-        if (isLargeMap && this._mapHackEnabled && this._mapHackDC && this._mapHackMask)
-        {
-            Profiler.Begin("radar.mask.hack")
-            this._BlitMaskLayer(this._mapHackDC, this._mapHackMask,
-                mapCenterX, mapCenterY, playerWorldX, playerWorldY, projectionCos, projectionSin)
-            Profiler.End("radar.mask.hack")
-        }
 
         ; Player dot at the map center
         this._DrawDot(Round(mapCenterX), Round(mapCenterY), RadarOverlay.COLOR_PLAYER, isLargeMap ? 4 : 2)
@@ -2692,6 +2702,9 @@ class RadarOverlay extends GdiOverlayBase
             DllCall("DeleteDC", "Ptr", this._mapWalkColorDC)
             this._mapWalkColorDC := 0
         }
+        ; The scroll cache holds a composite of these source bitmaps — force a rebuild once the
+        ; new terrain layers are generated (the cache DC itself is kept and reused).
+        this._maskCacheValid := false
     }
 
     ; Blits one pre-rendered terrain layer (srcDC's colour through mask's
@@ -2699,10 +2712,15 @@ class RadarOverlay extends GdiOverlayBase
     ; Shared by the wall-border maphack and the walkable-grid fill overlay —
     ; both bitmaps are generated together so they share W/H/grid dimensions.
     _BlitMaskLayer(srcDC, mask, mapCenterX, mapCenterY, playerWorldX, playerWorldY,
-                   projectionCos, projectionSin)
+                   projectionCos, projectionSin, targetDC := 0, clipW := 0, clipH := 0)
     {
         if (!srcDC || !mask)
             return
+        ; Default target is the back-buffer + its dimensions; the scroll cache passes its own
+        ; padded DC and size so the source-rect clipping inverse-maps the correct viewport.
+        tgtDC := targetDC ? targetDC : this.memDC
+        clipWW := clipW ? clipW : this.bufW
+        clipHH := clipH ? clipH : this.bufH
 
         playerGX := playerWorldX / RadarOverlay.WORLD_TO_GRID_RATIO
         playerGY := playerWorldY / RadarOverlay.WORLD_TO_GRID_RATIO
@@ -2740,7 +2758,7 @@ class RadarOverlay extends GdiOverlayBase
         bx0 := 0, by0 := 0, bx1 := bmpW, by1 := bmpH
         if (Abs(det) > 1.0e-9)
         {
-            W := this.bufW, H := this.bufH
+            W := clipWW, H := clipHH
             minBx := "", minBy := "", maxBx := "", maxBy := ""
             for _, c in [[0, 0], [W, 0], [0, H], [W, H]]
             {
@@ -2780,7 +2798,7 @@ class RadarOverlay extends GdiOverlayBase
         NumPut("Int", np2x, pts, 16), NumPut("Int", np2y, pts, 20)
 
         DllCall("PlgBlt",
-            "Ptr", this.memDC,
+            "Ptr", tgtDC,
             "Ptr", pts,
             "Ptr", srcDC,
             "Int", bx0, "Int", by0,
@@ -2788,6 +2806,151 @@ class RadarOverlay extends GdiOverlayBase
             "Int", subH,
             "Ptr", mask,
             "Int", bx0, "Int", by0)
+    }
+
+    ; Draws the walkable + maphack terrain layers through a scroll cache. The layers' rotation and
+    ; scale (projectionCos/Sin) are constant frame-to-frame — only the player position changes — so
+    ; the composited result is rendered ONCE into a padded off-screen cache via the expensive
+    ; rotated PlgBlt (_BlitMaskLayer) and then copied to the back-buffer each frame with a cheap
+    ; translated TransparentBlt (offset = the player's screen delta since the cache was built). The
+    ; cache is rebuilt only when the view scrolls past the padding margin, the projection changes,
+    ; the active layer set changes, or the terrain bitmap is regenerated (which sets _maskCacheValid
+    ; := false) — turning a per-frame PlgBlt into an occasional one. Any failure falls back to the
+    ; direct per-frame PlgBlt path, so it is never worse than before.
+    _DrawMapLayersCached(walkOn, hackOn, mapCenterX, mapCenterY, playerWorldX, playerWorldY,
+                         projectionCos, projectionSin)
+    {
+        global Profiler
+        haveHack := hackOn && this._mapHackDC && this._mapHackMask
+        haveWalk := walkOn && this._mapWalkColorDC && this._mapWalkMask
+        if (!haveHack && !haveWalk)
+            return
+        if (this.bufW < 1 || this.bufH < 1)
+            return
+
+        MARGIN := RadarOverlay.MASK_CACHE_MARGIN
+        KEY    := RadarOverlay.MASK_CACHE_KEY
+        cw := this.bufW + 2 * MARGIN
+        ch := this.bufH + 2 * MARGIN
+
+        ; (Re)create the cache DC when missing or the back-buffer size changed.
+        if (!this._maskCacheDC || this._maskCacheW != cw || this._maskCacheH != ch)
+        {
+            this._DestroyMaskCache()
+            scrDC := DllCall("GetDC", "Ptr", 0, "Ptr")
+            this._maskCacheBmp := DllCall("CreateCompatibleBitmap", "Ptr", scrDC, "Int", cw, "Int", ch, "Ptr")
+            this._maskCacheDC  := DllCall("CreateCompatibleDC", "Ptr", scrDC, "Ptr")
+            DllCall("ReleaseDC", "Ptr", 0, "Ptr", scrDC)
+            if (!this._maskCacheDC || !this._maskCacheBmp)
+            {
+                this._DestroyMaskCache()
+                this._DrawMapLayersDirect(haveWalk, haveHack, mapCenterX, mapCenterY,
+                    playerWorldX, playerWorldY, projectionCos, projectionSin)
+                return
+            }
+            DllCall("SelectObject", "Ptr", this._maskCacheDC, "Ptr", this._maskCacheBmp)
+            this._maskCacheW := cw, this._maskCacheH := ch
+            this._maskCacheValid := false
+        }
+
+        playerGX := playerWorldX / RadarOverlay.WORLD_TO_GRID_RATIO
+        playerGY := playerWorldY / RadarOverlay.WORLD_TO_GRID_RATIO
+        layerKey := (haveWalk ? "w" : "") . (haveHack ? "h" : "")
+
+        ; Reuse the cache when the projection and layer set match and the view has scrolled less
+        ; than the padding margin. The cached image is a pure translation of the current view, so
+        ; the offset (player screen delta) is the same isometric basis the corners use.
+        reuse := false
+        offX := 0, offY := 0
+        cosDrift := Abs(projectionCos - this._maskCacheCos)
+        sinDrift := Abs(projectionSin - this._maskCacheSin)
+        projSame := (this._maskCacheCos != 0)
+            && (cosDrift <= Abs(this._maskCacheCos) * 0.002)
+            && (sinDrift <= Abs(this._maskCacheSin) * 0.002)
+        if (this._maskCacheValid && projSame && this._maskCacheLayers = layerKey)
+        {
+            dGX := playerGX - this._maskCacheOX
+            dGY := playerGY - this._maskCacheOY
+            offX := Round((-dGX + dGY) * projectionCos)
+            offY := Round(( dGX + dGY) * projectionSin)
+            if (Abs(offX) <= MARGIN && Abs(offY) <= MARGIN)
+                reuse := true
+        }
+
+        if !reuse
+        {
+            ; Rebuild: fill with the transparent key, then blit both layers at the padded centre
+            ; (+MARGIN) so a ±MARGIN scroll in either axis stays inside the cache bitmap.
+            Profiler.Begin("radar.mask.rebuild")
+            rct := Buffer(16, 0)
+            NumPut("Int", cw, rct, 8), NumPut("Int", ch, rct, 12)
+            kbrush := DllCall("CreateSolidBrush", "UInt", KEY, "Ptr")
+            DllCall("FillRect", "Ptr", this._maskCacheDC, "Ptr", rct, "Ptr", kbrush)
+            DllCall("DeleteObject", "Ptr", kbrush)
+
+            ccx := mapCenterX + MARGIN, ccy := mapCenterY + MARGIN
+            if haveWalk
+                this._BlitMaskLayer(this._mapWalkColorDC, this._mapWalkMask, ccx, ccy,
+                    playerWorldX, playerWorldY, projectionCos, projectionSin, this._maskCacheDC, cw, ch)
+            if haveHack
+                this._BlitMaskLayer(this._mapHackDC, this._mapHackMask, ccx, ccy,
+                    playerWorldX, playerWorldY, projectionCos, projectionSin, this._maskCacheDC, cw, ch)
+
+            this._maskCacheOX := playerGX, this._maskCacheOY := playerGY
+            this._maskCacheCos := projectionCos, this._maskCacheSin := projectionSin
+            this._maskCacheLayers := layerKey
+            this._maskCacheValid := true
+            offX := 0, offY := 0
+            Profiler.End("radar.mask.rebuild")
+        }
+
+        ; Composite the cache onto the back-buffer with the scroll offset. Sample the padded cache
+        ; at (MARGIN - off) so the view lands correctly; the HUD/loot ExcludeClipRect on memDC still
+        ; protects those regions. On failure, fall back to a direct blit for this frame.
+        Profiler.Begin("radar.mask.blit")
+        ok := DllCall("msimg32\TransparentBlt"
+            , "Ptr", this.memDC, "Int", 0, "Int", 0, "Int", this.bufW, "Int", this.bufH
+            , "Ptr", this._maskCacheDC, "Int", MARGIN - offX, "Int", MARGIN - offY
+            , "Int", this.bufW, "Int", this.bufH, "UInt", KEY, "Int")
+        Profiler.End("radar.mask.blit")
+        if !ok
+        {
+            this._maskCacheValid := false
+            this._DrawMapLayersDirect(haveWalk, haveHack, mapCenterX, mapCenterY,
+                playerWorldX, playerWorldY, projectionCos, projectionSin)
+        }
+    }
+
+    ; Fallback / non-cached path: blit each active terrain layer straight to the back-buffer with
+    ; the rotated PlgBlt (walk under, wall-border on top) — the original per-frame behaviour.
+    _DrawMapLayersDirect(haveWalk, haveHack, mapCenterX, mapCenterY, playerWorldX, playerWorldY,
+                         projectionCos, projectionSin)
+    {
+        if haveWalk
+            this._BlitMaskLayer(this._mapWalkColorDC, this._mapWalkMask,
+                mapCenterX, mapCenterY, playerWorldX, playerWorldY, projectionCos, projectionSin)
+        if haveHack
+            this._BlitMaskLayer(this._mapHackDC, this._mapHackMask,
+                mapCenterX, mapCenterY, playerWorldX, playerWorldY, projectionCos, projectionSin)
+    }
+
+    ; Frees the scroll-cache DC + bitmap and marks it invalid. Called on back-buffer resize and on
+    ; overlay destruction; the terrain-bitmap regen path only flips _maskCacheValid (cheap reuse).
+    _DestroyMaskCache()
+    {
+        if this._maskCacheBmp {
+            stockBmp := DllCall("GetStockObject", "Int", 0, "Ptr")
+            if this._maskCacheDC
+                DllCall("SelectObject", "Ptr", this._maskCacheDC, "Ptr", stockBmp)
+            DllCall("DeleteObject", "Ptr", this._maskCacheBmp)
+            this._maskCacheBmp := 0
+        }
+        if this._maskCacheDC {
+            DllCall("DeleteDC", "Ptr", this._maskCacheDC)
+            this._maskCacheDC := 0
+        }
+        this._maskCacheW := 0, this._maskCacheH := 0
+        this._maskCacheValid := false
     }
 
     ; Hide() and SetAlpha() are inherited from GdiOverlayBase.
@@ -2798,6 +2961,7 @@ class RadarOverlay extends GdiOverlayBase
     {
         this.Hide()
         this._DestroyMapHackBitmap()
+        this._DestroyMaskCache()
         super.__Delete()
     }
 }
