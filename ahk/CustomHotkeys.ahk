@@ -703,6 +703,23 @@ _HotkeysBuildDebugRecord(hk, a, ai, snap)
             rec["lines"].Push("aim radius " px "px @" mode)
         }
     }
+    else if (t = "enemyAnim")
+    {
+        mode := a.Has("radiusMode") ? a["radiusMode"] : "world"
+        if (mode = "world")
+        {
+            wr := a.Has("worldRadius") ? (a["worldRadius"] + 0) : 1200
+            rec["circlePlayerWorld"] := wr
+        }
+        else
+        {
+            px := a.Has("radius") ? (a["radius"] + 0) : 120
+            rec[(mode = "cursor") ? "circleCursorPx" : "circlePlayerPx"] := px
+        }
+        idsStr := a.Has("animIds") ? a["animIds"] : ""
+        matched := _HotkeysCheckEnemyAnim(a, snap)
+        rec["lines"].Push("enemyAnim [" idsStr "] @" mode " -> " (matched ? "MATCH" : "no match"))
+    }
     else if (t = "charges")
     {
         type := a.Has("chargeType") ? a["chargeType"] : "power"
@@ -996,7 +1013,7 @@ _HotkeysRuntime(id)
 ; True if t names a condition (gate) type rather than an effect type.
 _HotkeysIsCondType(t)
 {
-    return (t = "vitals" || t = "buff" || t = "charges" || t = "monsterCount" || t = "monsterCountCursor")
+    return (t = "vitals" || t = "buff" || t = "charges" || t = "monsterCount" || t = "monsterCountCursor" || t = "enemyAnim")
 }
 
 ; Counts the condition leaves under a tree node (a leaf counts as 1; a group
@@ -1093,6 +1110,7 @@ _HotkeysEvalLeaf(a, snap)
         case "charges":            return _HotkeysCheckCharges(a, snap)
         case "monsterCount":       return _HotkeysCheckMonsterCount(a, snap)
         case "monsterCountCursor": return _HotkeysCheckMonsterCountCursor(a, snap)
+        case "enemyAnim":          return _HotkeysCheckEnemyAnim(a, snap)
     }
     return true
 }
@@ -1454,6 +1472,86 @@ _HotkeysCheckMonsterCountCursor(a, snap)
     a2 := a.Clone()
     a2["radiusMode"] := "cursor"
     return _HotkeysCheckMonsterCount(a2, snap)
+}
+
+; Enemy-animation condition: true iff any hostile monster within the configured
+; radius is CURRENTLY playing one of the leaf's animation ids. The enemy
+; animationId is the radar hot-path read (decodedComponents["actor"]
+; ["animationId"], monster-gated). Fields: animIds (comma id list), radiusMode
+; (world|player|cursor), worldRadius (world units) / radius (px). Mirrors the
+; monster gate of _HotkeysCheckMonsterCount (monsters, targetable, not friendly).
+_HotkeysCheckEnemyAnim(a, snap)
+{
+    if !snap
+        return false
+    ids := _HotkeysParseIdSet(a.Has("animIds") ? a["animIds"] : "")
+    if (ids.Count = 0)
+        return false
+    mode := a.Has("radiusMode") ? a["radiusMode"] : "world"
+    radius := (mode = "world")
+        ? (a.Has("worldRadius") ? (a["worldRadius"] + 0) : 1200)
+        : (a.Has("radius") ? (a["radius"] + 0) : 120)
+
+    octx := 0
+    if (mode != "world")
+    {
+        octx := _HotkeysPxOrigin(snap, mode)   ; "player" | "cursor" px origin
+        if !octx
+            return false
+    }
+
+    for entry in _HotkeysAwakeSample(snap)
+    {
+        entity := entry.Has("entity") ? entry["entity"] : 0
+        if !(entity && entity is Map)
+            continue
+        if !InStr(entity.Has("path") ? StrLower(entity["path"]) : "", "metadata/monsters/")
+            continue
+        dc := entity.Has("decodedComponents") ? entity["decodedComponents"] : 0
+        if !(dc && dc is Map) || !_HotkeysIsTargetable(dc)
+            continue
+        ; Skip our own minions / spectres / allies.
+        pos := dc.Has("positioned") ? dc["positioned"] : 0
+        if (pos && pos is Map && pos.Has("isFriendly") && pos["isFriendly"])
+            continue
+        ; Dangerous animation right now?
+        actor := dc.Has("actor") ? dc["actor"] : 0
+        if !(actor && actor is Map && actor.Has("animationId") && ids.Has(actor["animationId"]))
+            continue
+        ; Within the configured radius?
+        if (mode = "world")
+        {
+            dist := entry.Has("distance") ? entry["distance"] : -1
+            if (dist < 0 || dist > radius)
+                continue
+        }
+        else
+        {
+            render := dc.Has("render") ? dc["render"] : 0
+            wp := (render && render is Map && render.Has("worldPosition")) ? render["worldPosition"] : 0
+            if !(wp && wp is Map)
+                continue
+            d := _HotkeysPxDist(octx, wp.Has("x") ? wp["x"] : 0, wp.Has("y") ? wp["y"] : 0, wp.Has("z") ? wp["z"] : 0)
+            if (d < 0 || d > radius)
+                continue
+        }
+        return true   ; a dangerous enemy is in range → the condition passes
+    }
+    return false
+}
+
+; Parses a comma/space/tab-separated id list into a Map(id->true). Non-integers
+; are ignored. Used by the enemyAnim condition.
+_HotkeysParseIdSet(s)
+{
+    out := Map()
+    for _, tok in StrSplit(s, ",", " `t")
+    {
+        t := Trim(tok)
+        if (t != "" && IsInteger(t))
+            out[Integer(t)] := true
+    }
+    return out
 }
 
 ; Returns the awake-entity sample array from a snapshot, or an empty array.

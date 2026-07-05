@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.185`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.186`.
 
 ## Language
 
@@ -1652,33 +1652,37 @@ can react to the enemy's current animation / cast.
   idles/moves/casts → it should change (0=Idle, movement, skill CastTypes). Decode the number via
   `ui/animation_names.js` if needed.
 
-## Combat Reaction — defensive reaction to enemy animations (shipped 0.45.13.185)
+## Enemy-animation MACRO CONDITION (shipped 0.45.13.186)
 
-Consumes the hot-path enemy animationId: when a nearby ENEMY plays an animation id in the user's
-danger list, aim the cursor AWAY from that enemy and press a configured key (a dodge / guard /
-defensive skill bound in-game). Works during MANUAL play too — own toggle, independent of AutoPilot.
-Design chosen by the owner: configurable key + aim-away, user-supplied id list, always-in-game scope.
+Consumes the hot-path enemy animationId as a new **Macro Engine condition** rather than a standalone
+feature. Rationale (owner): the reaction is primarily for MANUAL play (and may also fire under
+AutoPilot), so it belongs in the Macro Engine's boolean condition tree — where the user attaches ANY
+action (a dodge/guard/defensive key, a flask, a chain) — not under Automation. The standalone
+`CombatReaction` feature shipped at 0.45.13.185 was REMOVED and replaced by this.
 
-- **`ahk/CombatReaction.ahk` (new):** `LoadCombatReaction()` seeds all globals (init gotcha) +
-  self-persists `[CombatReaction]` (`enabled`, `hotkey`, `animIds`, `radius`, `cooldownMs`, `aimAway`,
-  `restoreCursor`; default OFF, empty). `TryCombatReaction(radarSnap)` (from `UpdateRadarFast` right
-  after `TryAutoPilot`) — CHEAP when idle: an in-memory scan of the awake sample reading the CACHED
-  `decodedComponents["actor"]["animationId"]` (from the hot-path read) + life/positioned/distance;
-  no RPM, no input. Only on a danger-set match (nearest hostile monster within `radius`), cooldown
-  elapsed, and PoE foreground, does `_CrReact` run: project player + enemy via `_WorldToScreen`, push
-  the cursor to the opposite side of the player (`aimAway`), `_SendSkillKey` the configured key
-  (reuses CombatAutomation's UIPI-bypass sender; supports keys + mouse buttons), then optionally
-  restore the cursor. `g_crAnimIds` is a parsed id→true set rebuilt from the comma string.
-- **Wiring:** `InGameStateMonitor.ahk` `#Include` + `LoadCombatReaction()`; `AutoFlask.ahk`
-  `TryCombatReaction(radarSnap)` after `TryAutoPilot`; `BridgeDispatch.ahk` `SetCombatReaction`
-  (apply→persist→push); `WebViewBridge.ahk` pushes `combatReaction`; `ui/index.html` section
-  **Automation → AutoPilot → "⚔️ Combat Reaction"** (`det-ap-reaction`; enable, reaction key,
-  danger-id list, radius, cooldown, aim-away, restore-cursor) + `combatReactionSyncFromHeader`.
-- **Collecting ids:** Entities tab → a monster → Actor → `animationId` (e.g. a boss wind-up/slam),
-  paste the numbers into the danger list.
-- **Pending in-game verification:** bind a dodge key in-game + in the tool, list a monster's attack
-  id, stand near it → on that animation the cursor flicks away and the key fires (cooldown-gated);
-  confirm it does nothing for non-listed animations and while PoE is not focused.
+- **Condition type `enemyAnim` (`ahk/CustomHotkeys.ahk`):** `_HotkeysIsCondType` + `_HotkeysEvalLeaf`
+  gain `enemyAnim`; `_HotkeysCheckEnemyAnim(a, snap)` returns true iff any hostile monster within the
+  configured radius is CURRENTLY playing one of the leaf's animation ids. Mirrors
+  `_HotkeysCheckMonsterCount`'s monster gate (path `metadata/monsters/`, targetable, not friendly)
+  and its radius modes (world units via `worldRadius` / `radius` px `player`|`cursor`, reusing
+  `_HotkeysPxOrigin`/`_HotkeysPxDist`); the animation match reads
+  `decodedComponents["actor"]["animationId"]`. Leaf fields: `animIds` (comma id list, parsed by
+  `_HotkeysParseIdSet` → id-set), `radiusMode`, `worldRadius`/`radius`. Debug: an `enemyAnim` branch
+  in `_HotkeysBuildDebugRecord` draws the range circle + a live `MATCH / no match` line.
+- **UI (`ui/index.html`):** `enemyAnim` added to `HK_COND_TYPES`, the add-condition `<option>` list,
+  `HK_ACT_LABELS`, `hkActionDefaults` (`{animIds:'', radiusMode:'world', worldRadius:1200, radius:120,
+  debug:0, circleColor:'#FF6A6A'}`), a `hkRenderCondLeaf` `case 'enemyAnim'` (IDs text via `hkCTxt` +
+  radius + radiusMode), `animIds` added to `hkSetCond`'s text-key list, and the debug range-circle
+  swatch now shows for `enemyAnim` too. No new persistence path — it rides the existing hotkey config.
+- **Collecting ids:** Entities tab → a monster → Actor → `animationId` (e.g. a boss wind-up / slam);
+  paste the numbers into the condition's IDs field. Attach the hotkey's normal key action (dodge /
+  guard / flask) as the reaction.
+- **Removed:** `ahk/CombatReaction.ahk` + its wiring (`#Include`, `LoadCombatReaction`,
+  `TryCombatReaction`, `SetCombatReaction`, the `combatReaction` header, the Automation → AutoPilot
+  "⚔️ Combat Reaction" UI section + `combatReactionSyncFromHeader`).
+- **Pending in-game verification:** add an `enemyAnim` condition to a macro (IDs = a monster's attack
+  animationId, radius, a dodge/guard key action), stand near that monster → the macro fires on that
+  animation and not otherwise; the 🐞 debug shows the range circle + live MATCH state.
 
 ## Reference
 

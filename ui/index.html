@@ -5557,50 +5557,6 @@
           </details>
         </div>
 
-        <div class="cfg-section">
-          <details id="det-ap-reaction" ontoggle="syncCfgSections()">
-            <summary>
-              <div class="cfg-header" data-snodekey="ap-reaction">⚔️ Combat Reaction</div>
-            </summary>
-            <div class="cfg-subsection">
-              <div class="cfg-help">
-                When a nearby ENEMY plays one of the animation IDs you list below, the cursor is
-                aimed AWAY from that enemy and your configured key is pressed — bind it in-game to a
-                dodge-roll, guard, or defensive skill. Works while you play manually too (it does not
-                need AutoPilot). Only fires while Path of Exile 2 is focused, and is cooldown-limited.
-                Collect the IDs from the Entities tab → a monster → the <b>Actor</b> component →
-                <b>animationId</b> (e.g. a boss wind-up / slam), then paste the numbers here.
-              </div>
-              <div class="cfg-row"><span class="cfg-label">Enable combat reaction</span>
-                <label class="toggle"><input type="checkbox" id="cr-enabled"
-                    onchange="ahkCall('SetCombatReaction','enabled', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-row"><span class="cfg-label">Reaction key <span class="cfg-label-hint">(AHK key: q, e, space, rbutton…)</span></span>
-                <input type="text" id="cr-hotkey" spellcheck="false" style="width:120px"
-                    onchange="ahkCall('SetCombatReaction','hotkey', this.value)">
-              </div>
-              <div class="cfg-row"><span class="cfg-label">Danger animation IDs <span class="cfg-label-hint">(comma-separated)</span></span>
-                <input type="text" id="cr-animids" spellcheck="false" style="width:200px" placeholder="e.g. 1018,1050,552"
-                    onchange="ahkCall('SetCombatReaction','animIds', this.value)">
-              </div>
-              <div class="cfg-row"><span class="cfg-label">Trigger radius (world units)</span>
-                <span class="hk-num"><input type="number" id="cr-radius" min="0" max="20000" step="100" onchange="ahkCall('SetCombatReaction','radius',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
-              </div>
-              <div class="cfg-row"><span class="cfg-label">Cooldown (ms)</span>
-                <span class="hk-num"><input type="number" id="cr-cooldown" min="0" max="60000" step="100" onchange="ahkCall('SetCombatReaction','cooldownMs',this.value)"><span class="hk-num-spin"><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,1)">▲</button><button type="button" tabindex="-1" class="hk-num-btn" onclick="hkNumStep(this,-1)">▼</button></span></span>
-              </div>
-              <div class="cfg-row"><span class="cfg-label">Aim cursor away from enemy</span>
-                <label class="toggle"><input type="checkbox" id="cr-aimaway"
-                    onchange="ahkCall('SetCombatReaction','aimAway', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-row"><span class="cfg-label">Restore cursor after reacting</span>
-                <label class="toggle"><input type="checkbox" id="cr-restore"
-                    onchange="ahkCall('SetCombatReaction','restoreCursor', this.checked?'1':'0')"><span class="toggle-slider"></span></label>
-              </div>
-            </div>
-          </details>
-        </div>
-
         </div><!-- /cfg-subpanel autopilot -->
 
 
@@ -7926,18 +7882,6 @@
       val('uhp-minEx', s.minEx);
     }
 
-    function combatReactionSyncFromHeader(s) {
-      if (!s) return;
-      const chk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = v === true || v === 1 || v === '1' || v === 'true'; };
-      const val = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
-      chk('cr-enabled', s.enabled);
-      val('cr-hotkey', s.hotkey ?? '');
-      val('cr-animids', s.animIds ?? '');
-      val('cr-radius', s.radius);
-      val('cr-cooldown', s.cooldownMs);
-      chk('cr-aimaway', s.aimAway);
-      chk('cr-restore', s.restoreCursor);
-    }
 
     function ritualValueBadgesSyncFromHeader(s) {
       if (!s) return;
@@ -8704,6 +8648,7 @@
       buff: 'Condition: Buff',
       charges: 'Condition: Charges',
       monsterCount: 'Condition: Monster count',
+      enemyAnim: 'Condition: Enemy animation',
       aim: 'Mouse move (auto-aim)',
       // Legacy types — kept so pre-merge exports still read correctly.
       press: 'Key press / hold / loop',
@@ -9094,6 +9039,7 @@
         case 'buff':         return { type, buffName: '', mode: 'present', minStacks: 0, minTimeLeftMs: 0 };
         case 'charges':      return { type, chargeType: 'power', op: '>=', value: 1 };
         case 'monsterCount': return { type, rarity: 'any', radiusMode: 'player', radius: 120, op: '>=', value: 1 };
+        case 'enemyAnim':    return { type, animIds: '', radiusMode: 'world', worldRadius: 1200, radius: 120, debug: 0, circleColor: '#FF6A6A' };
         case 'aim':          return { type, targetType: 'monster', rarity: 'any', radius: 150, worldRadius: 1000, radiusMode: 'cursor', chestType: '', chestTypeCustom: 0, name: '', metadataPath: '', press: 1, holdMs: 0, scanAll: 0 };
         default:             return { type: 'key', mode: 'press' };
       }
@@ -9116,7 +9062,7 @@
     //   { kind:'group', mode:'all'|'any', cid, children:[ <node>... ] }
     //   leaf = a condition action ({type:'vitals'|'buff'|'charges'|'monsterCount', ...})
     // cid is a UI-only stable handle for addressing a node in onchange handlers.
-    const HK_COND_TYPES = ['vitals', 'buff', 'charges', 'monsterCount', 'monsterCountCursor'];
+    const HK_COND_TYPES = ['vitals', 'buff', 'charges', 'monsterCount', 'monsterCountCursor', 'enemyAnim'];
     function hkIsCondType(t) { return HK_COND_TYPES.includes(t); }
     let hkCidSeq = 1;
     function hkNewCid() { return hkCidSeq++; }
@@ -9187,7 +9133,7 @@
       const f = hkFindCond(hkCondHk(gi, hi), cid); if (!f) return;
       const isText = (k === 'buffName' || k === 'metadataPath' || k === 'chestType'
               || k === 'op' || k === 'resource' || k === 'mode' || k === 'chargeType'
-              || k === 'rarity' || k === 'radiusMode' || k === 'circleColor');
+              || k === 'rarity' || k === 'radiusMode' || k === 'circleColor' || k === 'animIds');
       let val = isText ? v : (isNaN(+v) ? v : +v);
       if (!isText && typeof val === 'number' && val < 0) val = 0;
       f.node[k] = val;
@@ -9277,6 +9223,7 @@
       const addCtrls = addOpen ? `<select id="hk-addcond-${cid}" title="Pick a condition type to add">
             <option value="vitals">Vitals</option><option value="buff">Buff</option>
             <option value="charges">Charges</option><option value="monsterCount">Monster count</option>
+            <option value="enemyAnim">Enemy animation</option>
           </select>
           <button class="hk-btn" title="Add the selected condition to this group" onclick="hkAddCond(${gi},${hi},${cid})">+ Condition</button>
           <button class="hk-btn" title="Add a nested group — a bracket — with its own ALL/ANY" onclick="hkAddCondGroup(${gi},${hi},${cid})">+ Group ( )</button>` : '';
@@ -9318,9 +9265,20 @@
                + `${hkCSel(a, 'op', HK_OPS, gi, hi, 'Comparison operator for the monster count')} ${hkCNum(a, 'value', 1, gi, hi, 'Monster-count threshold')}`;
           break;
         }
+        case 'enemyAnim': {
+          const eaWorld = (a.radiusMode || 'world') !== 'player' && (a.radiusMode || 'world') !== 'cursor';
+          const eaRadiusField = eaWorld
+            ? `Range ${hkCNum(a, 'worldRadius', 1200, gi, hi, 'Radius in world units (zoom-independent — matches the actual game distance)')} `
+            : `Radius(px) ${hkCNum(a, 'radius', 120, gi, hi, 'Radius in screen pixels')} `;
+          body = `IDs ${hkCTxt(a, 'animIds', 'e.g. 1018,1050,552', gi, hi)} `
+               + `<span class="hk-hint" title="Comma-separated enemy animation IDs. Collect them from the Entities tab → a monster → the Actor component → animationId (e.g. a boss wind-up / slam).">ⓘ</span> `
+               + eaRadiusField
+               + `${hkCSel(a, 'radiusMode', [['world', 'around player (range)'], ['player', 'around player (px)'], ['cursor', 'around cursor (px)']], gi, hi, 'World-unit range around the player, or a pixel radius around the player / cursor')}`;
+          break;
+        }
         default: body = `<span style="color:var(--subtext)">unknown condition</span>`;
       }
-      const swatch = (t === 'monsterCount' && hkBool(a.debug))
+      const swatch = ((t === 'monsterCount' || t === 'enemyAnim') && hkBool(a.debug))
         ? `<span class="cp-swatch" style="--swatch-color:${hkEsc(a.circleColor || '#FFA8C0')}" title="Range circle color" onclick="hkOpenCondCircleColor(${gi},${hi},${cid},this)"></span>` : '';
       return `<div class="hk-cleaf">
         <span class="hk-act-type">${hkEsc(HK_ACT_LABELS[t] || t)}</span>
@@ -10450,7 +10408,6 @@
       if (d.stashMover !== undefined) _hdrTry('stashMover', () => stashMoverSyncFromHeader(d.stashMover));
       if (d.lootRadarValue !== undefined) _hdrTry('lootRadarValue', () => lootRadarValueSyncFromHeader(d.lootRadarValue));
       if (d.uiHoverPrice !== undefined) _hdrTry('uiHoverPrice', () => uiHoverPriceSyncFromHeader(d.uiHoverPrice));
-      if (d.combatReaction !== undefined) _hdrTry('combatReaction', () => combatReactionSyncFromHeader(d.combatReaction));
       if (d.ritualValueBadges !== undefined) _hdrTry('ritualValueBadges', () => ritualValueBadgesSyncFromHeader(d.ritualValueBadges));
       if (d.customLandmarks !== undefined) _hdrTry('customLandmarks', () => customLandmarksSyncFromHeader(d.customLandmarks));
       if (d.lootLabelClear !== undefined) _hdrTry('lootLabelClear', () => lootLabelClearSyncFromHeader(d.lootLabelClear));
@@ -12744,7 +12701,7 @@
     // ═══════════════════════════════════════════════════════════════════
     //  CONFIG HELPERS
     // ═══════════════════════════════════════════════════════════════════
-    const _cfgSectionIds = ['status', 'integrations', 'autoflask', 'ap-combat', 'ap-explore', 'ap-loot', 'ap-reaction', 'stashmover', 'rangecircles', 'radar', 'lootvalue', 'uihoverprice', 'customlandmarks', 'maphack', 'blacklist', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
+    const _cfgSectionIds = ['status', 'integrations', 'autoflask', 'ap-combat', 'ap-explore', 'ap-loot', 'stashmover', 'rangecircles', 'radar', 'lootvalue', 'uihoverprice', 'customlandmarks', 'maphack', 'blacklist', 'radar-debug', 'debug-panels', 'debug-discovery', 'debug-diff', 'debug-overlay', 'offset-compare', 'al-conditions', 'al-timing', 'al-output', 'vitals-general', 'vitals-life', 'vitals-mana', 'vitals-es'];
     let _cfgSectionsGuard = 0;
     let _cfgSectionsLoaded = false;
 
