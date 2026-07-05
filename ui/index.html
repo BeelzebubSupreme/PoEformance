@@ -11355,7 +11355,10 @@
       // Lazy-decode cache. Keys are `<entityAddr>::<componentName>`,
       // values are { loading: bool, data: object|null }. Survives
       // snapshot pushes so a row stays expanded after the next tick.
-      lazyDecoded: new Map()
+      lazyDecoded: new Map(),
+      // Keys of lazy components whose live re-fetch is currently in flight,
+      // so the per-snapshot refresh doesn't stack duplicate decode calls.
+      refreshInFlight: new Set()
     };
 
     function updateEntities(jsonStr) {
@@ -11376,10 +11379,40 @@
       );
       // Drop lazy-decoded cache for entities that left range
       for (const key of [...window._eiState.lazyDecoded.keys()]) {
-        if (!liveAddrs.has(key.split('::')[0]))
+        if (!liveAddrs.has(key.split('::')[0])) {
           window._eiState.lazyDecoded.delete(key);
+          window._eiState.refreshInFlight.delete(key);
+        }
       }
       eiRender();
+      // Keep expanded lazy components (e.g. Actor animationId) live: silently
+      // re-decode them each snapshot instead of freezing on the first read.
+      _eiRefreshExpandedLazy(items);
+    }
+
+    // Re-fetch every currently-EXPANDED lazy-decoded component from the fresh
+    // snapshot so live fields keep updating. Silent — the existing data stays
+    // on screen (no loading flicker) until the async decode returns; guarded
+    // by refreshInFlight so slow decodes never stack duplicate calls.
+    function _eiRefreshExpandedLazy(items) {
+      const st = window._eiState;
+      if (!st.lazyDecoded.size) return;
+      // Build "<addr>::<name>" -> component addr from the fresh items.
+      const compAddrByKey = new Map();
+      for (const e of items) {
+        const comps = Array.isArray(e.components) ? e.components : [];
+        for (const c of comps) compAddrByKey.set(e.addr + '::' + c.name, c.addr || '');
+      }
+      for (const [key, entry] of st.lazyDecoded) {
+        if (!entry || entry.loading) continue;       // initial decode still pending
+        if (!st.compExpanded.has(key)) continue;      // only refresh visible rows
+        if (st.refreshInFlight.has(key)) continue;    // one live decode at a time
+        const compAddr = compAddrByKey.get(key);
+        if (compAddr === undefined) continue;         // component gone this frame
+        const [entityAddr, compName] = key.split('::');
+        st.refreshInFlight.add(key);
+        ahkCall('DecodeComponent', entityAddr, compName, compAddr);
+      }
     }
 
     // Re-renders the inspector from the cached payload + current filter state.
@@ -11697,6 +11730,7 @@
       const key = entityAddr + '::' + compName;
       const data = (decoded && typeof decoded === 'object') ? decoded : {};
       window._eiState.lazyDecoded.set(key, { loading: false, data: data });
+      window._eiState.refreshInFlight.delete(key);   // live re-fetch settled
       // Auto-expand if the lazy fetch returned anything useful, so the
       // user doesn't have to click a second time after the await.
       if (Object.keys(data).length > 0)
