@@ -1864,7 +1864,7 @@ yet #Included by the running app, so it touches zero hot-path code.
   interpreter refuses function definitions interspersed between top-level executable statements —
   group all `func(){}` defs before the executable body (or the whole script fails to load with no
   runtime error / OnError never fires).
-### Stage 3b: reader publishes the awake sample + parity diagnostic (0.45.13.213)
+### Stage 3b: reader publishes the awake sample + parity diagnostic (0.45.13.208)
 
 The reader now PACKS the awake-entity sample into the radar block each tick, and Main cross-checks it
 against its own live sample — the gate before stage 3c flips Main to CONSUME it. Same safe posture as
@@ -1912,7 +1912,7 @@ untouched** (it just reads the block on demand for the check).
   pure TEMPORAL SKEW (two async scans sampling at slightly different instants), and one sample with a
   ~20 s stale heartbeat was a frozen publish — both are exactly what stage 3c's freshness gate handles.
 
-### Stage 3c: Main consumes the reader's sample, with fallback (0.45.13.213)
+### Stage 3c: Main consumes the reader's sample, with fallback (0.45.13.210)
 
 The payoff: when the reader is publishing a FRESH sample for the current area, Main skips its own
 ~40 ms entity scan and rebuilds the awake sample from the reader's flat records. A SECOND opt-in
