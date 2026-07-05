@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.178`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.179`.
 
 ## Language
 
@@ -1571,9 +1571,19 @@ chase down why it (and the whole Actor block) stopped tracking the character.
   known vector-count offsets to tell a local shift from a whole-struct move. Writes
   `logs\InGameStateMonitor.actor_probe.log`. Bridge `ActorProbeRun`; UI "🎭 Probe Actor" in the
   RE-tools row. Reuses `_AIP_ResolveAreaInstance` + `_AIP_WriteProbeLog`.
-- **Pending in-game verification:** run "🎭 Probe Actor", act during the sample window, read the
-  log → the changing low-int offset IS the new animationId; update `PoE2Offsets.Actor["AnimationId"]`
-  (and, if the whole struct moved, the vector offsets by the same delta).
+- **FIXED — animationId 0x8A0 → 0x8B0 (+0x10) (0.45.13.179):** the probe (owner run) proved it.
+  Old `0x8A0` was FROZEN at 0 while acting; `+0x8B0` cycled through Idle(0) / FixedRun(195) /
+  DodgeRoll(268) / DodgeRollBack(402) / SprintEnd(872) AND the cast skills' CastTypes
+  (OrbOfStorms 474 / Flamewall 472 / SparkAdditive 299) — i.e. the primary current-animation field
+  (the separate `0x380` cluster held only locomotion-LAYER anims like FixedRunLayerBaseSwitched, so
+  it is NOT the field). `PoE2Offsets.Actor["AnimationId"] := 0x8B0`. The **vector offsets were NOT
+  moved**: ActiveSkills@0xB08 (42) and Cooldowns@0xB20 (4) still read clean plausible counts at the
+  old offsets (a whole-struct shift would read garbage there), and DeployedEnts="?" only means the
+  vector is empty (0 deployed → begin=end=0), not a wrong offset — so only the animationId field's
+  location changed. `ActorProbe` stays as the re-drift aid; it reads the offset dynamically so it
+  keeps working after the fix.
+- **Pending in-game verification (owner):** Entity Inspector → player → Actor → `animationId` should
+  now show Idle standing, "Fixed Run" moving, and the skill name while casting.
 
 ## Reference
 

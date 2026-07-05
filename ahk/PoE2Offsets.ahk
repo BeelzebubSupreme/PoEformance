@@ -237,7 +237,12 @@ class PoE2Offsets
     )
 
     static Actor := Map(
-        "AnimationId", 0x8A0,
+        ; AnimationId drifted 0x8A0 -> 0x8B0 (+0x10) with a game patch. Confirmed
+        ; via ActorProbe: the old 0x8A0 froze at 0, while 0x8B0 cycles Idle(0)/
+        ; FixedRun(195)/DodgeRoll(268) and the cast skill CastTypes
+        ; (OrbOfStorms 474 / Flamewall 472 / SparkAdditive 299) — the primary
+        ; current-animation field. (0x380 is a locomotion-LAYER field, not this.)
+        "AnimationId", 0x8B0,
         "ActiveSkills", 0xB08,        ; ActiveSkillsPtr StdVector start
         "ActiveSkillsLast", 0xB10,
         "Cooldowns", 0xB20,           ; CooldownsPtr StdVector start
