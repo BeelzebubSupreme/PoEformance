@@ -259,7 +259,7 @@ class PoE2PlayerReader extends PoE2PlayerComponentsReader
         ; Prefer a caller-supplied component, otherwise read once and reuse for both.
         statsComp := (playerStatsComponent && Type(playerStatsComponent) = "Map")
             ? playerStatsComponent
-            : this.ReadPlayerStatsComponent(localPlayerPtr)
+            : this._CachedPlayerStatsComponent(localPlayerPtr)
 
         rage := this.ReadRageSnapshotFromStats(statsComp)
         statShift := (rage && Type(rage) = "Map" && rage.Has("shift")) ? rage["shift"] : ""
@@ -409,6 +409,38 @@ class PoE2PlayerReader extends PoE2PlayerComponentsReader
         }
 
         return (bestScore >= 2) ? best : 0
+    }
+
+    ; Returns ReadPlayerStatsComponent(localPlayerPtr) cached and refreshed at most every ttlMs.
+    ; The only vitals-path consumers of the Stats component are Rage/Spirit, which change slowly,
+    ; yet reading it does two full stats-array scans (statsByItems + statsByBuffAndActions) — far
+    ; too expensive to run every vitals tick (it was the whole read.world.player cost). Life/Mana/
+    ; ES are read fresh in ReadPlayerVitals and are NOT affected by this cache. The cache is keyed
+    ; on the player pointer so it self-invalidates on a zone / character switch; a failed read is
+    ; not cached (serve the last good value for this player, else fall through).
+    ; Returns: the Stats component Map, or 0.
+    _CachedPlayerStatsComponent(localPlayerPtr, ttlMs := 500)
+    {
+        now := A_TickCount
+        if (this.HasOwnProp("_statsCompCache") && IsObject(this._statsCompCache)
+            && this.HasOwnProp("_statsCompPtr") && this._statsCompPtr = localPlayerPtr
+            && this.HasOwnProp("_statsCompTick") && (now - this._statsCompTick) < ttlMs)
+            return this._statsCompCache
+
+        comp := this.ReadPlayerStatsComponent(localPlayerPtr)
+        if IsObject(comp)
+        {
+            this._statsCompCache := comp
+            this._statsCompPtr := localPlayerPtr
+            this._statsCompTick := now
+            return comp
+        }
+
+        ; Read failed — don't poison the cache; serve the last good value if it is for this player.
+        if (this.HasOwnProp("_statsCompCache") && IsObject(this._statsCompCache)
+            && this.HasOwnProp("_statsCompPtr") && this._statsCompPtr = localPlayerPtr)
+            return this._statsCompCache
+        return comp
     }
 
     ; Finds and reads the Stats component for the local player entity.
