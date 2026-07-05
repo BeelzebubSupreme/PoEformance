@@ -9,6 +9,13 @@ ahk/BridgeDispatch.ahk -text
 ahk/WebViewBridge.ahk  -text
 ui/animation_names.js  -text
 
+# Version-carrying files: auto-resolve a version-line merge conflict to the higher
+# version (the dev branch always wins). Needs the "poever" merge driver configured
+# locally once — run tools/setup-git-merge-driver.sh (or .bat). See tools/git-merge-version.py.
+InGameStateMonitor.ahk merge=poever
+README.md              merge=poever
+CLAUDE.md              merge=poever
+
 # Binary assets — never normalize (text=auto already detects these; explicit for safety).
 *.png  binary
 *.jpg  binary

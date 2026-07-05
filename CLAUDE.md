@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.190`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.191`.
 
 ## Language
 
@@ -44,6 +44,13 @@ inline when authoring commit messages, PR bodies, etc.
   Always count up from the dev branch's own latest value; never reset it to match
   `master`. `master` is not bumped independently, so on merge the dev-branch version
   always wins (resolve any version-line conflict by taking the dev-branch value).
+  A **merge driver automates this for LOCAL merges**: `.gitattributes` maps the three
+  version files to `merge=poever` (`tools/git-merge-version.py`), which keeps the higher
+  version on a version-only conflict (direction-independent). It needs a one-time local
+  setup — `sh tools/setup-git-merge-driver.sh` (or `tools\setup-git-merge-driver.bat`) —
+  since the driver definition lives in `.git/config`, not the repo. GitHub's web "Merge"
+  button does NOT run merge drivers, so merge LOCALLY to benefit
+  (`git checkout master && git merge <dev-branch> && git push`).
 - **Always end a reply that committed & pushed with the exact pull command** so the
   user can grab it locally, e.g. `git pull origin <current-dev-branch>`. Every time a
   change is pushed — no exceptions. The user merges the dev branch onto `master`
