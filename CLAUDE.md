@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.206`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.207`.
 
 ## Language
 
@@ -1822,6 +1822,53 @@ HIJACK the radar tick into a 10 ms turbo loop that froze every overlay.
   animationIds correctly, the round-trip digest is bug-free, and (the whole point) the main tick keeps
   rendering the overlays during fishing. The Stage-1 foundation (shared memory + seqlock + lifecycle
   + the sampler pattern) is thus proven end-to-end on a real feature.
+
+### Stage 3a: the radar-snapshot wire format + offline harness (0.45.13.207)
+
+The high-stakes step — moving the radar snapshot to the reader — starts with the WIRE FORMAT, proven
+losslessly offline BEFORE any hot-path wiring (safety principle 3: never worse). Full design +
+record contract in `docs/reader-split.md` (Stage 3 design). This cut adds the format only; it is NOT
+yet #Included by the running app, so it touches zero hot-path code.
+
+- **`ahk/PoefRadarProto.ahk` (new)** — the shared byte layout for the radar snapshot block (a SEPARATE
+  named mapping `Local\PoEformanceRadarSnap` from the stage-2 status block). A fixed header + one
+  seqlock-guarded payload: `MAX_RECORDS`=512 flat per-entity records (`RECORD_SIZE`=120 B) + a
+  `HEAP_BYTES`=128 KB interned UTF-8 string heap (paths). Each record carries exactly the leaf fields
+  a full 21-file consumer audit found are read off `decodedComponents` on the radar path — render
+  (worldX/Y/Z, terrainHeight; gridPosition derived), life (curHP/maxHP/isAlive/lifeCurrentPercentMax),
+  positioned (reaction → isFriendly), rarityId, chest (opened/labelVis/strongbox bits), targetable
+  (a BARE BOOL on the radar path), actor (animationId) — plus the Targetable/Actor **component
+  addresses** for consumers that walk `entity["components"]` for a live re-read. A `R_PRESENCE`
+  bitfield gates which components are present. Classes-only (safe to #Include anywhere).
+- **`ahk/RadarSnapshotWire.ahk` (new)** — `RadarWirePack(blk, lock, sample, px,py,pz, areaHash)`
+  (reader side: serialise the awake sample under the seqlock, dedup paths into the heap, flag
+  truncation past 512) and `RadarWireUnpack(blk, lock)` (main side: copy the block out under the
+  seqlock — staleness on a mid-write collision, never torn — then RECONSTRUCT the exact nested-Map
+  `awakeEntities.sample` shape so NO consumer changes, safety principle 1). Handles the three shape
+  nuances the audit pinned: targetable rebuilt as a bare bool (defensive against a Map form), life
+  populated in BOTH flat (`curHP`/`maxHP`) and nested (`life["life"]["current"/"max"]`) forms, and a
+  minimal `entity["components"]` = `[{name:"Targetable",address},{name:"Actor",address}]` rebuilt for
+  the live-re-read walkers (CombatAutomation / ExplorationModule / HkAnimCapture / EntityFocus /
+  PoE2MemoryReader). Deep inspector fields (`components` full array, `mods`, deep dumps) are NOT
+  carried — not hot-path; they stay on Main's own on-demand read (stage 4). Reconstruction fills
+  `componentCount`/`namedComponentCount`/`decodedComponentCount` best-effort so those consumers never
+  error (minimal numbers, not the full decode — an accepted degradation for the opt-in path).
+- **`ahk/SharedMem.ahk`** — added `PutU8`/`GetU8`/`PutU16`/`GetU16` (byte/word accessors the record
+  bytes + heap length-prefixes need).
+- **Offline harness (scratchpad `radar_wire_test.ahk`)** — the doc's testing strategy: builds synthetic
+  sample entries covering every component combo (full monster, opened strongbox, friendly minion,
+  currency ground item, empty/invalid entity, targetable-as-Map), packs → unpacks → asserts every
+  carried leaf survived. **27/27 pass**, incl. unicode paths, gridPosition derivation, 600→512
+  truncation + the truncated flag, and a forced mid-write (odd seq) read returning `ok=false`. Not
+  committed (harnesses live in scratchpad, like `ui_scale_test.ahk`). AHK v2 lesson re-confirmed: the
+  interpreter refuses function definitions interspersed between top-level executable statements —
+  group all `func(){}` defs before the executable body (or the whole script fails to load with no
+  runtime error / OnError never fires).
+- **Pending (stage 3b, in-game only):** extract `ReadAwakeEntitiesFlat` from `ReadRadarSnapshot`, have
+  the reader pack it, and have Main splice the unpacked sample into its otherwise-locally-read snapshot
+  when the reader frame is fresh + area-hash matches (else fall back to Main's own `ReadRadarSnapshot`).
+  zoneScan refine + `_FilterStaleRadarEntities` (which also feeds LootTracker kills) stay Main-side on
+  the reconstructed sample.
 
 ## Reference
 

@@ -192,6 +192,17 @@ Each stage is independently shippable and reversible.
 3. **Radar snapshot → reader** — move the entity BFS/decode/cheap to the reader; Main consumes the
    flat snapshot; keep the tiny latency-critical local reads. This is the ~40 ms win + turns the
    read tails into staleness.
+   - **3a — wire format + pack/unpack + offline harness ✅ (0.45.13.207).** `ahk/PoefRadarProto.ahk`
+     (the flat per-entity record layout + snapshot seqlock block) + `ahk/RadarSnapshotWire.ahk`
+     (`RadarWirePack` reader-side / `RadarWireUnpack` main-side, incl. the interned UTF-8 string
+     heap). Proven lossless by the scratchpad harness `radar_wire_test.ahk` (27 checks: every
+     component combo, unicode paths, the three shape nuances, 600→512 truncation + flag, and a
+     mid-write seqlock collision → `ok=false`). NOT yet wired into the running app (zero hot-path
+     touch) — 3b does that.
+   - **3b — reader publishes + Main consumes with fallback (pending).** Extract the awake-entity
+     scan into `ReadAwakeEntitiesFlat`, have the reader pack it, and have Main splice the unpacked
+     sample into its otherwise-locally-read snapshot when the reader is fresh + area-hash matches
+     (else fall back to Main's own `ReadRadarSnapshot`). In-game verification only.
 4. **On-demand decode channel** — WM_COPYDATA request/reply for the inspector/hover full decode.
 5. **DPS sampler** — the first real payoff of the infrastructure: the detailed DPS meter / death
    recap as its own sampler process.

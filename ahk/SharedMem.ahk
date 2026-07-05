@@ -74,6 +74,10 @@ class SharedMemBlock
     }
 
     ; ── Scalar accessors (byte offset into the block) ────────────────────────────────────────────
+    PutU8(offset, val)  => NumPut("UChar",  val, this.ptr, offset)
+    GetU8(offset)       => NumGet(this.ptr, offset, "UChar")
+    PutU16(offset, val) => NumPut("UShort", val, this.ptr, offset)
+    GetU16(offset)      => NumGet(this.ptr, offset, "UShort")
     PutU32(offset, val) => NumPut("UInt",  val, this.ptr, offset)
     GetU32(offset)      => NumGet(this.ptr, offset, "UInt")
     PutI32(offset, val) => NumPut("Int",   val, this.ptr, offset)
