@@ -274,6 +274,40 @@ The Entities inspector / hover-price do deeper per-entity reads (full component 
 first cut Main does these locally (it keeps its own PoE handle for its local reads anyway). The
 WM_COPYDATA on-demand channel (stage 4) can take them over later.
 
+### Field audit result — the record contract (v205)
+
+A full consumer audit (`ahk/*`, ~30 files) crossed with the radar decode's supply gives the leaf
+fields the flat record must carry so the reconstructed shape is lossless. **Design decision: carry
+the full radar-decode SUPPLY, not the demand subset** — then reconstruction is byte-identical to
+today's `ReadRadarSnapshot` output and no missed-demand field can break a consumer.
+
+Per-entity record fields:
+- entry: `id`(u32), `entityPtr`(i64), `entityRawPtr`(i64), `distance`(f32), `priority`(i32)
+- entity: `pathIndex`(u32→heap), `flags`(u32) [isValid/entityId/address reconstructed]
+- render: `worldX/Y/Z`(f32), `terrainHeight`(f32) [gridPosition reconstructed from world]
+- life: `lifeCur/lifeMax`(i32) [isAlive = cur>0; percent reconstructed]
+- positioned: `reaction`(u8) [isFriendly reconstructed = (reaction&0x7F)=1]
+- rarityId(i32); targetable(u8 bool); actor `animationId`(i32)
+- chest: `chestFlags`(u8: isOpened/isLabelVisible/isStrongbox bits) — RadarOverlay hides opened chests
+- component addresses for LIVE re-reads (see nuance 1): `targetableAddr`(i64), `actorAddr`(i64)
+
+The inspector / Entities-browser / SnapshotSerializers fields (`components` full array, `mods`,
+`componentCount`, `namedComponentCount`, deep component dumps) are NOT hot-path — they stay on Main's
+own local/on-demand read (stage 4 channel later), so they are out of the flat record.
+
+### Three shape nuances the converter MUST handle (each a potential tool-breaker)
+1. **Raw `components` array** — a few HOT consumers (CombatAutomation ~656 live-rereads the Targetable
+   byte; `_HkFishCollectMonsters` finds the Actor address; ExplorationModule ~988) walk
+   `entity["components"]` to get a component ADDRESS for a live re-read. Reconstruction must either
+   rebuild a minimal `components` array containing those {name,address} entries (from the carried
+   `targetableAddr`/`actorAddr`), OR those specific consumers get adapted to read the carried address.
+   Recommended: rebuild a minimal components array so consumers stay untouched (principle 1).
+2. **Life shape inconsistency** — consumers read BOTH flat `life["current"]` AND nested
+   `life["life"]["current"]` (the player path uses the nested form). Reconstruction must populate both.
+3. **Targetable bool-vs-Map** — `decodedComponents["targetable"]` is sometimes a bare bool, sometimes
+   a Map with `["isTargetable"]`. Reconstruct the shape today's radar decode produces (bool) and
+   confirm every consumer handles it (SnapshotSerializers:308 treats it as either).
+
 ### Open Stage-3 questions (resolve before/while building)
 - Exact `flags` bit assignments + whether lifeCur/Max etc. are all actually read by a hot consumer
   (trim the record to what's used).
