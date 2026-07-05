@@ -11710,10 +11710,31 @@
       eiRender();
     }
     function eiToggleComp(addr, name) {
-      const set = window._eiState.compExpanded;
+      const st = window._eiState;
+      const set = st.compExpanded;
       const key = addr + '::' + name;
+      const opening = !set.has(key);
       if (set.has(key)) set.delete(key); else set.add(key);
+      // On (re-)open, re-read a lazily-decoded component from live memory so the
+      // dropdown shows current values instead of the ones captured at first open.
+      // (Snapshot-decoded components already refresh every push.) Silent: the old
+      // data stays until the fresh decode lands; refreshInFlight avoids stacking.
+      if (opening && st.lazyDecoded.has(key) && !st.refreshInFlight.has(key)) {
+        const compAddr = _eiCompAddr(addr, name);
+        if (compAddr !== undefined) {
+          st.refreshInFlight.add(key);
+          ahkCall('DecodeComponent', addr, name, compAddr);
+        }
+      }
       eiRender();
+    }
+    // Looks up a component's live address from the current snapshot items,
+    // for re-issuing a lazy decode. Returns undefined if not found this frame.
+    function _eiCompAddr(entityAddr, compName) {
+      const e = (window._eiState.items || []).find(x => x.addr === entityAddr);
+      if (!e || !Array.isArray(e.components)) return undefined;
+      const c = e.components.find(cc => cc.name === compName);
+      return c ? (c.addr || '') : undefined;
     }
     // Fire a lazy decode for one component on demand. Marks the row
     // as loading immediately, then waits for eiApplyDecodedComponent
