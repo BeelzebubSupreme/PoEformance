@@ -26,7 +26,7 @@ Subcommands
   extract-worldareas   WorldAreas.datc64   (game bundles) -> data/world_area_name_map.tsv
   extract-inventories  Inventories.datc64  (game bundles) -> data/inventory_type_map.tsv
 
-  gen-anim             GameHelper2 Animation.cs -> ui/animation_names.js
+  gen-anim             ahk/AnimationID.ahk map -> ui/animation_names.js
   gen-ct               poe2_ce_inspector.lua    -> tools/PoE2_Inspector.CT
   make-icon            tools/poeformance_logo.png -> ui/poeformance.ico
 
@@ -1336,21 +1336,26 @@ def extract_inventories(game_dir=None, output_tsv=None):
 
 
 # ===========================================================================
-# gen-anim : GameHelper2 Animation.cs enum -> ui/animation_names.js
+# gen-anim : ahk/AnimationID.ahk map -> ui/animation_names.js
 # ===========================================================================
-_ANIM_URL = "https://raw.githubusercontent.com/Gordin/GameHelper2/main/GameHelper/RemoteEnums/Animation.cs"
+# Source of truth is the local, hand-maintained AnimationID map (name -> id)
+# in ahk/AnimationID.ahk. It is more complete/current than GameHelper2's
+# Animation.cs, so we parse it locally instead of fetching the upstream enum.
+_ANIM_SRC = os.path.join(PROJECT_DIR, "ahk", "AnimationID.ahk")
 
 
-def gen_anim(output_js=None):
+def gen_anim(output_js=None, source_ahk=None):
     output_js = output_js or os.path.join(UI_DIR, "animation_names.js")
+    source_ahk = source_ahk or _ANIM_SRC
 
-    print(f"Fetching Animation.cs from {_ANIM_URL}")
-    with urllib.request.urlopen(_ANIM_URL) as resp:
-        content = resp.read().decode("utf-8")
+    print(f"Reading AnimationID map from {source_ahk}")
+    with open(source_ahk, "r", encoding="utf-8") as f:
+        content = f.read()
 
-    entries = re.findall(r"(\w+)\s*=\s*(0x[0-9A-Fa-f]+)", content)
+    # Lines look like: "Idle" = 0x0,  →  capture (name, hex)
+    entries = re.findall(r'"(\w+)"\s*=\s*(0x[0-9A-Fa-f]+)', content)
     if not entries:
-        raise ToolError("no enum entries parsed from Animation.cs")
+        raise ToolError(f"no enum entries parsed from {source_ahk}")
 
     js_entries = []
     for name, hexval in entries:
@@ -1362,7 +1367,7 @@ def gen_anim(output_js=None):
 
     os.makedirs(os.path.dirname(output_js), exist_ok=True)
     with open(output_js, "w", encoding="utf-8") as f:
-        f.write("// Auto-generated from GameHelper2 Animation.cs enum\n")
+        f.write("// Auto-generated from ahk/AnimationID.ahk (gen-anim)\n")
         f.write("// Maps CastType (int) -> human-readable animation name\n")
         f.write(js_obj + "\n")
         f.write('function animName(id) { return ANIM_NAMES[id] || ("0x" + id.toString(16).toUpperCase()); }\n')
@@ -1538,7 +1543,7 @@ def main(argv=None):
     p.add_argument("output_tsv", nargs="?")
     p.set_defaults(func=lambda a: extract_inventories(a.game_dir, a.output_tsv))
 
-    p = sub.add_parser("gen-anim", help="Animation.cs enum -> ui/animation_names.js")
+    p = sub.add_parser("gen-anim", help="ahk/AnimationID.ahk -> ui/animation_names.js")
     p.add_argument("output_js", nargs="?")
     p.set_defaults(func=lambda a: gen_anim(a.output_js))
 

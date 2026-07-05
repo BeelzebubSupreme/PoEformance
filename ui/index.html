@@ -141,7 +141,13 @@
        so users perceived a jump straight from normal → stage 2.
        Using @media (viewport) instead of @container — container
        queries on a flex:1 1 auto item were not measuring reliably. */
-    @media (max-width: 1300px) {
+    /* PILLS compact one stage EARLIER (<=1500px) than the nav bars. With
+       white-space:nowrap a pill can no longer absorb a tight row by wrapping
+       its label onto a second line, so the normal 10px label — which stops
+       fitting on one line around ~1470px — must switch to the denser 8px pill
+       style by 1500px, or the labels would overflow the row into the window
+       controls. The cat-bar / sub-tabs still compact at 1300px below. */
+    @media (max-width: 1500px) {
       #header-pills .pill {
         padding: 1px 6px;
         font-size: 8px;
@@ -156,6 +162,9 @@
         gap: 4px;
         row-gap: 3px;
       }
+    }
+
+    @media (max-width: 1300px) {
       /* Category + sub-tab bars track the same compaction as the pills, so a
          narrow window shrinks all three rows in lockstep. */
       #cat-bar .cat {
@@ -424,6 +433,11 @@
       font-weight: 600;
       letter-spacing: .12em;
       text-transform: uppercase;
+      /* Never break a pill's label across two lines. Flex-shrink can squeeze a
+         pill down to its longest word, at which point the label wraps ("AUTOPILOT
+         / OFF"); nowrap keeps every label on one line and lets the responsive
+         breakpoints (font-shrink ≤1300px, icon-only ≤1080px) handle tight widths. */
+      white-space: nowrap;
       background: linear-gradient(180deg, rgba(28,18,10,0.85), rgba(20,12,6,0.95));
       border: 1px solid rgba(90,62,34,0.7);
       color: var(--codex-text-dim);
@@ -1528,6 +1542,25 @@
       width: max-content;
       margin: 0 auto;
       position: relative
+    }
+    /* Currency tab: the grid is absolutely positioned (a fixed pixel canvas),
+       so it can't use the .inv-grid display:grid frame directly. This wrapper
+       gives it the SAME parchment frame and centers it like every other tab;
+       the inner .inv-grid-cur (position:relative) sits inside the padding so
+       its absolute children land correctly. */
+    .inv-frame-cur {
+      padding: 12px;
+      background:
+        radial-gradient(ellipse at center, rgba(232,220,184,0.04), transparent 70%),
+        linear-gradient(180deg, var(--codex-parchment) 0%, var(--codex-vellum) 100%);
+      border: 1px solid var(--codex-rule);
+      box-shadow:
+        inset 0 0 0 1px rgba(200,168,90,0.18),
+        inset 0 0 24px rgba(0,0,0,0.45),
+        0 2px 6px rgba(0,0,0,0.5);
+      border-radius: 1px;
+      width: max-content;
+      margin: 0 auto
     }
     /* Empty cell — hand-drawn-feeling parchment square. Subtle inset border
        made of two layered hair-lines (dark inner, gold-tinged outer) so the
@@ -6220,6 +6253,9 @@
               <button class="tree-tbtn" onclick="ahkCall('ComponentDumpProbeRun')" style="font-size:11px" title="Diagnostic: dump ALL components + raw field bytes of the currently highlighted entity (highlight one in the tree first). Basis for the systematic component-offset pass. Also Ctrl+Alt+Shift+D. Writes logs\InGameStateMonitor.component_dump.log">🧩 Dump Components</button>
               <button class="tree-tbtn" onclick="ahkCall('PathfindingProbeRun')" style="font-size:11px" title="Diagnostic: enumerate awake monsters, resolve their Pathfinding component and dump the candidate Flying (0xE5) / BaseSpeed (0xEC) fields plus raw hex, to verify the hypothesis offsets cross-referenced from Sikaka/POE2Radar. Stand in a populated area. Writes logs\InGameStateMonitor.pathfinding_probe.log">🏃 Probe Pathfinding</button>
               <button class="tree-tbtn" onclick="ahkCall('StackMaxProbeRun')" style="font-size:11px" title="Diagnostic: for every backpack item with a Stack component, dump the int32 table around the component base (flagging Count +0x18 and the max-size candidate +0x20) and deref UnknownPtr (+0x10), to test whether +0x20 holds the maximum stack size. STAND WITH A STACKABLE ITEM IN YOUR INVENTORY, then click. Writes logs\InGameStateMonitor.stack_max_probe.log">📦 Probe Stack Max</button>
+              <button class="tree-tbtn" onclick="ahkCall('ActorProbeRun')" style="font-size:11px" title="Diagnostic: locate the drifted Actor animationId offset. Resolves the local player's Actor component and TIME-SAMPLES a 4KB int32 window over ~5s while you act, then reports which offset changed (the animationId is the low-int one that cycles 0=Idle/4=Run/skill ids). Click OK, then RUN AROUND and CAST several skills for ~5s. Writes logs\InGameStateMonitor.actor_probe.log">🎭 Probe Actor</button>
+              <button class="tree-tbtn" onclick="ahkCall('ActorVectorProbeRun')" style="font-size:11px" title="Diagnostic: verify/re-base the Actor ActiveSkills / Cooldowns / DeployedEntities vectors. Reads each vector at the current offset AND at current+0x10, DECODES the first entries (castType / cooldown details), and scans the region for vector-shaped pointer pairs — so the correct offset is picked by content (valid detail pointers + sane castTypes), not by a count that just looks plausible. Be in-game, then click. Writes logs\InGameStateMonitor.actor_vector_probe.log">🧬 Probe Actor Vectors</button>
+              <button class="tree-tbtn" onclick="ahkCall('CurrencyLayoutProbeRun')" style="font-size:11px" title="Extracts the currency stash tab's exact slot layout from the game UI tree (each slot's real position + size + currency path) and bakes data\currency_tab_layout.json for a 1:1 currency-tab render. OPEN THE CURRENCY TAB in-game first, then click. Writes logs\InGameStateMonitor.currency_layout.log too.">🪙 Bake Currency Layout</button>
               <button class="tree-tbtn" onclick="ahkCall('RitualProbeRun')" style="font-size:11px" title="RE diagnostic for the Ritual (Favours) reward window: finds the RitualWindow element by StringId, walks its subtree and reports every reward slot (StringId / rect / item at +0x4F8), plus a struct pointer-scan fallback. OPEN THE FAVOURS WINDOW FIRST, then click. Basis for value badges on ritual rewards. Writes logs\InGameStateMonitor.ritual_probe.log">🎲 Probe Ritual</button>
               <button class="tree-tbtn" onclick="ahkCall('NpcIdentifyRun')" style="font-size:11px" title="TEST: in the hideout, click the NPC 'Doryani' label, wait for his dialog window, then click 'Identify Items'. Also on hotkey F9 (while PoE2 is focused); tune via [NpcIdentify] in poeformance_config.ini (hotkey, npcName, menuText, UI paths).">🪄 Doryani Identify</button>
               <button class="tree-tbtn" onclick="ahkCall('LootLabelProbeRun')" style="font-size:11px" title="RE diagnostic for ground-item (loot) labels: sweeps the UI for effectively-visible text elements and reports StringId / parent StringId / text / screen rect (+ any item at +0x4F8). STAND NEAR SEVERAL GROUND DROPS so their labels show, then click. Basis for keeping loot labels clear of the large-map maphack walls. Writes logs\InGameStateMonitor.lootlabel_probe.log">🏷 Probe Loot Labels</button>
@@ -6709,6 +6745,25 @@
         /* A leaf is one condition row — same flex layout as an effect action row. */
         .hk-cleaf { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 3px 0; border-bottom: 1px dashed rgba(90,62,34,0.5); }
         .hk-cleaf:last-child { border-bottom: none; }
+        .hk-anim-pick { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; max-width: 460px; }
+        .hk-anim-chip { display: inline-flex; align-items: center; gap: 4px; background: rgba(200,168,90,0.14); border: 1px solid rgba(200,168,90,0.5); border-radius: 10px; padding: 1px 4px 1px 7px; font-size: 12px; color: var(--codex-text); }
+        .hk-anim-chip b { cursor: pointer; color: #d68a8a; font-weight: 700; padding: 0 2px; }
+        .hk-anim-chip b:hover { color: #ff6a6a; }
+        .hk-anim-empty { color: var(--codex-text-dim); font-size: 12px; font-style: italic; }
+        .hk-anim-search { width: 150px; }
+        .hk-anim-live.on { background: rgba(255,106,106,0.22); border-color: #ff6a6a; color: #ffd9d9; }
+        .hk-anim-cap { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 4px; padding: 5px 7px; border: 1px dashed rgba(255,106,106,0.45); border-radius: 5px; background: rgba(255,106,106,0.06); }
+        .hk-anim-cap.frozen { border-color: rgba(200,168,90,0.5); background: rgba(200,168,90,0.06); }
+        .hk-anim-cap-rows { display: contents; }
+        .hk-anim-cap-clear { cursor: pointer; font-size: 11px; color: var(--codex-text-dim); background: transparent; border: 1px solid rgba(120,120,120,0.4); border-radius: 8px; padding: 0 6px; margin-right: 2px; }
+        .hk-anim-cap-clear:hover { color: #ff9a9a; border-color: #ff6a6a; }
+        .hk-anim-cap.frozen .hk-anim-cap-lbl { color: var(--codex-gold); }
+        .hk-anim-cap-lbl { color: #ff9a9a; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; margin-right: 2px; }
+        .hk-anim-cap-empty { color: var(--codex-text-dim); font-size: 12px; font-style: italic; }
+        .hk-anim-cap-item { cursor: pointer; font-size: 12px; color: var(--codex-text); background: rgba(200,168,90,0.10); border: 1px solid rgba(200,168,90,0.4); border-radius: 10px; padding: 1px 8px; display: inline-flex; gap: 5px; align-items: baseline; }
+        .hk-anim-cap-item:hover { background: rgba(200,168,90,0.24); border-color: var(--codex-gold); }
+        .hk-anim-cap-item s { text-decoration: none; color: var(--codex-text-dim); font-size: 10px; }
+        .hk-anim-cap-item.fresh { border-color: #ff6a6a; box-shadow: 0 0 6px rgba(255,106,106,0.5); }
         .hk-cleaf .hk-act-type { min-width: 132px; }
 
         /* Buttons — gilded two-tone, Cinzel small-caps (like the inv toolbar). */
@@ -7002,6 +7057,7 @@
     window.addEventListener('resize', updateAllBarMarkers);
     window.addEventListener('load', () => {
       snodeInit();   // inject skill-node icons before measuring (they change tab widths)
+      hkBuildAnimDatalist();   // populate the enemy-animation name typeahead
       // Fonts can still be loading when 'load' fires; once they settle
       // the active-tab width changes, so re-measure.
       if (document.fonts && document.fonts.ready) {
@@ -7625,6 +7681,8 @@
 
     function switchTab(key) {
       const prev = activeTab;
+      // Leaving the Macro editor disarms any live enemy-animation capture.
+      if (key !== 'hotkeys' && typeof hkAnimCapStop === 'function') hkAnimCapStop();
       // Alias tabs (Overlay/Vitals/AutoPilot/Stash Mover) render inside
       // #panel-config; everything else has its own #panel-<key>.
       const panelKey = cfgPanelForTab[key] ? 'config' : key;
@@ -7845,6 +7903,7 @@
       chk('uhp-enabled', s.enabled);
       val('uhp-minEx', s.minEx);
     }
+
 
     function ritualValueBadgesSyncFromHeader(s) {
       if (!s) return;
@@ -8306,6 +8365,7 @@
         return;
       }
       root.innerHTML = hkConfig.map((g, gi) => hkRenderGroup(g, gi)).join('');
+      if (_hkAnimCap.cid != null) _hkAnimCapPatch();   // fill the live-capture strip shell
     }
 
     function hkRenderGroup(g, gi) {
@@ -8611,6 +8671,7 @@
       buff: 'Condition: Buff',
       charges: 'Condition: Charges',
       monsterCount: 'Condition: Monster count',
+      enemyAnim: 'Condition: Enemy animation',
       aim: 'Mouse move (auto-aim)',
       // Legacy types — kept so pre-merge exports still read correctly.
       press: 'Key press / hold / loop',
@@ -9001,6 +9062,7 @@
         case 'buff':         return { type, buffName: '', mode: 'present', minStacks: 0, minTimeLeftMs: 0 };
         case 'charges':      return { type, chargeType: 'power', op: '>=', value: 1 };
         case 'monsterCount': return { type, rarity: 'any', radiusMode: 'player', radius: 120, op: '>=', value: 1 };
+        case 'enemyAnim':    return { type, animIds: '', radiusMode: 'world', worldRadius: 1200, radius: 120, debug: 0, circleColor: '#FF6A6A' };
         case 'aim':          return { type, targetType: 'monster', rarity: 'any', radius: 150, worldRadius: 1000, radiusMode: 'cursor', chestType: '', chestTypeCustom: 0, name: '', metadataPath: '', press: 1, holdMs: 0, scanAll: 0 };
         default:             return { type: 'key', mode: 'press' };
       }
@@ -9023,7 +9085,7 @@
     //   { kind:'group', mode:'all'|'any', cid, children:[ <node>... ] }
     //   leaf = a condition action ({type:'vitals'|'buff'|'charges'|'monsterCount', ...})
     // cid is a UI-only stable handle for addressing a node in onchange handlers.
-    const HK_COND_TYPES = ['vitals', 'buff', 'charges', 'monsterCount', 'monsterCountCursor'];
+    const HK_COND_TYPES = ['vitals', 'buff', 'charges', 'monsterCount', 'monsterCountCursor', 'enemyAnim'];
     function hkIsCondType(t) { return HK_COND_TYPES.includes(t); }
     let hkCidSeq = 1;
     function hkNewCid() { return hkCidSeq++; }
@@ -9094,7 +9156,7 @@
       const f = hkFindCond(hkCondHk(gi, hi), cid); if (!f) return;
       const isText = (k === 'buffName' || k === 'metadataPath' || k === 'chestType'
               || k === 'op' || k === 'resource' || k === 'mode' || k === 'chargeType'
-              || k === 'rarity' || k === 'radiusMode' || k === 'circleColor');
+              || k === 'rarity' || k === 'radiusMode' || k === 'circleColor' || k === 'animIds');
       let val = isText ? v : (isNaN(+v) ? v : +v);
       if (!isText && typeof val === 'number' && val < 0) val = 0;
       f.node[k] = val;
@@ -9122,6 +9184,7 @@
     }
     function hkDelCond(gi, hi, cid) {
       const f = hkFindCond(hkCondHk(gi, hi), cid); if (!f || !f.parent) return; // root not deletable
+      if (_hkAnimCap.cid === cid) hkAnimCapStop();   // deleting the armed leaf disarms capture
       f.parent.children.splice(f.index, 1);
       hkChanged();
     }
@@ -9162,6 +9225,166 @@
       return `<select title="Fills itself from the player's active buffs (Game › Skills & Buffs)" onchange="hkSetCond(${gi},${hi},${a.cid},'buffName',this.value)">${opts}</select>`;
     }
 
+    // ── Enemy-animation picker (search by NAME, store IDs) ──────────────────────
+    // Nobody knows the 1000+ numeric animation ids by heart, and a flat dropdown is
+    // unusable. Instead: a typeahead over the human-readable names (ANIM_NAMES from
+    // animation_names.js) via a shared <datalist>, plus removable chips. The leaf
+    // still stores animIds as a comma id string, so the AHK side is unchanged.
+    let ANIM_NAME_TO_ID = null;
+    function hkAnimNameToId(name) {
+      if (!ANIM_NAME_TO_ID) {
+        ANIM_NAME_TO_ID = {};
+        if (typeof ANIM_NAMES !== 'undefined')
+          for (const id in ANIM_NAMES) ANIM_NAME_TO_ID[String(ANIM_NAMES[id]).toLowerCase()] = +id;
+      }
+      return ANIM_NAME_TO_ID[String(name).toLowerCase()] ?? null;
+    }
+    // Builds the shared datalist of "<Name> — #<id>" options once (created lazily).
+    function hkBuildAnimDatalist() {
+      if (typeof ANIM_NAMES === 'undefined') return;
+      let dl = document.getElementById('anim-names-list');
+      if (!dl) { dl = document.createElement('datalist'); dl.id = 'anim-names-list'; document.body.appendChild(dl); }
+      if (dl.childElementCount) return;
+      const frag = document.createDocumentFragment();
+      for (const id in ANIM_NAMES) {
+        const o = document.createElement('option');
+        o.value = `${ANIM_NAMES[id]} — #${id}`;
+        frag.appendChild(o);
+      }
+      dl.appendChild(frag);
+    }
+    function hkParseIdList(s) {
+      return String(s || '').split(',').map(t => t.trim()).filter(t => /^\d+$/.test(t)).map(Number);
+    }
+    // Renders the selected animations as name chips + a search box (datalist typeahead).
+    function hkAnimPicker(a, gi, hi) {
+      hkBuildAnimDatalist();
+      const ids = hkParseIdList(a.animIds);
+      const chips = ids.map(id => {
+        const nm = (typeof ANIM_NAMES !== 'undefined' && ANIM_NAMES[id]) ? ANIM_NAMES[id] : ('#' + id);
+        return `<span class="hk-anim-chip" title="id ${id}">${hkEsc(nm)}<b title="Remove" onclick="hkAnimRemove(${gi},${hi},${a.cid},${id})">✕</b></span>`;
+      }).join('');
+      const empty = ids.length ? '' : `<span class="hk-anim-empty" title="No animations selected — this condition never matches until you add one">none</span>`;
+      return `<span class="hk-anim-pick">${chips}${empty}`
+           + `<input type="text" class="hk-anim-search" list="anim-names-list" spellcheck="false" placeholder="＋ type a name…"`
+           + ` title="Search a monster animation by name (e.g. Slam, Cast, Charge) and pick it. You can also type/paste raw ids or a comma list."`
+           + ` onchange="hkAnimAdd(${gi},${hi},${a.cid},this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"></span>`;
+    }
+    // Adds one or more animations from the search input: accepts a datalist pick
+    // ("<Name> — #<id>"), a bare id, an exact name, or a comma list of those.
+    function hkAnimAdd(gi, hi, cid, el) {
+      const raw = el.value || '';
+      const found = [];
+      raw.split(',').forEach(part => {
+        const p = part.trim(); if (!p) return;
+        const m = p.match(/#(\d+)\s*$/);
+        if (m) { found.push(+m[1]); return; }
+        if (/^\d+$/.test(p)) { found.push(+p); return; }
+        const id = hkAnimNameToId(p);
+        if (id != null) found.push(id);
+      });
+      el.value = '';
+      if (!found.length) return;
+      const f = hkFindCond(hkCondHk(gi, hi), cid); if (!f) return;
+      const cur = hkParseIdList(f.node.animIds);
+      found.forEach(id => { if (!cur.includes(id)) cur.push(id); });
+      hkSetCond(gi, hi, cid, 'animIds', cur.join(','));
+    }
+    function hkAnimRemove(gi, hi, cid, id) {
+      const f = hkFindCond(hkCondHk(gi, hi), cid); if (!f) return;
+      const cur = hkParseIdList(f.node.animIds).filter(x => x !== id);
+      hkSetCond(gi, hi, cid, 'animIds', cur.join(','));
+    }
+    // Adds a single id (from the live-capture feed) to a leaf. Keeps capture state.
+    function hkAnimAddId(gi, hi, cid, id) {
+      const f = hkFindCond(hkCondHk(gi, hi), cid); if (!f) return;
+      const cur = hkParseIdList(f.node.animIds);
+      if (!cur.includes(id)) cur.push(id);
+      hkSetCond(gi, hi, cid, 'animIds', cur.join(','));   // re-renders; the strip is repopulated
+    }
+
+    // ── Live enemy-animation capture (arms ahk/HkAnimCapture.ahk) ───────────────
+    // Discovery without knowing ids/names: arm on a condition, stand near the
+    // monster, let it attack, click the animation that lit up. Only one leaf armed
+    // at a time. On STOP the results FREEZE (stay visible + clickable) until cleared.
+    // rows: [{id,count,dist,age}]; live: AHK is actively pushing.
+    let _hkAnimCap = { cid: null, gi: null, hi: null, live: false, rows: [] };
+    function hkAnimCapToggle(gi, hi, cid) {
+      if (_hkAnimCap.cid === cid && _hkAnimCap.live) {
+        ahkCall('HkAnimCaptureStop');
+        _hkAnimCap.live = false;                       // freeze: keep cid + rows visible
+      } else {
+        ahkCall('HkAnimCaptureStart');
+        const keep = (_hkAnimCap.cid === cid) ? _hkAnimCap.rows : [];
+        _hkAnimCap = { cid, gi, hi, live: true, rows: keep };
+      }
+      hkRender();
+    }
+    // Dismiss frozen results (the ✕ on a stopped strip).
+    function hkAnimCapClear() {
+      if (_hkAnimCap.live) ahkCall('HkAnimCaptureStop');
+      _hkAnimCap = { cid: null, gi: null, hi: null, live: false, rows: [] };
+      hkRender();
+    }
+    // Full stop — called when navigating away from the macro tab.
+    function hkAnimCapStop() {
+      if (_hkAnimCap.cid == null && !_hkAnimCap.live) return;
+      if (_hkAnimCap.live) ahkCall('HkAnimCaptureStop');
+      _hkAnimCap = { cid: null, gi: null, hi: null, live: false, rows: [] };
+    }
+    // Static shell of the capture strip (label + optional clear + rows container).
+    // Rows are filled incrementally by _hkAnimCapPatch so live updates never
+    // destroy a button mid-click (#2) or duplicate a row (#3).
+    function _hkAnimCapStripHtml(live) {
+      return `<span class="hk-anim-cap-lbl">${live ? 'seen now — click to add:' : 'captured (stopped) — click to add:'}</span>`
+           + (live ? '' : `<button class="hk-anim-cap-clear" title="Dismiss these results" onclick="hkAnimCapClear()">✕ clear</button>`)
+           + `<span class="hk-anim-cap-rows"></span>`;
+    }
+    // Pushed from AHK while live: store (deduped by id) + incrementally patch.
+    function updateAnimCapture(rows) {
+      if (_hkAnimCap.cid == null || !_hkAnimCap.live) return;   // ignore stray pushes
+      const seen = new Map();
+      (Array.isArray(rows) ? rows : []).forEach(r => { if (r && r.id != null) seen.set(r.id, r); });
+      _hkAnimCap.rows = [...seen.values()];
+      _hkAnimCapPatch();
+    }
+    // Incremental, keyed-by-id DOM update: stable button elements so clicks land
+    // and no id renders twice. Called after every hkRender (fills the shell) and
+    // on each live push. onmousedown so a press registers even if a push lands
+    // immediately after.
+    function _hkAnimCapPatch() {
+      const box = document.querySelector('#hk-anim-cap-strip .hk-anim-cap-rows');
+      if (!box) return;
+      const { gi, hi, cid, rows } = _hkAnimCap;
+      const emptyEl = box.querySelector('.hk-anim-cap-empty');
+      if (!rows || !rows.length) {
+        if (!emptyEl) box.innerHTML = '<span class="hk-anim-cap-empty">no enemy animations seen yet — get closer / let it attack</span>';
+        return;
+      }
+      if (emptyEl) emptyEl.remove();
+      const existing = new Map();
+      box.querySelectorAll('button[data-anim-id]').forEach(b => existing.set(+b.dataset.animId, b));
+      const wanted = new Set();
+      rows.forEach(r => {
+        wanted.add(r.id);
+        let b = existing.get(r.id);
+        if (!b) {
+          const nm = (typeof ANIM_NAMES !== 'undefined' && ANIM_NAMES[r.id]) ? ANIM_NAMES[r.id] : ('#' + r.id);
+          b = document.createElement('button');
+          b.className = 'hk-anim-cap-item';
+          b.dataset.animId = r.id;
+          b.innerHTML = `<span class="hk-anim-cap-nm">${hkEsc(nm)}</span><s></s>`;
+          b.onmousedown = (ev) => { ev.preventDefault(); hkAnimAddId(gi, hi, cid, r.id); };
+          box.appendChild(b);
+        }
+        const s = b.querySelector('s');
+        if (s) s.textContent = `×${r.count} · ${r.dist}m`;
+        b.classList.toggle('fresh', r.age < 700);
+        b.title = `id ${r.id} · seen ${r.count}× · nearest ${r.dist}m — click to add`;
+      });
+      existing.forEach((b, id) => { if (!wanted.has(id)) b.remove(); });
+    }
+
     // Renders the condition gate for a hotkey (root group, no delete on root).
     function hkRenderConditions(hk, gi, hi) {
       if (!hk.conditions) return '';
@@ -9184,6 +9407,7 @@
       const addCtrls = addOpen ? `<select id="hk-addcond-${cid}" title="Pick a condition type to add">
             <option value="vitals">Vitals</option><option value="buff">Buff</option>
             <option value="charges">Charges</option><option value="monsterCount">Monster count</option>
+            <option value="enemyAnim">Enemy animation</option>
           </select>
           <button class="hk-btn" title="Add the selected condition to this group" onclick="hkAddCond(${gi},${hi},${cid})">+ Condition</button>
           <button class="hk-btn" title="Add a nested group — a bracket — with its own ALL/ANY" onclick="hkAddCondGroup(${gi},${hi},${cid})">+ Group ( )</button>` : '';
@@ -9225,9 +9449,24 @@
                + `${hkCSel(a, 'op', HK_OPS, gi, hi, 'Comparison operator for the monster count')} ${hkCNum(a, 'value', 1, gi, hi, 'Monster-count threshold')}`;
           break;
         }
+        case 'enemyAnim': {
+          const eaWorld = (a.radiusMode || 'world') !== 'player' && (a.radiusMode || 'world') !== 'cursor';
+          const eaRadiusField = eaWorld
+            ? `Range ${hkCNum(a, 'worldRadius', 1200, gi, hi, 'Radius in world units (zoom-independent — matches the actual game distance)')} `
+            : `Radius(px) ${hkCNum(a, 'radius', 120, gi, hi, 'Radius in screen pixels')} `;
+          const eaShown = (_hkAnimCap.cid === a.cid);
+          const eaLiveOn = eaShown && _hkAnimCap.live;
+          const eaLive = `<button class="hk-btn hk-anim-live${eaLiveOn ? ' on' : ''}" title="Live capture: watch which animations nearby enemies are playing RIGHT NOW and click one to add it. Stand near the monster/boss and let it attack — no need to know ids or names." onclick="hkAnimCapToggle(${gi},${hi},${a.cid})">👁 ${eaLiveOn ? 'stop' : 'live'}</button>`;
+          const eaStrip = eaShown ? `<div class="hk-anim-cap${eaLiveOn ? ' live' : ' frozen'}" id="hk-anim-cap-strip" style="flex-basis:100%">${_hkAnimCapStripHtml(eaLiveOn)}</div>` : '';
+          body = `Animations ${hkAnimPicker(a, gi, hi)} ${eaLive} `
+               + eaRadiusField
+               + `${hkCSel(a, 'radiusMode', [['world', 'around player (range)'], ['player', 'around player (px)'], ['cursor', 'around cursor (px)']], gi, hi, 'World-unit range around the player, or a pixel radius around the player / cursor')}`
+               + eaStrip;
+          break;
+        }
         default: body = `<span style="color:var(--subtext)">unknown condition</span>`;
       }
-      const swatch = (t === 'monsterCount' && hkBool(a.debug))
+      const swatch = ((t === 'monsterCount' || t === 'enemyAnim') && hkBool(a.debug))
         ? `<span class="cp-swatch" style="--swatch-color:${hkEsc(a.circleColor || '#FFA8C0')}" title="Range circle color" onclick="hkOpenCondCircleColor(${gi},${hi},${cid},this)"></span>` : '';
       return `<div class="hk-cleaf">
         <span class="hk-act-type">${hkEsc(HK_ACT_LABELS[t] || t)}</span>
@@ -9695,10 +9934,17 @@
       stash.sort((a, b) => a.id - b.id);
       others.sort((a, b) => (a.id === 1 ? -1 : b.id === 1 ? 1 : a.id - b.id));
 
+      // A section descriptor for one inventory. Currency tabs render via a
+      // dedicated 1:1 layout (kind 'html', cached by string) instead of the
+      // generic grid (kind 'grid', cell-patched).
+      const _invDesc = (inv) => _isCurrencyTab(inv)
+        ? { key: 'inv:' + inv.id, kind: 'html', html: _renderCurrencyTab(inv) }
+        : { key: 'inv:' + inv.id, kind: 'grid', inv };
+
       const descs = [];
       let equippedPlaced = false;
       for (const inv of others) {
-        descs.push({ key: 'inv:' + inv.id, kind: 'grid', inv });
+        descs.push(_invDesc(inv));
         if (inv.id === 1 && equipped.length) { descs.push({ key: 'equipped', kind: 'html', html: _renderEquippedGroup(equipped) }); equippedPlaced = true; }
       }
       if (equipped.length && !equippedPlaced) descs.unshift({ key: 'equipped', kind: 'html', html: _renderEquippedGroup(equipped) });
@@ -9707,7 +9953,7 @@
       const stashEmpty = stash.filter(i => (i.items || []).length === 0);
       if (stashFull.length || stashEmpty.length) {
         descs.push({ key: 'stash-header', kind: 'html', html: `<div class="inv-section-header" style="margin-top:14px">Stash <span class="inv-section-meta">${stashFull.length} populated · ${stashEmpty.length} empty · ${stash.length} total</span></div>` });
-        for (const inv of stashFull) descs.push({ key: 'inv:' + inv.id, kind: 'grid', inv });
+        for (const inv of stashFull) descs.push(_invDesc(inv));
         if (stashEmpty.length) {
           const labels = stashEmpty.map(i => i.tn ? i.tn : ('#' + i.id)).join(', ');
           descs.push({ key: 'stash-empty', kind: 'html', html: `<div class="inv-section" style="opacity:.55;font-size:11px;color:var(--subtext);padding:6px 8px;border:1px dashed var(--border);border-radius:4px">Empty stash tabs: ${escHtml(labels)}</div>` });
@@ -9912,6 +10158,175 @@
       </div>`;
     }
 
+    // ═══════════════════════════════════════════════════════════════════
+    //  CURRENCY STASH TAB — 1:1 layout
+    // ═══════════════════════════════════════════════════════════════════
+    // The currency tab is NOT a normal grid (memory gives a linear 53-slot
+    // index; the UI tree gives a scattered internal layout). Its VISUAL grid is
+    // game-fixed for everyone, so it's transcribed here: currency base name
+    // (item metadata last segment, sent as `it.mp`) → [col, row]. Built by
+    // cross-referencing the in-game currency tab against the probe's
+    // count→currency mapping (2026-07-04). If a slot lands wrong, fix its
+    // [col,row] here. Columns 0-2 = tier (base / greater "2" / perfect "3").
+    const CURRENCY_TAB_LAYOUT = {
+      // Fixed currency slots (bound to a specific currency type). base name → [col,row].
+      slots: {
+        // Transmute families × tiers (cols 0-2, rows 0-4)
+        CurrencyUpgradeToMagic: [0,0], CurrencyUpgradeToMagic2: [1,0], CurrencyUpgradeToMagic3: [2,0],
+        CurrencyAddModToMagic: [0,1], CurrencyAddModToMagic2: [1,1], CurrencyAddModToMagic3: [2,1],
+        CurrencyUpgradeMagicToRare: [0,2], CurrencyUpgradeMagicToRare2: [1,2], CurrencyUpgradeMagicToRare3: [2,2],
+        CurrencyAddModToRare: [0,3], CurrencyAddModToRare2: [1,3], CurrencyAddModToRare3: [2,3],
+        CurrencyRerollRare: [0,4], CurrencyRerollRare2: [1,4], CurrencyRerollRare3: [2,4],
+        // Middle block (cols 3-5, rows 0-1)
+        CurrencyUpgradeToRare: [3,0], CurrencyCorrupt: [4,0], CurrencyModValues: [5,0],
+        CurrencyUpgradeRandomly: [3,1], CurrencyRemoveMod: [5,1],
+        // Sockets (cols 6-8, rows 0-1)
+        CurrencyAddSkillGemSocket3: [6,0], CurrencyAddSkillGemSocket4: [7,0], CurrencyAddSkillGemSocket5: [8,0],
+        CurrencyAddEquipmentSocket: [8,1],
+        // Quality (cols 6-8, rows 2-3)
+        CurrencyMagicQuality: [6,2], CurrencyArmourQuality: [7,2], CurrencyWeaponQuality: [8,2],
+        CurrencyFlaskQuality: [7,3], CurrencyGemQuality: [8,3],
+      },
+      // Shard row (above the misc grid): a centered row of 4 slots holding any
+      // shard-type currency (base name contains "Shard"), filled in slot order.
+      shardRow: { count: 4, row: 7 },
+      // Always-empty framed slots the game shows without a bound currency type
+      // (e.g. the cell below the Vaal/Corrupt orb).
+      emptySlots: [[4,1]],
+      // Identification (col 8) — a fixed currency, but positioned below the
+      // quality block with a small gap (not part of the tight grid).
+      ident: { col: 8, gap: 20 },
+      // The central item slot: a 2-wide × 4-tall slot for NORMAL items (weapons /
+      // gear), NOT currency. Horizontally centered; small gap below the two
+      // empty frames above it.
+      bigSlot: { w: 2, h: 4, rowStart: 3, gap: 8 },
+      // Two always-empty framed slots directly above the central slot (centered),
+      // one row below the middle block.
+      emptyAbove: { count: 2, row: 2 },
+      // Generic misc-currency area (bottom): any currency the player parks here,
+      // not bound to a type. A cols×rows grid; centered; filled by slot order.
+      generic: { cols: 7, rows: 2, rowStart: 8 },
+      // Pixel gaps between visual groups: added AFTER these col/row indices.
+      colGapAfter: {2:12, 5:12}, rowGapAfter: {1:12, 4:12, 7:12},
+    };
+    const _CUR_CELL = 36;
+    // Absolute pixel top-left of a currency-tab cell (col,row), inter-group gaps
+    // folded in (colGapAfter / rowGapAfter).
+    function _curPos(col, row) {
+      const L = CURRENCY_TAB_LAYOUT;
+      let x = col * _CUR_CELL, y = row * _CUR_CELL;
+      for (const g in L.colGapAfter) if (col > +g) x += L.colGapAfter[g];
+      for (const g in L.rowGapAfter) if (row > +g) y += L.rowGapAfter[g];
+      return { x, y };
+    }
+    // A tab is the currency tab if enough of its items map into the layout.
+    function _isCurrencyTab(inv) {
+      const items = Array.isArray(inv.items) ? inv.items : [];
+      let hits = 0;
+      for (const it of items) if (it && it.mp && CURRENCY_TAB_LAYOUT.slots[it.mp]) { if (++hits >= 5) return true; }
+      return false;
+    }
+    // Renders the currency tab 1:1. Fixed currency slots go to their curated
+    // cell; the central big slot (centered) holds the tab's NON-currency item;
+    // the two empty frames sit above it; a bottom generic grid holds any currency
+    // not bound to a fixed slot (filled in slot order). Only real slots framed.
+    function _renderCurrencyTab(inv) {
+      const L = CURRENCY_TAB_LAYOUT, C = _CUR_CELL;
+      const items = Array.isArray(inv.items) ? inv.items : [];
+      let parts = '', maxX = 0, maxY = 0;
+      const bump = (x, y, w, h) => { maxX = Math.max(maxX, x + w); maxY = Math.max(maxY, y + h); };
+      const frame = (x, y, w, h) => { parts += `<div class="inv-cell" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px"></div>`; bump(x, y, w, h); };
+      const itemCell = (it, x, y, w, h) => {
+        const rarity = (typeof it.r === 'number' && it.r >= 0 && it.r <= 3) ? it.r : 0;
+        const tip = _buildItemTooltipPayload(it);
+        parts += `<div class="inv-item rarity-${rarity}" style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px" `
+               + `onmouseenter="_invShowTip(event,'${tip}')" onmouseleave="_invHideTip()" onmousemove="_invMoveTip(event)">`
+               + _itemVisual(it, Math.round(w/C), Math.round(h/C)) + `</div>`;
+        bump(x, y, w, h);
+      };
+
+      // Split the items by what the currency tab allows where:
+      //  - the central big slot holds ONLY normal gear (weapon/armour/jewellery/
+      //    flask/jewel → it.gear); everything else is "currency-area".
+      //  - fixed-slot currencies go to their curated cell.
+      //  - shard-type currencies (mp contains "Shard") go to the centered shard row.
+      //  - the identify slot is special-positioned.
+      //  - every other non-gear item goes to the generic misc grid.
+      const byMp = new Map(), generics = [], shards = [], normals = [];
+      let identItem = null;
+      for (const it of items) {
+        if (!it) continue;
+        if (it.gear) { normals.push(it); continue; }
+        if (it.mp === 'CurrencyIdentification') { identItem = it; continue; }
+        if (it.mp && L.slots[it.mp]) byMp.set(it.mp, it);
+        else if (it.mp && it.mp.indexOf('Shard') >= 0) shards.push(it);
+        else generics.push(it);
+      }
+
+      // 1) Fixed currency slots — frame every one; draw the item when present.
+      for (const path in L.slots) {
+        const cell = L.slots[path], p = _curPos(cell[0], cell[1]);
+        const it = byMp.get(path);
+        if (it) itemCell(it, p.x, p.y, C, C); else frame(p.x, p.y, C, C);
+      }
+      // Always-empty framed slots (no bound currency type).
+      for (const e of (L.emptySlots || [])) { const p = _curPos(e[0], e[1]); frame(p.x, p.y, C, C); }
+      // Identification: below the quality block with a gap.
+      const idp = _curPos(L.ident.col, 3);
+      const idY = idp.y + C + L.ident.gap;
+      if (identItem) itemCell(identItem, idp.x, idY, C, C); else frame(idp.x, idY, C, C);
+      // Content width so far (defines the centering axis for the middle column).
+      const rightEdge = maxX;
+
+      // 2) Central big slot (centered, small gap below the empty frames above) +
+      //    the tab's non-currency gear item.
+      const bigW = L.bigSlot.w * C, bigH = L.bigSlot.h * C;
+      const bigX = Math.round((rightEdge - bigW) / 2);
+      const bigY = _curPos(0, L.bigSlot.rowStart).y + (L.bigSlot.gap || 0);
+      const bigIt = normals.shift();
+      if (bigIt) itemCell(bigIt, bigX, bigY, bigW, bigH); else frame(bigX, bigY, bigW, bigH);
+
+      // 3) Two empty frames directly above the central slot (centered).
+      const eaW = L.emptyAbove.count * C + (L.emptyAbove.count - 1) * 2;
+      let eax = Math.round((rightEdge - eaW) / 2);
+      const eay = _curPos(0, L.emptyAbove.row).y;
+      for (let i = 0; i < L.emptyAbove.count; i++) { frame(eax, eay, C, C); eax += C + 2; }
+
+      // 4) Shard row (centered) — the shard-type currencies, in slot order.
+      shards.sort((a, b) => (a.sx | 0) - (b.sx | 0));
+      const shW = L.shardRow.count * C, shX0 = Math.round((rightEdge - shW) / 2);
+      const shY = _curPos(0, L.shardRow.row).y;
+      for (let i = 0; i < L.shardRow.count; i++) {
+        const it = shards[i];
+        if (it) itemCell(it, shX0 + i * C, shY, C, C); else frame(shX0 + i * C, shY, C, C);
+      }
+
+      // 5) Generic misc-currency grid at the bottom (centered). Frame all cells,
+      //    fill row-major with the generic currency items in slot (sx) order.
+      generics.sort((a, b) => (a.sx | 0) - (b.sx | 0));
+      const gW = L.generic.cols * C, gX0 = Math.round((rightEdge - gW) / 2);
+      const gY0 = _curPos(0, L.generic.rowStart).y;
+      let gi = 0;
+      for (let gy = 0; gy < L.generic.rows; gy++) {
+        for (let gx = 0; gx < L.generic.cols; gx++) {
+          const x = gX0 + gx * C, y = gY0 + gy * C;
+          const it = generics[gi++];
+          if (it) itemCell(it, x, y, C, C); else frame(x, y, C, C);
+        }
+      }
+      // Any leftover items beyond their region — trailing row (safety net).
+      let ux = 0, uy = maxY + 14;
+      for (const it of generics.slice(gi).concat(shards.slice(L.shardRow.count)).concat(normals)) { itemCell(it, ux, uy, C, C); ux += C + 2; }
+
+      const namePart = _isStashTabId(inv.id) ? (inv.tn || 'Stash Tab') : _inventoryLabel(inv.id);
+      // Title shows the description ("Currency · N items"); the "#id name" label
+      // drops to the small subtitle line (swapped, like every stash tab).
+      return `<div class="inv-section">
+        <div class="inv-section-header">Currency · ${items.length} items<span class="inv-section-meta">${escHtml('#' + inv.id + ' ' + namePart)}</span></div>
+        <div class="inv-frame-cur"><div class="inv-grid-cur" style="position:relative;width:${maxX}px;height:${maxY}px">${parts}</div></div>
+      </div>`;
+    }
+
     // Header line ("#id name · meta") for one inventory section — shared by the
     // full render and the in-place patcher so they stay byte-identical.
     function _invSectionHeaderHtml(inv, bx, by) {
@@ -9927,6 +10342,11 @@
       // Keep the raw internal type (e.g. "LakeTabletInventory1") in the meta line.
       const metaType = rawType ? `${escHtml(rawType)} · ` : '';
       const meta = `${metaType}${bx}×${by} · ${items.length} items` + (inv.src ? ' · ' + escHtml(inv.src) : '');
+      // Stash tabs: title = the description, "#id name" drops to the subtitle
+      // line (swapped). Non-stash sections (backpack/equipped) keep the label
+      // as the title.
+      if (_isStashTabId(id))
+        return `${meta}<span class="inv-section-meta">${escHtml(labelBase)}</span>`;
       return `${escHtml(labelBase)}<span class="inv-section-meta">${meta}</span>`;
     }
 
@@ -9935,6 +10355,23 @@
     // at a glance whether the cell needs replacing. Returns '' if the item
     // projects outside the grid (defensive — some non-grid inventories do this,
     // e.g. trinket holsters where slotEnd > totalBoxes).
+    // Inner visual of an item (icon layer + fallback name label + unid/stack
+    // badges) — shared by the grid cell and the currency-tab absolute slot so
+    // both look identical. w/h are the cell span (for the name truncation only).
+    function _itemVisual(it, w, h) {
+      const name = it.n || it.b || '?';
+      const stack = (typeof it.s === 'number' && it.s > 1) ? it.s : 0;
+      const stackBadge = stack ? `<span class="inv-stack">${stack}</span>` : '';
+      const icon = _iconUrl(it.a);
+      const imgLayer = icon ? `<img class="inv-item-img" src="${escAttr(icon)}" loading="lazy" onerror="this.style.display='none';var l=this.parentElement.querySelector('.inv-item-label');if(l)l.style.display=''">` : '';
+      const label = `<span class="inv-item-label"${icon ? ' style="display:none"' : ''}>${escHtml(_truncateForCell(name, w * h))}</span>`;
+      // "Unidentified" is an equippable-gear state only. Some currency base types
+      // still expose a Mods component whose Identified byte reads 0, so the reader
+      // reports idf=0 for them — gate on it.gear so currency never shows a "?".
+      const unidBadge = (it.gear && it.idf === 0) ? '<span class="inv-unid-badge" title="Unidentified">?</span>' : '';
+      return imgLayer + label + unidBadge + stackBadge;
+    }
+
     function _invItemCellHtml(it, bx, by) {
       const sx = (it.sx | 0), sy = (it.sy | 0);
       const ex = Math.max(sx + 1, (it.ex | 0));
@@ -9943,24 +10380,15 @@
       const w = Math.max(1, ex - sx);
       const h = Math.max(1, ey - sy);
       const rarity = (typeof it.r === 'number' && it.r >= 0 && it.r <= 3) ? it.r : 0;
-      const name = it.n || it.b || '?';
-      const stack = (typeof it.s === 'number' && it.s > 1) ? it.s : 0;
-      const stackBadge = stack ? `<span class="inv-stack">${stack}</span>` : '';
       const tip = _buildItemTooltipPayload(it);
-      // Real item art (RenderItem ResourcePath via poe2db). The icon fills the
-      // cell; the name label sits behind it and is revealed again if the CDN
-      // has no art for this path. idf===0 → unidentified corner glyph.
-      const icon = _iconUrl(it.a);
-      const imgLayer = icon ? `<img class="inv-item-img" src="${escAttr(icon)}" loading="lazy" onerror="this.style.display='none';var l=this.parentElement.querySelector('.inv-item-label');if(l)l.style.display=''">` : '';
-      const label = `<span class="inv-item-label"${icon ? ' style="display:none"' : ''}>${escHtml(_truncateForCell(name, w * h))}</span>`;
-      const unidBadge = (it.idf === 0) ? '<span class="inv-unid-badge" title="Unidentified">?</span>' : '';
       return `<div class="inv-item rarity-${rarity}" data-slot="${sx},${sy}" data-sig="${escAttr(_invSig(it))}" `
             + `style="grid-column:${sx + 1} / span ${w};grid-row:${sy + 1} / span ${h}" `
             + `onmouseenter="_invShowTip(event,'${tip}')" onmouseleave="_invHideTip()" onmousemove="_invMoveTip(event)">`
-            + imgLayer + label + unidBadge + stackBadge + `</div>`;
+            + _itemVisual(it, w, h) + `</div>`;
     }
 
     function _renderInvSection(inv) {
+      if (_isCurrencyTab(inv)) return _renderCurrencyTab(inv);
       const bx = Math.max(1, inv.bx || 12);
       const by = Math.max(1, inv.by || 5);
       const items = Array.isArray(inv.items) ? inv.items : [];
@@ -10019,7 +10447,14 @@
       let html = ttIcon + `<div class="inv-tt-name inv-item ${rarityCls}" style="border:none;background:none;padding:0;display:block;text-align:left">${escHtml(p.n || p.b || '?')}</div>`;
       if (p.b && p.b !== p.n) html += `<div class="inv-tt-base">${escHtml(p.b)}</div>`;
       if (p.idf === 0) html += `<div class="inv-tt-base" style="color:#e0533b">Unidentified</div>`;
-      if (p.s && p.s > 1) html += `<div class="inv-tt-base">Stack Size: ${p.s}${p.smax > 0 ? ' / ' + p.smax : ''}</div>`;
+      // "/ max" only when the count actually fits the shown max — the +0x28
+      // descriptor field is the NORMAL-inventory cap (e.g. 40), which a currency
+      // stash tab legitimately exceeds (e.g. 1231), so "1231 / 40" would be
+      // nonsense. Container-dependent caps are a TODO (see StackMaxProbe).
+      if (p.s && p.s > 1) {
+        const showMax = p.smax > 0 && p.s <= p.smax;
+        html += `<div class="inv-tt-base">Stack Size: ${p.s}${showMax ? ' / ' + p.smax : ''}</div>`;
+      }
       // Mods are objects {c: category, t: text}. Implicits + enchants render
       // first (with separators), then explicits — matches the in-game tooltip order.
       const mods = Array.isArray(p.m) ? p.m : [];
@@ -11125,7 +11560,10 @@
       // Lazy-decode cache. Keys are `<entityAddr>::<componentName>`,
       // values are { loading: bool, data: object|null }. Survives
       // snapshot pushes so a row stays expanded after the next tick.
-      lazyDecoded: new Map()
+      lazyDecoded: new Map(),
+      // Keys of lazy components whose live re-fetch is currently in flight,
+      // so the per-snapshot refresh doesn't stack duplicate decode calls.
+      refreshInFlight: new Set()
     };
 
     function updateEntities(jsonStr) {
@@ -11146,10 +11584,40 @@
       );
       // Drop lazy-decoded cache for entities that left range
       for (const key of [...window._eiState.lazyDecoded.keys()]) {
-        if (!liveAddrs.has(key.split('::')[0]))
+        if (!liveAddrs.has(key.split('::')[0])) {
           window._eiState.lazyDecoded.delete(key);
+          window._eiState.refreshInFlight.delete(key);
+        }
       }
       eiRender();
+      // Keep expanded lazy components (e.g. Actor animationId) live: silently
+      // re-decode them each snapshot instead of freezing on the first read.
+      _eiRefreshExpandedLazy(items);
+    }
+
+    // Re-fetch every currently-EXPANDED lazy-decoded component from the fresh
+    // snapshot so live fields keep updating. Silent — the existing data stays
+    // on screen (no loading flicker) until the async decode returns; guarded
+    // by refreshInFlight so slow decodes never stack duplicate calls.
+    function _eiRefreshExpandedLazy(items) {
+      const st = window._eiState;
+      if (!st.lazyDecoded.size) return;
+      // Build "<addr>::<name>" -> component addr from the fresh items.
+      const compAddrByKey = new Map();
+      for (const e of items) {
+        const comps = Array.isArray(e.components) ? e.components : [];
+        for (const c of comps) compAddrByKey.set(e.addr + '::' + c.name, c.addr || '');
+      }
+      for (const [key, entry] of st.lazyDecoded) {
+        if (!entry || entry.loading) continue;       // initial decode still pending
+        if (!st.compExpanded.has(key)) continue;      // only refresh visible rows
+        if (st.refreshInFlight.has(key)) continue;    // one live decode at a time
+        const compAddr = compAddrByKey.get(key);
+        if (compAddr === undefined) continue;         // component gone this frame
+        const [entityAddr, compName] = key.split('::');
+        st.refreshInFlight.add(key);
+        ahkCall('DecodeComponent', entityAddr, compName, compAddr);
+      }
     }
 
     // Re-renders the inspector from the cached payload + current filter state.
@@ -11349,6 +11817,16 @@
         if (val === 1 || val === '1' || val === true)  return '✓ yes';
         if (val === 0 || val === '0' || val === false) return '✗ no';
       }
+      // Resolve the Actor animationId to a human-readable CastType name
+      // (ANIM_NAMES from animation_names.js). Show "<id> · <name>" so the
+      // raw value stays visible; "(unknown)" for ids not in the enum.
+      if (key === 'animationId') {
+        const n = Number(val);
+        if (Number.isFinite(n)) {
+          const nm = (typeof ANIM_NAMES !== 'undefined') ? ANIM_NAMES[n] : undefined;
+          return nm ? (n + ' · ' + nm) : (n + ' · (unknown)');
+        }
+      }
       return String(val);
     }
     function eiPrettyValueClass(key, val) {
@@ -11435,10 +11913,31 @@
       eiRender();
     }
     function eiToggleComp(addr, name) {
-      const set = window._eiState.compExpanded;
+      const st = window._eiState;
+      const set = st.compExpanded;
       const key = addr + '::' + name;
+      const opening = !set.has(key);
       if (set.has(key)) set.delete(key); else set.add(key);
+      // On (re-)open, re-read a lazily-decoded component from live memory so the
+      // dropdown shows current values instead of the ones captured at first open.
+      // (Snapshot-decoded components already refresh every push.) Silent: the old
+      // data stays until the fresh decode lands; refreshInFlight avoids stacking.
+      if (opening && st.lazyDecoded.has(key) && !st.refreshInFlight.has(key)) {
+        const compAddr = _eiCompAddr(addr, name);
+        if (compAddr !== undefined) {
+          st.refreshInFlight.add(key);
+          ahkCall('DecodeComponent', addr, name, compAddr);
+        }
+      }
       eiRender();
+    }
+    // Looks up a component's live address from the current snapshot items,
+    // for re-issuing a lazy decode. Returns undefined if not found this frame.
+    function _eiCompAddr(entityAddr, compName) {
+      const e = (window._eiState.items || []).find(x => x.addr === entityAddr);
+      if (!e || !Array.isArray(e.components)) return undefined;
+      const c = e.components.find(cc => cc.name === compName);
+      return c ? (c.addr || '') : undefined;
     }
     // Fire a lazy decode for one component on demand. Marks the row
     // as loading immediately, then waits for eiApplyDecodedComponent
@@ -11457,6 +11956,7 @@
       const key = entityAddr + '::' + compName;
       const data = (decoded && typeof decoded === 'object') ? decoded : {};
       window._eiState.lazyDecoded.set(key, { loading: false, data: data });
+      window._eiState.refreshInFlight.delete(key);   // live re-fetch settled
       // Auto-expand if the lazy fetch returned anything useful, so the
       // user doesn't have to click a second time after the await.
       if (Object.keys(data).length > 0)

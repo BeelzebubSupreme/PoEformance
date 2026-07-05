@@ -435,7 +435,7 @@ _ComponentSummaryKeys(canonicalName)
     static keysByComponent := Map(
         "life",        ["isAlive", "lifeCurrentPercentMax", "manaCurrentPercentMax", "energyShieldCurrentPercentMax", "lifeRegen", "manaRegen", "energyShieldRegen"],
         "render",      ["worldPosition", "gridPosition", "modelBounds", "terrainHeight"],
-        "animated",    ["id", "animatedEntityPtr"],
+        "animated",    ["id", "animatedEntityPtr", "modelPath"],
         "positioned",  ["reaction", "isFriendly"],
         "actor",       ["animationId", "activeSkillsCount", "cooldownsCount", "deployedCount"],
         "stats",       ["currentWeaponIndex", "statsByItemsPtr", "statsByBuffAndActionsPtr"],

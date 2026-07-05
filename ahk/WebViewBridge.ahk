@@ -1392,15 +1392,58 @@ _BuildInventoryArrayJson(invs)
             base := d.Has("baseType") ? String(d["baseType"]) : ""
             rarId := d.Has("rarityId") ? Integer(d["rarityId"]) : -1
             stkCnt := d.Has("stackCount") ? Integer(d["stackCount"]) : 0
-            stkMax := d.Has("stackMax") ? Integer(d["stackMax"]) : 0
+            ; Container-aware max stack WITHOUT container detection: the descriptor
+            ; carries the normal cap (+0x28, e.g. 40) and the currency-tab cap
+            ; (+0x20, e.g. 5000), with normal <= tab. Show the SMALLEST cap that
+            ; still fits the current Count. So a normal tab / backpack (Count <=
+            ; normal cap) shows the normal cap ("40/40", "19/40"), and only a stack
+            ; that already exceeds it (a currency tab, e.g. 1231) escalates to the
+            ; tab cap ("1231/5000"). Safe everywhere (never below Count) and needs
+            ; no fragile tab-id / tab-type detection. (Tiny stacks in a currency tab
+            ; show the normal cap — harmless; a proper currency-tab StashType signal
+            ; would refine only that case.)
+            stkM28 := d.Has("stackMax") ? Integer(d["stackMax"]) : 0
+            stkM20 := d.Has("stackMaxTab") ? Integer(d["stackMaxTab"]) : 0
+            if (stkM28 > 0 && stkCnt <= stkM28)
+                stkMax := stkM28
+            else if (stkM20 > 0)
+                stkMax := stkM20
+            else
+                stkMax := stkM28
             idf := d.Has("identified") ? Integer(d["identified"]) : -1
             art := d.Has("artPath") ? String(d["artPath"]) : ""
+            ; Metadata base name (last path segment, e.g. "CurrencyUpgradeToMagic")
+            ; + an "is currency" flag — the currency-tab layout places currency
+            ; items by name and puts non-currency items (weapons/gear) in the
+            ; central slot.
+            ; isGear = a "normal" equippable item (weapon / armour / jewellery /
+            ; flask / jewel). The currency tab's central slot only accepts gear;
+            ; everything else (currency, essences, runes, fragments, shards, …)
+            ; belongs in the misc grid, so gear-by-path is the reliable split.
+            mp := "", isCur := 0, isGear := 0
+            if (d.Has("metadataPath") && d["metadataPath"] != "")
+            {
+                fullPath := String(d["metadataPath"])
+                mp := RegExReplace(fullPath, ".*/", "")
+                isCur := InStr(fullPath, "/Currency/") ? 1 : 0
+                for _, cat in ["/Weapons/", "/Armours/", "/Rings/", "/Amulets/", "/Belts/", "/Flasks/", "/Jewels/", "/Quivers/"]
+                {
+                    if InStr(fullPath, cat)
+                    {
+                        isGear := 1
+                        break
+                    }
+                }
+            }
             modsJson := _BuildItemModsJson(d.Has("modsInfo") ? d["modsInfo"] : 0)
             itemsJson .= "{"
                 . '"sx":' Integer(it["slotStartX"]) ","
                 . '"sy":' Integer(it["slotStartY"]) ","
                 . '"ex":' Integer(it["slotEndX"]) ","
                 . '"ey":' Integer(it["slotEndY"]) ","
+                . '"mp":' _JsStr(mp) ","
+                . '"cur":' isCur ","
+                . '"gear":' isGear ","
                 . '"n":' _JsStr(name) ","
                 . '"b":' _JsStr(base) ","
                 . '"r":' rarId ","

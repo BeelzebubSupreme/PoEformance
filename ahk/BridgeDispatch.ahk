@@ -182,6 +182,12 @@ _DispatchBridgeCall(method, args)
                 _UhpApplySetting(args[1], args[2])
             SaveUiHoverPrice()
             SetTimer(PushHeaderToWebView, -50)
+        case "HkAnimCaptureStart":
+            ; Macro enemyAnim live capture — arm (accumulate nearby enemy animations).
+            StartHkAnimCapture()
+        case "HkAnimCaptureStop":
+            ; Macro enemyAnim live capture — disarm + clear.
+            StopHkAnimCapture()
         case "SetRitualValueBadges":
             ; Persistent value badges on Ritual reward cells. args[1]=key, args[2]=value.
             if (args.Length >= 2)
@@ -916,6 +922,15 @@ _DispatchBridgeCall(method, args)
         case "StackMaxProbeRun":
             ; TEMP diagnostic: test whether Stack +0x20 is the max stack size.
             SetTimer(() => StackMaxProbeRun(), -1)
+        case "ActorProbeRun":
+            ; TEMP diagnostic: time-sample the Actor struct to locate the drifted animationId.
+            SetTimer(() => ActorProbeRun(), -1)
+        case "ActorVectorProbeRun":
+            ; TEMP diagnostic: verify/re-base the Actor ActiveSkills/Cooldowns/Deployed vectors.
+            SetTimer(() => ActorVectorProbeRun(), -1)
+        case "CurrencyLayoutProbeRun":
+            ; RE aid: bake the currency tab's slot layout from the UI tree.
+            SetTimer(() => CurrencyLayoutProbeRun(), -1)
         case "ComponentDumpProbeRun":
             ; TEMP diagnostic: dump all components + raw fields of the highlighted entity.
             SetTimer(() => ComponentDumpProbeRun(), -1)

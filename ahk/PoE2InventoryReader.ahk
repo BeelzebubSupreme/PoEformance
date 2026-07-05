@@ -206,6 +206,7 @@ class PoE2InventoryReader extends PoE2PlayerReader
                 continue
             inv["inventoryId"] := invId
             inv["inventoryType"] := this.GetInventoryType(invId)
+            inv["invStructPtr"] := invPtr   ; raw container struct (for +0x00 type / +0x04 slot reads)
             result.Push(inv)
         }
 
@@ -694,11 +695,14 @@ class PoE2InventoryReader extends PoE2PlayerReader
 
         ; Stack count + max size (for stackable items like scrolls, currency).
         ; The Stack component's Count is +0x18; its +0x10 points at a shared
-        ; per-base-type StackSizeData descriptor whose +0x28 is the normal
-        ; inventory max stack (verified in-game: Scroll of Wisdom = 40). Both
-        ; are 0 for non-stackable items (no Stack component) so the UI hides
-        ; the badge.
-        stackCount := 0, stackMax := 0
+        ; per-base-type StackSizeData descriptor holding per-CONTAINER caps:
+        ; +0x28 = normal-inventory max (Scroll of Wisdom = 40), +0x20 = the
+        ; expanded stash/currency-tab max (Wisdom = 5000). Verified in-game
+        ; 2026-07-04 across a full currency tab. This reader exposes both caps; a consumer
+        ; can pick a display max without container detection by using the smallest cap
+        ; that fits the current Count (Count <= MaxStack ? MaxStack : MaxStackTab). All 0 for
+        ; non-stackable items (no Stack component) so the UI hides the badge.
+        stackCount := 0, stackMax := 0, stackMaxTab := 0
         try
         {
             stackPtr := this.FindEntityComponentAddress(itemEntityPtr, "Stack")
@@ -707,12 +711,15 @@ class PoE2InventoryReader extends PoE2PlayerReader
                 stackCount := this.Mem.ReadInt(stackPtr + PoE2Offsets.Stack["Count"])
                 sizeDataPtr := this.Mem.ReadPtr(stackPtr + PoE2Offsets.Stack["StackSizeDataPtr"])
                 if this.IsProbablyValidPointer(sizeDataPtr)
-                    stackMax := this.Mem.ReadInt(sizeDataPtr + PoE2Offsets.StackSizeData["MaxStack"])
+                {
+                    stackMax    := this.Mem.ReadInt(sizeDataPtr + PoE2Offsets.StackSizeData["MaxStack"])
+                    stackMaxTab := this.Mem.ReadInt(sizeDataPtr + PoE2Offsets.StackSizeData["MaxStackTab"])
+                }
             }
         }
         catch
         {
-            stackCount := 0, stackMax := 0
+            stackCount := 0, stackMax := 0, stackMaxTab := 0
         }
 
         ; Identified flag (from the Mods component) and the 2D inventory-art path
@@ -729,6 +736,7 @@ class PoE2InventoryReader extends PoE2PlayerReader
             "rarity", this.RarityNameFromId(rarityId),
             "stackCount", stackCount,
             "stackMax", stackMax,
+            "stackMaxTab", stackMaxTab,
             "identified", identified,
             "artPath", artPath,
             "modsInfo", modsInfo

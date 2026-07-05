@@ -237,7 +237,12 @@ class PoE2Offsets
     )
 
     static Actor := Map(
-        "AnimationId", 0x8A0,
+        ; AnimationId drifted 0x8A0 -> 0x8B0 (+0x10) with a game patch. Confirmed
+        ; via ActorProbe: the old 0x8A0 froze at 0, while 0x8B0 cycles Idle(0)/
+        ; FixedRun(195)/DodgeRoll(268) and the cast skill CastTypes
+        ; (OrbOfStorms 474 / Flamewall 472 / SparkAdditive 299) — the primary
+        ; current-animation field. (0x380 is a locomotion-LAYER field, not this.)
+        "AnimationId", 0x8B0,
         "ActiveSkills", 0xB08,        ; ActiveSkillsPtr StdVector start
         "ActiveSkillsLast", 0xB10,
         "Cooldowns", 0xB20,           ; CooldownsPtr StdVector start
@@ -305,7 +310,22 @@ class PoE2Offsets
     )
 
     static Animated := Map(
-        "AnimatedEntityPtr", 0x280
+        "AnimatedEntityPtr", 0x280,
+        "ModelInfoPtr", 0x358          ; -> AnimatedModelInfo (the loaded .ao model)
+    )
+
+    ; Model-info object referenced by Animated.ModelInfoPtr. Its ModelFileRecordPtr
+    ; points at a file record (FileInfoValue) whose Name (+0x08) is the loaded .ao
+    ; model path — distinguishes entities that share a metadata path but load
+    ; different models (e.g. the ExpeditionMarker flag variants).
+    static AnimatedModelInfo := Map(
+        "ModelFileRecordPtr", 0x18
+    )
+
+    ; Generic GGPK file-record value struct. Name (+0x08) is a StdWString holding
+    ; the file path (here, the .ao model file).
+    static FileInfoValue := Map(
+        "Name", 0x08
     )
 
     static Buffs := Map(
@@ -375,13 +395,18 @@ class PoE2Offsets
 
     ; StackSizeData — the per-base-type descriptor the Stack component points at
     ; (Stack + 0x10). Shared across every stack of the same base item (two
-    ; Scroll-of-Wisdom stacks resolve to the same pointer). +0x28 is the normal
-    ; inventory max stack size — verified in-game 2026-07-04: Scroll of Wisdom
-    ; reads 40, and across a full currency tab the field only ever yields the
-    ; real PoE2 caps 10/20/30/40. (+0x20 = 5000 currency-tab cap, +0x24 = 100 are
-    ; other fields, not the per-item max.)
+    ; Scroll-of-Wisdom stacks resolve to the same pointer). It holds per-CONTEXT
+    ; stack caps (verified in-game 2026-07-04):
+    ;   +0x28 MaxStack    — NORMAL cap: backpack AND normal stash tabs (Wisdom = 40)
+    ;   +0x20 MaxStackTab — CURRENCY stash tab cap (Wisdom = 5000)
+    ; (+0x24 = 100 is a third field, unused for display.) The consumer currently
+    ; uses MaxStack everywhere: it's correct for the backpack + normal tabs, and a
+    ; currency tab's overflow is hidden by the UI's "Count <= max" guard. Using
+    ; MaxStackTab needs a reliable CURRENCY-TAB signal, which is NOT in the
+    ; inventory struct (backpack + currency tab read identical +0x00/+0x04) — TODO.
     static StackSizeData := Map(
-        "MaxStack", 0x28
+        "MaxStack", 0x28,
+        "MaxStackTab", 0x20
     )
 
     ; Item "Base" component. For unique items, +0x30 points to the item's

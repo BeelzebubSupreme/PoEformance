@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.162`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.190`.
 
 ## Language
 
@@ -1464,6 +1464,274 @@ Reuses `_HPP_HexDump` / `_SmResolveServerData`.
   `UnknownPtr`→`StackSizeDataPtr` (0x10) + new `PoE2Offsets.StackSizeData` (`MaxStack` 0x28);
   `PoE2InventoryReader` reads `stackMax` alongside `stackCount` (deref +0x10 → +0x28);
   `WebViewBridge` emits `smax`; the inventory tooltip shows "Stack Size: 19 / 40".
+
+## Max stack size is container-dependent (0.45.13.164)
+
+Follow-up to the max-stack wiring: the StackSizeData descriptor (shared per base type) holds
+THREE caps — +0x20=5000, +0x24=100, +0x28=40 for Scroll of Wisdom — and the CURRENT container
+selects which applies. The normal inventory uses +0x28 (40); a **currency stash tab** holds
+far more (the owner's tab #143 had a Wisdom stack of 1231, and every currency there with
+Count > 100 has +0x20=5000), so it selects **+0x20**. So `stackMax` (the +0x28 read) is only
+correct for the backpack.
+- **Interim UI fix (shipped):** the inventory tooltip shows "/ max" ONLY when Count ≤ max, so
+  the nonsensical "1231 / 40" is gone (it now shows just "1231" until the container cap is
+  wired). "19 / 40" in the backpack is unaffected.
+- **StackMaxProbe extended:** a CONTAINER-SELECTOR SUMMARY table now prints, per inventory,
+  the resolved type + the raw `InventoryStruct` +0x00 (InventoryType) / +0x04 (InventorySlot),
+  and per stackable item the base path, Count and the three caps — to pin how the container
+  selects the field. `PoE2InventoryReader` now exposes `invStructPtr` per inventory for this.
+- **CAP FIELDS confirmed:** the descriptor holds +0x28 = NORMAL cap (backpack AND normal
+  stash tabs both cap Wisdom at 40 — in-game "40/40" in a "white" tab) and +0x20 = CURRENCY
+  stash tab cap (Wisdom = 5000). +0x24 = 100 unused.
+- **SELECTOR still open:** the InventoryStruct +0x00/+0x04 read the SAME value in every
+  container (a vtable pointer 0x00007FF6…), AND the backpack + currency tab shared identical
+  values while their effective caps differ (40 vs 5000) — so the container-type signal is NOT
+  in the first 8 bytes of the inventory struct. The first "inventoryId 1 vs stash tab" rule was
+  WRONG: it over-reported normal tabs as 5000. Until a reliable currency-tab signal is found,
+  the consumer uses **MaxStack (+0x28) everywhere** — correct for the backpack + normal tabs;
+  a currency-tab overflow (Count > 40) is hidden by the UI's "Count ≤ max" guard, so it shows
+  just the count, never a wrong "/40". `MaxStackTab` (+0x20) is read + kept for when detection
+  lands. **Next:** probe a wider inventory-struct range with a currency tab AND a normal tab
+  open to locate the differing field (or read the tab's StashType from the tab-metadata vector).
+- **RESOLVED without detection (0.45.13.165):** instead of detecting the container type, the
+  consumer shows the SMALLEST descriptor cap that still fits the current Count — normal cap
+  (+0x28) when Count ≤ it, else the currency-tab cap (+0x20). Since normal ≤ tab, the backpack
+  and normal tabs (Count ≤ normal cap) show the normal cap ("19/40", "40/40"), and only a stack
+  that already exceeds it (a currency tab, e.g. 1231) escalates to the tab cap ("1231/5000").
+  Safe everywhere (never below Count), no fragile tab-id hardcode (#143 is the owner's tab
+  POSITION, not a game constant). Tiny stacks in a currency tab show the normal cap — harmless;
+  a StashType signal would refine only that case. Logic in `WebViewBridge` (`stkM28`/`stkM20`).
+
+## Currency tab 1:1 layout — RE + bake (WIP, 0.45.13.166)
+
+The currency stash tab is NOT a normal grid: the inventory struct only exposes a LINEAR slot
+index (dims 53×4, all items in row y=0, x = fixed per-currency index 0–52, gaps = group
+separators). The real 2D layout lives in the **game UI element tree** — owner-found: the slot
+container at UI path `[35][2][0][0][0][1][1][0][0][1][1][0][0][1]` (74 children) has one
+UiElement per slot carrying its `UnscaledPos` + `Size` and the item at `+0x4F8` (→ currency
+metadata path). Since the layout is game-fixed (identical for everyone), reading it once bakes
+it. `ahk/CurrencyLayoutProbe.ahk` (`CurrencyLayoutProbeRun`, bridge `CurrencyLayoutProbeRun`,
+UI "🪙 Bake Currency Layout" in Config → Debug) navigates that path, collects every
+Metadata/Items/Currency slot's absolute unscaled pos + size, and writes
+`data/currency_tab_layout.json` (`{container:{x,y,w,h}, slots:[{path,x,y,w,h}]}`, TRACKED
+shipped data) + a readable log. **RESULT (probe run 2026-07-04):** the UI-tree positions turned out to be a wide/scattered
+INTERNAL layout (base tier far left, greater/perfect far right ~x3400, families keyed by y),
+NOT the compact visual grid — the game re-arranges before drawing, so the raw coords can't
+drive a 1:1 render. Instead the visual grid was TRANSCRIBED from a clean currency-tab
+screenshot cross-referenced with the probe's count→currency mapping (the count=1 ambiguities
+in the abyss/omen rows resolved via the probe's collection order, which matches the visual
+left-to-right). **Shipped 0.45.13.167:** `WebViewBridge` emits each item's metadata base name
+(`it.mp`, last path segment); `ui/index.html` holds the curated `CURRENCY_TAB_LAYOUT`
+(base-name → [col,row], cols 0-2 = tier base/greater/perfect) and `_applyCurrencyLayouts(data)`
+rewrites each detected currency tab's item sx/sy onto those cells (+ tab bx/by) BEFORE render,
+so the existing grid renderer + patcher draw it 1:1 (unmapped/new currencies park in trailing
+rows). Detection: ≥5 items match the layout map. **Refined 0.45.13.168 — dedicated renderer:**
+replaced the grid-remap with `_renderCurrencyTab(inv)` (routed via `_renderInvSection` + an
+`_invDesc` 'html' desc so it's string-cached, not grid-patched). It absolutely-positions one
+slot per curated cell — framing ONLY real slots (no full background grid), with inter-group
+pixel gaps (`colGapAfter`/`rowGapAfter`) and the central multi-cell slot (`bigSlots`) + the
+extra always-empty frames (`emptySlots`). `_itemVisual(it,w,h)` was factored out of
+`_invItemCellHtml` and reused. Verified in the preview: 44 items + 5 empty frames, compact
+348×360, gaps applied (col 3 at x=120 = 3·36+12). **Refined 0.45.13.169** per feedback: the bottom two rows are a
+GENERIC 7×2 misc-currency grid (not bound to specific currencies) filled by slot order (`it.sx`)
+— the abyss/omen entries left the fixed `slots` map; the central slot is a 2×4 slot for the
+tab's NON-currency item (weapons/gear; `WebViewBridge` now emits an `it.cur` flag from the
+`/Currency/` path) and is HORIZONTALLY CENTERED, as are the two empty frames above it;
+Identification moved up a row. Verified: big slot centered (x=138, center 174 == grid 174),
+2×4, non-currency item placed there, generics in the bottom grid. **Pending in-game verification:** open the
+currency tab in the tool's Inventory tab — it should mirror the game grid; report any
+mis-placed slot and I fix its [col,row] in `CURRENCY_TAB_LAYOUT`. The probe stays as the
+re-bake aid.
+
+## Actor animationId decode + offset-drift investigation (WIP, 0.45.13.176–178)
+
+Surface the Actor component's `animationId` as a readable name in the Entity Inspector, and
+chase down why it (and the whole Actor block) stopped tracking the character.
+
+- **Readable name (0.45.13.175–176):** the Actor whitelist already emits `animationId`; the
+  inspector now resolves it via `ANIM_NAMES` in `eiPrettyValue` → `"<id> · <name>"` (or
+  `"<id> · (unknown)"`). The name table `ui/animation_names.js` is now generated from the
+  hand-maintained **`ahk/AnimationID.ahk`** (1084 CastType entries, up to 0x43B) instead of the
+  older GameHelper2 `Animation.cs` — `tools/poe_tools.py gen-anim` reads the local file.
+- **Live-refresh fix (0.45.13.177):** the inspector's lazy-decode cache was only invalidated on
+  range-exit, so a decoded Actor froze on the value read at click time. `updateEntityInspector`
+  now silently re-decodes every currently-EXPANDED lazy component each snapshot
+  (`_eiRefreshExpandedLazy`, `refreshInFlight`-guarded), and the AHK `_DecodeComponentOnDemand`
+  re-reads live — so expanded fields update continuously. This did NOT fix `animationId`: it
+  stays frozen while acting → the value at `Actor+0x8A0` no longer changes.
+- **CONCLUSION: Actor offset drift.** Like the W2S-matrix (−8) and AreaInstance (+0x18) drifts, a
+  patch shifted the Actor struct, so `PoE2Offsets.Actor["AnimationId"] = 0x8A0` (from the owner's
+  CE inspector / CT) now points at a stale field. The counts (ActiveSkills/Cooldowns/Deployed)
+  read plausibly, so it may be a small local shift rather than a whole-struct move.
+- **`ahk/ActorProbe.ahk` (RE aid, 0.45.13.178):** `ActorProbeRun` resolves the local player's
+  Actor component and TIME-SAMPLES a 4 KB int32 window (`Actor+0x000..0xFFC`) ~60×/80 ms while
+  the user runs/casts, tracking distinct values per offset. It reports the offsets that CHANGED,
+  ranked with an animation-id band first (non-negative, ≤8192, ≤32 distinct — the animationId is
+  the low-int one cycling 0=Idle/4=Run/skill ids), flags the current `0x8A0`, and cross-checks the
+  known vector-count offsets to tell a local shift from a whole-struct move. Writes
+  `logs\InGameStateMonitor.actor_probe.log`. Bridge `ActorProbeRun`; UI "🎭 Probe Actor" in the
+  RE-tools row. Reuses `_AIP_ResolveAreaInstance` + `_AIP_WriteProbeLog`.
+- **FIXED — animationId 0x8A0 → 0x8B0 (+0x10) (0.45.13.179):** the probe (owner run) proved it.
+  Old `0x8A0` was FROZEN at 0 while acting; `+0x8B0` cycled through Idle(0) / FixedRun(195) /
+  DodgeRoll(268) / DodgeRollBack(402) / SprintEnd(872) AND the cast skills' CastTypes
+  (OrbOfStorms 474 / Flamewall 472 / SparkAdditive 299) — i.e. the primary current-animation field
+  (the separate `0x380` cluster held only locomotion-LAYER anims like FixedRunLayerBaseSwitched, so
+  it is NOT the field). `PoE2Offsets.Actor["AnimationId"] := 0x8B0`. The **vector offsets were NOT
+  moved**: ActiveSkills@0xB08 (42) and Cooldowns@0xB20 (4) still read clean plausible counts at the
+  old offsets (a whole-struct shift would read garbage there), and DeployedEnts="?" only means the
+  vector is empty (0 deployed → begin=end=0), not a wrong offset — so only the animationId field's
+  location changed. `ActorProbe` stays as the re-drift aid; it reads the offset dynamically so it
+  keeps working after the fix.
+- **Pending in-game verification (owner):** Entity Inspector → player → Actor → `animationId` should
+  now show Idle standing, "Fixed Run" moving, and the skill name while casting.
+- **Vector offsets under review (0.45.13.180):** owner reports ActiveSkills=42 (char has only 9
+  skills) and a Cooldowns count frozen at 4 — so ActiveSkills/Cooldowns/DeployedEntities may have
+  drifted too (or 42 is the full granted-skill table + 4 is legitimately the count of cooldown-capable
+  skills; unconfirmed). `ActorProbe.ahk` gained `ActorVectorProbeRun` (bridge `ActorVectorProbeRun`,
+  UI "🧬 Probe Actor Vectors"): reads each vector at the CURRENT offset AND current+0x10, DECODES the
+  first entries (ActiveSkills→detailsPtr→castType/cdMs; Cooldowns→datId/maxUses/cdList secs;
+  Deployed→entityId/datId/type), and scans 0xAE0..0xC48 for vector-shaped pointer pairs — so the
+  correct offset is chosen by CONTENT (valid detail pointers + sane castTypes), not a plausible-looking
+  count. Pending: owner runs it in-game, sends `logs\InGameStateMonitor.actor_vector_probe.log`; then
+  re-base `PoE2Offsets.Actor` ActiveSkills/Cooldowns/DeployedEntities (+their `*Last`) if the +0x10
+  variant decodes cleanly and the current one is garbage.
+- **RESULT — vectors are CORRECT, not drifted (0.45.13.181):** owner ran `ActorVectorProbeRun`.
+  ActiveSkills@0xB08 decoded 42 entries with 10/10 valid detailsPtrs, while +0x10 gave count=155587
+  and garbage → **0xB08 is right**; 42 is the actor's full granted-skill table (not the 9 equipped
+  gems). Cooldowns@0xB20 decoded 4 entries with real datId/maxUses and clean cdMs (8000/10000 ms) →
+  **0xB20 is right**; the count legitimately stays 4 (number of cooldown-capable skills; the live
+  timers live inside each entry's `cdList`, not in the list size). DeployedEntities was empty (no
+  minions/totems out) so unverifiable now — left as-is. **So only `animationId` drifted (+0x10, already
+  fixed); the vector offsets stay.** Fixed the Section-A `Format` bug (`{:<n}` → `{:-n}`; AHK left-align
+  is `-`, not `<`). Open follow-up (out of scope, not the reported issue): the sampled ActiveSkills
+  entries decoded `castType=0/useStage=0/cdMs=0` — either those first table rows are non-cast granted
+  effects, or `ActiveSkillDetails` inner offsets (CastType 0x0C / TotalCooldownTimeInMs 0xE8) also
+  drifted; verify against a known equipped skill before trusting per-skill castType.
+
+## Animated component: .ao model path (shipped 0.45.13.182)
+
+Owner-supplied offsets to read the loaded **.ao model file path** off the Animated component —
+it distinguishes otherwise-identical entities that share a metadata path but load different
+models (e.g. the different ExpeditionMarker flag variants). Chain: `Animated+0x358` → model-info
+object → `+0x18` → file record (FileInfoValue) → `+0x08` StdWString = the .ao path.
+
+- **`PoE2Offsets.ahk`:** `Animated["ModelInfoPtr"] = 0x358`; new `AnimatedModelInfo["ModelFileRecordPtr"]
+  = 0x18`; new generic `FileInfoValue["Name"] = 0x08`.
+- **`PoE2ComponentDecoders.ahk` (`DecodeAnimatedComponentBasic`):** walks the chain and adds
+  `modelPath` to the returned Map (empty string if unresolved). NOT on the radar hot path —
+  `DecodeSampleEntityComponentsRadar` doesn't decode Animated at all; this runs only in the full
+  `DecodeSampleEntityComponents` (inspector/browser) pass, so the extra StdWString read is off the
+  per-frame tick.
+- **`SnapshotSerializers.ahk`:** `modelPath` added to the `animated` inspector whitelist → shows in
+  the Entity Inspector's Animated component (row omitted when empty).
+- **Pending in-game verification:** open the Entity Inspector on an Animated entity (e.g. an
+  ExpeditionMarker) → the Animated component should list `modelPath` = its `.ao` file; two entities
+  with the same metadata path but different flags should differ here. Available for entity
+  differentiation (grouping/labels) if wanted later.
+
+## Enemy animationId in the radar hot path (shipped 0.45.13.184)
+
+The Actor `animationId` was only read in the full (inspector/browser) decode, not per-frame. Now
+each cached MONSTER entity's animationId is refreshed live on the radar tick so combat/consumers
+can react to the enemy's current animation / cast.
+
+- **Where:** `PoE2EntityReader.UpdateCachedEntityRadar` — the cheap per-tick cache update (Phase 3
+  of the `PoE2MemoryReader` radar cache; new/changed entities full-decode in Phase 2, existing ones
+  cheap-update here every tick round-robin). The existing monster-gated component pass (which already
+  finds Targetable) was extended to ALSO grab the Actor component in the SAME in-memory loop and do a
+  single `ReadInt` of `Actor.AnimationId` (0x8B0). Stored under `decodedComponents["actor"]
+  ["animationId"]` — same key as the full decode, so consumers read it uniformly.
+- **Cost:** gated to `metadata/monsters/` paths (items/terrain/effects/chests skip it); one extra
+  `ReadInt` per monster per cheap-update, reusing the already-cached component list (no extra
+  component lookup / RPM beyond the one int). Off entirely for non-monsters.
+- **Consumption:** available on every awake monster sample at
+  `entry["entity"]["decodedComponents"]["actor"]["animationId"]` (AHK snapshot). Also serializes into
+  the Entities-tab inspector (the `actor` whitelist), so a monster's Actor row shows the live
+  animationId — a convenient in-game verification.
+- **Pending in-game verification:** watch a monster's Actor → animationId in the inspector while it
+  idles/moves/casts → it should change (0=Idle, movement, skill CastTypes). Decode the number via
+  `ui/animation_names.js` if needed.
+
+## Enemy-animation MACRO CONDITION (shipped 0.45.13.186)
+
+Consumes the hot-path enemy animationId as a new **Macro Engine condition** rather than a standalone
+feature. Rationale (owner): the reaction is primarily for MANUAL play (and may also fire under
+AutoPilot), so it belongs in the Macro Engine's boolean condition tree — where the user attaches ANY
+action (a dodge/guard/defensive key, a flask, a chain) — not under Automation. The standalone
+`CombatReaction` feature shipped at 0.45.13.185 was REMOVED and replaced by this.
+
+- **Condition type `enemyAnim` (`ahk/CustomHotkeys.ahk`):** `_HotkeysIsCondType` + `_HotkeysEvalLeaf`
+  gain `enemyAnim`; `_HotkeysCheckEnemyAnim(a, snap)` returns true iff any hostile monster within the
+  configured radius is CURRENTLY playing one of the leaf's animation ids. Mirrors
+  `_HotkeysCheckMonsterCount`'s monster gate (path `metadata/monsters/`, targetable, not friendly)
+  and its radius modes (world units via `worldRadius` / `radius` px `player`|`cursor`, reusing
+  `_HotkeysPxOrigin`/`_HotkeysPxDist`); the animation match reads
+  `decodedComponents["actor"]["animationId"]`. Leaf fields: `animIds` (comma id list, parsed by
+  `_HotkeysParseIdSet` → id-set), `radiusMode`, `worldRadius`/`radius`. Debug: an `enemyAnim` branch
+  in `_HotkeysBuildDebugRecord` draws the range circle + a live `MATCH / no match` line.
+- **UI (`ui/index.html`):** `enemyAnim` added to `HK_COND_TYPES`, the add-condition `<option>` list,
+  `HK_ACT_LABELS`, `hkActionDefaults` (`{animIds:'', radiusMode:'world', worldRadius:1200, radius:120,
+  debug:0, circleColor:'#FF6A6A'}`), a `hkRenderCondLeaf` `case 'enemyAnim'` (IDs text via `hkCTxt` +
+  radius + radiusMode), `animIds` added to `hkSetCond`'s text-key list, and the debug range-circle
+  swatch now shows for `enemyAnim` too. No new persistence path — it rides the existing hotkey config.
+- **Name-based picker (0.45.13.187):** nobody knows the 1084 numeric ids by heart, and a flat
+  dropdown is unusable — so the condition's animation field is a **typeahead by NAME** (chips), not a
+  raw id box. `hkAnimPicker` renders the selected animations as removable name chips + a search input
+  bound to a shared `<datalist id="anim-names-list">` built once from `ANIM_NAMES` (id→name, from
+  `ui/animation_names.js`) as `"<Name> — #<id>"` options. `hkAnimAdd` accepts a datalist pick, a bare
+  id, an exact name, or a comma list of those (parses the trailing `#<id>`, else numeric, else
+  `hkAnimNameToId`); `hkAnimRemove` drops a chip. The leaf still stores `animIds` as a comma id
+  string (AHK unchanged). `hkBuildAnimDatalist()` runs on `load` + lazily in the picker. Parsing
+  validated against the real 1084-entry map (name / raw / datalist / mixed list all resolve).
+- **Collecting ids for a specific boss attack:** still discoverable via the Entities tab → a monster
+  → Actor → `animationId` while it attacks; but for anything with a known name you now just search it.
+  Attach the hotkey's normal key action (dodge / guard / flask) as the reaction.
+- **Live capture (0.45.13.188) — `ahk/HkAnimCapture.ahk`:** the discovery killer. A "👁 live" toggle on
+  the enemyAnim leaf arms capture; the user stands near the monster/boss, lets it attack, and clicks
+  the animation that lit up — no ids or names needed. `TryHkAnimCapture(radarSnap)` (from
+  `UpdateRadarFast`, NO-OP unless armed) scans the awake sample for hostile monsters and accumulates
+  each `decodedComponents["actor"]["animationId"]` into `g_hkAnimCapSeen` (id→count/last/nearest-dist),
+  resets on area change, prunes entries older than 8 s, and pushes `updateAnimCapture([{id,count,dist,
+  age}])` to the WebView ~4 Hz. Bridge `HkAnimCaptureStart`/`HkAnimCaptureStop`; `LoadHkAnimCapture()`
+  seeds globals (no persistence — transient tool). UI: `hkAnimCapToggle` arms one leaf at a time (also
+  stopped on macro-tab exit + on deleting the armed leaf); `updateAnimCapture` renders a clickable
+  live strip under the leaf (name via `ANIM_NAMES`, ×count · dist, a red "fresh" glow when age<700 ms),
+  each row calling `hkAnimAddId` to add its id. Verified in the browser preview: leaf render (chips +
+  search + live button), the strip populates/sorts/labels (known + unknown ids, fresh glow), and the
+  empty state — end to end.
+- **Turbo fishing path (0.45.13.189):** short animations (a 200–400 ms slam) can slip past the normal
+  round-robin sample, and the 50 ms tick's GDI + secondary reads block the single AHK thread. So while
+  armed, capture TAKES OVER the radar tick with a stripped fast loop: `StartHkAnimCapture` bumps the
+  `UpdateRadarFast` timer to `g_hkFishIntervalMs` (10 ms) and the tick early-branches to
+  `HkAnimFishTick()` (returns before ANY GDI overlay / AutoPilot / loot / alerts / stash / … run).
+  `HkAnimFishTick` refreshes the monster Actor-address list only ~every `g_hkFishHeavyMs` (300 ms) via
+  one `ReadRadarSnapshot()` (`_HkFishCollectMonsters` → hostile/targetable/non-friendly monsters'
+  Actor comp addr + dist), and EVERY tick reads each animationId DIRECTLY (`Mem.ReadInt(addr +
+  Actor.AnimationId)`) into `g_hkAnimCapSeen` — a ~10 ms sample rate that reliably catches brief
+  animations (they also linger 8 s in the feed so there's time to click). UI push stays throttled
+  (`g_hkFishPushMs` 45 ms). `StopHkAnimCapture` restores the normal `g_hkFishNormalMs` (50 ms) tick.
+  Overlays freeze on their last frame during fishing (acceptable for a brief, deliberate mode).
+  **Pending in-game verification:** arm 👁, stand at a boss, let it do a quick attack → the brief
+  animation should still appear (and glow "fresh"); confirm the overlays resume and the tick returns
+  to normal on stop.
+- **Live-capture UX fixes (0.45.13.190):** three issues with the feed, all rooted in the old
+  full-`innerHTML`-rewrite every push. (1) On STOP the results now FREEZE instead of vanishing —
+  `_hkAnimCap` gains `live`+`rows`; a stopped strip stays visible (grey "frozen" style, a "captured
+  (stopped)" label + a "✕ clear" button) and its rows remain clickable until cleared or you leave the
+  macro tab. (2) Clicks now register — the feed is patched by an INCREMENTAL, keyed-by-id DOM update
+  (`_hkAnimCapPatch`, called from `hkRender` + each push) so a row's `<button>` element is STABLE
+  (never recreated mid-frame); rows fire on `onmousedown` (atomic) so a press lands even if a push
+  arrives immediately. (3) No duplicates — one DOM element per id (keyed) + a defensive dedupe-by-id
+  when storing the pushed rows. The strip is now a static shell (`_hkAnimCapStripHtml`: label + clear +
+  a `.hk-anim-cap-rows` container) that the patch fills. Verified end-to-end in the browser preview:
+  dedupe (4 rows w/ a dup → 3 buttons), element stability across pushes, click-to-add (live AND
+  frozen), freeze-on-stop, and clear.
+- **Removed:** `ahk/CombatReaction.ahk` + its wiring (`#Include`, `LoadCombatReaction`,
+  `TryCombatReaction`, `SetCombatReaction`, the `combatReaction` header, the Automation → AutoPilot
+  "⚔️ Combat Reaction" UI section + `combatReactionSyncFromHeader`).
+- **Pending in-game verification:** add an `enemyAnim` condition to a macro (IDs = a monster's attack
+  animationId, radius, a dodge/guard key action), stand near that monster → the macro fires on that
+  animation and not otherwise; the 🐞 debug shows the range circle + live MATCH state.
 
 ## Reference
 
