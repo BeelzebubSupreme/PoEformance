@@ -3389,6 +3389,11 @@ class PoE2GameStateReader extends PoE2InventoryReader
                     awakeSample.Push(entry)
                 }
                 mapSize := currentEntities.Count
+                ; Mirror the local scan's isZoneLoading heuristic (non-junk awake / total-awake ratio)
+                ; so the sleeping-entity scan below is gated IDENTICALLY to Main's own path. Hardcoding
+                ; false here made sleeping run every tick (tens of ms) in junk-heavy maps where Main's
+                ; own path skips it (its cacheFillRatio stays < 0.90 because junk inflates mapSize).
+                isZoneLoading := (mapSize > 0) ? ((awakeSample.Length / mapSize) < 0.90) : false
                 consumed := true
             }
         }

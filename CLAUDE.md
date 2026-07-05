@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.210`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.211`.
 
 ## Language
 
@@ -1864,7 +1864,7 @@ yet #Included by the running app, so it touches zero hot-path code.
   interpreter refuses function definitions interspersed between top-level executable statements —
   group all `func(){}` defs before the executable body (or the whole script fails to load with no
   runtime error / OnError never fires).
-### Stage 3b: reader publishes the awake sample + parity diagnostic (0.45.13.210)
+### Stage 3b: reader publishes the awake sample + parity diagnostic (0.45.13.211)
 
 The reader now PACKS the awake-entity sample into the radar block each tick, and Main cross-checks it
 against its own live sample — the gate before stage 3c flips Main to CONSUME it. Same safe posture as
@@ -1912,7 +1912,7 @@ untouched** (it just reads the block on demand for the check).
   pure TEMPORAL SKEW (two async scans sampling at slightly different instants), and one sample with a
   ~20 s stale heartbeat was a frozen publish — both are exactly what stage 3c's freshness gate handles.
 
-### Stage 3c: Main consumes the reader's sample, with fallback (0.45.13.210)
+### Stage 3c: Main consumes the reader's sample, with fallback (0.45.13.211)
 
 The payoff: when the reader is publishing a FRESH sample for the current area, Main skips its own
 ~40 ms entity scan and rebuilds the awake sample from the reader's flat records. A SECOND opt-in
@@ -1941,11 +1941,16 @@ toggle keeps it separable from 3b so the parity check can gate it.
   first, then A/B tests consume vs. Main's own scan.
 - **Static verification:** `PoE2MemoryReader.ahk` braces balanced (370/370) + full reader stack
   parse-loads; `ReaderProcess`/`WebViewBridge` balanced; UI inline script `node --check` clean.
-- **Pending in-game verification:** with "🔌 Reader process" ON + parity confirmed, enable "📥 Consume
-  reader sample" → radar dots / loot / AutoPilot should behave exactly as before (the sample is now
-  the reader's, ~1 frame behind), LootTracker KILLS should still count, and area transitions should be
-  seamless (freshness/area gate → brief fallback to Main's own scan). Turning consume OFF must restore
-  the exact prior behaviour. Optionally profile `tick.read` (Shift+F3) — it should drop while consuming.
+- **Verified in-game (2026-07-06, MapRiverhold A/B):** functional PASS — no visual regression,
+  LootTracker kills keep counting, clean toggle-off. Profiler proved the mechanism: consume ran ~95 %
+  of ticks (`read.ent.decode.new` 4/82 calls) and **`read.entities` dropped 59 ms → 4.9 ms**. BUT the
+  owner's A/B exposed a regression (fixed 0.45.13.211): consuming made `read.sleep` balloon 0 → 35.7 ms
+  (206 ms spikes), so `tick.read` only fell 65 → 46 ms instead of ~10 ms. Cause: the consume branch
+  hardcoded `isZoneLoading := false`, which runs the sleeping-entity scan every tick; Main's own path
+  keeps `isZoneLoading` TRUE in junk-heavy maps (its cacheFillRatio stays < 0.90 because junk inflates
+  mapSize) and thus SKIPS sleeping. Fix (0.45.13.211): the consume branch now computes
+  `isZoneLoading := (awakeSample.Length / mapSize) < 0.90` (non-junk awake / total-awake), gating
+  sleeping identically to Main's path. Re-measure expected: `tick.read` ~10-15 ms while consuming.
 
 ## Reference
 
