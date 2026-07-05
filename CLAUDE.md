@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.179`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.180`.
 
 ## Language
 
@@ -1584,6 +1584,17 @@ chase down why it (and the whole Actor block) stopped tracking the character.
   keeps working after the fix.
 - **Pending in-game verification (owner):** Entity Inspector → player → Actor → `animationId` should
   now show Idle standing, "Fixed Run" moving, and the skill name while casting.
+- **Vector offsets under review (0.45.13.180):** owner reports ActiveSkills=42 (char has only 9
+  skills) and a Cooldowns count frozen at 4 — so ActiveSkills/Cooldowns/DeployedEntities may have
+  drifted too (or 42 is the full granted-skill table + 4 is legitimately the count of cooldown-capable
+  skills; unconfirmed). `ActorProbe.ahk` gained `ActorVectorProbeRun` (bridge `ActorVectorProbeRun`,
+  UI "🧬 Probe Actor Vectors"): reads each vector at the CURRENT offset AND current+0x10, DECODES the
+  first entries (ActiveSkills→detailsPtr→castType/cdMs; Cooldowns→datId/maxUses/cdList secs;
+  Deployed→entityId/datId/type), and scans 0xAE0..0xC48 for vector-shaped pointer pairs — so the
+  correct offset is chosen by CONTENT (valid detail pointers + sane castTypes), not a plausible-looking
+  count. Pending: owner runs it in-game, sends `logs\InGameStateMonitor.actor_vector_probe.log`; then
+  re-base `PoE2Offsets.Actor` ActiveSkills/Cooldowns/DeployedEntities (+their `*Last`) if the +0x10
+  variant decodes cleanly and the current one is garbage.
 
 ## Reference
 

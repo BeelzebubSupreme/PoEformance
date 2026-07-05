@@ -919,6 +919,9 @@ _DispatchBridgeCall(method, args)
         case "ActorProbeRun":
             ; TEMP diagnostic: time-sample the Actor struct to locate the drifted animationId.
             SetTimer(() => ActorProbeRun(), -1)
+        case "ActorVectorProbeRun":
+            ; TEMP diagnostic: verify/re-base the Actor ActiveSkills/Cooldowns/Deployed vectors.
+            SetTimer(() => ActorVectorProbeRun(), -1)
         case "CurrencyLayoutProbeRun":
             ; RE aid: bake the currency tab's slot layout from the UI tree.
             SetTimer(() => CurrencyLayoutProbeRun(), -1)

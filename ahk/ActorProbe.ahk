@@ -197,6 +197,190 @@ ActorProbeRun()
     _AIP_WriteProbeLog("actor_probe", rpt)
 }
 
+; Actor VECTOR probe: verify (or re-base) the ActiveSkills / Cooldowns /
+; DeployedEntities std::vectors. animationId drifted +0x10, and the owner reports
+; ActiveSkills=42 (only 9 skills) and a Cooldowns count frozen at 4 — so the
+; vector offsets are suspect too. This reads the vectors at the CURRENT offsets
+; AND at current+0x10, DECODES the first entries (castType / cooldown details),
+; and scans the region for std::vector-shaped pointer pairs — so the correct
+; offset is chosen by CONTENT (valid detail pointers + sane castTypes), not by
+; a count that merely looks plausible. One-shot (vectors are stable); no timing.
+; Writes a log + summary. Trigger: bridge "ActorVectorProbeRun".
+ActorVectorProbeRun()
+{
+    global g_reader
+    if !(IsObject(g_reader) && IsObject(g_reader.Mem) && g_reader.Mem.Handle)
+    {
+        try MsgBox("Actor vector probe: not connected to PoE2.", "Actor Vector Probe", "Iconx")
+        return
+    }
+    reader := g_reader
+
+    localPlayer := _ActorProbeLocalPlayer()
+    if !(localPlayer && reader.IsPlausibleEntityPointer(localPlayer))
+    {
+        try MsgBox("Actor vector probe: could not resolve the local player (be in-game).", "Actor Vector Probe", "Iconx")
+        return
+    }
+    actorAddr := 0
+    try actorAddr := reader.FindEntityComponentAddress(localPlayer, "Actor")
+    if !(actorAddr && reader.IsProbablyValidPointer(actorAddr))
+    {
+        try MsgBox("Actor vector probe: no resolvable Actor component.", "Actor Vector Probe", "Iconx")
+        return
+    }
+
+    nl := "`r`n"
+    rpt := "=== Actor vector probe ===" nl
+    rpt .= "localPlayer=0x" Format("{:X}", localPlayer) "  Actor=0x" Format("{:X}", actorAddr) nl
+    rpt .= "Goal: find the real ActiveSkills / Cooldowns / DeployedEntities offsets." nl
+    rpt .= "The CORRECT offset decodes to valid detail pointers + sane castTypes." nl nl
+
+    ; ── Section A: std::vector-shaped pointer-pair scan (0xAE0..0xC48) ─────────
+    ; A live vector is {begin,end,cap}; begin/end are valid pointers with
+    ; end>=begin and a bounded span. Print the count under each candidate element
+    ; size so the right offset stands out (ActiveSkill=0x10, Deployed=0x14,
+    ; Cooldown=0x48).
+    rpt .= "-- A. pointer-pair scan (offset: begin end  span  /0x10 /0x14 /0x48  first→valid?) --" nl
+    off := 0xAE0
+    while (off <= 0xC48)
+    {
+        begin := reader.Mem.ReadInt64(actorAddr + off)
+        end   := reader.Mem.ReadInt64(actorAddr + off + 0x8)
+        if (reader.IsProbablyValidPointer(begin) && reader.IsProbablyValidPointer(end) && end >= begin && (end - begin) <= 0x4000)
+        {
+            span := end - begin
+            c10 := (Mod(span, 0x10) = 0) ? (span // 0x10) : "-"
+            c14 := (Mod(span, 0x14) = 0) ? (span // 0x14) : "-"
+            c48 := (Mod(span, 0x48) = 0) ? (span // 0x48) : "-"
+            fp := reader.Mem.ReadPtr(begin)
+            fpv := reader.IsProbablyValidPointer(fp) ? "yes" : "no"
+            rpt .= Format("  +0x{:03X}: 0x{:X} 0x{:X}  span={:<6} /0x10={:<5} /0x14={:<5} /0x48={:<5} first→{}", off, begin, end, span, c10, c14, c48, fpv) nl
+        }
+        off += 0x8
+    }
+    rpt .= nl
+
+    ; ── Section B: ActiveSkills decode at current (0xB08) and +0x10 (0xB18) ────
+    rpt .= "-- B. ActiveSkills decode (element 0x10 → detailsPtr → castType) --" nl
+    rpt .= "  [correct offset: most detailsPtr valid, castType in 0..1083]" nl
+    rpt .= _ActorVecDecodeActiveSkills(reader, actorAddr, PoE2Offsets.Actor["ActiveSkills"], "current")
+    rpt .= _ActorVecDecodeActiveSkills(reader, actorAddr, PoE2Offsets.Actor["ActiveSkills"] + 0x10, "+0x10")
+    rpt .= nl
+
+    ; ── Section C: Cooldowns decode at current (0xB20) and +0x10 (0xB30) ───────
+    rpt .= "-- C. Cooldowns decode (element 0x48: datId/maxUses/cdMs + cdList) --" nl
+    rpt .= _ActorVecDecodeCooldowns(reader, actorAddr, PoE2Offsets.Actor["Cooldowns"], "current")
+    rpt .= _ActorVecDecodeCooldowns(reader, actorAddr, PoE2Offsets.Actor["Cooldowns"] + 0x10, "+0x10")
+    rpt .= nl
+
+    ; ── Section D: DeployedEntities decode at current (0xC18) and +0x10 (0xC28) ─
+    rpt .= "-- D. DeployedEntities decode (element 0x14: entityId/datId/type/counter) --" nl
+    rpt .= _ActorVecDecodeDeployed(reader, actorAddr, PoE2Offsets.Actor["DeployedEntities"], "current")
+    rpt .= _ActorVecDecodeDeployed(reader, actorAddr, PoE2Offsets.Actor["DeployedEntities"] + 0x10, "+0x10")
+
+    _AIP_WriteProbeLog("actor_vector_probe", rpt)
+}
+
+; Decodes up to 10 ActiveSkills entries at Actor+base and returns a text block.
+; The correct base yields valid detailsPtrs and small castTypes. Params: reader,
+; actorAddr, base (vector begin offset), label.
+_ActorVecDecodeActiveSkills(reader, actorAddr, base, label)
+{
+    nl := "`r`n"
+    begin := reader.Mem.ReadInt64(actorAddr + base)
+    end   := reader.Mem.ReadInt64(actorAddr + base + 0x8)
+    head := Format("  base +0x{:X} ({}): begin=0x{:X} end=0x{:X}  ", base, label, begin, end)
+    if !(reader.IsProbablyValidPointer(begin) && reader.IsProbablyValidPointer(end) && end >= begin)
+        return head "(not a valid vector)" nl
+    cnt := (end - begin) // 0x10
+    out := head "count=" cnt nl
+    valids := 0
+    n := Min(cnt, 10)
+    i := 0
+    while (i < n)
+    {
+        entry := begin + (i * 0x10)
+        dptr := reader.Mem.ReadPtr(entry + PoE2Offsets.ActiveSkillStructure["ActiveSkillPtr"])
+        if reader.IsProbablyValidPointer(dptr)
+        {
+            valids += 1
+            cast := reader.Mem.ReadInt(dptr + PoE2Offsets.ActiveSkillDetails["CastType"])
+            stage := reader.Mem.ReadInt(dptr + PoE2Offsets.ActiveSkillDetails["UseStage"])
+            cd := reader.Mem.ReadInt(dptr + PoE2Offsets.ActiveSkillDetails["TotalCooldownTimeInMs"])
+            out .= Format("    [{}] details=0x{:X}  castType={}  useStage={}  cdMs={}", i, dptr, cast, stage, cd) nl
+        }
+        else
+            out .= Format("    [{}] details=0x{:X}  (INVALID)", i, dptr) nl
+        i += 1
+    }
+    out .= "    -> valid detail ptrs: " valids "/" n (valids = n && n > 0 ? "  <== looks correct" : "") nl
+    return out
+}
+
+; Decodes up to 8 Cooldowns entries (element 0x48) at Actor+base. Params: reader,
+; actorAddr, base, label.
+_ActorVecDecodeCooldowns(reader, actorAddr, base, label)
+{
+    nl := "`r`n"
+    begin := reader.Mem.ReadInt64(actorAddr + base)
+    end   := reader.Mem.ReadInt64(actorAddr + base + 0x8)
+    head := Format("  base +0x{:X} ({}): begin=0x{:X} end=0x{:X}  ", base, label, begin, end)
+    if !(reader.IsProbablyValidPointer(begin) && reader.IsProbablyValidPointer(end) && end >= begin)
+        return head "(not a valid vector)" nl
+    cnt := (end - begin) // 0x48
+    out := head "count=" cnt nl
+    n := Min(cnt, 8)
+    i := 0
+    while (i < n)
+    {
+        entry := begin + (i * 0x48)
+        datId   := reader.Mem.ReadInt(entry + PoE2Offsets.ActiveSkillCooldown["ActiveSkillsDatId"])
+        maxUses := reader.Mem.ReadInt(entry + PoE2Offsets.ActiveSkillCooldown["MaxUses"])
+        cdMs    := reader.Mem.ReadInt(entry + PoE2Offsets.ActiveSkillCooldown["TotalCooldownTimeInMs"])
+        cf := reader.Mem.ReadInt64(entry + PoE2Offsets.ActiveSkillCooldown["CooldownsList"])
+        cl := reader.Mem.ReadInt64(entry + PoE2Offsets.ActiveSkillCooldown["CooldownsList"] + 0x8)
+        cdListN := (reader.IsProbablyValidPointer(cf) && reader.IsProbablyValidPointer(cl) && cl >= cf) ? ((cl - cf) // 0x10) : "?"
+        secs := ""
+        if (cdListN != "?" && cdListN > 0)
+        {
+            el := reader.Mem.ReadFloat(cf + PoE2Offsets.ActiveSkillCooldownEntry["ElapsedSec"])
+            tot := reader.Mem.ReadFloat(cf + PoE2Offsets.ActiveSkillCooldownEntry["TotalSec"])
+            secs := "  cd[0]=" Round(el, 2) "/" Round(tot, 2) "s"
+        }
+        out .= Format("    [{}] datId={}  maxUses={}  cdMs={}  activeCd={}{}", i, datId, maxUses, cdMs, cdListN, secs) nl
+        i += 1
+    }
+    return out
+}
+
+; Decodes up to 8 DeployedEntities entries (element 0x14) at Actor+base. Params:
+; reader, actorAddr, base, label.
+_ActorVecDecodeDeployed(reader, actorAddr, base, label)
+{
+    nl := "`r`n"
+    begin := reader.Mem.ReadInt64(actorAddr + base)
+    end   := reader.Mem.ReadInt64(actorAddr + base + 0x8)
+    head := Format("  base +0x{:X} ({}): begin=0x{:X} end=0x{:X}  ", base, label, begin, end)
+    if !(reader.IsProbablyValidPointer(begin) && reader.IsProbablyValidPointer(end) && end >= begin)
+        return head "(empty or not a valid vector)" nl
+    cnt := (end - begin) // 0x14
+    out := head "count=" cnt nl
+    n := Min(cnt, 8)
+    i := 0
+    while (i < n)
+    {
+        entry := begin + (i * 0x14)
+        eid   := reader.Mem.ReadInt(entry + PoE2Offsets.DeployedEntity["EntityId"])
+        datId := reader.Mem.ReadInt(entry + PoE2Offsets.DeployedEntity["ActiveSkillsDatId"])
+        typ   := reader.Mem.ReadInt(entry + PoE2Offsets.DeployedEntity["DeployedObjectType"])
+        cnt2  := reader.Mem.ReadInt(entry + PoE2Offsets.DeployedEntity["Counter"])
+        out .= Format("    [{}] entityId={}  datId={}  type={}  counter={}", i, eid, datId, typ, cnt2) nl
+        i += 1
+    }
+    return out
+}
+
 ; Formats an array of ints as a compact comma list (caps length). Param: arr.
 _ActorProbeValList(arr)
 {
