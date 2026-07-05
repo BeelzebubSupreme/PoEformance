@@ -182,6 +182,12 @@ _DispatchBridgeCall(method, args)
                 _UhpApplySetting(args[1], args[2])
             SaveUiHoverPrice()
             SetTimer(PushHeaderToWebView, -50)
+        case "SetCombatReaction":
+            ; Defensive combat reaction to enemy animations. args[1]=key, args[2]=value.
+            if (args.Length >= 2)
+                _CrApplySetting(args[1], args[2])
+            SaveCombatReaction()
+            SetTimer(PushHeaderToWebView, -50)
         case "SetRitualValueBadges":
             ; Persistent value badges on Ritual reward cells. args[1]=key, args[2]=value.
             if (args.Length >= 2)

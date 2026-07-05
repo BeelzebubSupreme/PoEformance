@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.184`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.185`.
 
 ## Language
 
@@ -1651,6 +1651,34 @@ can react to the enemy's current animation / cast.
 - **Pending in-game verification:** watch a monster's Actor → animationId in the inspector while it
   idles/moves/casts → it should change (0=Idle, movement, skill CastTypes). Decode the number via
   `ui/animation_names.js` if needed.
+
+## Combat Reaction — defensive reaction to enemy animations (shipped 0.45.13.185)
+
+Consumes the hot-path enemy animationId: when a nearby ENEMY plays an animation id in the user's
+danger list, aim the cursor AWAY from that enemy and press a configured key (a dodge / guard /
+defensive skill bound in-game). Works during MANUAL play too — own toggle, independent of AutoPilot.
+Design chosen by the owner: configurable key + aim-away, user-supplied id list, always-in-game scope.
+
+- **`ahk/CombatReaction.ahk` (new):** `LoadCombatReaction()` seeds all globals (init gotcha) +
+  self-persists `[CombatReaction]` (`enabled`, `hotkey`, `animIds`, `radius`, `cooldownMs`, `aimAway`,
+  `restoreCursor`; default OFF, empty). `TryCombatReaction(radarSnap)` (from `UpdateRadarFast` right
+  after `TryAutoPilot`) — CHEAP when idle: an in-memory scan of the awake sample reading the CACHED
+  `decodedComponents["actor"]["animationId"]` (from the hot-path read) + life/positioned/distance;
+  no RPM, no input. Only on a danger-set match (nearest hostile monster within `radius`), cooldown
+  elapsed, and PoE foreground, does `_CrReact` run: project player + enemy via `_WorldToScreen`, push
+  the cursor to the opposite side of the player (`aimAway`), `_SendSkillKey` the configured key
+  (reuses CombatAutomation's UIPI-bypass sender; supports keys + mouse buttons), then optionally
+  restore the cursor. `g_crAnimIds` is a parsed id→true set rebuilt from the comma string.
+- **Wiring:** `InGameStateMonitor.ahk` `#Include` + `LoadCombatReaction()`; `AutoFlask.ahk`
+  `TryCombatReaction(radarSnap)` after `TryAutoPilot`; `BridgeDispatch.ahk` `SetCombatReaction`
+  (apply→persist→push); `WebViewBridge.ahk` pushes `combatReaction`; `ui/index.html` section
+  **Automation → AutoPilot → "⚔️ Combat Reaction"** (`det-ap-reaction`; enable, reaction key,
+  danger-id list, radius, cooldown, aim-away, restore-cursor) + `combatReactionSyncFromHeader`.
+- **Collecting ids:** Entities tab → a monster → Actor → `animationId` (e.g. a boss wind-up/slam),
+  paste the numbers into the danger list.
+- **Pending in-game verification:** bind a dodge key in-game + in the tool, list a monster's attack
+  id, stand near it → on that animation the cursor flicks away and the key fires (cooldown-gated);
+  confirm it does nothing for non-listed animations and while PoE is not focused.
 
 ## Reference
 

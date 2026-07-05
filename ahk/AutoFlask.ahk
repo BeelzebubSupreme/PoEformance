@@ -79,6 +79,11 @@ UpdateRadarFast()
         TryAutoPilot(radarSnap)
         Profiler.End("tick.autopilot")
 
+        ; ── Defensive combat reaction (own toggle; also during manual play) ──
+        ; Cheap when idle (in-memory scan of cached enemy animationId); only sends
+        ; input on a danger-set match, cooldown-limited + game-foreground gated.
+        TryCombatReaction(radarSnap)
+
         ; ── Standalone combat presence ──────────────────────────────────────
         ; The AutoPilot loop only maintains g_combatState while it is enabled.
         ; When the bot is off but a feature needs combat (e.g. a Vitals bar with
