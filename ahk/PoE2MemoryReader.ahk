@@ -3228,6 +3228,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
             this._radarEntityCache := Map()
             this._radarJunkIds := Map()   ; per-entity "known junk" cache (skip re-decoding junk)
             this._radarEntityCacheAreaHash := currentAreaHash
+            this._radarSleepingTick := 0  ; invalidate the throttled sleeping cache (new zone's sleepers)
             ; Schedule zone scanner. Earlier code used a 2 s safety delay before
             ; starting; the TerrainReady diagnostic confirms terrain data is now
             ; readable on the very first attempt after a zone change, so we kick
@@ -3643,16 +3644,28 @@ class PoE2GameStateReader extends PoE2InventoryReader
         else
         {
             sleepingLimit := this.RadarSleepingEntityLimit
-            try
-            {
-                if (sleepingLimit > 0)
-                    sleepingEntities := this.ReadAreaEntityMapSummaryForRadar(sleepingMapAddress, sleepingLimit, playerOrigin)
-                else
-                    sleepingEntities := emptyEntitySummary
-            }
-            catch
+            if (sleepingLimit <= 0)
             {
                 sleepingEntities := emptyEntitySummary
+            }
+            else if (this.HasOwnProp("_radarSleepingCache") && (this._radarSleepingCache is Map)
+                && (A_TickCount - this._radarSleepingTick) < 750)
+            {
+                ; Throttle the (potentially expensive) sleeping-map scan. Sleeping entities are static, so
+                ; a ~750 ms refresh is imperceptible on the radar, but the scan can traverse a large
+                ; std::map (a dense area's sleeping tree costs 100s of ms even for an 8-entity sample).
+                ; Bounding it here keeps read.sleep low regardless of how the isZoneLoading gate flaps —
+                ; notably on reader-consume FALLBACK ticks, where it would otherwise fire full-cost.
+                sleepingEntities := this._radarSleepingCache
+            }
+            else
+            {
+                try
+                    sleepingEntities := this.ReadAreaEntityMapSummaryForRadar(sleepingMapAddress, sleepingLimit, playerOrigin)
+                catch
+                    sleepingEntities := emptyEntitySummary
+                this._radarSleepingCache := sleepingEntities
+                this._radarSleepingTick := A_TickCount
             }
         }
         t5 := A_TickCount  ; after sleeping entity read
