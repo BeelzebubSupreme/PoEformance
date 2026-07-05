@@ -1204,14 +1204,29 @@ class PoE2ComponentDecoders
         if (path = "" && this.IsProbablyValidPointer(entityDetailsPtr))
             path := this.ReadStdWStringAt(entityDetailsPtr + PoE2Offsets.EntityDetails["Path"])
 
-        if (path = "" && entityId = 0)
+        ; Loaded .ao model-file path. Chain: Animated+0x358 -> modelInfo -> +0x18
+        ; -> file record -> +0x08 StdWString. The .ao path distinguishes entities
+        ; that share a metadata path but load different models (e.g. the different
+        ; ExpeditionMarker flag variants). Not read on the radar hot path — this
+        ; decoder runs only in the full (inspector/browser) component pass.
+        modelPath := ""
+        modelInfoPtr := this.Mem.ReadPtr(componentPtr + PoE2Offsets.Animated["ModelInfoPtr"])
+        if this.IsProbablyValidPointer(modelInfoPtr)
+        {
+            fileRecPtr := this.Mem.ReadPtr(modelInfoPtr + PoE2Offsets.AnimatedModelInfo["ModelFileRecordPtr"])
+            if this.IsProbablyValidPointer(fileRecPtr)
+                modelPath := this.ReadStdWStringAt(fileRecPtr + PoE2Offsets.FileInfoValue["Name"], 260)
+        }
+
+        if (path = "" && entityId = 0 && modelPath = "")
             return 0
 
         return Map(
             "address", componentPtr,
             "animatedEntityPtr", animatedEntityPtr,
             "id", entityId,
-            "path", path
+            "path", path,
+            "modelPath", modelPath
         )
     }
 

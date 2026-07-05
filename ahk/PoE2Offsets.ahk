@@ -310,7 +310,22 @@ class PoE2Offsets
     )
 
     static Animated := Map(
-        "AnimatedEntityPtr", 0x280
+        "AnimatedEntityPtr", 0x280,
+        "ModelInfoPtr", 0x358          ; -> AnimatedModelInfo (the loaded .ao model)
+    )
+
+    ; Model-info object referenced by Animated.ModelInfoPtr. Its ModelFileRecordPtr
+    ; points at a file record (FileInfoValue) whose Name (+0x08) is the loaded .ao
+    ; model path — distinguishes entities that share a metadata path but load
+    ; different models (e.g. the ExpeditionMarker flag variants).
+    static AnimatedModelInfo := Map(
+        "ModelFileRecordPtr", 0x18
+    )
+
+    ; Generic GGPK file-record value struct. Name (+0x08) is a StdWString holding
+    ; the file path (here, the .ao model file).
+    static FileInfoValue := Map(
+        "Name", 0x08
     )
 
     static Buffs := Map(

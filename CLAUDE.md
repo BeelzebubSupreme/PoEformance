@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.181`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.182`.
 
 ## Language
 
@@ -1607,6 +1607,27 @@ chase down why it (and the whole Actor block) stopped tracking the character.
   entries decoded `castType=0/useStage=0/cdMs=0` — either those first table rows are non-cast granted
   effects, or `ActiveSkillDetails` inner offsets (CastType 0x0C / TotalCooldownTimeInMs 0xE8) also
   drifted; verify against a known equipped skill before trusting per-skill castType.
+
+## Animated component: .ao model path (shipped 0.45.13.182)
+
+Owner-supplied offsets to read the loaded **.ao model file path** off the Animated component —
+it distinguishes otherwise-identical entities that share a metadata path but load different
+models (e.g. the different ExpeditionMarker flag variants). Chain: `Animated+0x358` → model-info
+object → `+0x18` → file record (FileInfoValue) → `+0x08` StdWString = the .ao path.
+
+- **`PoE2Offsets.ahk`:** `Animated["ModelInfoPtr"] = 0x358`; new `AnimatedModelInfo["ModelFileRecordPtr"]
+  = 0x18`; new generic `FileInfoValue["Name"] = 0x08`.
+- **`PoE2ComponentDecoders.ahk` (`DecodeAnimatedComponentBasic`):** walks the chain and adds
+  `modelPath` to the returned Map (empty string if unresolved). NOT on the radar hot path —
+  `DecodeSampleEntityComponentsRadar` doesn't decode Animated at all; this runs only in the full
+  `DecodeSampleEntityComponents` (inspector/browser) pass, so the extra StdWString read is off the
+  per-frame tick.
+- **`SnapshotSerializers.ahk`:** `modelPath` added to the `animated` inspector whitelist → shows in
+  the Entity Inspector's Animated component (row omitted when empty).
+- **Pending in-game verification:** open the Entity Inspector on an Animated entity (e.g. an
+  ExpeditionMarker) → the Animated component should list `modelPath` = its `.ao` file; two entities
+  with the same metadata path but different flags should differ here. Available for entity
+  differentiation (grouping/labels) if wanted later.
 
 ## Reference
 
