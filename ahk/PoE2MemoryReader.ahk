@@ -3003,6 +3003,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
         ;   first  15 s after zone change → retry every 400 ms (~38 reads max)
         ;   after  15 s                    → retry every 1500 ms
         currentAreaHash := this.Mem.ReadUInt(areaInstanceData + PoE2Offsets.AreaInstance["CurrentAreaHash"])
+        Profiler.Begin("read.world.terrain")
         if (currentAreaHash != this._radarTerrainAreaHash)
         {
             this._radarTerrainCache := 0
@@ -3046,8 +3047,10 @@ class PoE2GameStateReader extends PoE2InventoryReader
                 this._terrainLoggedError := this._terrainLastError
             }
         }
+        Profiler.End("read.world.terrain")
 
         ; World area data (town/hideout flags) — re-read only on zone change (area hash).
+        Profiler.Begin("read.world.area")
         if (currentAreaHash != this._radarWorldAreaHash)
         {
             this._radarWorldAreaCache := 0
@@ -3065,8 +3068,10 @@ class PoE2GameStateReader extends PoE2InventoryReader
             }
             this._radarWorldAreaHash := currentAreaHash
         }
+        Profiler.End("read.world.area")
 
         ; W2S camera matrix — read every tick (64 bytes, one ReadBytes call)
+        Profiler.Begin("read.world.matrix")
         w2sMatrix := []
         try {
             if !IsSet(worldData)
@@ -3082,8 +3087,10 @@ class PoE2GameStateReader extends PoE2InventoryReader
                 }
             }
         }
+        Profiler.End("read.world.matrix")
 
         ; Player world position
+        Profiler.Begin("read.world.player")
         playerInfoPtr := areaInstanceData + PoE2Offsets.AreaInstance["PlayerInfo"]
         localPlayerRawPtr := this.Mem.ReadPtr(playerInfoPtr + PoE2Offsets.LocalPlayerStruct["LocalPlayerPtr"])
         localPlayerPtr := this.ResolveEntityPointer(localPlayerRawPtr)
@@ -3098,6 +3105,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
                 this._radarPlayerVitalsCache := freshVitals
             this._radarPlayerVitalsTick := nowTick
         }
+        Profiler.End("read.world.player")
         t2 := A_TickCount  ; after player read
         Profiler.End("read.world")
         Profiler.Begin("read.ui")

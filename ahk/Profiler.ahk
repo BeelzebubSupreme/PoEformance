@@ -216,6 +216,6 @@ _ProfilerAreaContext()
                 area .= " (" wc["name"] ")"
         }
     }
-    try ecount := g_radarLastSnap["areaInstance"]["awakeEntities"]["sample"].Length
+    try ecount := g_radarLastSnap["inGameState"]["areaInstance"]["awakeEntities"]["sample"].Length
     return Map("area", area, "entities", ecount)
 }
