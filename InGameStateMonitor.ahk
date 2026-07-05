@@ -56,7 +56,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.191"
+POEFORMANCE_VERSION := "0.45.13.192"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -1059,5 +1059,9 @@ OnTreeTabChanged(*)
 ; F3: one-shot debug dump — TreeView content, game window screenshot, radar entity TSV.
 F3:: OnF3DebugDump()
 
-; The per-tick QPC profiler is toggled by CLICKING the ⏱ status pill in the header
-; (ProfilerToggle bridge case → ProfilerToggleDump). It no longer has a hotkey.
+; Shift+F3: toggle the per-tick QPC profiler measurement window (also available by clicking the
+; ⏱ status pill → ProfilerToggle bridge case → ProfilerToggleDump). 1st press starts recording,
+; 2nd press stops and both surfaces the table on the pill AND appends it to
+; logs\InGameStateMonitor.profiler.log (readable in Config → Data & Logs), so a window recorded
+; during real play — game focused, tool in the background — can be reviewed later.
++F3:: ProfilerToggleDump()

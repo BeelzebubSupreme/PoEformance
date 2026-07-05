@@ -143,12 +143,14 @@ _PushProfilerPill()
         . _JsStr(g_profDumpState) "," _JsStr(g_profDumpHeadline) "," _JsStr(g_profDumpTable) ")")
 }
 
-; Profiler toggle — invoked by clicking the ⏱ status pill (ProfilerToggle bridge case).
+; Profiler toggle — bound to Shift+F3 in-game AND to the ⏱ status pill (ProfilerToggle bridge case).
 ; Two-click measurement flow so the profiler only runs during the window you care about
 ; (no always-on cost):
-;   1st click -> reset + enable; the status pill shows "REC". Reproduce the stutter.
-;   2nd click -> snapshot the table to the status pill (headline + full table in its
-;                hover tooltip), then disable again. No file, no in-game tooltip.
+;   1st press -> reset + enable; the status pill shows "REC". Reproduce the scenario.
+;   2nd press -> snapshot the table to the status pill (headline + full table in its hover
+;                tooltip) AND append it to logs\InGameStateMonitor.profiler.log (readable in
+;                Config -> Data & Logs), then disable again. The file lets a window recorded
+;                during real play (game focused, tool in the background) be reviewed afterwards.
 ProfilerToggleDump()
 {
     global Profiler, g_profDumpState, g_profDumpHeadline, g_profDumpTable
@@ -166,10 +168,54 @@ ProfilerToggleDump()
         return
     }
 
-    ; Second press: stop measuring, surface the collected table on the pill.
+    ; Second press: stop measuring, surface the collected table on the pill, and persist it.
     Profiler.Enabled := false
     g_profDumpState    := "done"
     g_profDumpHeadline := Profiler.Headline()
     g_profDumpTable    := Profiler.Summary()
     _PushProfilerPill()
+    _ProfilerDumpToFile(g_profDumpTable)
+}
+
+; Appends a completed profiler measurement window to logs\InGameStateMonitor.profiler.log so a
+; window recorded during real play (game focused, tool in the background) can be read afterwards in
+; Config -> Data & Logs. <table> is Profiler.Summary(); a header line stamps time, version, area and
+; awake-entity count so results can be attributed to the scenario (boss / pack / town / explore).
+; No-op on empty data. No return.
+_ProfilerDumpToFile(table)
+{
+    if (Trim(table) = "" || InStr(table, "no profiler data"))
+        return
+    ctx := _ProfilerAreaContext()
+    ver := IsSet(POEFORMANCE_VERSION) ? POEFORMANCE_VERSION : "?"
+    path := A_ScriptDir "\logs\InGameStateMonitor.profiler.log"
+    try {
+        h := FileOpen(path, "a", "UTF-8")
+        if IsObject(h) {
+            h.Write("`r`n===== Profiler window " FormatTime(, "yyyy-MM-dd HH:mm:ss")
+                . " | v" ver " | area=" ctx["area"] " | awake=" ctx["entities"] " =====`r`n")
+            ; Summary() joins rows with "`n"; normalize to CRLF for a Windows log file.
+            h.Write(StrReplace(table, "`n", "`r`n") "`r`n")
+            h.Close()
+        }
+    }
+}
+
+; Cheap best-effort scenario context for the profiler log header: the current area id/name and the
+; awake-entity count (the main driver of read.entities cost). All reads are guarded; unknown -> "?".
+; Returns Map("area", <str>, "entities", <int|"?">).
+_ProfilerAreaContext()
+{
+    global g_reader, g_radarLastSnap
+    area := "?", ecount := "?"
+    try {
+        wc := g_reader._radarWorldAreaCache
+        if (IsObject(wc) && wc.Has("id")) {
+            area := wc["id"]
+            if (wc.Has("name") && wc["name"] != "")
+                area .= " (" wc["name"] ")"
+        }
+    }
+    try ecount := g_radarLastSnap["areaInstance"]["awakeEntities"]["sample"].Length
+    return Map("area", area, "entities", ecount)
 }
