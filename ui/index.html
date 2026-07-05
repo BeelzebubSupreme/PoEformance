@@ -6753,6 +6753,11 @@
         .hk-anim-search { width: 150px; }
         .hk-anim-live.on { background: rgba(255,106,106,0.22); border-color: #ff6a6a; color: #ffd9d9; }
         .hk-anim-cap { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 4px; padding: 5px 7px; border: 1px dashed rgba(255,106,106,0.45); border-radius: 5px; background: rgba(255,106,106,0.06); }
+        .hk-anim-cap.frozen { border-color: rgba(200,168,90,0.5); background: rgba(200,168,90,0.06); }
+        .hk-anim-cap-rows { display: contents; }
+        .hk-anim-cap-clear { cursor: pointer; font-size: 11px; color: var(--codex-text-dim); background: transparent; border: 1px solid rgba(120,120,120,0.4); border-radius: 8px; padding: 0 6px; margin-right: 2px; }
+        .hk-anim-cap-clear:hover { color: #ff9a9a; border-color: #ff6a6a; }
+        .hk-anim-cap.frozen .hk-anim-cap-lbl { color: var(--codex-gold); }
         .hk-anim-cap-lbl { color: #ff9a9a; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; margin-right: 2px; }
         .hk-anim-cap-empty { color: var(--codex-text-dim); font-size: 12px; font-style: italic; }
         .hk-anim-cap-item { cursor: pointer; font-size: 12px; color: var(--codex-text); background: rgba(200,168,90,0.10); border: 1px solid rgba(200,168,90,0.4); border-radius: 10px; padding: 1px 8px; display: inline-flex; gap: 5px; align-items: baseline; }
@@ -8360,6 +8365,7 @@
         return;
       }
       root.innerHTML = hkConfig.map((g, gi) => hkRenderGroup(g, gi)).join('');
+      if (_hkAnimCap.cid != null) _hkAnimCapPatch();   // fill the live-capture strip shell
     }
 
     function hkRenderGroup(g, gi) {
@@ -9289,51 +9295,94 @@
       const cur = hkParseIdList(f.node.animIds).filter(x => x !== id);
       hkSetCond(gi, hi, cid, 'animIds', cur.join(','));
     }
-    // Adds a single id (from the live-capture feed) to a leaf. Keeps capture armed.
+    // Adds a single id (from the live-capture feed) to a leaf. Keeps capture state.
     function hkAnimAddId(gi, hi, cid, id) {
       const f = hkFindCond(hkCondHk(gi, hi), cid); if (!f) return;
       const cur = hkParseIdList(f.node.animIds);
       if (!cur.includes(id)) cur.push(id);
-      hkSetCond(gi, hi, cid, 'animIds', cur.join(','));
+      hkSetCond(gi, hi, cid, 'animIds', cur.join(','));   // re-renders; the strip is repopulated
     }
 
     // ── Live enemy-animation capture (arms ahk/HkAnimCapture.ahk) ───────────────
-    // The killer feature for discovery: instead of knowing an id/name, arm capture
-    // on a condition, stand near the monster, let it attack, and click the
-    // animation that lit up. Only one leaf can be armed at a time.
-    let _hkAnimCap = { cid: null, gi: null, hi: null };
+    // Discovery without knowing ids/names: arm on a condition, stand near the
+    // monster, let it attack, click the animation that lit up. Only one leaf armed
+    // at a time. On STOP the results FREEZE (stay visible + clickable) until cleared.
+    // rows: [{id,count,dist,age}]; live: AHK is actively pushing.
+    let _hkAnimCap = { cid: null, gi: null, hi: null, live: false, rows: [] };
     function hkAnimCapToggle(gi, hi, cid) {
-      if (_hkAnimCap.cid === cid) {
+      if (_hkAnimCap.cid === cid && _hkAnimCap.live) {
         ahkCall('HkAnimCaptureStop');
-        _hkAnimCap = { cid: null, gi: null, hi: null };
+        _hkAnimCap.live = false;                       // freeze: keep cid + rows visible
       } else {
         ahkCall('HkAnimCaptureStart');
-        _hkAnimCap = { cid, gi, hi };
+        const keep = (_hkAnimCap.cid === cid) ? _hkAnimCap.rows : [];
+        _hkAnimCap = { cid, gi, hi, live: true, rows: keep };
       }
       hkRender();
     }
-    // Disarms capture if armed — called when navigating away from the macro tab.
-    function hkAnimCapStop() {
-      if (_hkAnimCap.cid == null) return;
-      ahkCall('HkAnimCaptureStop');
-      _hkAnimCap = { cid: null, gi: null, hi: null };
+    // Dismiss frozen results (the ✕ on a stopped strip).
+    function hkAnimCapClear() {
+      if (_hkAnimCap.live) ahkCall('HkAnimCaptureStop');
+      _hkAnimCap = { cid: null, gi: null, hi: null, live: false, rows: [] };
+      hkRender();
     }
-    // Pushed from AHK ~4 Hz while armed: the recent enemy animations (most recent
-    // first). Updates only the strip DOM (no full re-render, so it can't flicker
-    // the editor). Each row adds its id on click.
+    // Full stop — called when navigating away from the macro tab.
+    function hkAnimCapStop() {
+      if (_hkAnimCap.cid == null && !_hkAnimCap.live) return;
+      if (_hkAnimCap.live) ahkCall('HkAnimCaptureStop');
+      _hkAnimCap = { cid: null, gi: null, hi: null, live: false, rows: [] };
+    }
+    // Static shell of the capture strip (label + optional clear + rows container).
+    // Rows are filled incrementally by _hkAnimCapPatch so live updates never
+    // destroy a button mid-click (#2) or duplicate a row (#3).
+    function _hkAnimCapStripHtml(live) {
+      return `<span class="hk-anim-cap-lbl">${live ? 'seen now — click to add:' : 'captured (stopped) — click to add:'}</span>`
+           + (live ? '' : `<button class="hk-anim-cap-clear" title="Dismiss these results" onclick="hkAnimCapClear()">✕ clear</button>`)
+           + `<span class="hk-anim-cap-rows"></span>`;
+    }
+    // Pushed from AHK while live: store (deduped by id) + incrementally patch.
     function updateAnimCapture(rows) {
-      const strip = document.getElementById('hk-anim-cap-strip');
-      if (!strip || _hkAnimCap.cid == null) return;
-      if (!Array.isArray(rows) || !rows.length) {
-        strip.innerHTML = '<span class="hk-anim-cap-empty">no enemy animations in range — get closer / let it attack</span>';
+      if (_hkAnimCap.cid == null || !_hkAnimCap.live) return;   // ignore stray pushes
+      const seen = new Map();
+      (Array.isArray(rows) ? rows : []).forEach(r => { if (r && r.id != null) seen.set(r.id, r); });
+      _hkAnimCap.rows = [...seen.values()];
+      _hkAnimCapPatch();
+    }
+    // Incremental, keyed-by-id DOM update: stable button elements so clicks land
+    // and no id renders twice. Called after every hkRender (fills the shell) and
+    // on each live push. onmousedown so a press registers even if a push lands
+    // immediately after.
+    function _hkAnimCapPatch() {
+      const box = document.querySelector('#hk-anim-cap-strip .hk-anim-cap-rows');
+      if (!box) return;
+      const { gi, hi, cid, rows } = _hkAnimCap;
+      const emptyEl = box.querySelector('.hk-anim-cap-empty');
+      if (!rows || !rows.length) {
+        if (!emptyEl) box.innerHTML = '<span class="hk-anim-cap-empty">no enemy animations seen yet — get closer / let it attack</span>';
         return;
       }
-      const { gi, hi, cid } = _hkAnimCap;
-      strip.innerHTML = '<span class="hk-anim-cap-lbl">seen now:</span>' + rows.map(r => {
-        const nm = (typeof ANIM_NAMES !== 'undefined' && ANIM_NAMES[r.id]) ? ANIM_NAMES[r.id] : ('#' + r.id);
-        const fresh = r.age < 700 ? ' fresh' : '';
-        return `<button class="hk-anim-cap-item${fresh}" title="id ${r.id} · seen ${r.count}× · nearest ${r.dist}m — click to add" onclick="hkAnimAddId(${gi},${hi},${cid},${r.id})">${hkEsc(nm)}<s>×${r.count} · ${r.dist}m</s></button>`;
-      }).join('');
+      if (emptyEl) emptyEl.remove();
+      const existing = new Map();
+      box.querySelectorAll('button[data-anim-id]').forEach(b => existing.set(+b.dataset.animId, b));
+      const wanted = new Set();
+      rows.forEach(r => {
+        wanted.add(r.id);
+        let b = existing.get(r.id);
+        if (!b) {
+          const nm = (typeof ANIM_NAMES !== 'undefined' && ANIM_NAMES[r.id]) ? ANIM_NAMES[r.id] : ('#' + r.id);
+          b = document.createElement('button');
+          b.className = 'hk-anim-cap-item';
+          b.dataset.animId = r.id;
+          b.innerHTML = `<span class="hk-anim-cap-nm">${hkEsc(nm)}</span><s></s>`;
+          b.onmousedown = (ev) => { ev.preventDefault(); hkAnimAddId(gi, hi, cid, r.id); };
+          box.appendChild(b);
+        }
+        const s = b.querySelector('s');
+        if (s) s.textContent = `×${r.count} · ${r.dist}m`;
+        b.classList.toggle('fresh', r.age < 700);
+        b.title = `id ${r.id} · seen ${r.count}× · nearest ${r.dist}m — click to add`;
+      });
+      existing.forEach((b, id) => { if (!wanted.has(id)) b.remove(); });
     }
 
     // Renders the condition gate for a hotkey (root group, no delete on root).
@@ -9405,9 +9454,10 @@
           const eaRadiusField = eaWorld
             ? `Range ${hkCNum(a, 'worldRadius', 1200, gi, hi, 'Radius in world units (zoom-independent — matches the actual game distance)')} `
             : `Radius(px) ${hkCNum(a, 'radius', 120, gi, hi, 'Radius in screen pixels')} `;
-          const eaArmed = (_hkAnimCap.cid === a.cid);
-          const eaLive = `<button class="hk-btn hk-anim-live${eaArmed ? ' on' : ''}" title="Live capture: watch which animations nearby enemies are playing RIGHT NOW and click one to add it. Stand near the monster/boss and let it attack — no need to know ids or names." onclick="hkAnimCapToggle(${gi},${hi},${a.cid})">👁 ${eaArmed ? 'stop' : 'live'}</button>`;
-          const eaStrip = eaArmed ? `<div class="hk-anim-cap" id="hk-anim-cap-strip" style="flex-basis:100%">watching nearby enemies…</div>` : '';
+          const eaShown = (_hkAnimCap.cid === a.cid);
+          const eaLiveOn = eaShown && _hkAnimCap.live;
+          const eaLive = `<button class="hk-btn hk-anim-live${eaLiveOn ? ' on' : ''}" title="Live capture: watch which animations nearby enemies are playing RIGHT NOW and click one to add it. Stand near the monster/boss and let it attack — no need to know ids or names." onclick="hkAnimCapToggle(${gi},${hi},${a.cid})">👁 ${eaLiveOn ? 'stop' : 'live'}</button>`;
+          const eaStrip = eaShown ? `<div class="hk-anim-cap${eaLiveOn ? ' live' : ' frozen'}" id="hk-anim-cap-strip" style="flex-basis:100%">${_hkAnimCapStripHtml(eaLiveOn)}</div>` : '';
           body = `Animations ${hkAnimPicker(a, gi, hi)} ${eaLive} `
                + eaRadiusField
                + `${hkCSel(a, 'radiusMode', [['world', 'around player (range)'], ['player', 'around player (px)'], ['cursor', 'around cursor (px)']], gi, hi, 'World-unit range around the player, or a pixel radius around the player / cursor')}`

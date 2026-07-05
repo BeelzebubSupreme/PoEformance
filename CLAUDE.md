@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.189`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.190`.
 
 ## Language
 
@@ -1714,6 +1714,18 @@ action (a dodge/guard/defensive key, a flask, a chain) — not under Automation.
   **Pending in-game verification:** arm 👁, stand at a boss, let it do a quick attack → the brief
   animation should still appear (and glow "fresh"); confirm the overlays resume and the tick returns
   to normal on stop.
+- **Live-capture UX fixes (0.45.13.190):** three issues with the feed, all rooted in the old
+  full-`innerHTML`-rewrite every push. (1) On STOP the results now FREEZE instead of vanishing —
+  `_hkAnimCap` gains `live`+`rows`; a stopped strip stays visible (grey "frozen" style, a "captured
+  (stopped)" label + a "✕ clear" button) and its rows remain clickable until cleared or you leave the
+  macro tab. (2) Clicks now register — the feed is patched by an INCREMENTAL, keyed-by-id DOM update
+  (`_hkAnimCapPatch`, called from `hkRender` + each push) so a row's `<button>` element is STABLE
+  (never recreated mid-frame); rows fire on `onmousedown` (atomic) so a press lands even if a push
+  arrives immediately. (3) No duplicates — one DOM element per id (keyed) + a defensive dedupe-by-id
+  when storing the pushed rows. The strip is now a static shell (`_hkAnimCapStripHtml`: label + clear +
+  a `.hk-anim-cap-rows` container) that the patch fills. Verified end-to-end in the browser preview:
+  dedupe (4 rows w/ a dup → 3 buttons), element stability across pushes, click-to-add (live AND
+  frozen), freeze-on-stop, and clear.
 - **Removed:** `ahk/CombatReaction.ahk` + its wiring (`#Include`, `LoadCombatReaction`,
   `TryCombatReaction`, `SetCombatReaction`, the `combatReaction` header, the Automation → AutoPilot
   "⚔️ Combat Reaction" UI section + `combatReactionSyncFromHeader`).
