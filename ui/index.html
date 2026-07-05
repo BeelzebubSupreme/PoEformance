@@ -6745,6 +6745,12 @@
         /* A leaf is one condition row — same flex layout as an effect action row. */
         .hk-cleaf { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 3px 0; border-bottom: 1px dashed rgba(90,62,34,0.5); }
         .hk-cleaf:last-child { border-bottom: none; }
+        .hk-anim-pick { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; max-width: 460px; }
+        .hk-anim-chip { display: inline-flex; align-items: center; gap: 4px; background: rgba(200,168,90,0.14); border: 1px solid rgba(200,168,90,0.5); border-radius: 10px; padding: 1px 4px 1px 7px; font-size: 12px; color: var(--codex-text); }
+        .hk-anim-chip b { cursor: pointer; color: #d68a8a; font-weight: 700; padding: 0 2px; }
+        .hk-anim-chip b:hover { color: #ff6a6a; }
+        .hk-anim-empty { color: var(--codex-text-dim); font-size: 12px; font-style: italic; }
+        .hk-anim-search { width: 150px; }
         .hk-cleaf .hk-act-type { min-width: 132px; }
 
         /* Buttons — gilded two-tone, Cinzel small-caps (like the inv toolbar). */
@@ -7038,6 +7044,7 @@
     window.addEventListener('resize', updateAllBarMarkers);
     window.addEventListener('load', () => {
       snodeInit();   // inject skill-node icons before measuring (they change tab widths)
+      hkBuildAnimDatalist();   // populate the enemy-animation name typeahead
       // Fonts can still be loading when 'load' fires; once they settle
       // the active-tab width changes, so re-measure.
       if (document.fonts && document.fonts.ready) {
@@ -9201,6 +9208,77 @@
       return `<select title="Fills itself from the player's active buffs (Game › Skills & Buffs)" onchange="hkSetCond(${gi},${hi},${a.cid},'buffName',this.value)">${opts}</select>`;
     }
 
+    // ── Enemy-animation picker (search by NAME, store IDs) ──────────────────────
+    // Nobody knows the 1000+ numeric animation ids by heart, and a flat dropdown is
+    // unusable. Instead: a typeahead over the human-readable names (ANIM_NAMES from
+    // animation_names.js) via a shared <datalist>, plus removable chips. The leaf
+    // still stores animIds as a comma id string, so the AHK side is unchanged.
+    let ANIM_NAME_TO_ID = null;
+    function hkAnimNameToId(name) {
+      if (!ANIM_NAME_TO_ID) {
+        ANIM_NAME_TO_ID = {};
+        if (typeof ANIM_NAMES !== 'undefined')
+          for (const id in ANIM_NAMES) ANIM_NAME_TO_ID[String(ANIM_NAMES[id]).toLowerCase()] = +id;
+      }
+      return ANIM_NAME_TO_ID[String(name).toLowerCase()] ?? null;
+    }
+    // Builds the shared datalist of "<Name> — #<id>" options once (created lazily).
+    function hkBuildAnimDatalist() {
+      if (typeof ANIM_NAMES === 'undefined') return;
+      let dl = document.getElementById('anim-names-list');
+      if (!dl) { dl = document.createElement('datalist'); dl.id = 'anim-names-list'; document.body.appendChild(dl); }
+      if (dl.childElementCount) return;
+      const frag = document.createDocumentFragment();
+      for (const id in ANIM_NAMES) {
+        const o = document.createElement('option');
+        o.value = `${ANIM_NAMES[id]} — #${id}`;
+        frag.appendChild(o);
+      }
+      dl.appendChild(frag);
+    }
+    function hkParseIdList(s) {
+      return String(s || '').split(',').map(t => t.trim()).filter(t => /^\d+$/.test(t)).map(Number);
+    }
+    // Renders the selected animations as name chips + a search box (datalist typeahead).
+    function hkAnimPicker(a, gi, hi) {
+      hkBuildAnimDatalist();
+      const ids = hkParseIdList(a.animIds);
+      const chips = ids.map(id => {
+        const nm = (typeof ANIM_NAMES !== 'undefined' && ANIM_NAMES[id]) ? ANIM_NAMES[id] : ('#' + id);
+        return `<span class="hk-anim-chip" title="id ${id}">${hkEsc(nm)}<b title="Remove" onclick="hkAnimRemove(${gi},${hi},${a.cid},${id})">✕</b></span>`;
+      }).join('');
+      const empty = ids.length ? '' : `<span class="hk-anim-empty" title="No animations selected — this condition never matches until you add one">none</span>`;
+      return `<span class="hk-anim-pick">${chips}${empty}`
+           + `<input type="text" class="hk-anim-search" list="anim-names-list" spellcheck="false" placeholder="＋ type a name…"`
+           + ` title="Search a monster animation by name (e.g. Slam, Cast, Charge) and pick it. You can also type/paste raw ids or a comma list."`
+           + ` onchange="hkAnimAdd(${gi},${hi},${a.cid},this)" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}"></span>`;
+    }
+    // Adds one or more animations from the search input: accepts a datalist pick
+    // ("<Name> — #<id>"), a bare id, an exact name, or a comma list of those.
+    function hkAnimAdd(gi, hi, cid, el) {
+      const raw = el.value || '';
+      const found = [];
+      raw.split(',').forEach(part => {
+        const p = part.trim(); if (!p) return;
+        const m = p.match(/#(\d+)\s*$/);
+        if (m) { found.push(+m[1]); return; }
+        if (/^\d+$/.test(p)) { found.push(+p); return; }
+        const id = hkAnimNameToId(p);
+        if (id != null) found.push(id);
+      });
+      el.value = '';
+      if (!found.length) return;
+      const f = hkFindCond(hkCondHk(gi, hi), cid); if (!f) return;
+      const cur = hkParseIdList(f.node.animIds);
+      found.forEach(id => { if (!cur.includes(id)) cur.push(id); });
+      hkSetCond(gi, hi, cid, 'animIds', cur.join(','));
+    }
+    function hkAnimRemove(gi, hi, cid, id) {
+      const f = hkFindCond(hkCondHk(gi, hi), cid); if (!f) return;
+      const cur = hkParseIdList(f.node.animIds).filter(x => x !== id);
+      hkSetCond(gi, hi, cid, 'animIds', cur.join(','));
+    }
+
     // Renders the condition gate for a hotkey (root group, no delete on root).
     function hkRenderConditions(hk, gi, hi) {
       if (!hk.conditions) return '';
@@ -9270,8 +9348,7 @@
           const eaRadiusField = eaWorld
             ? `Range ${hkCNum(a, 'worldRadius', 1200, gi, hi, 'Radius in world units (zoom-independent — matches the actual game distance)')} `
             : `Radius(px) ${hkCNum(a, 'radius', 120, gi, hi, 'Radius in screen pixels')} `;
-          body = `IDs ${hkCTxt(a, 'animIds', 'e.g. 1018,1050,552', gi, hi)} `
-               + `<span class="hk-hint" title="Comma-separated enemy animation IDs. Collect them from the Entities tab → a monster → the Actor component → animationId (e.g. a boss wind-up / slam).">ⓘ</span> `
+          body = `Animations ${hkAnimPicker(a, gi, hi)} `
                + eaRadiusField
                + `${hkCSel(a, 'radiusMode', [['world', 'around player (range)'], ['player', 'around player (px)'], ['cursor', 'around cursor (px)']], gi, hi, 'World-unit range around the player, or a pixel radius around the player / cursor')}`;
           break;

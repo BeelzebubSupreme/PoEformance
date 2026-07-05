@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.186`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.187`.
 
 ## Language
 
@@ -1674,9 +1674,18 @@ action (a dodge/guard/defensive key, a flask, a chain) — not under Automation.
   debug:0, circleColor:'#FF6A6A'}`), a `hkRenderCondLeaf` `case 'enemyAnim'` (IDs text via `hkCTxt` +
   radius + radiusMode), `animIds` added to `hkSetCond`'s text-key list, and the debug range-circle
   swatch now shows for `enemyAnim` too. No new persistence path — it rides the existing hotkey config.
-- **Collecting ids:** Entities tab → a monster → Actor → `animationId` (e.g. a boss wind-up / slam);
-  paste the numbers into the condition's IDs field. Attach the hotkey's normal key action (dodge /
-  guard / flask) as the reaction.
+- **Name-based picker (0.45.13.187):** nobody knows the 1084 numeric ids by heart, and a flat
+  dropdown is unusable — so the condition's animation field is a **typeahead by NAME** (chips), not a
+  raw id box. `hkAnimPicker` renders the selected animations as removable name chips + a search input
+  bound to a shared `<datalist id="anim-names-list">` built once from `ANIM_NAMES` (id→name, from
+  `ui/animation_names.js`) as `"<Name> — #<id>"` options. `hkAnimAdd` accepts a datalist pick, a bare
+  id, an exact name, or a comma list of those (parses the trailing `#<id>`, else numeric, else
+  `hkAnimNameToId`); `hkAnimRemove` drops a chip. The leaf still stores `animIds` as a comma id
+  string (AHK unchanged). `hkBuildAnimDatalist()` runs on `load` + lazily in the picker. Parsing
+  validated against the real 1084-entry map (name / raw / datalist / mixed list all resolve).
+- **Collecting ids for a specific boss attack:** still discoverable via the Entities tab → a monster
+  → Actor → `animationId` while it attacks; but for anything with a known name you now just search it.
+  Attach the hotkey's normal key action (dodge / guard / flask) as the reaction.
 - **Removed:** `ahk/CombatReaction.ahk` + its wiring (`#Include`, `LoadCombatReaction`,
   `TryCombatReaction`, `SetCombatReaction`, the `combatReaction` header, the Automation → AutoPilot
   "⚔️ Combat Reaction" UI section + `combatReactionSyncFromHeader`).
