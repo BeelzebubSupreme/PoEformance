@@ -37,6 +37,12 @@ g_connected := false
 g_lastPid := 0
 g_reads := 0
 g_err := 0
+; Cached inGameState resolution (the 12-state loop in ReadAutoFlaskSnapshot is the only real cost per
+; tick besides the publish scan). Re-resolve at most every ~500 ms; the publish scan self-guards on an
+; invalid areaInstance, so a stale ings between resolves simply yields no publish (Main then falls back).
+g_ingsCache := 0
+g_stateCache := 0
+g_ingsCacheTick := 0
 
 SetTimer(ReaderTick, 50)   ; persistent ~20 Hz loop; keeps this process alive
 return
@@ -46,6 +52,7 @@ return
 ReaderTick()
 {
     global g_blk, g_lock, g_reader, g_connected, g_lastPid, g_reads, g_err
+    global g_ingsCache, g_stateCache, g_ingsCacheTick
     try
     {
         now := A_TickCount
@@ -67,22 +74,35 @@ ReaderTick()
             g_connected := g_reader.Connect()
             if (g_connected)
                 g_lastPid := pid
+            g_ingsCacheTick := 0   ; force a fresh state resolve (old process' address is invalid)
         }
 
-        ; Lightweight live read (no snapshot feature deps): current state + inGameState address.
-        stateCode := 0
-        ings := 0
-        if (g_connected)
+        ; Resolve the inGameState address + current state — CACHED ~500 ms (the 12-state loop is the
+        ; cost; the per-tick publish scan below reuses the cached address). Skips ~15 RPMs on most ticks.
+        if (g_connected && (g_ingsCacheTick = 0 || (now - g_ingsCacheTick) > 500))
         {
             snap := 0
             try snap := g_reader.ReadAutoFlaskSnapshot()
             if (snap is Map)
             {
                 nm := snap.Has("currentStateName") ? snap["currentStateName"] : ""
-                stateCode := (nm = "InGameState") ? 1 : 0
-                ings := snap.Has("inGameStateAddress") ? snap["inGameStateAddress"] : 0
+                g_stateCache := (nm = "InGameState") ? 1 : 0
+                g_ingsCache := snap.Has("inGameStateAddress") ? snap["inGameStateAddress"] : 0
             }
+            else
+            {
+                g_stateCache := 0
+                g_ingsCache := 0
+            }
+            g_ingsCacheTick := now
         }
+        else if (!g_connected)
+        {
+            g_stateCache := 0
+            g_ingsCache := 0
+        }
+        stateCode := g_stateCache
+        ings := g_ingsCache
         g_reads += 1
 
         ; Stage 3b: when in-game, run the awake-entity scan and PUBLISH the flat snapshot. Guarded so a
