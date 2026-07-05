@@ -1806,27 +1806,47 @@ class PoE2EntityReader extends PoE2ComponentDecoders
             }
         }
 
-        ; Update targetable only for monsters (non-monsters don't change targetability; saves 1 RPM)
+        ; Monster-only per-tick reads (non-monsters don't change these; saves RPM).
+        ; One in-memory pass over the cached component list grabs BOTH the Targetable
+        ; and the Actor component, then does a single RPM read each:
+        ;   - Targetable.IsTargetable (alive/dead)
+        ;   - Actor.AnimationId — the enemy's CURRENT animation / cast, refreshed
+        ;     live in the hot path so combat/consumers can react to it. Stored under
+        ;     decodedComponents["actor"]["animationId"] (same key as the full decode).
         isMonster := entity.Has("path") && InStr(StrLower(entity["path"]), "metadata/monsters/")
         if isMonster
         {
             comps := entity.Has("components") ? entity["components"] : 0
             if (comps && Type(comps) = "Array")
             {
+                gotTgt := false, gotActor := false
                 for _, comp in comps
                 {
+                    if (gotTgt && gotActor)
+                        break
                     if !(comp && Type(comp) = "Map" && comp.Has("name") && comp.Has("address"))
                         continue
                     cName := comp["name"]
-                    if (InStr(cName, "Targetable") || cName = "Targetable")
+                    cAddr := comp["address"]
+                    if (!gotTgt && (InStr(cName, "Targetable") || cName = "Targetable"))
                     {
-                        tgtAddr := comp["address"]
-                        if (tgtAddr && this.IsProbablyValidPointer(tgtAddr))
+                        if (cAddr && this.IsProbablyValidPointer(cAddr))
                         {
-                            raw := this.Mem.ReadUChar(tgtAddr + PoE2Offsets.Targetable["IsTargetable"])
+                            raw := this.Mem.ReadUChar(cAddr + PoE2Offsets.Targetable["IsTargetable"])
                             dc["targetable"] := (raw = 1)
                         }
-                        break
+                        gotTgt := true
+                    }
+                    else if (!gotActor && (InStr(cName, "Actor") || cName = "Actor"))
+                    {
+                        if (cAddr && this.IsProbablyValidPointer(cAddr))
+                        {
+                            animId := this.Mem.ReadInt(cAddr + PoE2Offsets.Actor["AnimationId"])
+                            actorMap := (dc.Has("actor") && Type(dc["actor"]) = "Map") ? dc["actor"] : Map()
+                            actorMap["animationId"] := animId
+                            dc["actor"] := actorMap
+                        }
+                        gotActor := true
                     }
                 }
             }

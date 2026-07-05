@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.183`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.184`.
 
 ## Language
 
@@ -1628,6 +1628,29 @@ object → `+0x18` → file record (FileInfoValue) → `+0x08` StdWString = the 
   ExpeditionMarker) → the Animated component should list `modelPath` = its `.ao` file; two entities
   with the same metadata path but different flags should differ here. Available for entity
   differentiation (grouping/labels) if wanted later.
+
+## Enemy animationId in the radar hot path (shipped 0.45.13.184)
+
+The Actor `animationId` was only read in the full (inspector/browser) decode, not per-frame. Now
+each cached MONSTER entity's animationId is refreshed live on the radar tick so combat/consumers
+can react to the enemy's current animation / cast.
+
+- **Where:** `PoE2EntityReader.UpdateCachedEntityRadar` — the cheap per-tick cache update (Phase 3
+  of the `PoE2MemoryReader` radar cache; new/changed entities full-decode in Phase 2, existing ones
+  cheap-update here every tick round-robin). The existing monster-gated component pass (which already
+  finds Targetable) was extended to ALSO grab the Actor component in the SAME in-memory loop and do a
+  single `ReadInt` of `Actor.AnimationId` (0x8B0). Stored under `decodedComponents["actor"]
+  ["animationId"]` — same key as the full decode, so consumers read it uniformly.
+- **Cost:** gated to `metadata/monsters/` paths (items/terrain/effects/chests skip it); one extra
+  `ReadInt` per monster per cheap-update, reusing the already-cached component list (no extra
+  component lookup / RPM beyond the one int). Off entirely for non-monsters.
+- **Consumption:** available on every awake monster sample at
+  `entry["entity"]["decodedComponents"]["actor"]["animationId"]` (AHK snapshot). Also serializes into
+  the Entities-tab inspector (the `actor` whitelist), so a monster's Actor row shows the live
+  animationId — a convenient in-game verification.
+- **Pending in-game verification:** watch a monster's Actor → animationId in the inspector while it
+  idles/moves/casts → it should change (0=Idle, movement, skill CastTypes). Decode the number via
+  `ui/animation_names.js` if needed.
 
 ## Reference
 
