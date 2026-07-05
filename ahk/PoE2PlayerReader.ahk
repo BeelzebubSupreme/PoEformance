@@ -250,15 +250,20 @@ class PoE2PlayerReader extends PoE2PlayerComponentsReader
     ; Returns: Map with localPlayerPtr, lifeComponentPtr, componentsScanned, stats
     BuildVitalsResult(localPlayerPtr, lifeComponentPtr, healthVital, manaVital, esVital, playerStatsComponent, componentsScanned)
     {
-        rage := this.ReadRageSnapshotFromStats(playerStatsComponent)
-        if !rage
-            rage := this.ReadRageSnapshotFromStats(this.ReadPlayerStatsComponent(localPlayerPtr))
+        ; Rage and Spirit both come from the Stats component's pair arrays. Read that component
+        ; AT MOST ONCE here and feed it to both extractors. Previously it was read TWICE (once in
+        ; the Rage fallback, once in the Spirit fallback), and each ReadPlayerStatsComponent does
+        ; TWO full stats-array scans (statsByItems + statsByBuffAndActions) — so a single vitals
+        ; tick ran ~4 full stats scans just to pull ~4 numbers. That was the dominant cost of
+        ; read.world (profiled ~112 ms/tick in dense areas; see the read.world.player sub-marker).
+        ; Prefer a caller-supplied component, otherwise read once and reuse for both.
+        statsComp := (playerStatsComponent && Type(playerStatsComponent) = "Map")
+            ? playerStatsComponent
+            : this.ReadPlayerStatsComponent(localPlayerPtr)
 
+        rage := this.ReadRageSnapshotFromStats(statsComp)
         statShift := (rage && Type(rage) = "Map" && rage.Has("shift")) ? rage["shift"] : ""
-
-        spirit := this.ReadSpiritSnapshotFromStats(playerStatsComponent, statShift)
-        if !spirit
-            spirit := this.ReadSpiritSnapshotFromStats(this.ReadPlayerStatsComponent(localPlayerPtr), statShift)
+        spirit := this.ReadSpiritSnapshotFromStats(statsComp, statShift)
 
         stats := Map(
             "lifeCurrent",    healthVital["current"],
