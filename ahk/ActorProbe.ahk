@@ -255,7 +255,7 @@ ActorVectorProbeRun()
             c48 := (Mod(span, 0x48) = 0) ? (span // 0x48) : "-"
             fp := reader.Mem.ReadPtr(begin)
             fpv := reader.IsProbablyValidPointer(fp) ? "yes" : "no"
-            rpt .= Format("  +0x{:03X}: 0x{:X} 0x{:X}  span={:<6} /0x10={:<5} /0x14={:<5} /0x48={:<5} first→{}", off, begin, end, span, c10, c14, c48, fpv) nl
+            rpt .= Format("  +0x{:03X}: 0x{:X} 0x{:X}  span={:-6} /0x10={:-5} /0x14={:-5} /0x48={:-5} first→{}", off, begin, end, span, c10, c14, c48, fpv) nl
         }
         off += 0x8
     }

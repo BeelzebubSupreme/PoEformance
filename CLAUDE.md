@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.180`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.181`.
 
 ## Language
 
@@ -1595,6 +1595,18 @@ chase down why it (and the whole Actor block) stopped tracking the character.
   count. Pending: owner runs it in-game, sends `logs\InGameStateMonitor.actor_vector_probe.log`; then
   re-base `PoE2Offsets.Actor` ActiveSkills/Cooldowns/DeployedEntities (+their `*Last`) if the +0x10
   variant decodes cleanly and the current one is garbage.
+- **RESULT — vectors are CORRECT, not drifted (0.45.13.181):** owner ran `ActorVectorProbeRun`.
+  ActiveSkills@0xB08 decoded 42 entries with 10/10 valid detailsPtrs, while +0x10 gave count=155587
+  and garbage → **0xB08 is right**; 42 is the actor's full granted-skill table (not the 9 equipped
+  gems). Cooldowns@0xB20 decoded 4 entries with real datId/maxUses and clean cdMs (8000/10000 ms) →
+  **0xB20 is right**; the count legitimately stays 4 (number of cooldown-capable skills; the live
+  timers live inside each entry's `cdList`, not in the list size). DeployedEntities was empty (no
+  minions/totems out) so unverifiable now — left as-is. **So only `animationId` drifted (+0x10, already
+  fixed); the vector offsets stay.** Fixed the Section-A `Format` bug (`{:<n}` → `{:-n}`; AHK left-align
+  is `-`, not `<`). Open follow-up (out of scope, not the reported issue): the sampled ActiveSkills
+  entries decoded `castType=0/useStage=0/cdMs=0` — either those first table rows are non-cast granted
+  effects, or `ActiveSkillDetails` inner offsets (CastType 0x0C / TotalCooldownTimeInMs 0xE8) also
+  drifted; verify against a known equipped skill before trusting per-skill castType.
 
 ## Reference
 
