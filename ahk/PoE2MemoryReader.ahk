@@ -3388,11 +3388,14 @@ class PoE2GameStateReader extends PoE2InventoryReader
                         continue
                     awakeSample.Push(entry)
                 }
-                mapSize := currentEntities.Count
-                ; Mirror the local scan's isZoneLoading heuristic (non-junk awake / total-awake ratio)
-                ; so the sleeping-entity scan below is gated IDENTICALLY to Main's own path. Hardcoding
-                ; false here made sleeping run every tick (tens of ms) in junk-heavy maps where Main's
-                ; own path skips it (its cacheFillRatio stays < 0.90 because junk inflates mapSize).
+                ; mapSize must be the reader's RAW BFS count (all awake ids incl. undecoded junk), NOT
+                ; the published record count — the reader omits junk that failed to decode, so the
+                ; record count ~= the non-junk awake count and the fill ratio would read ~1.0. Using the
+                ; raw count makes the isZoneLoading ratio (non-junk decoded / raw awake) match Main's own
+                ; cacheFillRatio, so the sleeping-entity scan is gated IDENTICALLY (else it runs every
+                ; tick and costs tens of ms that Main's own path skips in junk-heavy maps).
+                rawCount := (rd.Has("rawCount") && rd["rawCount"] > 0) ? rd["rawCount"] : currentEntities.Count
+                mapSize := Max(rawCount, currentEntities.Count)
                 isZoneLoading := (mapSize > 0) ? ((awakeSample.Length / mapSize) < 0.90) : false
                 consumed := true
             }
@@ -4037,6 +4040,10 @@ class PoE2GameStateReader extends PoE2InventoryReader
         awakeSample := []
         for _, entry in cache
             awakeSample.Push(entry)
+        ; Stash the RAW BFS count (all awake ids, incl. junk that never decoded). Main consumes this as
+        ; mapSize for its isZoneLoading ratio — the published sample omits undecoded junk, so its own
+        ; length would over-estimate the fill ratio and wrongly run the sleeping scan every tick.
+        this._flatRawCount := mapSize
         return awakeSample
     }
 
@@ -4060,11 +4067,12 @@ class PoE2GameStateReader extends PoE2InventoryReader
         playerOrigin := this.ExtractWorldPositionFromRenderComponent(playerRenderComponent)
 
         sample := this.ReadAwakeEntitiesFlat(areaInstanceData, currentAreaHash, playerOrigin)
+        rawCount := this.HasOwnProp("_flatRawCount") ? this._flatRawCount : sample.Length
 
         px := (playerOrigin is Map && playerOrigin.Has("x")) ? playerOrigin["x"] : 0.0
         py := (playerOrigin is Map && playerOrigin.Has("y")) ? playerOrigin["y"] : 0.0
         pz := (playerOrigin is Map && playerOrigin.Has("z")) ? playerOrigin["z"] : 0.0
-        return Map("sample", sample, "areaHash", currentAreaHash, "playerX", px, "playerY", py, "playerZ", pz)
+        return Map("sample", sample, "rawCount", rawCount, "areaHash", currentAreaHash, "playerX", px, "playerY", py, "playerZ", pz)
     }
 
     ; Records a deep-scan entry in the per-path "needs refine" queue so the

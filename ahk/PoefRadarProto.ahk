@@ -40,6 +40,10 @@ class PoefRadarProto
     static O_HEAPLEN   := 64                   ; u32  bytes used in the heap
     static O_TRUNC     := 68                   ; u32  1 if the sample exceeded MAX_RECORDS (records dropped)
     static O_RDHEART   := 72                   ; u32  reader heartbeat (A_TickCount) — Main watchdogs it
+    static O_RAWCOUNT  := 76                   ; u32  reader's RAW awake-map BFS count (incl. undecoded
+                                               ;      junk) — Main uses it for the isZoneLoading ratio,
+                                               ;      since the published record set omits junk that
+                                               ;      failed to decode
     static O_RECORDS   := 80                   ; record[MAX_RECORDS], RECORD_SIZE bytes each
 
     ; ── Per-entity record (RECORD_SIZE bytes, 8-byte fields first for alignment) ────────────────────

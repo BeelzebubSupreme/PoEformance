@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.211`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.212`.
 
 ## Language
 
@@ -1864,7 +1864,7 @@ yet #Included by the running app, so it touches zero hot-path code.
   interpreter refuses function definitions interspersed between top-level executable statements —
   group all `func(){}` defs before the executable body (or the whole script fails to load with no
   runtime error / OnError never fires).
-### Stage 3b: reader publishes the awake sample + parity diagnostic (0.45.13.211)
+### Stage 3b: reader publishes the awake sample + parity diagnostic (0.45.13.212)
 
 The reader now PACKS the awake-entity sample into the radar block each tick, and Main cross-checks it
 against its own live sample — the gate before stage 3c flips Main to CONSUME it. Same safe posture as
@@ -1912,7 +1912,7 @@ untouched** (it just reads the block on demand for the check).
   pure TEMPORAL SKEW (two async scans sampling at slightly different instants), and one sample with a
   ~20 s stale heartbeat was a frozen publish — both are exactly what stage 3c's freshness gate handles.
 
-### Stage 3c: Main consumes the reader's sample, with fallback (0.45.13.211)
+### Stage 3c: Main consumes the reader's sample, with fallback (0.45.13.212)
 
 The payoff: when the reader is publishing a FRESH sample for the current area, Main skips its own
 ~40 ms entity scan and rebuilds the awake sample from the reader's flat records. A SECOND opt-in
@@ -1944,13 +1944,20 @@ toggle keeps it separable from 3b so the parity check can gate it.
 - **Verified in-game (2026-07-06, MapRiverhold A/B):** functional PASS — no visual regression,
   LootTracker kills keep counting, clean toggle-off. Profiler proved the mechanism: consume ran ~95 %
   of ticks (`read.ent.decode.new` 4/82 calls) and **`read.entities` dropped 59 ms → 4.9 ms**. BUT the
-  owner's A/B exposed a regression (fixed 0.45.13.211): consuming made `read.sleep` balloon 0 → 35.7 ms
+  owner's A/B exposed a regression (fixed 0.45.13.212): consuming made `read.sleep` balloon 0 → 35.7 ms
   (206 ms spikes), so `tick.read` only fell 65 → 46 ms instead of ~10 ms. Cause: the consume branch
   hardcoded `isZoneLoading := false`, which runs the sleeping-entity scan every tick; Main's own path
   keeps `isZoneLoading` TRUE in junk-heavy maps (its cacheFillRatio stays < 0.90 because junk inflates
-  mapSize) and thus SKIPS sleeping. Fix (0.45.13.211): the consume branch now computes
-  `isZoneLoading := (awakeSample.Length / mapSize) < 0.90` (non-junk awake / total-awake), gating
-  sleeping identically to Main's path. Re-measure expected: `tick.read` ~10-15 ms while consuming.
+  mapSize) and thus SKIPS sleeping. First fix (0.45.13.211) computed `isZoneLoading` from a fill ratio
+  but was still insufficient (re-measure: `read.sleep` only 35 → 29.7 ms) because the consume `mapSize`
+  used the PUBLISHED record count, and the reader OMITS junk that fails to decode (projectiles/effects),
+  so that count ≈ the non-junk awake count → ratio ≈ 1.0 → sleeping still ran every tick. Real fix
+  (0.45.13.212): the reader now also publishes its RAW awake-map BFS count (`PoefRadarProto.O_RAWCOUNT`,
+  set from `ReadAwakeEntitiesFlat`'s `_flatRawCount`), and the consume branch uses
+  `Max(rawCount, currentEntities.Count)` as mapSize — so the ratio (non-junk decoded / raw awake)
+  matches Main's own `cacheFillRatio` and the sleeping scan is gated IDENTICALLY. Wire change is
+  backward-compatible (a reserved header slot; a stale reader writing 0 falls back to the record count).
+  Re-measure expected: `tick.read` ~10-15 ms while consuming.
 
 ## Reference
 

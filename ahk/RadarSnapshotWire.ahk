@@ -27,8 +27,10 @@
 ; Serialise `sample` (an array of nested-Map entries, exactly as ReadRadarSnapshot builds it) into the
 ; block under the seqlock. playerX/Y/Z + areaHash are small facts Main uses to gate the snapshot.
 ; Returns the number of records written (<= MAX_RECORDS; truncation is flagged in O_TRUNC).
-RadarWirePack(blk, lock, sample, playerX, playerY, playerZ, areaHash)
+RadarWirePack(blk, lock, sample, playerX, playerY, playerZ, areaHash, rawCount := -1)
 {
+    if (rawCount < 0)
+        rawCount := (sample is Array) ? sample.Length : 0
     intern := Map()            ; frame-local path -> heap byte offset (dedup within this publish)
     cursor := 0                ; heap write cursor (relative to HEAP_OFF)
     count  := 0
@@ -64,6 +66,7 @@ RadarWirePack(blk, lock, sample, playerX, playerY, playerZ, areaHash)
     blk.PutU32(PoefRadarProto.O_RECCOUNT, count)
     blk.PutU32(PoefRadarProto.O_HEAPLEN, cursor)
     blk.PutU32(PoefRadarProto.O_TRUNC, trunc)
+    blk.PutU32(PoefRadarProto.O_RAWCOUNT, rawCount)
     lock.WriteEnd()
     return count
 }
@@ -288,6 +291,7 @@ RadarWireUnpack(blk, lock)
         "playerY", NumGet(p + PoefRadarProto.O_PLAYERY, "Float"),
         "playerZ", NumGet(p + PoefRadarProto.O_PLAYERZ, "Float"),
         "truncated", NumGet(p + PoefRadarProto.O_TRUNC, "UInt"),
+        "rawCount", NumGet(p + PoefRadarProto.O_RAWCOUNT, "UInt"),
         "sample", sample)
 }
 

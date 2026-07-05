@@ -95,7 +95,8 @@ ReaderTick()
                 if (pub is Map)
                 {
                     RadarWirePack(g_radarBlk, g_radarLock, pub["sample"],
-                        pub["playerX"], pub["playerY"], pub["playerZ"], pub["areaHash"])
+                        pub["playerX"], pub["playerY"], pub["playerZ"], pub["areaHash"],
+                        pub.Has("rawCount") ? pub["rawCount"] : -1)
                     g_radarBlk.PutU32(PoefRadarProto.O_RDHEART, now)
                 }
             }
