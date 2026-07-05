@@ -158,6 +158,7 @@ PushHeaderToWebView()
         . ',"lootTradePricing":' BuildLootTradePricingHeaderJson()
         . ',"overlayPlacement":' BuildOverlayPlacementHeaderJson()
         . ',"startupTrace":' BuildStartupTraceHeaderJson()
+        . ',"readerProcess":' BuildReaderProcessHeaderJson()
         . ',"apStatusLog":' BuildAutoPilotStatusLogHeaderJson()
         . ',"customLandmarks":' BuildCustomLandmarksHeaderJson()
         . "}"

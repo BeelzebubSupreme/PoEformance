@@ -6144,6 +6144,10 @@
                 <label class="toggle"><input type="checkbox" id="startup-trace" onchange="ahkCall('SetStartupTrace', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label>
               </div>
               <div class="cfg-help">Times every startup step (QueryPerformanceCounter) into <code>logs\InGameStateMonitor.startup_trace.log</code>. Most starts are fast — leave this <b>ON across several restarts</b> to catch the occasional slow one, then turn it off. Read the result in <b>Config → Data &amp; Logs</b> (open <code>startup_trace.log</code>).</div>
+              <div class="cfg-row"><span class="cfg-label">🔌 Reader process (split stage 2)</span>
+                <label class="toggle"><input type="checkbox" id="reader-process" onchange="ahkCall('SetReaderProcess', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Reader-split stage 2 (dev/RE, opt-in): runs a persistent second process (<code>poef_reader.ahk</code>) that independently attaches to PoE and publishes a live status via shared memory. <button class="cfg-btn" onclick="ahkCall('ReaderProcessDiag')">🔌 Reader status</button> — the reader should resolve the SAME inGameState address as the main app (a cross-process correctness check for the split).</div>
             </div>
           </details>
         </div>
@@ -10932,6 +10936,7 @@
       if (d.invChainDump !== undefined) setChk('inv-chain-dump', d.invChainDump);
       // Startup timing trace toggle (Config > Debug > Diagnostic Actions).
       if (d.startupTrace !== undefined) setChk('startup-trace', d.startupTrace);
+      if (d.readerProcess !== undefined) setChk('reader-process', d.readerProcess);
       // AutoPilot status file-log toggle (Config > AutoPilot > Live Status).
       if (d.apStatusLog !== undefined) setChk('ap-status-log', d.apStatusLog);
 

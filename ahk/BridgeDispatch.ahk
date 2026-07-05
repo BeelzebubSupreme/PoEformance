@@ -211,6 +211,14 @@ _DispatchBridgeCall(method, args)
             if (args.Length >= 1)
                 SetStartupTrace(args[1])
             SetTimer(PushHeaderToWebView, -50)
+        case "SetReaderProcess":
+            ; Reader-split stage 2: persistent reader-process toggle ([Diagnostics] readerProcess).
+            if (args.Length >= 1)
+                SetReaderProcess(args[1])
+            SetTimer(PushHeaderToWebView, -50)
+        case "ReaderProcessDiag":
+            ; Stage-2 verification: MsgBox the reader's live status + inGameState cross-check.
+            SetTimer(ReaderProcessDiagnose, -1)
         case "SetAutoPilotStatusLog":
             ; Persistent AutoPilot status file-log toggle ([Diagnostics] apStatusLog). args[1]=on.
             if (args.Length >= 1)

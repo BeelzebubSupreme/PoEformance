@@ -95,6 +95,9 @@ UpdateRadarFast()
         ; reads, so this stays cheap and the overlays below keep rendering at the normal cadence.
         TryHkAnimFishPublish(radarSnap)
 
+        ; ── Reader-split stage 2: persistent reader-process heartbeat + watchdog (opt-in, no-op off) ──
+        ReaderProcessTick()
+
         ; ── AutoPilot (state machine: combat → explore, owns shared guards) ──
         Profiler.Begin("tick.autopilot")
         TryAutoPilot(radarSnap)
