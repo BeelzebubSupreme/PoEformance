@@ -147,6 +147,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
         ; Reset on area change. New entities get full ReadEntityBasic decode; existing ones get
         ; cheap per-tick updates (position, life, targetable, flags) via UpdateCachedEntityRadar.
         this._radarEntityCache := Map()
+        this._radarJunkIds := Map()   ; ids path-checked as junk → skipped without RPM (Phase 1)
         this._radarEntityCacheAreaHash := 0xFFFFFFFF
 
         ; Zone navigation: continuous accumulation of important entities.
@@ -3225,6 +3226,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
         if (currentAreaHash != this._radarEntityCacheAreaHash)
         {
             this._radarEntityCache := Map()
+            this._radarJunkIds := Map()   ; per-entity "known junk" cache (skip re-decoding junk)
             this._radarEntityCacheAreaHash := currentAreaHash
             ; Schedule zone scanner. Earlier code used a 2 s safety delay before
             ; starting; the TerrainReady diagnostic confirms terrain data is now
@@ -3390,6 +3392,9 @@ class PoE2GameStateReader extends PoE2InventoryReader
         ;   Phase 2: Decode new + changed entities FIRST (priority time budget)
         ;   Phase 3: Cheap-update existing cached entities (separate budget, round-robin)
         cache := this._radarEntityCache
+        if !this.HasOwnProp("_radarJunkIds")
+            this._radarJunkIds := Map()
+        junkIds := this._radarJunkIds
         newDecodeCount := 0
         cheapUpdateCount := 0
         cacheErrors := 0
@@ -3412,6 +3417,13 @@ class PoE2GameStateReader extends PoE2InventoryReader
                 if (cachedRawPtr != rawPtr)
                     changedEntityList.Push(Map("id", entityId, "rawPtr", rawPtr, "cached", cached))
             }
+            else if (junkIds.Has(entityId) && junkIds[entityId] = rawPtr)
+            {
+                ; Known junk (same id+pointer → same entity) — skip the expensive full decode and
+                ; caching entirely. It was path-checked once in Phase 2 when first seen; an entity's
+                ; path is stable for its lifetime, so no RPM is needed to re-confirm here. A recycled
+                ; id gets a new rawPtr → guard fails → falls through and is re-evaluated below.
+            }
             else
                 newEntityList.Push(Map("id", entityId, "rawPtr", rawPtr))
         }
@@ -3430,6 +3442,20 @@ class PoE2GameStateReader extends PoE2InventoryReader
                 entityPtr := this.ResolveEntityPointer(item["rawPtr"])
                 if !this.IsProbablyValidPointer(entityPtr)
                     continue
+                ; ── Junk pre-filter ────────────────────────────────────────────────────────
+                ; Read only id+flags+path (cheap) and SKIP the full component decode for junk
+                ; (effects / projectiles / daemons / …) that the sample-build filter would drop
+                ; anyway. In dense combat ~half the awake map is junk (raw≫sample), so this keeps
+                ; the decode budget for real entities. Remember id→rawPtr so Phase 1 skips it with
+                ; NO RPM on later ticks; the set is dropped on a filter change (RebuildJunkActive)
+                ; and on area change so live-toggling the filter still works.
+                ident := this.ReadEntityIdentityBasic(entityPtr)
+                if (ident && Type(ident) = "Map"
+                    && IsJunkEntity(ident.Has("path") ? ident["path"] : ""))
+                {
+                    junkIds[item["id"]] := item["rawPtr"]
+                    continue
+                }
                 entityBasic := this.ReadEntityBasic(entityPtr, item["id"])
                 if (entityBasic && Type(entityBasic) = "Map")
                 {
