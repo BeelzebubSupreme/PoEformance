@@ -168,7 +168,13 @@ ReaderConsumeEnabled()
 ConsumeReaderRadarSample(currentAreaHash)
 {
     global g_rpRadarBlk, g_rpRadarLock
-    static RP_CONSUME_MAX_AGE := 300   ; ms; the reader publishes every ~30-110 ms, so 300 gives margin
+    static RP_CONSUME_MAX_AGE := 500   ; ms; the reader publishes every ~100-150 ms in dense maps and
+                                       ; occasionally hitches (decode spikes to ~270 ms like Main's own),
+                                       ; so 500 tolerates one hitch → fewer fallback ticks (each of which
+                                       ; costs Main a full ~50 ms scan). A 500 ms-old radar sample is
+                                       ; acceptable (radar isn't latency-critical; AutoPilot re-reads
+                                       ; player pos + targetable live). Raise further only if fallback
+                                       ; stays high — but staler samples eventually show on the radar.
     if !IsObject(g_rpRadarBlk)
         return 0
     rdHeart := g_rpRadarBlk.GetU32(PoefRadarProto.O_RDHEART)

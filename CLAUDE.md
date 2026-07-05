@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.213`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.214`.
 
 ## Language
 
@@ -34,8 +34,7 @@ inline when authoring commit messages, PR bodies, etc.
   substantially.
 - New functions get a short 2-3 line comment explaining purpose, parameters, and return value.
 - Variable names follow the existing camelCase / snake_case style of surrounding code.
-- The user often cannot runtime-test (the game is ~140 GB). When a change can only be
-  verified in-game, say so and list exactly what to check.
+- When a change can only be verified in-game, say so and list exactly what to check.
 - **Bump the version after every change.** Increment the last segment of the version
   number on each adjustment — in **all three** of `InGameStateMonitor.ahk`
   (`POEFORMANCE_VERSION := "x.y.z.N"`), `CLAUDE.md` (the `Version` line above), and
@@ -231,8 +230,6 @@ both halves.
 
 ## AutoPilot navigation (v0.45.12.0) — distance-field architecture
 
-Modeled on `myrahz/Radar` (`PathFinder.cs`): never follow a stored path.
-
 **Verified in-game (2026-06-24):** exploration + combat navigation work end-to-end (click
 projection / anchor gating, per-tick distance-field pathing, arrival + stuck handling).
 
@@ -273,6 +270,7 @@ keeps an on-disk session history. Reuses the existing inventory reader / radar s
 area-state instead of re-reading memory.
 
 ### New files (`ahk/`)
+
 - **LootTracker.ahk** — run state machine + per-tick entry `TryLootTrackerTick(radarSnap)`
   (runs in `UpdateRadarFast` right after `TryEntityAlerts`, self-throttled), session
   totals, valuation, the cached display model `g_ltLiveView` (rebuilt ~4 Hz, read by the
@@ -994,18 +992,17 @@ holding the active league name — EXACTLY poe.ninja/poe2scout's value (`"Standa
 - **Pending in-game verification:** with auto on, the league field should show the character's real
   league (e.g. `detected: HC Runes of Aldur`), prices refetch on a league change, no manual entry.
 
-## Custom landmark labels on the radar (shipped 0.45.13.123) — port of Sikaka/POE2Radar `CustomLandmarkData`
+## Custom landmark labels on the radar (shipped 0.45.13.123)
 
 Draws curated, human-readable labels on the radar for known terrain tiles — boss arenas (with
 their reward, e.g. "Beira of the Rotten (10% Cold Res)"), named POIs, and area-transition
-destinations. Ports `Sikaka/POE2Radar`'s `CustomLandmarkData.cs`: a big JSON keyed by area code →
-tile-path pattern → label, matched by SUBSTRING against the tile paths we already scan.
+destinations. Ports `CustomLandmarkData.cs`: a big JSON keyed by area code → tile-path pattern
+→ label, matched by SUBSTRING against the tile paths we already scan.
 
-- **`data/custom_landmarks.json` (committed source data)** — the full label map shipped verbatim
-  from Sikaka/POE2Radar (`CustomLandmarks.json`): 91 area codes, 272 entries, plus a global `*`
-  bucket. Keys look like
-  `"Metadata/Terrain/Woods/Slash/HagWitchArena_01.tdtx:5-y:0"` → `"Beira of the Rotten (10% Cold Res)"`.
-  Tracked (NOT gitignored). Data credit: Sikaka/POE2Radar.
+- **`data/custom_landmarks.json` (committed source data)** — the full label map: 91 area codes,
+272 entries, plus a global `*` bucket. Keys look like
+`"Metadata/Terrain/Woods/Slash/HagWitchArena_01.tdtx:5-y:0"` → `"Beira of the Rotten (10% Cold Res)"`.
+  Tracked (NOT gitignored).
 - **`ahk/CustomLandmarks.ahk` (new)** — the lookup. `LoadCustomLandmarks()` seeds all globals
   (init gotcha) — `g_clmEnabled` (default ON, `[CustomLandmarks] enabled`), `g_clmFile`,
   `g_clmData`, `g_clmCount` — and calls `_ClmLoadData()`. `_ClmLoadData()` parses the JSON with the
@@ -1031,8 +1028,6 @@ tile-path pattern → label, matched by SUBSTRING against the tile paths we alre
   `BridgeDispatch.ahk` case `SetCustomLandmarks`; `WebViewBridge.ahk` pushes `customLandmarks`; UI
   **Config → Overlay → "🗺️ Custom Landmarks"** (toggle, shows the loaded-label count),
   `customLandmarksSyncFromHeader`. Default ON.
-- **Pending in-game verification:** confirm labels render at the right tiles (boss arenas / POIs /
-  transitions) for the current area, the amber colour/outline is legible, and toggling off hides them.
 - **Label de-dupe fix (0.45.13.124):** first in-game test showed the SAME label stacked many times
   across the map (e.g. a wall/arena tile such as Machinarium `BossWall01` → "Boss" is placed at many
   spots; the zone scan emits ONE POI per tile, so each drew its own "Boss (Nm)" label — a cluttered
@@ -1222,8 +1217,8 @@ The C# reference (GameHelper2 `UiElementBase.GetUnScaledPosition` + `GameWindowS
   `GameCullSize` static address — our pattern scanner already found it, nobody read it) and the
   origin is the CLIENT area (GetClientRect), never WinGetPos.
 
-Implementation (`ahk/UiTreeBrowser.ahk`): `UiTree_ScaleCtx(reader, hwnd)` (client rect + cull
-+ v1/v2, one cheap ReadInt; cull sanity-clamped to 0), `_UiScalePair(idx, mult, sc)`,
+Implementation (`ahk/UiTreeBrowser.ahk`): `UiTree_ScaleCtx(reader, hwnd)` (client rect + cull +
+v1/v2, one cheap ReadInt; cull sanity-clamped to 0), `_UiScalePair(idx, mult, sc)`,
 `UiTree_GetScreenPos(reader, elem, sc:=0)` (faithful GetUnScaledPosition port; now also returns
 the leaf's `scaleIndex`/`localMult`; degrades to the old plain sum without a window),
 `UiTree_ScreenRectOf(reader, elem, sc:=0, sizeW:="", sizeH:="")` (absolute screen-px rect =
@@ -1238,46 +1233,42 @@ the overlay window origin (`this._lastX/_lastY`) instead of re-scaling with the 
 On a 16:10 window with cull 0 and uniform scale chains the new math reduces exactly to the old
 formula — differences appear only where the old math was wrong (mixed scale spaces, non-16:10
 aspects, windowed mode, localMult ≠ 1).
-**Pending in-game verification:** UI-browser highlight sits exactly on the selected element
-(e.g. Guild Stash), hover-price/ritual badges pixel-exact on their cells, loot-label click
-accuracy, stash-mover button/grid anchor (existing offsetX/offsetY calibrations may now
-double-correct — re-zero them if the grid is offset the other way).
-- **Hotfix 0.45.13.142 — hover-price died; hardened against bad memory scale data:** first
-  in-game test broke price-on-hover entirely. An OFFLINE harness (fake reader + synthetic
-  UiElement tree, 35 checks incl. hand-computed C#-reference values) proved the core math
-  correct — so the in-game breakage comes from the MEMORY values, with two prime suspects:
-  (a) the `GameCullSize` static was never consumed before, so a mis-resolved pattern
-  (garbage cull int) silently poisons `v1` and collapses every width-scaled rect — the
-  root is ScaleIndex 3, killing the whole descent; (b) the ScaleIndex/LocalScaleMultiplier
-  offsets (0x18A/0x130) are from the 0.4.x reference layout and other UiElement fields HAVE
-  drifted in 0.5.x (StringId 0x140→0x098), so they may read garbage. Hardening (all in
-  `UiTreeBrowser.ahk`): `UiTree_ScaleCtx` clamps v1 into a plausibility band (0.7–1.3 × v2;
-  outside → distrust the cull, then fall back to v1=v2); `_UiScalePair` sanitizes
-  localMult (accept 0.2–5.0, else 1.0), unknown ScaleIndex → uniform (v2,v2), and honors a
-  `sc["uniform"]` legacy-override flag (exact pre-scale-aware behavior); `UiTree_HitTest`
-  retries once in uniform mode when the descent never leaves the root (descent split into
-  `_UiHitDescend`). `UiHoverPrice._UhpResolveHoveredItem` retries its hit test + chain scan
-  once with `sc["uniform"] := true` when NO item slot was found (partial-chain failures the
-  root-level fallback can't see); scan extracted into `_UhpScanChainForItem`. The
-  UIHover probe (`Ctrl+Alt+Shift+H`) now prints per-chain-element `scIdx`/`lMult` and the
-  ctx `v1/v2/cull` — capture it over an inventory item to see the REAL memory values if
-  anything still misbehaves. (0.45.13.146: the probe threads its ONE scale ctx through every
-  report line — `_UiHoverChainLine(reader, addr, sc)` — and prints the `scaleMode`, so when
-  the hit test flips the uniform fallback the printed positions match the hit geometry.)
-  Offline harness lives in the session scratchpad
-  (`ui_scale_test.ahk`), validated: uniform 16:10 ≡ old math, 16:9 + client offset, mixed
-  scale-space conversion, real cull (+128), poisoned cull (700 → rejected), garbage
-  index/mult leaf (→ uniform behavior), partial-chain + uniform retry.
-- **UI Browser hover highlight (0.45.13.143):** hovering a node in the CHILDREN list (and in
-  the search-results list) draws a BLUE rect (BGR `0xFF0000`) on that element's live screen
-  rect, alongside the red selection rect. `ui/index.html`: `onmouseenter`/`onmouseleave` on
-  `.uib-child-row` + `.uib-sr-row` → `ahkCall('UiBrowseHover', ptr)` ('' clears; the static
-  `#uib-children-list` also clears on `onmouseleave` as a safety net against re-renders).
-  `BridgeDispatch` case `UiBrowseHover` → `UiBrowserHoverHighlight(hex)`
-  (`UiBrowserHandler.ahk`): resolves the ptr, caches the ABSOLUTE screen-px rect
-  (`UiTree_ScreenRectOf`) in `g_uiBrowserHoverHighlight` (0 clears; also cleared by
-  `UiBrowserClearHighlight`). `OverlayManager` counts the hover rect toward
-  `ctx.inspectOverride`; `RadarOverlay._FinishFrame` draws it after the red rect.
+**Hotfix 0.45.13.142 — hover-price died; hardened against bad memory scale data:** first
+in-game test broke price-on-hover entirely. An OFFLINE harness (fake reader + synthetic
+UiElement tree, 35 checks incl. hand-computed C#-reference values) proved the core math
+correct — so the in-game breakage comes from the MEMORY values, with two prime suspects:
+(a) the `GameCullSize` static was never consumed before, so a mis-resolved pattern
+(garbage cull int) silently poisons `v1` and collapses every width-scaled rect — the
+root is ScaleIndex 3, killing the whole descent; (b) the ScaleIndex/LocalScaleMultiplier
+offsets (0x18A/0x130) are from the 0.4.x reference layout and other UiElement fields HAVE
+drifted in 0.5.x (StringId 0x140→0x098), so they may read garbage. Hardening (all in
+`UiTreeBrowser.ahk`): `UiTree_ScaleCtx` clamps v1 into a plausibility band (0.7–1.3 × v2;
+outside → distrust the cull, then fall back to v1=v2); `_UiScalePair` sanitizes
+localMult (accept 0.2–5.0, else 1.0), unknown ScaleIndex → uniform (v2,v2), and honors a
+`sc["uniform"]` legacy-override flag (exact pre-scale-aware behavior); `UiTree_HitTest`
+retries once in uniform mode when the descent never leaves the root (descent split into
+`_UiHitDescend`). `UiHoverPrice._UhpResolveHoveredItem` retries its hit test + chain scan
+once with `sc["uniform"] := true` when NO item slot was found (partial-chain failures the
+root-level fallback can't see); scan extracted into `_UhpScanChainForItem`. The
+UIHover probe (`Ctrl+Alt+Shift+H`) now prints per-chain-element `scIdx`/`lMult` and the
+ctx `v1/v2/cull` — capture it over an inventory item to see the REAL memory values if
+anything still misbehaves. (0.45.13.146: the probe threads its ONE scale ctx through every
+report line — `_UiHoverChainLine(reader, addr, sc)` — and prints the `scaleMode`, so when
+the hit test flips the uniform fallback the printed positions match the hit geometry.)
+Offline harness lives in the session scratchpad
+(`ui_scale_test.ahk`), validated: uniform 16:10 ≡ old math, 16:9 + client offset, mixed
+scale-space conversion, real cull (+128), poisoned cull (700 → rejected), garbage
+index/mult leaf (→ uniform behavior), partial-chain + uniform retry.
+**UI Browser hover highlight (0.45.13.143):** hovering a node in the CHILDREN list (and in
+the search-results list) draws a BLUE rect (BGR `0xFF0000`) on that element's live screen
+rect, alongside the red selection rect. `ui/index.html`: `onmouseenter`/`onmouseleave` on
+`.uib-child-row` + `.uib-sr-row` → `ahkCall('UiBrowseHover', ptr)` ('' clears; the static
+`#uib-children-list` also clears on `onmouseleave` as a safety net against re-renders).
+`BridgeDispatch` case `UiBrowseHover` → `UiBrowserHoverHighlight(hex)`
+(`UiBrowserHandler.ahk`): resolves the ptr, caches the ABSOLUTE screen-px rect
+(`UiTree_ScreenRectOf`) in `g_uiBrowserHoverHighlight` (0 clears; also cleared by
+`UiBrowserClearHighlight`). `OverlayManager` counts the hover rect toward
+`ctx.inspectOverride`; `RadarOverlay._FinishFrame` draws it after the red rect.
 
 ## NPC "Identify Items" hotkey (TEST, shipped 0.45.13.144) — `ahk/NpcIdentify.ahk`
 
@@ -1297,13 +1288,11 @@ discoverable in `poeformance_config.ini`. Wiring: `#Include ahk/NpcIdentify.ahk`
 `LoadNpcIdentify()` + `RegisterNpcIdentifyHotkey()` at startup (HotIf-gated to the PoE window,
 StashMover pattern); bridge case `NpcIdentifyRun`; "🪄 Doryani Identify" button in the RE-tools
 row. Verified: full-script `AutoHotkey64.exe /validate` passes.
-**Pending in-game verification:** label click walks to Doryani and opens the dialog; the
-window/menu paths resolve on the live client; the final click fires identification; tooltip
-reasons on each abort gate.
 
 ## AutoPilot panel polish (shipped 0.45.13.150)
 
 Four owner-requested tweaks to Automation → AutoPilot:
+
 - **Summary underline incl. status:** `#det-autopilot > summary` draws a bottom-gradient rule
   (junkbox trick, inset 26px past the icon, ending at the right edge) in BOTH open and closed
   state, covering the live-status string next to the caret; the box's open-only `.cfg-header`
@@ -1435,18 +1424,18 @@ composited PNGs, mirrored in `tools/skillnode_map.json`).
 **Pending in-game verification:** category/tab switching incl. the sliding marker on the new
 rows, alias tabs showing the right sub-panels, Config remembering general/debug/data, vitals
 edit-mode from the new Vitals tab, snode icons on all new nav chips.
-- **Header-sync isolation + JS→AHK error log (0.45.13.147):** follow-up to a "Vitals Life/
-  Mana/ES boxes missing" report. Browser repro (static `http-server` + driving `updateHeader`
-  with a realistic payload) shows the CURRENT code builds and shows all three `det-vitals-*`
-  sections — the likely in-app cause is a JS exception in an EARLIER `updateHeader` feature
-  block (real data) starving `vitalsSyncFromHeader` (which is the only `renderVitalsBars`
-  trigger). Hardening: every feature-sync call in `updateHeader` now runs isolated via
-  `_hdrTry(name, fn)` (one throwing block can no longer kill the rest, the error is logged),
-  and `_jsReport(msg)` forwards JS errors — incl. `window.onerror` — over the bridge (new
-  `JsError` case → `LogError("WebViewJS: …")`), so WebView exceptions finally show up in the
-  error log (readable in Config → Data & Logs). Note: the vitals sections may also simply be
-  COLLAPSED (their open state persists in `[…] cfgSections`, and the default list doesn't
-  include `vitals-life/mana/es`).
+**Header-sync isolation + JS→AHK error log (0.45.13.147):** follow-up to a "Vitals Life/
+Mana/ES boxes missing" report. Browser repro (static `http-server` + driving `updateHeader`
+with a realistic payload) shows the CURRENT code builds and shows all three `det-vitals-*`
+sections — the likely in-app cause is a JS exception in an EARLIER `updateHeader` feature
+block (real data) starving `vitalsSyncFromHeader` (which is the only `renderVitalsBars`
+trigger). Hardening: every feature-sync call in `updateHeader` now runs isolated via
+`_hdrTry(name, fn)` (one throwing block can no longer kill the rest, the error is logged),
+and `_jsReport(msg)` forwards JS errors — incl. `window.onerror` — over the bridge (new
+`JsError` case → `LogError("WebViewJS: …")`), so WebView exceptions finally show up in the
+error log (readable in Config → Data & Logs). Note: the vitals sections may also simply be
+COLLAPSED (their open state persists in `[…] cfgSections`, and the default list doesn't
+include `vitals-life/mana/es`).
 
 ## Stack max-size probe (0.45.13.159) — testing Stack +0x20
 
@@ -1461,16 +1450,16 @@ raw hex, and derefs `UnknownPtr(+0x10)` (the max size may instead live in a refe
 StackData/dat row). Writes `logs\InGameStateMonitor.stack_max_probe.log` (readable in Data &
 Logs) + a summary MsgBox. Owner test case: one stack of 19 Scrolls of Wisdom (real max 40).
 Reuses `_HPP_HexDump` / `_SmResolveServerData`.
-- **RESULT (confirmed in-game 2026-07-04):** the max size is NOT on the Stack component
-  directly (its +0x20 is a pointer, +0x28 is ~always 0). It lives in the struct the Stack
-  component points to at **+0x10** (a SHARED per-base-type `StackSizeData` descriptor — two
-  Scroll-of-Wisdom stacks resolved to the same pointer), at **+0x28**: Scroll of Wisdom read
-  40, and across a full currency tab the field only ever yielded the real PoE2 caps
-  10/20/30/40. (In that descriptor +0x20=5000 = currency-tab cap and +0x24=100 are other
-  fields, not the per-item max.) **Wired 0.45.13.160:** `PoE2Offsets.Stack` renamed
-  `UnknownPtr`→`StackSizeDataPtr` (0x10) + new `PoE2Offsets.StackSizeData` (`MaxStack` 0x28);
-  `PoE2InventoryReader` reads `stackMax` alongside `stackCount` (deref +0x10 → +0x28);
-  `WebViewBridge` emits `smax`; the inventory tooltip shows "Stack Size: 19 / 40".
+**RESULT (confirmed in-game 2026-07-04):** the max size is NOT on the Stack component
+directly (its +0x20 is a pointer, +0x28 is ~always 0). It lives in the struct the Stack
+component points to at **+0x10** (a SHARED per-base-type `StackSizeData` descriptor — two
+Scroll-of-Wisdom stacks resolved to the same pointer), at **+0x28**: Scroll of Wisdom read
+40, and across a full currency tab the field only ever yielded the real PoE2 caps
+10/20/30/40. (In that descriptor +0x20=5000 = currency-tab cap and +0x24=100 are other
+fields, not the per-item max.) **Wired 0.45.13.160:** `PoE2Offsets.Stack` renamed
+`UnknownPtr`→`StackSizeDataPtr` (0x10) + new `PoE2Offsets.StackSizeData` (`MaxStack` 0x28);
+`PoE2InventoryReader` reads `stackMax` alongside `stackCount` (deref +0x10 → +0x28);
+`WebViewBridge` emits `smax`; the inventory tooltip shows "Stack Size: 19 / 40".
 
 ## Max stack size is container-dependent (0.45.13.164)
 
@@ -1480,6 +1469,7 @@ selects which applies. The normal inventory uses +0x28 (40); a **currency stash 
 far more (the owner's tab #143 had a Wisdom stack of 1231, and every currency there with
 Count > 100 has +0x20=5000), so it selects **+0x20**. So `stackMax` (the +0x28 read) is only
 correct for the backpack.
+
 - **Interim UI fix (shipped):** the inventory tooltip shows "/ max" ONLY when Count ≤ max, so
   the nonsensical "1231 / 40" is gone (it now shows just "1231" until the container cap is
   wired). "19 / 40" in the backpack is unaffected.
@@ -1748,6 +1738,7 @@ rationale: `docs/reader-split.md`.** Motivation for the split is HEADROOM for fu
 features (a detailed DPS meter / death recap especially), NOT the current numbers.
 
 ### Profiler tooling (how to measure — use this before "optimising" any read)
+
 - `ahk/Profiler.ahk` — QPC per-label timing, disabled by default (near-zero when off). Two-click
   flow: **Shift+F3** (or click the ⏱ status pill) starts a measurement window, press again to stop.
   On stop it appends the table to `logs\InGameStateMonitor.profiler.log` (readable in **Data &
@@ -1761,6 +1752,7 @@ features (a detailed DPS meter / death recap especially), NOT the current number
   building a fix** (the terrain hypothesis for read.world was wrong; it was a double stats read).
 
 ### Shipped single-process fixes (do not regress these)
+
 - **read.world 112→2 ms** — `PoE2PlayerReader.BuildVitalsResult` read the player Stats component
   TWICE per vitals tick (once for Rage, once for Spirit), each doing two full stats-array scans.
   Fix: read it ONCE (dedup) + `_CachedPlayerStatsComponent()` (~500 ms TTL, keyed on the player
@@ -1782,9 +1774,11 @@ features (a detailed DPS meter / death recap especially), NOT the current number
   cheap ~50 %, and the read tail 1.5 s → 0.4 s.
 
 ### Reader-split infrastructure (stage 1 — SHIPPED + proven; stages 2–5 pending)
+
 The generalisable transport for moving reads off the render thread. See `docs/reader-split.md` for
 the staged plan (2 = reader-process scaffolding, 3 = radar snapshot to the reader, 4 = on-demand
 decode channel, 5 = DPS sampler).
+
 - **`ahk/SharedMem.ahk`** — `SharedMemBlock(name, bytes)` = named pagefile-backed file mapping
   (`CreateFileMapping(-1,…)`/`MapViewOfFile`; one process creates, others open the same name; isOwner
   from `ERROR_ALREADY_EXISTS`). `Put/Get` U32/I32/I64/F32 + `PutBytes/GetBytes` + `Clear`. `SeqLock
@@ -1801,8 +1795,10 @@ decode channel, 5 = DPS sampler).
   reads are valid in another's handle (same target process).
 
 ### First sampler: anim-fishing out-of-process (0.45.13.202)
+
 The live enemy-animation capture (Macro Engine `enemyAnim`) moved off the render thread — it used to
 HIJACK the radar tick into a 10 ms turbo loop that froze every overlay.
+
 - **`ahk/HkFishProtocol.ahk`** — the shared wire layout, #Include'd by BOTH sides. Region A
   (Main→Fisher) = monster Actor-component addresses + distances; Region B (Fisher→Main) = animId→
   {count,last,dist} rows; a control header (run flag, `Actor.AnimationId` offset, both heartbeats);
@@ -1864,6 +1860,7 @@ yet #Included by the running app, so it touches zero hot-path code.
   interpreter refuses function definitions interspersed between top-level executable statements —
   group all `func(){}` defs before the executable body (or the whole script fails to load with no
   runtime error / OnError never fires).
+  
 ### Stage 3b: reader publishes the awake sample + parity diagnostic (0.45.13.208)
 
 The reader now PACKS the awake-entity sample into the radar block each tick, and Main cross-checks it
@@ -1963,8 +1960,14 @@ toggle keeps it separable from 3b so the parity check can gate it.
   ~49 fallback ticks × ~200 ms averaged read.sleep back to 35 ms. Third fix (0.45.13.213): **throttle
   the sleeping scan to ~750 ms** (`_radarSleepingCache` / `_radarSleepingTick`, invalidated on area
   change) — sleeping entities are static so the refresh is imperceptible, but it bounds `read.sleep`
-  regardless of how `isZoneLoading` flaps (helps the non-consume path too). Re-measure expected:
-  `tick.read` ~10-15 ms while consuming.
+  regardless of how `isZoneLoading` flaps (helps the non-consume path too). **Re-measure confirmed
+  (0.45.13.213, MapRiverhold):** `read.sleep` 35.7 → 4.2 ms, `tick.read` 50.7 → 24 ms. The remaining
+  cost is the reader-consume FALLBACK rate — 16 % of ticks (`read.ent.decode.new` 86/546) ran Main's
+  full ~50 ms scan (a dense-map reader hitch missed the 300 ms freshness window). Fix (0.45.13.214):
+  raised `RP_CONSUME_MAX_AGE` 300 → 500 ms so one reader hitch is tolerated (a 500 ms-old radar sample
+  is acceptable; AutoPilot re-reads player pos + targetable live). Expected: fallback down, `tick.read`
+  toward ~10-15 ms. If fallback stays high, the reader tick itself needs slimming (it also runs
+  `ReadAutoFlaskSnapshot` each tick) or the sleeping scan moves to the reader too.
 
 ## Reference
 
