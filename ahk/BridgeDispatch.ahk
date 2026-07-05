@@ -182,6 +182,12 @@ _DispatchBridgeCall(method, args)
                 _UhpApplySetting(args[1], args[2])
             SaveUiHoverPrice()
             SetTimer(PushHeaderToWebView, -50)
+        case "HkAnimCaptureStart":
+            ; Macro enemyAnim live capture — arm (accumulate nearby enemy animations).
+            StartHkAnimCapture()
+        case "HkAnimCaptureStop":
+            ; Macro enemyAnim live capture — disarm + clear.
+            StopHkAnimCapture()
         case "SetRitualValueBadges":
             ; Persistent value badges on Ritual reward cells. args[1]=key, args[2]=value.
             if (args.Length >= 2)

@@ -56,7 +56,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.187"
+POEFORMANCE_VERSION := "0.45.13.188"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -393,6 +393,7 @@ try g_atlasOverlayEnabled := (IniRead(A_ScriptDir "\poeformance_config.ini", "At
 HotkeysInit()
 SkillHotkeysInit()
 HotkeysLoadConfig()
+LoadHkAnimCapture()
 HotkeysSeedFlaskPresets()   ; one-time: create the default "Flasks" hotkey group (replaces AutoFlask)
 g_hkOneShotPerTick := (IniRead(_ConfigPath(), "Hotkeys", "oneShotPerTick", "0") = "1")
 
@@ -1035,6 +1036,7 @@ OnTreeTabChanged(*)
 #Include ahk/ExplorationModule.ahk
 #Include ahk/AutoPilot.ahk
 #Include ahk/CustomHotkeys.ahk
+#Include ahk/HkAnimCapture.ahk
 #Include ahk/CustomHotkeysBindings.ahk
 #Include ahk/SkillBarReader.ahk
 #Include ahk/CustomHotkeysBridge.ahk

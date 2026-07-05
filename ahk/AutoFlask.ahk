@@ -79,6 +79,9 @@ UpdateRadarFast()
         TryAutoPilot(radarSnap)
         Profiler.End("tick.autopilot")
 
+        ; ── Macro "enemy animation" live capture — only when the editor armed it ──
+        TryHkAnimCapture(radarSnap)
+
         ; ── Standalone combat presence ──────────────────────────────────────
         ; The AutoPilot loop only maintains g_combatState while it is enabled.
         ; When the bot is off but a feature needs combat (e.g. a Vitals bar with

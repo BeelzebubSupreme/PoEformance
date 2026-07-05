@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.187`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.188`.
 
 ## Language
 
@@ -1686,6 +1686,19 @@ action (a dodge/guard/defensive key, a flask, a chain) — not under Automation.
 - **Collecting ids for a specific boss attack:** still discoverable via the Entities tab → a monster
   → Actor → `animationId` while it attacks; but for anything with a known name you now just search it.
   Attach the hotkey's normal key action (dodge / guard / flask) as the reaction.
+- **Live capture (0.45.13.188) — `ahk/HkAnimCapture.ahk`:** the discovery killer. A "👁 live" toggle on
+  the enemyAnim leaf arms capture; the user stands near the monster/boss, lets it attack, and clicks
+  the animation that lit up — no ids or names needed. `TryHkAnimCapture(radarSnap)` (from
+  `UpdateRadarFast`, NO-OP unless armed) scans the awake sample for hostile monsters and accumulates
+  each `decodedComponents["actor"]["animationId"]` into `g_hkAnimCapSeen` (id→count/last/nearest-dist),
+  resets on area change, prunes entries older than 8 s, and pushes `updateAnimCapture([{id,count,dist,
+  age}])` to the WebView ~4 Hz. Bridge `HkAnimCaptureStart`/`HkAnimCaptureStop`; `LoadHkAnimCapture()`
+  seeds globals (no persistence — transient tool). UI: `hkAnimCapToggle` arms one leaf at a time (also
+  stopped on macro-tab exit + on deleting the armed leaf); `updateAnimCapture` renders a clickable
+  live strip under the leaf (name via `ANIM_NAMES`, ×count · dist, a red "fresh" glow when age<700 ms),
+  each row calling `hkAnimAddId` to add its id. Verified in the browser preview: leaf render (chips +
+  search + live button), the strip populates/sorts/labels (known + unknown ids, fresh glow), and the
+  empty state — end to end.
 - **Removed:** `ahk/CombatReaction.ahk` + its wiring (`#Include`, `LoadCombatReaction`,
   `TryCombatReaction`, `SetCombatReaction`, the `combatReaction` header, the Automation → AutoPilot
   "⚔️ Combat Reaction" UI section + `combatReactionSyncFromHeader`).
