@@ -84,6 +84,8 @@ class PoefRadarProto
     static P_ACTOR     := 0x0040               ; actor component present
     static P_TGTVAL    := 0x0080               ; the targetable bare-bool VALUE (isTargetable)
     static P_LIFEALIVE := 0x0100               ; life isAlive value
+    static P_SLEEPING  := 0x0200               ; record is a SLEEPING entity (else awake) — reader
+                                               ; publishes sleeping too so Main need not scan them
 
     ; Chest bitfield (R_CHESTBITS)
     static C_OPENED    := 0x01

@@ -3371,11 +3371,14 @@ class PoE2GameStateReader extends PoE2InventoryReader
         cacheErrors := 0
         cache := this._radarEntityCache
         awakeSample := []
+        consumedSleepingSample := 0   ; set from the reader's published sleeping list on a consume tick
         if (ReaderConsumeEnabled())
         {
             rd := ConsumeReaderRadarSample(currentAreaHash)
             if (rd is Map && rd.Has("sample"))
             {
+                if (rd.Has("sleepingSample") && (rd["sleepingSample"] is Array))
+                    consumedSleepingSample := rd["sleepingSample"]
                 for _, entry in rd["sample"]
                 {
                     eid := entry.Has("id") ? entry["id"] : 0
@@ -3637,7 +3640,14 @@ class PoE2GameStateReader extends PoE2InventoryReader
         ; Once the cache is >90% full (steady state), scan sleeping entities with a small limit.
         sleepingMapAddress := awakeMapAddress + (PoE2Offsets.AreaInstance["SleepingEntities"] - PoE2Offsets.AreaInstance["AwakeEntities"])  ; next std::map in EntityListStruct
         emptyEntitySummary := Map("address", 0, "size", 0, "sample", [], "sampleCount", 0)
-        if (isZoneLoading)
+        if (consumed && (consumedSleepingSample is Array))
+        {
+            ; Stage 3c: the reader publishes sleeping entities too, so on a consume tick Main NEVER scans
+            ; the sleeping std::map itself (that traversal is the 100s-of-ms cost read.sleep used to show).
+            sleepingEntities := Map("address", sleepingMapAddress, "size", consumedSleepingSample.Length,
+                "sample", consumedSleepingSample, "sampleCount", consumedSleepingSample.Length)
+        }
+        else if (isZoneLoading)
         {
             sleepingEntities := emptyEntitySummary
         }
@@ -4082,10 +4092,61 @@ class PoE2GameStateReader extends PoE2InventoryReader
         sample := this.ReadAwakeEntitiesFlat(areaInstanceData, currentAreaHash, playerOrigin)
         rawCount := this.HasOwnProp("_flatRawCount") ? this._flatRawCount : sample.Length
 
+        ; Publish the SLEEPING entities too (throttled reader-side), tagged so Main routes them to
+        ; sleepingEntities and never scans the sleeping std::map itself on a consume tick.
+        sleeping := this._ReaderSleepingSample(areaInstanceData, currentAreaHash, playerOrigin)
+        for _, se in sleeping
+        {
+            if (se is Map)
+            {
+                se["_sleeping"] := true
+                sample.Push(se)
+            }
+        }
+
         px := (playerOrigin is Map && playerOrigin.Has("x")) ? playerOrigin["x"] : 0.0
         py := (playerOrigin is Map && playerOrigin.Has("y")) ? playerOrigin["y"] : 0.0
         pz := (playerOrigin is Map && playerOrigin.Has("z")) ? playerOrigin["z"] : 0.0
         return Map("sample", sample, "rawCount", rawCount, "areaHash", currentAreaHash, "playerX", px, "playerY", py, "playerZ", pz)
+    }
+
+    ; Reader-side SLEEPING-entity sample, throttled to ~750 ms (the sleeping std::map traversal is
+    ; expensive — 100s of ms in a dense area). Cached per area so most reader ticks reuse it and the
+    ; publish cadence stays tight; Main consumes the published sleeping list instead of scanning it.
+    _ReaderSleepingSample(areaInstanceData, currentAreaHash, playerOrigin)
+    {
+        if !this.HasOwnProp("_flatSleepingCache")
+        {
+            this._flatSleepingCache := []
+            this._flatSleepingTick := 0
+            this._flatSleepingArea := 0
+        }
+        if (currentAreaHash != this._flatSleepingArea)
+        {
+            this._flatSleepingCache := []
+            this._flatSleepingTick := 0
+            this._flatSleepingArea := currentAreaHash
+        }
+        now := A_TickCount
+        if (this._flatSleepingTick != 0 && (now - this._flatSleepingTick) < 750)
+            return this._flatSleepingCache
+
+        sleepingLimit := this.RadarSleepingEntityLimit
+        if (sleepingLimit <= 0)
+        {
+            this._flatSleepingCache := []
+            this._flatSleepingTick := now
+            return this._flatSleepingCache
+        }
+
+        sleepingMapAddress := areaInstanceData + PoE2Offsets.AreaInstance["SleepingEntities"]
+        summary := 0
+        try summary := this.ReadAreaEntityMapSummaryForRadar(sleepingMapAddress, sleepingLimit, playerOrigin)
+        catch
+            summary := 0
+        this._flatSleepingCache := (summary is Map && summary.Has("sample")) ? summary["sample"] : []
+        this._flatSleepingTick := now
+        return this._flatSleepingCache
     }
 
     ; Records a deep-scan entry in the per-path "needs refine" queue so the

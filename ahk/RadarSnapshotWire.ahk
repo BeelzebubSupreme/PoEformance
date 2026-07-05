@@ -88,6 +88,8 @@ _RadarPackEntry(blk, entry, entity, idx, intern, &cursor)
     presence  := 0
     chestBits := 0
     reaction  := 0
+    if (entry.Has("_sleeping") && entry["_sleeping"])
+        presence |= PoefRadarProto.P_SLEEPING
     worldX := 0.0, worldY := 0.0, worldZ := 0.0, terrainH := 0.0
     rarity := 0, animId := 0, curHP := 0, maxHP := 0, lifePct := 0.0
     renderAddr := 0, lifeAddr := 0, chestAddr := 0
@@ -273,13 +275,21 @@ RadarWireUnpack(blk, lock)
     if (count > PoefRadarProto.MAX_RECORDS)
         count := PoefRadarProto.MAX_RECORDS
 
+    ; Split awake vs sleeping (the P_SLEEPING bit) into two arrays so Main routes them like its own scan.
     sample := []
+    sleepingSample := []
     idx := 0
     while (idx < count)
     {
         entry := _RadarUnpackEntry(p, idx)
         if (entry)
-            sample.Push(entry)
+        {
+            recOff := PoefRadarProto.O_RECORDS + idx * PoefRadarProto.RECORD_SIZE
+            if (NumGet(p + recOff + PoefRadarProto.R_PRESENCE, "UInt") & PoefRadarProto.P_SLEEPING)
+                sleepingSample.Push(entry)
+            else
+                sample.Push(entry)
+        }
         idx += 1
     }
 
@@ -292,7 +302,8 @@ RadarWireUnpack(blk, lock)
         "playerZ", NumGet(p + PoefRadarProto.O_PLAYERZ, "Float"),
         "truncated", NumGet(p + PoefRadarProto.O_TRUNC, "UInt"),
         "rawCount", NumGet(p + PoefRadarProto.O_RAWCOUNT, "UInt"),
-        "sample", sample)
+        "sample", sample,
+        "sleepingSample", sleepingSample)
 }
 
 ; Copies the whole block into a stable Buffer (the seqlock retry re-runs THIS only; the expensive

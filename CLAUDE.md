@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.215`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.216`.
 
 ## Language
 
@@ -1968,6 +1968,24 @@ toggle keeps it separable from 3b so the parity check can gate it.
   is acceptable; AutoPilot re-reads player pos + targetable live). Expected: fallback down, `tick.read`
   toward ~10-15 ms. If fallback stays high, the reader tick itself needs slimming (it also runs
   `ReadAutoFlaskSnapshot` each tick) or the sleeping scan moves to the reader too.
+- **Reader-tick slimming + sleeping in the reader (0.45.13.215–216):** two follow-ups to push more
+  ticks onto the cheap consume path and drop Main's residual `read.sleep`.
+  - **0.45.13.215 — cache the reader's inGameState resolve.** `poef_reader.ahk` called
+    `ReadAutoFlaskSnapshot` (the 12-state ~15-RPM resolve loop) every 50 ms tick just to get the
+    inGameState address for the publish scan. Now it caches the resolve and re-runs it at most every
+    ~500 ms; the publish scan reuses the cached address and self-guards on an invalid areaInstance (a
+    stale address just yields no publish → Main falls back). Invalidated on reconnect.
+  - **0.45.13.216 — publish SLEEPING entities from the reader.** The sleeping std::map scan (100s of ms
+    in a dense area) was the residual `read.sleep`. New `PoefRadarProto.P_SLEEPING` record bit;
+    `_ReaderSleepingSample` (reader-side, THROTTLED ~750 ms per area so the reader tick stays tight)
+    reads the sleeping sample and `ReadAwakeFlatForPublish` appends it to the published records tagged
+    `_sleeping`; `RadarWirePack` sets the bit, `RadarWireUnpack` SPLITS records into `sample` (awake) +
+    `sleepingSample`. Main's consume routes `sleepingSample` straight into `sleepingEntities` and NEVER
+    scans the sleeping map on a consume tick (fallback ticks still scan locally, throttled). Verified
+    offline: `radar_wire_test.ahk` 29/29 (awake/sleeping split) + `h_sleep.ahk` linear split test.
+  - **Pending in-game verification:** re-measure — fallback rate (`read.ent.decode.new` calls /
+    `read.entities` calls) should fall and `read.sleep` should approach ~0 on consume ticks, pushing
+    `tick.read` toward ~10-15 ms; confirm sleeping NPCs / radar dots still appear.
 
 ## Reference
 
