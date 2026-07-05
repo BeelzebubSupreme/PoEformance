@@ -3291,6 +3291,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
             zoneScanReady := false
         }
 
+        Profiler.Begin("read.ent.zonescan")
         if (zoneScanReady)
         {
             scanStart := A_TickCount
@@ -3346,8 +3347,11 @@ class PoE2GameStateReader extends PoE2InventoryReader
             }
         }
 
+        Profiler.End("read.ent.zonescan")
+
         ; Step 1: Full tree scan — get all entityId → rawPtr
         ; Throttle BFS to every 200ms; reuse cached results on intermediate ticks.
+        Profiler.Begin("read.ent.bfs")
         bfsInterval := 200
         doFullBfs := !this._radarLastBfsTick
             || (nowTick - this._radarLastBfsTick) >= bfsInterval
@@ -3378,6 +3382,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
             currentEntities := this._radarLastCurrentEntities
             fullAwakeRawPtrs := this._radarLastFullAwakeRawPtrs
         }
+        Profiler.End("read.ent.bfs")
         mapSize := currentEntities.Count
 
         ; Step 2+3: Update cache — new entities get full decode, existing get cheap update
@@ -3412,6 +3417,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
         }
 
         ; ── Phase 2: Decode new + changed entities (priority budget) ─────
+        Profiler.Begin("read.ent.decode")
         decodeDeadline := A_TickCount + decodeBudgetMs
         this._radarMode := true
 
@@ -3470,7 +3476,10 @@ class PoE2GameStateReader extends PoE2InventoryReader
                 cacheErrors += 1
         }
 
+        Profiler.End("read.ent.decode")
+
         ; ── Phase 3: Cheap updates (time-budgeted, round-robin) ──────────
+        Profiler.Begin("read.ent.cheap")
         ; Build array of cached entity IDs for round-robin traversal.
         ; Start from where we left off last tick so every entity gets updated eventually.
         cachedIds := []
@@ -3504,6 +3513,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
             }
             this._cheapUpdateOffset := Mod(offset + cheapUpdateCount, Max(cachedCount, 1))
         }
+        Profiler.End("read.ent.cheap")
         this._radarMode := false
 
         ; Step 4: Remove entities no longer in the tree
