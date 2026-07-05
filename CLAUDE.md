@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.188`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.189`.
 
 ## Language
 
@@ -1699,6 +1699,21 @@ action (a dodge/guard/defensive key, a flask, a chain) — not under Automation.
   each row calling `hkAnimAddId` to add its id. Verified in the browser preview: leaf render (chips +
   search + live button), the strip populates/sorts/labels (known + unknown ids, fresh glow), and the
   empty state — end to end.
+- **Turbo fishing path (0.45.13.189):** short animations (a 200–400 ms slam) can slip past the normal
+  round-robin sample, and the 50 ms tick's GDI + secondary reads block the single AHK thread. So while
+  armed, capture TAKES OVER the radar tick with a stripped fast loop: `StartHkAnimCapture` bumps the
+  `UpdateRadarFast` timer to `g_hkFishIntervalMs` (10 ms) and the tick early-branches to
+  `HkAnimFishTick()` (returns before ANY GDI overlay / AutoPilot / loot / alerts / stash / … run).
+  `HkAnimFishTick` refreshes the monster Actor-address list only ~every `g_hkFishHeavyMs` (300 ms) via
+  one `ReadRadarSnapshot()` (`_HkFishCollectMonsters` → hostile/targetable/non-friendly monsters'
+  Actor comp addr + dist), and EVERY tick reads each animationId DIRECTLY (`Mem.ReadInt(addr +
+  Actor.AnimationId)`) into `g_hkAnimCapSeen` — a ~10 ms sample rate that reliably catches brief
+  animations (they also linger 8 s in the feed so there's time to click). UI push stays throttled
+  (`g_hkFishPushMs` 45 ms). `StopHkAnimCapture` restores the normal `g_hkFishNormalMs` (50 ms) tick.
+  Overlays freeze on their last frame during fishing (acceptable for a brief, deliberate mode).
+  **Pending in-game verification:** arm 👁, stand at a boss, let it do a quick attack → the brief
+  animation should still appear (and glow "fresh"); confirm the overlays resume and the tick returns
+  to normal on stop.
 - **Removed:** `ahk/CombatReaction.ahk` + its wiring (`#Include`, `LoadCombatReaction`,
   `TryCombatReaction`, `SetCombatReaction`, the `combatReaction` header, the Automation → AutoPilot
   "⚔️ Combat Reaction" UI section + `combatReactionSyncFromHeader`).

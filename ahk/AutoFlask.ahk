@@ -34,6 +34,19 @@ UpdateRadarFast()
         if !IsObject(g_reader)
             return
 
+        ; ── Live enemy-animation FISHING (turbo) ─────────────────────────────
+        ; While the macro editor arms capture, take a stripped, fast path: no GDI
+        ; overlays, no AutoPilot / loot / alerts / stash / anything else — just a
+        ; high-rate direct read of nearby monsters' animationId so very short
+        ; animations are caught. StartHkAnimCapture already bumped this timer to
+        ; ~10 ms; StopHkAnimCapture restores 50 ms.
+        global g_hkAnimCapOn
+        if (IsSet(g_hkAnimCapOn) && g_hkAnimCapOn)
+        {
+            HkAnimFishTick()
+            return
+        }
+
         radarReadStart := A_TickCount
         Profiler.Begin("tick.read")
         radarSnap := g_reader.ReadRadarSnapshot()
@@ -78,9 +91,6 @@ UpdateRadarFast()
         Profiler.Begin("tick.autopilot")
         TryAutoPilot(radarSnap)
         Profiler.End("tick.autopilot")
-
-        ; ── Macro "enemy animation" live capture — only when the editor armed it ──
-        TryHkAnimCapture(radarSnap)
 
         ; ── Standalone combat presence ──────────────────────────────────────
         ; The AutoPilot loop only maintains g_combatState while it is enabled.
