@@ -698,8 +698,9 @@ class PoE2InventoryReader extends PoE2PlayerReader
         ; per-base-type StackSizeData descriptor holding per-CONTAINER caps:
         ; +0x28 = normal-inventory max (Scroll of Wisdom = 40), +0x20 = the
         ; expanded stash/currency-tab max (Wisdom = 5000). Verified in-game
-        ; 2026-07-04 across a full currency tab. The caller picks the right one
-        ; by inventoryId (backpack → Normal, stash tab → Tab). All 0 for
+        ; 2026-07-04 across a full currency tab. This reader exposes both caps; a consumer
+        ; can pick a display max without container detection by using the smallest cap
+        ; that fits the current Count (Count <= MaxStack ? MaxStack : MaxStackTab). All 0 for
         ; non-stackable items (no Stack component) so the UI hides the badge.
         stackCount := 0, stackMax := 0, stackMaxTab := 0
         try
