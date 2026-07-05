@@ -11579,6 +11579,16 @@
         if (val === 1 || val === '1' || val === true)  return '✓ yes';
         if (val === 0 || val === '0' || val === false) return '✗ no';
       }
+      // Resolve the Actor animationId to a human-readable CastType name
+      // (ANIM_NAMES from animation_names.js). Show "<id> · <name>" so the
+      // raw value stays visible; "(unknown)" for ids not in the enum.
+      if (key === 'animationId') {
+        const n = Number(val);
+        if (Number.isFinite(n)) {
+          const nm = (typeof ANIM_NAMES !== 'undefined') ? ANIM_NAMES[n] : undefined;
+          return nm ? (n + ' · ' + nm) : (n + ' · (unknown)');
+        }
+      }
       return String(val);
     }
     function eiPrettyValueClass(key, val) {
