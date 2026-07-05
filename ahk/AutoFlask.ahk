@@ -40,8 +40,11 @@ UpdateRadarFast()
         ; high-rate direct read of nearby monsters' animationId so very short
         ; animations are caught. StartHkAnimCapture already bumped this timer to
         ; ~10 ms; StopHkAnimCapture restores 50 ms.
-        global g_hkAnimCapOn
-        if (IsSet(g_hkAnimCapOn) && g_hkAnimCapOn)
+        ; The out-of-process fisher (proc mode) does NOT hijack the tick — it runs in a separate
+        ; process and Main just publishes/reads via shared memory in the normal flow below
+        ; (TryHkAnimFishPublish). Only the inproc FALLBACK takes over the tick with the turbo loop.
+        global g_hkAnimCapOn, g_hkFishMode
+        if (IsSet(g_hkAnimCapOn) && g_hkAnimCapOn && IsSet(g_hkFishMode) && g_hkFishMode = "inproc")
         {
             HkAnimFishTick()
             return
@@ -86,6 +89,11 @@ UpdateRadarFast()
         }
         g_radarLastSnap := radarSnap  ; cache for Dump Entities button
         HotkeyBindingsOnAreaChange(radarSnap)
+
+        ; ── Anim-fishing (out-of-process sampler) — publish addresses + render the digest ──
+        ; No-op unless the live capture is armed in proc mode; the fisher process does the 10 ms
+        ; reads, so this stays cheap and the overlays below keep rendering at the normal cadence.
+        TryHkAnimFishPublish(radarSnap)
 
         ; ── AutoPilot (state machine: combat → explore, owns shared guards) ──
         Profiler.Begin("tick.autopilot")
