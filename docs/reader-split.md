@@ -211,11 +211,17 @@ Each stage is independently shippable and reversible.
      `ReadAwakeEntitiesFlat` currently DUPLICATES the live scan's orchestration (reusing the same
      underlying helpers) — the duplication resolves in 3c when Main's inline scan is replaced by
      consuming the reader.
-   - **3c — Main consumes with fallback (pending, in-game only).** Once 3b parity is confirmed
-     in-game, gate Main to SPLICE the unpacked sample into its otherwise-locally-read snapshot when
-     the reader frame is fresh + area-hash matches (else fall back to Main's own `ReadRadarSnapshot`),
-     and SKIP Main's own entity scan for the ~40 ms win. zoneScan refine + `_FilterStaleRadarEntities`
-     (which also feeds LootTracker kills) stay Main-side on the reconstructed sample.
+   - **3c — Main consumes with fallback ✅ (0.45.13.210), pending in-game verify.** In-game 3b parity
+     confirmed byte-perfect in the settled state (matched N/N, 0 path/pos mismatch, only-in-main 0;
+     the nonzero cases were pure temporal skew / one stale publish). 3c adds a SECOND opt-in toggle
+     `[Diagnostics] readerConsume` (needs `readerProcess` on): when set, `ReadRadarSnapshot` calls
+     `ConsumeReaderRadarSample(currentAreaHash)` — a FRESHNESS gate (reader `O_RDHEART` age < 300 ms)
+     + AREA gate — and on success rebuilds the awake sample from the reader's records (junk-filtered
+     Main-side) and SKIPS its own BFS/decode/cheap (the ~40 ms win), wrapped in `if (!consumed)`. Any
+     failure → `consumed=false` → Main runs its own scan exactly as today (never worse). zoneScan
+     refine + `_FilterStaleRadarEntities` (feeds LootTracker kills; live-re-reads Targetable from the
+     carried component address so death detection stays fresh) run on the reconstructed sample.
+     `RadarTimings["consumed"]` flags which path ran.
 4. **On-demand decode channel** — WM_COPYDATA request/reply for the inspector/hover full decode.
 5. **DPS sampler** — the first real payoff of the infrastructure: the detailed DPS meter / death
    recap as its own sampler process.

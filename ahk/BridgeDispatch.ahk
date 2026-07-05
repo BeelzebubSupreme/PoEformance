@@ -222,6 +222,11 @@ _DispatchBridgeCall(method, args)
         case "RadarConsumeDiag":
             ; Stage-3b verification: MsgBox the reader's published awake sample vs Main's live sample.
             SetTimer(RadarConsumeDiagnose, -1)
+        case "SetReaderConsume":
+            ; Reader-split stage 3c: toggle whether Main CONSUMES the reader's sample ([Diagnostics] readerConsume).
+            if (args.Length >= 1)
+                SetReaderConsume(args[1])
+            SetTimer(PushHeaderToWebView, -50)
         case "SetAutoPilotStatusLog":
             ; Persistent AutoPilot status file-log toggle ([Diagnostics] apStatusLog). args[1]=on.
             if (args.Length >= 1)

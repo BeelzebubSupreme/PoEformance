@@ -159,6 +159,7 @@ PushHeaderToWebView()
         . ',"overlayPlacement":' BuildOverlayPlacementHeaderJson()
         . ',"startupTrace":' BuildStartupTraceHeaderJson()
         . ',"readerProcess":' BuildReaderProcessHeaderJson()
+        . ',"readerConsume":' BuildReaderConsumeHeaderJson()
         . ',"apStatusLog":' BuildAutoPilotStatusLogHeaderJson()
         . ',"customLandmarks":' BuildCustomLandmarksHeaderJson()
         . "}"

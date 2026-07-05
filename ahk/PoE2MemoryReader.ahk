@@ -3351,8 +3351,52 @@ class PoE2GameStateReader extends PoE2InventoryReader
 
         Profiler.End("read.ent.zonescan")
 
+        ; ── Reader-split stage 3c: consume the reader's published sample if fresh + area matches ──
+        ; When the persistent reader process is publishing a FRESH snapshot for THIS area, Main skips
+        ; its own ~40 ms entity scan (BFS + decode + cheap) and rebuilds the awake sample from the
+        ; reader's flat records instead. Junk is filtered HERE (config-dependent, Main-side);
+        ; currentEntities/fullAwakeRawPtrs are built from the FULL reader set (incl. junk) so the stale
+        ; filter's network-bubble check still works. ANY failure — consume disabled, reader off/stale,
+        ; area-mismatch, or a mid-write unpack collision — leaves consumed=false and Main runs its own
+        ; scan below, exactly as today (never worse). The Main-side zoneScan + _FilterStaleRadarEntities
+        ; (which feeds LootTracker kills) then run on the reconstructed sample unchanged.
+        consumed := false
+        currentEntities := Map()
+        fullAwakeRawPtrs := Map()
+        mapSize := 0
+        isZoneLoading := false
+        newDecodeCount := 0
+        cheapUpdateCount := 0
+        cacheErrors := 0
+        cache := this._radarEntityCache
+        awakeSample := []
+        if (ReaderConsumeEnabled())
+        {
+            rd := ConsumeReaderRadarSample(currentAreaHash)
+            if (rd is Map && rd.Has("sample"))
+            {
+                for _, entry in rd["sample"]
+                {
+                    eid := entry.Has("id") ? entry["id"] : 0
+                    rp := entry.Has("entityRawPtr") ? entry["entityRawPtr"] : 0
+                    if (eid > 0)
+                        currentEntities[eid] := rp
+                    if (rp > 0)
+                        fullAwakeRawPtrs[rp] := true
+                    jent := entry.Has("entity") ? entry["entity"] : 0
+                    if (jent is Map && IsJunkEntity(jent.Has("path") ? jent["path"] : ""))
+                        continue
+                    awakeSample.Push(entry)
+                }
+                mapSize := currentEntities.Count
+                consumed := true
+            }
+        }
+
         ; Step 1: Full tree scan — get all entityId → rawPtr
         ; Throttle BFS to every 200ms; reuse cached results on intermediate ticks.
+        if (!consumed)
+        {
         Profiler.Begin("read.ent.bfs")
         bfsInterval := 200
         doFullBfs := !this._radarLastBfsTick
@@ -3568,6 +3612,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
                 continue
             awakeSample.Push(entry)
         }
+        }   ; end if (!consumed) — stage 3c
 
         awakeEntities := Map(
             "address", awakeMapAddress,
@@ -3772,7 +3817,8 @@ class PoE2GameStateReader extends PoE2InventoryReader
             "cacheErrors", cacheErrors,
             "filterPre", filterPre,
             "filterPost", filterPost,
-            "filterBL", filterBL
+            "filterBL", filterBL,
+            "consumed", consumed ? 1 : 0
         )
 
         return Map(

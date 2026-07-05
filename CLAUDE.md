@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.209`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.210`.
 
 ## Language
 
@@ -1864,7 +1864,7 @@ yet #Included by the running app, so it touches zero hot-path code.
   interpreter refuses function definitions interspersed between top-level executable statements —
   group all `func(){}` defs before the executable body (or the whole script fails to load with no
   runtime error / OnError never fires).
-### Stage 3b: reader publishes the awake sample + parity diagnostic (0.45.13.209)
+### Stage 3b: reader publishes the awake sample + parity diagnostic (0.45.13.210)
 
 The reader now PACKS the awake-entity sample into the radar block each tick, and Main cross-checks it
 against its own live sample — the gate before stage 3c flips Main to CONSUME it. Same safe posture as
@@ -1906,6 +1906,46 @@ untouched** (it just reads the block on demand for the check).
   repeatedly — the frame counter should climb, areaHash should MATCH, matched-by-id should be most of
   Main's sample, path/pos mismatches 0, and "only in main" 0 (the reader's extra entries are the junk
   Main filters). That confirms the reader builds the same awake sample Main does, gating stage 3c.
+- **Verified in-game (2026-07-05, stage 3b):** parity is byte-perfect in the SETTLED state — a stable
+  area with a fresh reader heartbeat gave matched 25/25, path mismatch 0, pos mismatch 0, only-in-main
+  0, areaHash MATCH. The nonzero mismatches seen while moving/in combat (a few pos/only-in-main) are
+  pure TEMPORAL SKEW (two async scans sampling at slightly different instants), and one sample with a
+  ~20 s stale heartbeat was a frozen publish — both are exactly what stage 3c's freshness gate handles.
+
+### Stage 3c: Main consumes the reader's sample, with fallback (0.45.13.210)
+
+The payoff: when the reader is publishing a FRESH sample for the current area, Main skips its own
+~40 ms entity scan and rebuilds the awake sample from the reader's flat records. A SECOND opt-in
+toggle keeps it separable from 3b so the parity check can gate it.
+
+- **`ahk/PoE2MemoryReader.ahk` (`ReadRadarSnapshot`):** right after the zoneScan block, a consume
+  branch: if `ReaderConsumeEnabled()` and `ConsumeReaderRadarSample(currentAreaHash)` returns a fresh
+  same-area snapshot, Main builds `awakeSample` (junk-filtered Main-side) + `currentEntities` +
+  `fullAwakeRawPtrs` (from the FULL reader set incl. junk, so the stale filter's network-bubble check
+  still works) from the reader's records and sets `consumed=true`. The whole existing scan
+  (BFS/decode/cheap/build) is wrapped in `if (!consumed) { … }`, so on ANY failure (consume off,
+  reader off/stale/area-mismatch, mid-write unpack) Main runs its own scan exactly as today (never
+  worse). The Main-side zoneScan accumulation + `_FilterStaleRadarEntities` then run on the
+  reconstructed sample unchanged — and the filter LIVE-RE-READS the Targetable byte from the carried
+  component address, so dead-entity detection + LootTracker kill counting stay fresh even though the
+  reader's decoded targetable may lag. `RadarTimings["consumed"]` (0/1) flags which path ran.
+- **`ahk/ReaderProcess.ahk`:** `ReaderConsumeEnabled()` (both toggles on + block exists),
+  `ConsumeReaderRadarSample(currentAreaHash)` (freshness gate `O_RDHEART` age < 300 ms + area gate →
+  RadarWireUnpack, else 0), `SetReaderConsume` (persist `[Diagnostics] readerConsume`),
+  `BuildReaderConsumeHeaderJson`. `LoadReaderProcess` seeds `g_rpConsume` + reads the INI.
+- **Wiring:** `BridgeDispatch` case `SetReaderConsume`; `WebViewBridge` pushes `readerConsume`; UI
+  **Config → Debug → Diagnostic Actions**, a "📥 Consume reader sample (split stage 3c)" toggle under
+  the reader-process one (+ `reader-consume` in the header sync). Default OFF.
+- **Why a second toggle:** enabling `readerProcess` alone stays at 3b (publish + parity diagnostic, no
+  behaviour change); `readerConsume` additionally flips Main to consume — so the owner verifies parity
+  first, then A/B tests consume vs. Main's own scan.
+- **Static verification:** `PoE2MemoryReader.ahk` braces balanced (370/370) + full reader stack
+  parse-loads; `ReaderProcess`/`WebViewBridge` balanced; UI inline script `node --check` clean.
+- **Pending in-game verification:** with "🔌 Reader process" ON + parity confirmed, enable "📥 Consume
+  reader sample" → radar dots / loot / AutoPilot should behave exactly as before (the sample is now
+  the reader's, ~1 frame behind), LootTracker KILLS should still count, and area transitions should be
+  seamless (freshness/area gate → brief fallback to Main's own scan). Turning consume OFF must restore
+  the exact prior behaviour. Optionally profile `tick.read` (Shift+F3) — it should drop while consuming.
 
 ## Reference
 

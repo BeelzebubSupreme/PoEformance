@@ -22,8 +22,13 @@ LoadReaderProcess()
     ; Stage 3b: the radar snapshot block Main OWNS (creates + stamps) and the reader packs into.
     global g_rpRadarBlk := 0
     global g_rpRadarLock := 0
+    ; Stage 3c: when ON, Main CONSUMES the reader's published sample (skips its own entity scan) when
+    ; it is fresh + area-matches, else falls back to its own scan. Separate opt-in from the reader
+    ; toggle so 3b (publish + parity diagnostic) can be verified before flipping Main to consume.
+    global g_rpConsume := false
 
     try g_rpEnabled := (IniRead(_ConfigPath(), "Diagnostics", "readerProcess", "0") = "1")
+    try g_rpConsume := (IniRead(_ConfigPath(), "Diagnostics", "readerConsume", "0") = "1")
 
     try
     {
@@ -141,6 +146,56 @@ ReaderProcessDiagnose()
         . "inGameState (main):   " Format("0x{:X}", mainIngs) "`n"
         . "cross-check:    " match
     try MsgBox(msg, "Reader status")
+}
+
+; ── Stage 3c: live consume ─────────────────────────────────────────────────────────────────────────
+
+; True when Main is allowed to consume the reader's published radar sample this tick. Requires BOTH
+; opt-in toggles (reader running + consume on) and the radar block to exist. The freshness + area gates
+; live in ConsumeReaderRadarSample so a failure there just falls back to Main's own scan.
+ReaderConsumeEnabled()
+{
+    global g_rpEnabled, g_rpConsume, g_rpRadarBlk
+    return (IsSet(g_rpConsume) && g_rpConsume)
+        && (IsSet(g_rpEnabled) && g_rpEnabled)
+        && IsObject(g_rpRadarBlk)
+}
+
+; Returns the reader's freshly published radar snapshot (RadarWireUnpack result) ONLY when it is fresh
+; (published within RP_CONSUME_MAX_AGE ms) AND belongs to the CURRENT area; otherwise 0 so ReadRadarSnapshot
+; falls back to its own scan. The freshness gate turns a stale/blocked reader into staleness→fallback,
+; never a frozen or wrong-area sample.
+ConsumeReaderRadarSample(currentAreaHash)
+{
+    global g_rpRadarBlk, g_rpRadarLock
+    static RP_CONSUME_MAX_AGE := 300   ; ms; the reader publishes every ~30-110 ms, so 300 gives margin
+    if !IsObject(g_rpRadarBlk)
+        return 0
+    rdHeart := g_rpRadarBlk.GetU32(PoefRadarProto.O_RDHEART)
+    if (rdHeart = 0 || (A_TickCount - rdHeart) > RP_CONSUME_MAX_AGE)
+        return 0
+    res := RadarWireUnpack(g_rpRadarBlk, g_rpRadarLock)
+    if !(res is Map && res.Has("ok") && res["ok"])
+        return 0
+    ; Area gate — the reader may be one zone transition ahead/behind; only consume a matching area.
+    if ((res["areaHash"] & 0xFFFFFFFF) != (currentAreaHash & 0xFFFFFFFF))
+        return 0
+    return res
+}
+
+; Bridge SetReaderConsume: toggle stage-3c consumption on/off at runtime and persist it.
+SetReaderConsume(val)
+{
+    global g_rpConsume
+    g_rpConsume := _LrvTruthy(val)
+    try IniWrite(g_rpConsume ? "1" : "0", _ConfigPath(), "Diagnostics", "readerConsume")
+}
+
+; Header JSON value (bool) for the WebView push. Caller prepends the key.
+BuildReaderConsumeHeaderJson()
+{
+    global g_rpConsume
+    return (IsSet(g_rpConsume) && g_rpConsume) ? "true" : "false"
 }
 
 ; Bridge RadarConsumeDiag: unpack the reader's latest published awake sample and cross-check it against
