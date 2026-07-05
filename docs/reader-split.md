@@ -1,0 +1,219 @@
+# Reader-split architecture
+
+Status: **design / not yet built.** This document is the plan; nothing here is wired up yet.
+Version target when the pilot lands: bump as usual.
+
+## Why (the real motivation)
+
+AutoHotkey v2 is single-threaded. Every `ReadProcessMemory` (RPM) call, every component decode,
+every GDI blit and every WebView push runs on **one** timer tick (`UpdateRadarFast`, ~50–100 ms).
+So each new memory read competes with rendering and input for the same frame budget — which is why
+every read has had to be individually justified and optimised.
+
+A profiling pass (v0.45.13.192–199) already removed the worst offenders with cheap, single-process
+fixes:
+
+| Fix | Before | After |
+|---|---|---|
+| `read.world` — double player-stats read + throttle | 112 ms | 2–3 ms |
+| `radar.mask` — maphack blit → offset-scroll cache | 55 ms | 7–9 ms |
+| `read.entities` — junk pre-filter (skip decode of effects/projectiles) | decode.new 39 ms / tail 1.5 s | 25 ms / tail 0.4 s |
+
+That took a dense-combat tick from ~224 ms with 1.8 s freezes down to ~90 ms with ~400 ms hitches.
+Good — but every one of those wins required *re-thinking a mem read*.
+
+**The split is not about the current numbers. It is about headroom.** The goal is to stop having
+to re-optimise the whole tick every time a feature wants more reads. Planned features that each
+need many *continuous* reads:
+
+- **Detailed DPS meter** — which skill dealt how much, when; high-frequency life/ES-delta sampling.
+- **Death recap** — a rolling history of incoming hits/debuffs: "what actually killed me?"
+- …and more, all read-heavy.
+
+These are impossible on a shared render thread and natural in a dedicated reader. The DPS meter is
+the poster child: it needs 20–60 Hz sampling + a rolling buffer, which would blow the frame budget
+on the main thread but runs independently in its own process.
+
+## The architecture
+
+Multiple processes from **one codebase** (same repo, same `#Include`s, different entry points):
+
+```
+┌─────────────────────────────┐        shared memory        ┌──────────────────────────────┐
+│ Main  (InGameStateMonitor)  │  ◀── snapshot (double-buf) ─│ Reader "radar"               │
+│  - WebView2 / GDI overlays  │                             │  - owns RPM + base scan      │
+│  - hotkeys, BridgeDispatch  │  ── commands (WM_COPYDATA)─▶│  - bfs + decode + cheap      │
+│  - AutoPilot / StashMover   │                             │  - publishes the snapshot    │
+│  - THIN consumer + actor    │                             └──────────────────────────────┘
+│  - a few tiny local reads   │        shared memory        ┌──────────────────────────────┐
+│    (player pos, W2S matrix) │  ◀── digest ───────────────│ Sampler "dps" (later)        │
+└─────────────────────────────┘                             │  - owns raw high-freq reads  │
+                                                            │  - owns history + attribution│
+                                                            │  - publishes a compact digest│
+                                                            └──────────────────────────────┘
+```
+
+Key roles:
+
+- **Main** — never blocks on a heavy read again. It consumes finished snapshots/digests from
+  shared memory, renders, and acts (clicks, keys). It keeps only a handful of *tiny,
+  latency-critical* local reads (see below).
+- **Reader "radar"** — owns the process attach (the 48 MB module scan + `EnsureConnected`), the
+  entity BFS, decode, and cheap-update. Publishes the radar snapshot. This is the ~40 ms of
+  `read.entities` moving off Main.
+- **Sampler "dps" (and future samplers)** — the generalisable pattern: a feature that reads a lot
+  *continuously* becomes its **own** process that owns its raw reads **and** its computation, and
+  publishes only a compact **digest** (e.g. "Spark: 1.2M DPS", "death: 8400 fire from <entity>,
+  120 ms pre-death"). Main displays the digest and never touches raw memory for that feature.
+
+**Two AHK processes can both RPM the same PoE process independently** — RPM is a read-only external
+call, no lock, no conflict. This is what makes the split possible at all.
+
+## Transport
+
+| Channel | Mechanism | Used for |
+|---|---|---|
+| Hot data stream | **Shared memory** (memory-mapped file, `CreateFileMapping`/`MapViewOfFile`) | snapshot + digests, many KB, 10–60×/s |
+| Control / commands | **WM_COPYDATA** (window message) | Main→Reader: set area-reset, request full-decode of entity X, quit |
+| On-demand replies | shared-memory reply slot or WM_COPYDATA | Reader→Main: full component decode for the inspector/hover (rare) |
+
+Not TCP/Winsock for the hot path — the existing `LocalApiServer` proves Winsock works, but the
+per-request overhead is too high for a per-frame snapshot. Files/INI are far too slow. Shared
+memory is zero-copy RAM shared between processes; it is the only transport fast enough here.
+
+## Shared-memory layout
+
+One named mapping (e.g. `Local\PoEformanceRadar`, a few MB). Conceptual layout:
+
+```
+Header (fixed):
+  magic                     u32   sanity
+  wireVersion               u32   struct-format version — mismatch ⇒ refuse (catches a stale reader)
+  epoch                     u32   base-address generation (bumped on PoE restart / pointer re-resolve)
+  heartbeatTick             u32   reader liveness (Main watchdogs this)
+  activeBuffer / writeSeq   u32   seqlock (odd = mid-write)
+  resolvedStatics           …     published pointers (inGameState, areaInstance, …)
+  areaHash / isTown / …     …     small area facts
+
+Snapshot buffers  Buffer0 / Buffer1 (double, seqlock):
+  seq                       u32   per-buffer sequence (odd = writing)
+  playerRec                 …     pos, life, ES, …
+  w2sMatrix[16]             f32
+  entityCount               u32
+  entityRec[N]              …     FLAT fixed-size records (id, pos, rarity, animId, flags, path-idx)
+  stringHeap                …     interned paths; entityRec holds an index into this heap
+
+Digest region (per sampler, e.g. dps):
+  compact computed results the sampler owns (current DPS per skill, last death recap, …)
+  — optionally an append-only event ring the sampler fills and Main drains
+```
+
+### The wire format is the real work
+
+`g_radarLastSnap` is a nested AHK `Map` (entities with `decodedComponents` maps, arrays, strings).
+That cannot cross a process boundary as-is. It must become a **flat binary contract**:
+
+- **Fixed entity records** — one struct per entity with exactly the hot-path fields. Variable data
+  (paths) goes through an **interned string heap**: the reader keeps a persistent `path→index`
+  dict so the heap is stable and cheap; each record stores an index.
+- **On-demand detail** — full component decode / mods (only the inspector / UI-browser / hover need
+  it) is **not** in the hot stream. Main requests "decode entity ptr X" over the command channel;
+  the reader replies. The expensive full decode is thus paid only when someone actually looks.
+
+Maintaining this struct in two places (reader writer + Main reader) is the standing maintenance
+cost of the split. Document the layout in exactly one place and keep both sides in lock-step via
+`wireVersion`.
+
+## Consistency
+
+- **Seqlock double-buffer** (one writer, one reader): reader writes buffer A, bumps `seq`; Main
+  reads `seq` → buffer → `seq`, and if `seq` changed (or is odd) it re-reads. Lock-free, correct
+  for the single-writer/single-reader case. No tearing.
+- **Epoch** — the reader re-resolves base addresses on PoE restart / pointer invalidation and bumps
+  `epoch`; Main notices and treats prior pointers as stale.
+- **wireVersion** — both sides ship from the same repo, but a *stale running reader* after an update
+  must be caught: version mismatch ⇒ Main refuses the mapping and respawns the reader.
+
+## Offsets are NOT a sync problem
+
+`PoE2Offsets` are compile-time constants `#Include`d by both processes. They do **not** cross the
+wire — only the flat wire-struct does. So the "two things in sync" burden is just the wire-struct,
+not the (large, drift-prone) offset tables. The reader also owns the base-address scan, so all the
+pointer-drift handling that already exists stays in one place.
+
+## Latency-critical local reads stay in Main
+
+The split does **not** have to be "all reads in the reader." AutoPilot reads a *fresh* path from the
+*current* player position each click tick (the whole point of the distance-field design). Feeding
+the player position over IPC with one frame of latency would make clicks land slightly behind.
+
+So Main keeps a handful of **cheap, latency-critical** direct reads — player position, W2S matrix,
+area hash (one pointer chain each, effectively free). Only the *expensive bulk* (entity decode,
+module scan, inventory) moves to the reader. Both processes RPM-ing PoE is fine.
+
+## Lifecycle
+
+- **Main owns the reader**: `Run(...)` at startup (precedent: `LootPricing` already spawns a hidden
+  child via `Run(cmd, A_ScriptDir, "Hide", &pid)` and polls `ProcessExist`), `OnExit` kills it.
+- **Single-instance guard** — a named mutex so a restart never leaves two readers RPM-ing.
+- **Heartbeat watchdog** — Main watches `heartbeatTick`; if it goes stale (reader hung/crashed),
+  Main respawns it. The UI shows "reader: connecting/ok/restarting".
+- **Graceful degradation** — while the reader is down/behind, Main shows the last snapshot (stale)
+  instead of freezing. This is the core win: a slow/blocked read becomes *staleness*, never a
+  frozen UI.
+
+## The sampler pattern (how the DPS meter fits)
+
+Each new read-heavy feature becomes its **own** sampler process built on the same primitives:
+
+1. `#Include` the shared reader modules; attach to PoE (own RPM).
+2. Do its raw high-frequency sampling at its own rate (e.g. DPS at 20–60 Hz), keeping its **own**
+   rolling buffers / attribution state.
+3. Publish only a compact **digest** into a shared-memory region.
+4. Main reads the digest and renders it — and **never touches raw memory for that feature**.
+
+For the DPS meter specifically: the sampler owns the incoming-hit history + damage attribution;
+Main just shows "Skill X: N DPS" and "death: hit Y, 8400 fire, 120 ms pre-death". All the heavy
+buffering lives outside the render thread. Adding the next such feature is then a repeatable move
+("new sampler, new wire-struct, consume the digest"), not a per-read optimisation fight.
+
+## Staged rollout
+
+Each stage is independently shippable and reversible.
+
+0. **`docs/reader-split.md`** — this document. ✅
+1. **`ahk/SharedMem.ahk`** — the mapping + seqlock primitive (`CreateFileMapping`/`MapViewOfFile`
+   via DllCall; write/read double-buffer helpers). **Validate on the anim-fishing pilot**: move the
+   live enemy-animation capture (already an isolated, high-rate mode that today *hijacks* the tick)
+   into a tiny second process that writes the id→count table into shared memory; Main reads it in
+   its normal tick without stripping the overlays. This proves shared memory + lifecycle +
+   struct-sync at a low-risk feature before touching the radar.
+2. **Reader-process scaffolding** — spawn/kill/watchdog/heartbeat/wireVersion, `epoch`, the header.
+3. **Radar snapshot → reader** — move the entity BFS/decode/cheap to the reader; Main consumes the
+   flat snapshot; keep the tiny latency-critical local reads. This is the ~40 ms win + turns the
+   read tails into staleness.
+4. **On-demand decode channel** — WM_COPYDATA request/reply for the inspector/hover full decode.
+5. **DPS sampler** — the first real payoff of the infrastructure: the detailed DPS meter / death
+   recap as its own sampler process.
+
+## Risks / open questions
+
+- **Wire-struct maintenance** — the one real recurring cost; mitigated by `wireVersion` + a single
+  documented layout.
+- **AHK process/IPC ergonomics** — `CreateFileMapping`/`MapViewOfFile`/`WM_COPYDATA` are all
+  DllCall-able; no blocker, but needs careful buffer math (this is why stage 1 pilots it small).
+- **Two readers, one target** — confirmed safe (RPM is read-only), but double the attach logic;
+  keep it in the shared modules.
+- **Testing without the game** — the seqlock + wire pack/unpack can be unit-tested off a synthetic
+  buffer (like the earlier `ui_scale_test.ahk` offline harness) before in-game verification.
+- **Snapshot size** — cap the entity record count / string heap; `log()` if truncated so "covered
+  everything" never silently lies.
+
+## Reference
+
+- Profiling journey that led here: the `Profiler` sub-markers (`read.world.*`, `read.ent.*`,
+  `radar.mask.*`) + the `logs/InGameStateMonitor.profiler.log` windows (Shift+F3).
+- Spawn precedent: `ahk/LootPricing.ahk` (`Run` + `ProcessExist`).
+- Attach machinery to reuse in the reader: `ahk/PoE2MemoryReader.ahk` (base scan, `EnsureConnected`)
+  + `ahk/ProcessMemory.ahk` (OpenProcess / RPM).
+- Prior IPC in the codebase (not for the hot path): `ahk/LocalApiServer.ahk` (Winsock + WSAAsyncSelect).
