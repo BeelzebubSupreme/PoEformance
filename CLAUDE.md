@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.207`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.208`.
 
 ## Language
 
@@ -1864,11 +1864,48 @@ yet #Included by the running app, so it touches zero hot-path code.
   interpreter refuses function definitions interspersed between top-level executable statements —
   group all `func(){}` defs before the executable body (or the whole script fails to load with no
   runtime error / OnError never fires).
-- **Pending (stage 3b, in-game only):** extract `ReadAwakeEntitiesFlat` from `ReadRadarSnapshot`, have
-  the reader pack it, and have Main splice the unpacked sample into its otherwise-locally-read snapshot
-  when the reader frame is fresh + area-hash matches (else fall back to Main's own `ReadRadarSnapshot`).
-  zoneScan refine + `_FilterStaleRadarEntities` (which also feeds LootTracker kills) stay Main-side on
-  the reconstructed sample.
+### Stage 3b: reader publishes the awake sample + parity diagnostic (0.45.13.208)
+
+The reader now PACKS the awake-entity sample into the radar block each tick, and Main cross-checks it
+against its own live sample — the gate before stage 3c flips Main to CONSUME it. Same safe posture as
+stage 2: the reader independently produces data, a diagnostic proves parity; **Main's live path is
+untouched** (it just reads the block on demand for the check).
+
+- **`ahk/PoE2MemoryReader.ahk` — `ReadAwakeEntitiesFlat(areaInstanceData, currentAreaHash, playerOrigin)`
+  (new):** a SELF-CONTAINED copy of ReadRadarSnapshot's awake-entity scan (BFS → decode new/changed →
+  cheap-update → build sample) with its OWN cache state (`_flat*` props, separate from the live
+  `_radar*` cache so it never touches Main's hot path) and a generous decode budget (the reader has no
+  render competing). It does NOT apply the junk filter — the reader publishes everything and Main
+  derives the junk verdict on consume (config-dependent data stays in Main). Mirrors the live scan's
+  phases so the published sample matches what Main builds. **Currently DUPLICATES the live
+  orchestration** (reusing the same helpers `ScanEntityMapIdsAndPtrs`/`ReadEntityBasic`/
+  `UpdateCachedEntityRadar`/…); the duplication resolves in 3c when Main's inline scan is replaced by
+  consuming the reader.
+- **`ahk/PoE2MemoryReader.ahk` — `ReadAwakeFlatForPublish(inGameStateAddress)` (new):** resolves
+  area+player from a given inGameState addr (the reader already has it from its lightweight
+  `ReadAutoFlaskSnapshot`, so this avoids re-running the 12-state resolve) and returns
+  `Map(sample, areaHash, playerX/Y/Z)` for the wire pack.
+- **`poef_reader.ahk`:** #Includes `PoefRadarProto` + `RadarSnapshotWire`, opens the radar block by
+  name, and each in-game tick calls `ReadAwakeFlatForPublish` → `RadarWirePack` (guarded so a transient
+  read never crashes the reader or blocks its status heartbeat) + writes `O_RDHEART`.
+- **`ahk/ReaderProcess.ahk`:** Main OWNS the radar block — `LoadReaderProcess` creates it + stamps
+  MAGIC/VERSION (alongside the stage-2 status block). New `RadarConsumeDiagnose()` unpacks the reader's
+  latest sample and cross-checks it vs Main's live `g_radarLastSnap` sample: matched-by-id count, path
+  mismatch, world-X mismatch, "only in reader" (= junk Main filters, expected) and "only in main"
+  (must be 0 — Main should never have an entity the reader lacks) + areaHash MATCH + a frame counter
+  that must increase between clicks.
+- **`ahk/SharedMem.ahk` / `ahk/PoefRadarProto.ahk`:** `O_RDHEART` added to the radar block header
+  (reader heartbeat) so the diagnostic can show the publish liveness.
+- **Wiring:** `BridgeDispatch` case `RadarConsumeDiag` → `RadarConsumeDiagnose`; UI **Config → Debug →
+  Diagnostic Actions**, next to "🔌 Reader status", a "📡 Radar parity" button (in the reader-process
+  help block).
+- **Static verification:** the full reader stack (`poef_reader.ahk` include chain) parse-loads clean
+  (offline harness `ld_reader.ahk` confirms both new methods exist on the class), the reader entry
+  point loads and self-exits correctly when Main's run flag isn't set, and all edited files brace-check.
+- **Pending in-game verification:** enable "🔌 Reader process", get in-game, click "📡 Radar parity"
+  repeatedly — the frame counter should climb, areaHash should MATCH, matched-by-id should be most of
+  Main's sample, path/pos mismatches 0, and "only in main" 0 (the reader's extra entries are the junk
+  Main filters). That confirms the reader builds the same awake sample Main does, gating stage 3c.
 
 ## Reference
 

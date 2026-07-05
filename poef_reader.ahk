@@ -16,6 +16,8 @@
 #Warn All, Off
 #Include ahk/SharedMem.ahk
 #Include ahk/PoefReaderProto.ahk
+#Include ahk/PoefRadarProto.ahk
+#Include ahk/RadarSnapshotWire.ahk
 #Include ahk/PoE2MemoryReader.ahk
 
 g_blk := 0
@@ -23,6 +25,12 @@ try g_blk := SharedMemBlock(PoefReaderProto.NAME, PoefReaderProto.SIZE)
 if !IsObject(g_blk)
     ExitApp
 g_lock := SeqLock(g_blk, PoefReaderProto.O_SEQ)
+
+; Radar snapshot block (stage 3b): opened by name (Main creates + stamps MAGIC/VERSION as owner). The
+; reader packs the awake sample here each tick; Main cross-checks it against its own live snapshot.
+g_radarBlk := 0
+try g_radarBlk := SharedMemBlock(PoefRadarProto.NAME, PoefRadarProto.SIZE)
+g_radarLock := IsObject(g_radarBlk) ? SeqLock(g_radarBlk, PoefRadarProto.O_SEQ) : 0
 
 g_reader := PoE2GameStateReader()
 g_connected := false
@@ -76,6 +84,22 @@ ReaderTick()
             }
         }
         g_reads += 1
+
+        ; Stage 3b: when in-game, run the awake-entity scan and PUBLISH the flat snapshot. Guarded so a
+        ; transient read failure can never crash the reader or block its status heartbeat above.
+        if (g_connected && stateCode = 1 && IsObject(g_radarBlk) && ings != 0)
+        {
+            try
+            {
+                pub := g_reader.ReadAwakeFlatForPublish(ings)
+                if (pub is Map)
+                {
+                    RadarWirePack(g_radarBlk, g_radarLock, pub["sample"],
+                        pub["playerX"], pub["playerY"], pub["playerZ"], pub["areaHash"])
+                    g_radarBlk.PutU32(PoefRadarProto.O_RDHEART, now)
+                }
+            }
+        }
 
         g_lock.WriteBegin()
         g_blk.PutU32(PoefReaderProto.O_RD_HEART, now)

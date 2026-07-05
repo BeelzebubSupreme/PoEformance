@@ -219,6 +219,9 @@ _DispatchBridgeCall(method, args)
         case "ReaderProcessDiag":
             ; Stage-2 verification: MsgBox the reader's live status + inGameState cross-check.
             SetTimer(ReaderProcessDiagnose, -1)
+        case "RadarConsumeDiag":
+            ; Stage-3b verification: MsgBox the reader's published awake sample vs Main's live sample.
+            SetTimer(RadarConsumeDiagnose, -1)
         case "SetAutoPilotStatusLog":
             ; Persistent AutoPilot status file-log toggle ([Diagnostics] apStatusLog). args[1]=on.
             if (args.Length >= 1)

@@ -199,10 +199,23 @@ Each stage is independently shippable and reversible.
      component combo, unicode paths, the three shape nuances, 600→512 truncation + flag, and a
      mid-write seqlock collision → `ok=false`). NOT yet wired into the running app (zero hot-path
      touch) — 3b does that.
-   - **3b — reader publishes + Main consumes with fallback (pending).** Extract the awake-entity
-     scan into `ReadAwakeEntitiesFlat`, have the reader pack it, and have Main splice the unpacked
-     sample into its otherwise-locally-read snapshot when the reader is fresh + area-hash matches
-     (else fall back to Main's own `ReadRadarSnapshot`). In-game verification only.
+   - **3b — reader publishes + parity diagnostic ✅ (0.45.13.208).** `PoE2MemoryReader` gains
+     `ReadAwakeEntitiesFlat` (a self-contained copy of the awake-entity scan with its OWN `_flat*`
+     cache, no junk filter → publishes everything) + `ReadAwakeFlatForPublish` (resolves area+player
+     from a given inGameState addr). The reader (`poef_reader.ahk`) packs it into the radar block
+     each tick; Main OWNS the block (`ReaderProcess.ahk` creates + stamps it) and a diagnostic
+     `RadarConsumeDiagnose` (bridge `RadarConsumeDiag`, UI "📡 Radar parity") unpacks the reader's
+     sample and cross-checks it against Main's live sample (matched-by-id count, path/pos parity,
+     "only in main" must be 0). Main's LIVE PATH IS UNTOUCHED — the reader just publishes and Main
+     just cross-checks, exactly like stage 2's inGameState cross-check. In-game verification pending.
+     `ReadAwakeEntitiesFlat` currently DUPLICATES the live scan's orchestration (reusing the same
+     underlying helpers) — the duplication resolves in 3c when Main's inline scan is replaced by
+     consuming the reader.
+   - **3c — Main consumes with fallback (pending, in-game only).** Once 3b parity is confirmed
+     in-game, gate Main to SPLICE the unpacked sample into its otherwise-locally-read snapshot when
+     the reader frame is fresh + area-hash matches (else fall back to Main's own `ReadRadarSnapshot`),
+     and SKIP Main's own entity scan for the ~40 ms win. zoneScan refine + `_FilterStaleRadarEntities`
+     (which also feeds LootTracker kills) stay Main-side on the reconstructed sample.
 4. **On-demand decode channel** — WM_COPYDATA request/reply for the inspector/hover full decode.
 5. **DPS sampler** — the first real payoff of the infrastructure: the detailed DPS meter / death
    recap as its own sampler process.

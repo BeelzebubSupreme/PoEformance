@@ -3803,6 +3803,219 @@ class PoE2GameStateReader extends PoE2InventoryReader
         )
     }
 
+    ; ── Reader-split stage 3b: publish-side awake-entity scan ─────────────────────────────────────
+    ; A self-contained copy of ReadRadarSnapshot's awake-entity scan (BFS → decode new/changed →
+    ; cheap-update → build sample), used ONLY by the persistent reader process to produce the RAW
+    ; awake sample it publishes over shared memory. It keeps its OWN cache state (_flat* props,
+    ; separate from the live _radar* cache) so it never touches the main app's hot path, and it does
+    ; NOT apply the junk filter — the reader publishes everything and Main derives the junk verdict on
+    ; consume (design: config-dependent data stays in Main). Mirrors the live scan's phases/budgets so
+    ; the published sample matches what Main would build; a parity diagnostic cross-checks this
+    ; in-game before Main ever consumes it (stage 3c). Returns the awake sample array (pre-filter).
+    ReadAwakeEntitiesFlat(areaInstanceData, currentAreaHash, playerOrigin)
+    {
+        if !this.HasOwnProp("_flatEntityCache")
+        {
+            this._flatEntityCache := Map()
+            this._flatCacheAreaHash := 0
+            this._flatBfsTick := 0
+            this._flatLastEntities := 0
+            this._flatCheapOffset := 0
+        }
+
+        entityListOffset := PoE2Offsets.AreaInstance["AwakeEntities"]
+        awakeMapAddress := areaInstanceData + entityListOffset
+
+        ; Reset the flat cache on area change (mirrors the live cache reset).
+        if (currentAreaHash != this._flatCacheAreaHash)
+        {
+            this._flatEntityCache := Map()
+            this._flatCacheAreaHash := currentAreaHash
+            this._flatBfsTick := 0
+            this._flatLastEntities := 0
+            this._flatCheapOffset := 0
+        }
+
+        nowTick := A_TickCount
+
+        ; Step 1: full-tree BFS (throttled to 200 ms, reuse cache between).
+        doFullBfs := !this._flatBfsTick || (nowTick - this._flatBfsTick) >= 200 || !this._flatLastEntities
+        if (doFullBfs)
+        {
+            currentEntities := 0
+            try currentEntities := this.ScanEntityMapIdsAndPtrs(awakeMapAddress)
+            catch
+                currentEntities := Map()
+            if !currentEntities
+                currentEntities := Map()
+            this._flatLastEntities := currentEntities
+            this._flatBfsTick := nowTick
+        }
+        else
+            currentEntities := this._flatLastEntities
+
+        cache := this._flatEntityCache
+        mapSize := currentEntities.Count
+
+        ; The reader has spare CPU (no render competes), so give the decode a generous budget so the
+        ; cache fills quickly after a zone change.
+        cacheFillRatio := mapSize > 0 ? (cache.Count / mapSize) : 1.0
+        decodeBudgetMs := (cacheFillRatio < 0.90) ? 60 : 40
+        cheapBudgetMs  := (cacheFillRatio < 0.90) ? 15 : 30
+
+        ; Phase 1: classify new / changed (pure CPU).
+        newEntityList := []
+        changedEntityList := []
+        for entityId, rawPtr in currentEntities
+        {
+            if cache.Has(entityId)
+            {
+                cached := cache[entityId]
+                cachedRawPtr := cached.Has("entityRawPtr") ? cached["entityRawPtr"] : 0
+                if (cachedRawPtr != rawPtr)
+                    changedEntityList.Push(Map("id", entityId, "rawPtr", rawPtr, "cached", cached))
+            }
+            else
+                newEntityList.Push(Map("id", entityId, "rawPtr", rawPtr))
+        }
+
+        this._radarMode := true
+
+        ; Phase 2: decode new + changed (priority budget). No junk pre-filter — publish everything.
+        decodeDeadline := A_TickCount + decodeBudgetMs
+        for _, item in newEntityList
+        {
+            if (A_TickCount >= decodeDeadline)
+                break
+            try
+            {
+                entityPtr := this.ResolveEntityPointer(item["rawPtr"])
+                if !this.IsProbablyValidPointer(entityPtr)
+                    continue
+                entityBasic := this.ReadEntityBasic(entityPtr, item["id"])
+                if (entityBasic && Type(entityBasic) = "Map")
+                {
+                    entityPos := this.ExtractEntityWorldPositionFromEntityBasic(entityBasic, playerOrigin)
+                    cache[item["id"]] := Map(
+                        "id", item["id"],
+                        "entityPtr", entityPtr,
+                        "entityRawPtr", item["rawPtr"],
+                        "entity", entityBasic,
+                        "distance", this.ComputeDistance3DFromMaps(playerOrigin, entityPos),
+                        "priority", this.ComputeSampleEntryPriority(entityBasic, 0)
+                    )
+                }
+            }
+            catch
+            {
+            }
+        }
+        for _, item in changedEntityList
+        {
+            if (A_TickCount >= decodeDeadline)
+                break
+            try
+            {
+                entityPtr := this.ResolveEntityPointer(item["rawPtr"])
+                if !this.IsProbablyValidPointer(entityPtr)
+                    continue
+                entityBasic := this.ReadEntityBasic(entityPtr, item["id"])
+                if (entityBasic && Type(entityBasic) = "Map")
+                {
+                    entityPos := this.ExtractEntityWorldPositionFromEntityBasic(entityBasic, playerOrigin)
+                    cached := item["cached"]
+                    cached["entity"] := entityBasic
+                    cached["entityPtr"] := entityPtr
+                    cached["entityRawPtr"] := item["rawPtr"]
+                    cached["distance"] := this.ComputeDistance3DFromMaps(playerOrigin, entityPos)
+                    cached["priority"] := this.ComputeSampleEntryPriority(entityBasic, 0)
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        ; Phase 3: cheap-update existing (round-robin, time-budgeted).
+        cachedIds := []
+        for entityId, _ in cache
+        {
+            if currentEntities.Has(entityId)
+                cachedIds.Push(entityId)
+        }
+        cachedCount := cachedIds.Length
+        cheapUpdateCount := 0
+        if (cachedCount > 0)
+        {
+            cheapDeadline := A_TickCount + cheapBudgetMs
+            offset := this._flatCheapOffset
+            if (offset >= cachedCount)
+                offset := 0
+            Loop cachedCount
+            {
+                if (A_TickCount >= cheapDeadline)
+                    break
+                idx := Mod(offset + A_Index - 1, cachedCount) + 1
+                entityId := cachedIds[idx]
+                if !cache.Has(entityId)
+                    continue
+                try
+                {
+                    this.UpdateCachedEntityRadar(cache[entityId], playerOrigin)
+                    cheapUpdateCount += 1
+                }
+                catch
+                {
+                }
+            }
+            this._flatCheapOffset := Mod(offset + cheapUpdateCount, Max(cachedCount, 1))
+        }
+        this._radarMode := false
+
+        ; Phase 4: remove entities no longer in the tree.
+        removeIds := []
+        for cachedId, _ in cache
+        {
+            if !currentEntities.Has(cachedId)
+                removeIds.Push(cachedId)
+        }
+        for _, rid in removeIds
+            cache.Delete(rid)
+
+        ; Build the RAW sample (no junk filter — Main derives that on consume).
+        awakeSample := []
+        for _, entry in cache
+            awakeSample.Push(entry)
+        return awakeSample
+    }
+
+    ; Reader-side entry point: from a resolved inGameState address, resolve the area + player origin
+    ; and run ReadAwakeEntitiesFlat. Returns a Map(sample, areaHash, playerX/Y/Z) for the wire pack,
+    ; or 0 if the area/player pointers are not resolvable. The reader already has inGameStateAddress
+    ; from its lightweight ReadAutoFlaskSnapshot, so this avoids re-running the 12-state resolve.
+    ReadAwakeFlatForPublish(inGameStateAddress)
+    {
+        if !this.IsProbablyValidPointer(inGameStateAddress)
+            return 0
+        areaInstanceData := this.Mem.ReadPtr(inGameStateAddress + PoE2Offsets.InGameState["AreaInstanceData"])
+        if !this.IsProbablyValidPointer(areaInstanceData)
+            return 0
+        currentAreaHash := this.Mem.ReadUInt(areaInstanceData + PoE2Offsets.AreaInstance["CurrentAreaHash"])
+
+        playerInfoPtr := areaInstanceData + PoE2Offsets.AreaInstance["PlayerInfo"]
+        localPlayerRawPtr := this.Mem.ReadPtr(playerInfoPtr + PoE2Offsets.LocalPlayerStruct["LocalPlayerPtr"])
+        localPlayerPtr := this.ResolveEntityPointer(localPlayerRawPtr)
+        playerRenderComponent := this.ReadPlayerRenderComponent(localPlayerPtr)
+        playerOrigin := this.ExtractWorldPositionFromRenderComponent(playerRenderComponent)
+
+        sample := this.ReadAwakeEntitiesFlat(areaInstanceData, currentAreaHash, playerOrigin)
+
+        px := (playerOrigin is Map && playerOrigin.Has("x")) ? playerOrigin["x"] : 0.0
+        py := (playerOrigin is Map && playerOrigin.Has("y")) ? playerOrigin["y"] : 0.0
+        pz := (playerOrigin is Map && playerOrigin.Has("z")) ? playerOrigin["z"] : 0.0
+        return Map("sample", sample, "areaHash", currentAreaHash, "playerX", px, "playerY", py, "playerZ", pz)
+    }
+
     ; Records a deep-scan entry in the per-path "needs refine" queue so the
     ; live-entity refinement pass can locate one unresolved tile in O(1)-ish
     ; time instead of scanning every accumulated entry every tick.

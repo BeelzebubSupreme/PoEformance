@@ -19,6 +19,9 @@ LoadReaderProcess()
     global g_rpPid := 0
     global g_rpLastSpawn := 0
     global g_rpStatus := Map("heart", 0, "connected", 0, "state", 0, "reads", 0, "ings", 0)
+    ; Stage 3b: the radar snapshot block Main OWNS (creates + stamps) and the reader packs into.
+    global g_rpRadarBlk := 0
+    global g_rpRadarLock := 0
 
     try g_rpEnabled := (IniRead(_ConfigPath(), "Diagnostics", "readerProcess", "0") = "1")
 
@@ -32,6 +35,17 @@ LoadReaderProcess()
     }
     catch
         g_rpBlk := 0
+
+    try
+    {
+        g_rpRadarBlk := SharedMemBlock(PoefRadarProto.NAME, PoefRadarProto.SIZE)
+        g_rpRadarBlk.Clear()
+        g_rpRadarBlk.PutU32(PoefRadarProto.O_MAGIC, PoefRadarProto.MAGIC)
+        g_rpRadarBlk.PutU32(PoefRadarProto.O_VERSION, PoefRadarProto.VERSION)
+        g_rpRadarLock := SeqLock(g_rpRadarBlk, PoefRadarProto.O_SEQ)
+    }
+    catch
+        g_rpRadarBlk := 0
 
     try OnExit(_RpOnExit)
 
@@ -127,6 +141,130 @@ ReaderProcessDiagnose()
         . "inGameState (main):   " Format("0x{:X}", mainIngs) "`n"
         . "cross-check:    " match
     try MsgBox(msg, "Reader status")
+}
+
+; Bridge RadarConsumeDiag: unpack the reader's latest published awake sample and cross-check it against
+; the main app's own live snapshot (stage 3b parity check). This is the gate before stage 3c flips Main
+; to CONSUME the reader's sample — it proves the reader independently builds the same awake sample Main
+; builds, the way stage 2's inGameState cross-check proved the independent attach.
+RadarConsumeDiagnose()
+{
+    global g_rpEnabled, g_rpRadarBlk, g_rpRadarLock, g_rpPid, g_radarLastSnap
+    if !IsObject(g_rpRadarBlk)
+    {
+        try MsgBox("Radar snapshot block unavailable (creation failed).", "Radar consume")
+        return
+    }
+
+    now := A_TickCount
+    rdHeart := g_rpRadarBlk.GetU32(PoefRadarProto.O_RDHEART)
+    heartAge := (rdHeart > 0) ? (now - rdHeart) : -1
+
+    res := RadarWireUnpack(g_rpRadarBlk, g_rpRadarLock)
+    if !(res is Map && res.Has("ok") && res["ok"])
+    {
+        try MsgBox("Reader radar snapshot not readable (seqlock busy / no publish yet).`n`n"
+            . "enabled:       " (g_rpEnabled ? "yes" : "no") "`n"
+            . "reader alive:  " ((g_rpPid && ProcessExist(g_rpPid)) ? "yes" : "no") "`n"
+            . "heartbeat age: " (heartAge >= 0 ? heartAge " ms" : "(never)"), "Radar consume")
+        return
+    }
+
+    ; Main's own live awake sample for the cross-check.
+    mainSample := 0
+    mainAreaHash := 0
+    try
+    {
+        inGs := (g_radarLastSnap is Map && g_radarLastSnap.Has("inGameState")) ? g_radarLastSnap["inGameState"] : 0
+        area := (inGs is Map && inGs.Has("areaInstance")) ? inGs["areaInstance"] : 0
+        if (area is Map)
+        {
+            mainAreaHash := area.Has("currentAreaHash") ? area["currentAreaHash"] : 0
+            aw := area.Has("awakeEntities") ? area["awakeEntities"] : 0
+            if (aw is Map && aw.Has("sample"))
+                mainSample := aw["sample"]
+        }
+    }
+    mainCount := (mainSample is Array) ? mainSample.Length : 0
+
+    ; Index Main's entities by id for a spot cross-check.
+    mainById := Map()
+    if (mainSample is Array)
+    {
+        for _, e in mainSample
+        {
+            eid := (e is Map && e.Has("id")) ? e["id"] : 0
+            if (eid > 0)
+                mainById[eid] := e
+        }
+    }
+
+    ; Match reader entities against Main by id; compare path + world position.
+    rdSample := res["sample"]
+    matched := 0, pathMismatch := 0, posMismatch := 0, onlyReader := 0
+    for _, re in rdSample
+    {
+        rid := re["id"]
+        if !mainById.Has(rid)
+        {
+            onlyReader += 1
+            continue
+        }
+        matched += 1
+        me := mainById[rid]
+        rpath := re["entity"]["path"]
+        mpath := (me["entity"] is Map && me["entity"].Has("path")) ? me["entity"]["path"] : ""
+        if (rpath != mpath)
+            pathMismatch += 1
+        ; Compare render world X (if both have it) within 1 unit.
+        rwx := _RadarDiagWorldX(re)
+        mwx := _RadarDiagWorldX(me)
+        if (rwx != "" && mwx != "" && Abs(rwx - mwx) > 1.0)
+            posMismatch += 1
+    }
+    onlyMain := 0
+    rdIds := Map()
+    for _, re in rdSample
+        rdIds[re["id"]] := true
+    for mid, _ in mainById
+    {
+        if !rdIds.Has(mid)
+            onlyMain += 1
+    }
+
+    areaMatch := (res["areaHash"] = mainAreaHash) ? "MATCH" : "differ"
+
+    msg := "Radar consume parity (stage 3b)`n`n"
+        . "reader alive:   " ((g_rpPid && ProcessExist(g_rpPid)) ? ("yes (pid " g_rpPid ")") : "no") "`n"
+        . "heartbeat age:  " (heartAge >= 0 ? heartAge " ms" : "(never)") "`n"
+        . "frame:          " res["frame"] "  (click again — should increase)`n"
+        . "truncated:      " (res["truncated"] ? "YES (>512)" : "no") "`n`n"
+        . "areaHash reader/main: " Format("0x{:X}", res["areaHash"] & 0xFFFFFFFF)
+            . " / " Format("0x{:X}", mainAreaHash & 0xFFFFFFFF) "  " areaMatch "`n`n"
+        . "reader sample:  " rdSample.Length "`n"
+        . "main sample:    " mainCount "  (Main junk-filters; reader publishes all → reader >= main)`n"
+        . "matched by id:  " matched "`n"
+        . "  path mismatch:  " pathMismatch "`n"
+        . "  pos  mismatch:  " posMismatch "`n"
+        . "only in reader: " onlyReader "  (expected: junk the reader doesn't filter)`n"
+        . "only in main:   " onlyMain "  (want 0 — Main should never have an entity the reader lacks)"
+    try MsgBox(msg, "Radar consume")
+}
+
+; Helper: pull render worldPosition.x off a sample entry, or "" if absent.
+_RadarDiagWorldX(entry)
+{
+    try
+    {
+        dc := entry["entity"]["decodedComponents"]
+        if (dc is Map && dc.Has("render"))
+        {
+            wp := dc["render"]["worldPosition"]
+            if (wp is Map && wp.Has("x"))
+                return wp["x"]
+        }
+    }
+    return ""
 }
 
 ; ── internals ────────────────────────────────────────────────────────────────────────────────────
