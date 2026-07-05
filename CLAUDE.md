@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.202`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.203`.
 
 ## Language
 
@@ -1739,6 +1739,89 @@ action (a dodge/guard/defensive key, a flask, a chain) — not under Automation.
 - **Pending in-game verification:** add an `enemyAnim` condition to a macro (IDs = a monster's attack
   animationId, radius, a dodge/guard key action), stand near that monster → the macro fires on that
   animation and not otherwise; the 🐞 debug shows the range circle + live MATCH state.
+
+## Performance pass + reader-split foundation (0.45.13.192–202)
+
+A measure-first performance investigation that removed the worst per-tick costs with cheap,
+single-process fixes, then laid the foundation for a multi-process architecture. **Full design +
+rationale: `docs/reader-split.md`.** Motivation for the split is HEADROOM for future read-heavy
+features (a detailed DPS meter / death recap especially), NOT the current numbers.
+
+### Profiler tooling (how to measure — use this before "optimising" any read)
+- `ahk/Profiler.ahk` — QPC per-label timing, disabled by default (near-zero when off). Two-click
+  flow: **Shift+F3** (or click the ⏱ status pill) starts a measurement window, press again to stop.
+  On stop it appends the table to `logs\InGameStateMonitor.profiler.log` (readable in **Data &
+  Logs**), with a header stamping area + `awake=<sampleCount>` + `raw=<mapSize>`. This file dump is
+  what makes real-play measurement possible (the game is foreground, not the WebView).
+- Per-tick sub-markers already exist and are the map of the tick: `tick.read` (=`read.state/world/
+  ui/entities/sleep/filter`), `tick.overlays` (per-overlay `ov.*` + `radar.mask.*`), `tick.autopilot
+  /alerts/loot`. `read.world` and `read.entities` are further split (`read.world.terrain/area/matrix/
+  player`; `read.ent.zonescan/bfs/decode.new/decode.changed/cheap`). **Lesson, twice proven: an
+  "expensive marker" is often a bug/redundancy, not a fundamental cost — sub-mark and MEASURE before
+  building a fix** (the terrain hypothesis for read.world was wrong; it was a double stats read).
+
+### Shipped single-process fixes (do not regress these)
+- **read.world 112→2 ms** — `PoE2PlayerReader.BuildVitalsResult` read the player Stats component
+  TWICE per vitals tick (once for Rage, once for Spirit), each doing two full stats-array scans.
+  Fix: read it ONCE (dedup) + `_CachedPlayerStatsComponent()` (~500 ms TTL, keyed on the player
+  pointer; rage/spirit change slowly, Life/Mana/ES stay fresh).
+- **radar.mask 55→8 ms** — the maphack/walk mask blit (`_BlitMaskLayer` PlgBlt) is a per-frame
+  rotated software blit filling the window. The projection (cos/sin) is frame-CONSTANT — only the
+  player position moves — so `RadarOverlay._DrawMapLayersCached` renders the composited layers ONCE
+  into a padded off-screen cache (window + 2×`MASK_CACHE_MARGIN`) via PlgBlt, then per frame copies
+  it with a translated `msimg32\TransparentBlt` (key 0xFF00FF; offset = the player screen delta).
+  Rebuild only on scroll past the margin / projection change / terrain regen. `_DrawMapLayersDirect`
+  is the fallback (never worse than the old path).
+- **read.entities junk pre-filter** — in dense combat ~half the awake map is junk (effects/
+  projectiles: `raw=182` vs `awake=96`) that was fully decoded then dropped by the sample-build
+  junk filter. Fix: in Phase 2, a cheap `ReadEntityIdentityBasic` (id+flags+path) runs before the
+  full `ReadEntityBasic`; junk paths skip the decode + caching and their id→rawPtr is remembered in
+  `_radarJunkIds` (Phase 1 then skips them with no RPM; rawPtr guard handles recycled ids). Cleared
+  on area change + on any junk-filter change (`RebuildJunkActive` reaches into `g_reader`). Safe: the
+  SAME `IsJunkEntity` already ran at sample-build, so nothing is newly hidden. Cut decode.new ~35 %,
+  cheap ~50 %, and the read tail 1.5 s → 0.4 s.
+
+### Reader-split infrastructure (stage 1 — SHIPPED + proven; stages 2–5 pending)
+The generalisable transport for moving reads off the render thread. See `docs/reader-split.md` for
+the staged plan (2 = reader-process scaffolding, 3 = radar snapshot to the reader, 4 = on-demand
+decode channel, 5 = DPS sampler).
+- **`ahk/SharedMem.ahk`** — `SharedMemBlock(name, bytes)` = named pagefile-backed file mapping
+  (`CreateFileMapping(-1,…)`/`MapViewOfFile`; one process creates, others open the same name; isOwner
+  from `ERROR_ALREADY_EXISTS`). `Put/Get` U32/I32/I64/F32 + `PutBytes/GetBytes` + `Clear`. `SeqLock
+  (block, seqOffset)` — single-writer/single-reader: `WriteBegin/WriteEnd` bracket a write (seq odd
+  while writing), `Read(copyFn)` retries until a stable EVEN sequence around the copy and returns ""
+  on a mid-write collision (→ use last value; STALENESS, never a torn payload). Pure DllCall, no
+  deps, classes-only (safe to #Include anywhere). Verified cross-process (torn=0 over ~62k reads
+  while a writer wrote ~300k times).
+- **The sampler pattern** — each read-heavy feature becomes its OWN process that owns its raw
+  high-frequency reads + computation and publishes a compact DIGEST via shared memory; the main app
+  renders the digest and never touches raw memory for that feature. Offsets stay compile-time
+  `#Include` (only the wire-struct needs sync, guarded by a `VERSION`/`MAGIC`). A_TickCount is
+  system-wide, so heartbeats/ages are consistent across processes. Absolute addresses one process
+  reads are valid in another's handle (same target process).
+
+### First sampler: anim-fishing out-of-process (0.45.13.202)
+The live enemy-animation capture (Macro Engine `enemyAnim`) moved off the render thread — it used to
+HIJACK the radar tick into a 10 ms turbo loop that froze every overlay.
+- **`ahk/HkFishProtocol.ahk`** — the shared wire layout, #Include'd by BOTH sides. Region A
+  (Main→Fisher) = monster Actor-component addresses + distances; Region B (Fisher→Main) = animId→
+  {count,last,dist} rows; a control header (run flag, `Actor.AnimationId` offset, both heartbeats);
+  two seqlocks.
+- **`poef_fisher.ahk`** (repo-root entry point) — the lean sampler process: only SharedMem + the
+  protocol + `ProcessMemory` (its OWN PoE handle). Every ~10 ms it reads the published addresses and
+  each monster's animationId, accumulates the table, publishes it back. Exits on run=0 or a stale
+  Main heartbeat; silent on transient errors.
+- **`ahk/HkAnimCapture.ahk`** — TWO backends. `"proc"` (preferred): publishes the address list
+  (free — Main already has the radar snapshot) via `TryHkAnimFishPublish(radarSnap)` in the NORMAL
+  tick flow and renders the digest, NO tick hijack → overlays keep rendering. `"inproc"` (fallback):
+  the unchanged legacy turbo path (`HkAnimFishTick`, timer bumped), used only if shared memory / the
+  fisher can't start → never worse than before. Main owns the block (`LoadHkAnimCapture`), spawns/
+  kills/heartbeats the fisher, `OnExit` guarantees no orphan. `AutoFlask.ahk` hijack branch now fires
+  only in inproc mode.
+- **Verified in-game (2026-07-05):** the fisher process starts on arm / stops on disarm, reads enemy
+  animationIds correctly, the round-trip digest is bug-free, and (the whole point) the main tick keeps
+  rendering the overlays during fishing. The Stage-1 foundation (shared memory + seqlock + lifecycle
+  + the sampler pattern) is thus proven end-to-end on a real feature.
 
 ## Reference
 
