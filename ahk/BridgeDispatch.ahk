@@ -916,6 +916,9 @@ _DispatchBridgeCall(method, args)
         case "StackMaxProbeRun":
             ; TEMP diagnostic: test whether Stack +0x20 is the max stack size.
             SetTimer(() => StackMaxProbeRun(), -1)
+        case "ActorProbeRun":
+            ; TEMP diagnostic: time-sample the Actor struct to locate the drifted animationId.
+            SetTimer(() => ActorProbeRun(), -1)
         case "CurrencyLayoutProbeRun":
             ; RE aid: bake the currency tab's slot layout from the UI tree.
             SetTimer(() => CurrencyLayoutProbeRun(), -1)

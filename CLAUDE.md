@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.177`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.178`.
 
 ## Language
 
@@ -1542,6 +1542,38 @@ Identification moved up a row. Verified: big slot centered (x=138, center 174 ==
 currency tab in the tool's Inventory tab — it should mirror the game grid; report any
 mis-placed slot and I fix its [col,row] in `CURRENCY_TAB_LAYOUT`. The probe stays as the
 re-bake aid.
+
+## Actor animationId decode + offset-drift investigation (WIP, 0.45.13.176–178)
+
+Surface the Actor component's `animationId` as a readable name in the Entity Inspector, and
+chase down why it (and the whole Actor block) stopped tracking the character.
+
+- **Readable name (0.45.13.175–176):** the Actor whitelist already emits `animationId`; the
+  inspector now resolves it via `ANIM_NAMES` in `eiPrettyValue` → `"<id> · <name>"` (or
+  `"<id> · (unknown)"`). The name table `ui/animation_names.js` is now generated from the
+  hand-maintained **`ahk/AnimationID.ahk`** (1084 CastType entries, up to 0x43B) instead of the
+  older GameHelper2 `Animation.cs` — `tools/poe_tools.py gen-anim` reads the local file.
+- **Live-refresh fix (0.45.13.177):** the inspector's lazy-decode cache was only invalidated on
+  range-exit, so a decoded Actor froze on the value read at click time. `updateEntityInspector`
+  now silently re-decodes every currently-EXPANDED lazy component each snapshot
+  (`_eiRefreshExpandedLazy`, `refreshInFlight`-guarded), and the AHK `_DecodeComponentOnDemand`
+  re-reads live — so expanded fields update continuously. This did NOT fix `animationId`: it
+  stays frozen while acting → the value at `Actor+0x8A0` no longer changes.
+- **CONCLUSION: Actor offset drift.** Like the W2S-matrix (−8) and AreaInstance (+0x18) drifts, a
+  patch shifted the Actor struct, so `PoE2Offsets.Actor["AnimationId"] = 0x8A0` (from the owner's
+  CE inspector / CT) now points at a stale field. The counts (ActiveSkills/Cooldowns/Deployed)
+  read plausibly, so it may be a small local shift rather than a whole-struct move.
+- **`ahk/ActorProbe.ahk` (RE aid, 0.45.13.178):** `ActorProbeRun` resolves the local player's
+  Actor component and TIME-SAMPLES a 4 KB int32 window (`Actor+0x000..0xFFC`) ~60×/80 ms while
+  the user runs/casts, tracking distinct values per offset. It reports the offsets that CHANGED,
+  ranked with an animation-id band first (non-negative, ≤8192, ≤32 distinct — the animationId is
+  the low-int one cycling 0=Idle/4=Run/skill ids), flags the current `0x8A0`, and cross-checks the
+  known vector-count offsets to tell a local shift from a whole-struct move. Writes
+  `logs\InGameStateMonitor.actor_probe.log`. Bridge `ActorProbeRun`; UI "🎭 Probe Actor" in the
+  RE-tools row. Reuses `_AIP_ResolveAreaInstance` + `_AIP_WriteProbeLog`.
+- **Pending in-game verification:** run "🎭 Probe Actor", act during the sample window, read the
+  log → the changing low-int offset IS the new animationId; update `PoE2Offsets.Actor["AnimationId"]`
+  (and, if the whole struct moved, the vector offsets by the same delta).
 
 ## Reference
 
