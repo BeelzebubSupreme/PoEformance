@@ -11573,7 +11573,11 @@
       lazyDecoded: new Map(),
       // Keys of lazy components whose live re-fetch is currently in flight,
       // so the per-snapshot refresh doesn't stack duplicate decode calls.
-      refreshInFlight: new Set()
+      refreshInFlight: new Set(),
+      // Reader-split stage 4: per-entity FULL component list (addr -> {components,
+      // componentCount, namedComponentCount}), fetched on expand via
+      // RequestEntityComponents. Overrides the minimal list the consumed snapshot carries.
+      fullComps: new Map()
     };
 
     function updateEntities(jsonStr) {
@@ -11592,6 +11596,10 @@
       window._eiState.compExpanded = new Set(
         [...window._eiState.compExpanded].filter(k => liveAddrs.has(k.split('::')[0]))
       );
+      // Drop the full-component override for entities that left range (addresses get recycled).
+      for (const a of [...window._eiState.fullComps.keys()]) {
+        if (!liveAddrs.has(a)) window._eiState.fullComps.delete(a);
+      }
       // Drop lazy-decoded cache for entities that left range
       for (const key of [...window._eiState.lazyDecoded.keys()]) {
         if (!liveAddrs.has(key.split('::')[0])) {
@@ -11790,13 +11798,15 @@
         ['Alive',    `<span class="ei-prop-val">${e.alive === false ? 'no' : 'yes'}</span>`],
         ['Life',     `<span class="ei-prop-val">${e.life >= 0 ? e.life + '%' : '—'}</span>`],
         ['Distance', `<span class="ei-prop-val">${e.dist >= 0 ? e.dist + 'm' : '—'}</span>`],
-        ['Components', `<span class="ei-prop-val">${e.componentCount ?? '?'}${e.namedComponentCount !== undefined ? ` (${e.namedComponentCount} named)` : ''}</span>`]
+        ['Components', `<span class="ei-prop-val">${_eiOv(e) ? _eiOv(e).componentCount : (e.componentCount ?? '?')}${(_eiOv(e) ? _eiOv(e).namedComponentCount : e.namedComponentCount) !== undefined ? ` (${_eiOv(e) ? _eiOv(e).namedComponentCount : e.namedComponentCount} named)` : ''}</span>`]
       ];
       const propsHtml = props.map(([k, v]) =>
         `<div class="ei-prop-row"><span class="ei-prop-key">${k}</span>${v}</div>`
       ).join('');
 
-      const comps = Array.isArray(e.components) ? e.components : [];
+      const _ov = _eiOv(e);
+      const comps = (_ov && Array.isArray(_ov.components)) ? _ov.components
+                    : (Array.isArray(e.components) ? e.components : []);
       const compsHtml = comps.length
         ? comps.map(c => eiComponentRow(e.addr, c)).join('')
         : '<div class="ei-prop-val muted" style="padding:4px 0">No components reported.</div>';
@@ -11919,7 +11929,20 @@
 
     function eiToggle(addr) {
       const set = window._eiState.expanded;
+      const opening = !set.has(addr);
       if (set.has(addr)) set.delete(addr); else set.add(addr);
+      // Reader-split stage 4: on expand, ask AHK to re-read this ONE entity's FULL component list
+      // (the consumed snapshot carries only a minimal {Targetable,Actor} list). Cheap — one entity,
+      // read live on Main's own handle — so the inspector shows the complete list either way.
+      if (opening) ahkCall('RequestEntityComponents', addr);
+      eiRender();
+    }
+    // Reader-split stage 4: apply the full component list AHK re-read for one entity. Payload is a raw
+    // object { components, componentCount, namedComponentCount }; overrides the minimal snapshot list.
+    function eiApplyEntityComponents(addr, payload) {
+      let obj; try { obj = (typeof payload === 'string') ? JSON.parse(payload) : payload; } catch (e) { return; }
+      if (!obj || !Array.isArray(obj.components)) return;
+      window._eiState.fullComps.set(addr, obj);
       eiRender();
     }
     function eiToggleComp(addr, name) {
@@ -11941,12 +11964,23 @@
       }
       eiRender();
     }
-    // Looks up a component's live address from the current snapshot items,
-    // for re-issuing a lazy decode. Returns undefined if not found this frame.
+    // Reader-split stage 4: the full-component override for an entity (or null). Takes the entity
+    // object or its addr string.
+    function _eiOv(e) {
+      const addr = (typeof e === 'string') ? e : (e && e.addr);
+      return addr ? (window._eiState.fullComps.get(addr) || null) : null;
+    }
+    // Looks up a component's live address for re-issuing a lazy decode. Prefers the full-component
+    // override (stage 4) so components beyond the minimal snapshot list are also addressable.
     function _eiCompAddr(entityAddr, compName) {
-      const e = (window._eiState.items || []).find(x => x.addr === entityAddr);
-      if (!e || !Array.isArray(e.components)) return undefined;
-      const c = e.components.find(cc => cc.name === compName);
+      const ov = _eiOv(entityAddr);
+      let comps = (ov && Array.isArray(ov.components)) ? ov.components : null;
+      if (!comps) {
+        const e = (window._eiState.items || []).find(x => x.addr === entityAddr);
+        comps = (e && Array.isArray(e.components)) ? e.components : null;
+      }
+      if (!comps) return undefined;
+      const c = comps.find(cc => cc.name === compName);
       return c ? (c.addr || '') : undefined;
     }
     // Fire a lazy decode for one component on demand. Marks the row

@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.216`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.217`.
 
 ## Language
 
@@ -1986,6 +1986,36 @@ toggle keeps it separable from 3b so the parity check can gate it.
   - **Pending in-game verification:** re-measure — fallback rate (`read.ent.decode.new` calls /
     `read.entities` calls) should fall and `read.sleep` should approach ~0 on consume ticks, pushing
     `tick.read` toward ~10-15 ms; confirm sleeping NPCs / radar dots still appear.
+
+### Stage 4: on-demand full component list for the Entities inspector (0.45.13.217)
+
+Fixes the one real degradation of consume mode: the reconstructed snapshot entry carries only a MINIMAL
+`components` array ({Targetable, Actor}) + the radar-decoded `decodedComponents`, so the Entities
+inspector would LIST only those and couldn't reach the deeper components (Buffs / Stats / Mods / NPC /
+…). The design's literal Stage 4 was a WM_COPYDATA request/reply to the reader — but Main keeps its OWN
+PoE handle (for the latency-critical local reads) and each reconstructed entry carries the real entity
+ADDRESS, so Main can re-read the full entity LOCALLY. No IPC needed; the WM_COPYDATA channel would be
+premature complexity.
+
+- **`ahk/WebViewBridge.ahk` — `_RequestEntityComponents(entityAddrHex)`:** re-reads ONE entity's FULL
+  component list via `g_reader.ReadEntityBasic(addr)` (non-radar mode → full decode) and pushes
+  `{components, componentCount, namedComponentCount}` to JS `eiApplyEntityComponents`. Cheap + rare
+  (one entity, only when the user expands it) → never touches the radar hot path. Fires whether or not
+  consuming (harmless when not — same data, freshly read). Reuses `_SerializeComponents`.
+- **`ahk/BridgeDispatch.ahk`:** case `RequestEntityComponents` → `SetTimer(() => _RequestEntityComponents(args[1]), -1)`.
+- **`ui/index.html`:** `_eiState.fullComps` (addr → full-list override, pruned when the entity leaves);
+  `eiToggle` calls `ahkCall('RequestEntityComponents', addr)` on expand; `eiApplyEntityComponents`
+  stores the override + re-renders; `eiRenderDetail` + `_eiCompAddr` prefer the override (so the full
+  list shows AND per-component lazy-decode `_DecodeComponentOnDemand` can address components beyond the
+  minimal set). `_eiOv(e)` helper.
+- **Why this is the whole job:** the per-component deep decode was ALREADY on-demand + live
+  (`_DecodeComponentOnDemand` re-reads a component from its address). The only gap consume opened was
+  the LIST of components (their names+addresses); this restores it. `mods` etc. then decode via the
+  existing lazy path.
+- **Static verification:** `WebViewBridge` braces balanced; UI inline script `node --check` clean.
+- **Pending in-game verification:** with consume ON, open the Entities tab, expand an entity → its full
+  component list should appear (not just Targetable/Actor) and each component still lazy-decodes on
+  click; confirm it matches the consume-OFF inspector.
 
 ## Reference
 

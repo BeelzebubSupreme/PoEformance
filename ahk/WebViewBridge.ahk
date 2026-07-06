@@ -255,6 +255,37 @@ _DecodeComponentOnDemand(entityAddrHex, compName, compAddrHex)
     }
 }
 
+; Reader-split stage 4 — on-demand FULL component list for ONE entity. When Main CONSUMES the reader's
+; sample (opt-in), the reconstructed snapshot entry carries only a MINIMAL components array
+; ({Targetable, Actor}), so the Entities inspector would list just those. When the user expands an
+; entity, the UI calls this to re-read the entity's FULL component list LOCALLY (Main keeps its own PoE
+; handle and the reconstructed entry carries the real entity address); the result replaces the minimal
+; list in the inspector. Cheap and rare — ONE entity, only when the user actually looks — so it never
+; touches the radar hot path. Also fires when NOT consuming (harmless: same data, freshly read).
+_RequestEntityComponents(entityAddrHex)
+{
+    global g_reader
+    try
+    {
+        addr := _ParseHexToUInt(entityAddrHex)
+        if !addr || !g_reader.IsProbablyValidPointer(addr)
+            return
+        full := g_reader.ReadEntityBasic(addr)   ; non-radar mode → full component decode
+        if !(full is Map)
+            return
+        comps      := full.Has("components") ? full["components"] : 0
+        decoded    := full.Has("decodedComponents") ? full["decodedComponents"] : 0
+        compCount  := full.Has("componentCount") ? full["componentCount"] : 0
+        namedCount := full.Has("namedComponentCount") ? full["namedComponentCount"] : 0
+        json := '{"components":' _SerializeComponents(comps, decoded)
+            . ',"componentCount":' compCount
+            . ',"namedComponentCount":' namedCount '}'
+        WebViewExec("eiApplyEntityComponents(" _JsStr(entityAddrHex) "," json ")")
+    }
+    catch as e
+        try LogError("RequestEntityComponents " entityAddrHex, e)
+}
+
 ; Pushes the lazy-decode result to JS. Empty `jsonSummary` becomes a JSON
 ; null so the UI can distinguish "decoder ran but had nothing to add" from
 ; "decoder hasn't fired yet".

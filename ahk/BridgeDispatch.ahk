@@ -334,6 +334,11 @@ _DispatchBridgeCall(method, args)
             ; args: [entityAddrHex, componentName, componentAddrHex]
             if (args.Length >= 3)
                 SetTimer(() => _DecodeComponentOnDemand(args[1], args[2], args[3]), -1)
+        case "RequestEntityComponents":
+            ; Reader-split stage 4: re-read one entity's FULL component list locally when the user
+            ; expands it — restores the full inspector list that the consumed (minimal) snapshot omits.
+            if (args.Length >= 1)
+                SetTimer(() => _RequestEntityComponents(args[1]), -1)
         case "ToggleZoneNav":
             global g_zoneNavEnabled
             g_zoneNavEnabled := !g_zoneNavEnabled
