@@ -56,7 +56,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.228"
+POEFORMANCE_VERSION := "0.45.13.229"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -269,6 +269,8 @@ g_zoneNavEnabled := true
 g_mapHackEnabled := true
 g_walkGridEnabled := false   ; walkable-grid fill overlay (diagnostic, off by default)
 g_mapHackUnexplored := false ; maphack: dark wash over unexplored walkable cells (off by default)
+g_mapHackUnexploredColor := "#181820" ; unexplored-wash colour (hex #RRGGBB)
+g_mapHackUnexploredSpacing := 2        ; unexplored-wash dot spacing (1=solid, higher=sparser)
 g_maphackMaskDebug := false  ; red outlines of the HUD clip masks (debug, off by default)
 ; Maphack source: "memory" = render an overlay on top of the unexplored
 ; minimap cells (requires PoE2 attached + the radar reading working);

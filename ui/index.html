@@ -5597,6 +5597,20 @@
                     ><span class="toggle-slider"></span></label>
               </div>
               <div class="cfg-help">Puts a subtle dark wash over walkable areas you haven't reached yet, so on the revealed map you can see where you still need to explore. It clears as you move through an area. Approximate: the game exposes no fog-of-war grid, so "explored" is tracked from your own path. Large map + Map Hack only.</div>
+              <div class="cfg-sub-row" style="padding:4px 8px 6px 18px;gap:18px;align-items:center;flex-wrap:wrap">
+                <div style="display:flex;gap:8px;align-items:center" data-tip="Colour of the unexplored wash. Default is very dark; pick a lighter shade if it's too heavy.">
+                  <span style="color:var(--subtext);font-size:11px">↳ Colour</span>
+                  <span id="cp-swatch-mhunexp" class="cp-swatch" onclick="mapHackUnexpOpenColor(this)"></span>
+                  <span id="cp-hex-mhunexp" style="font-family:monospace;font-size:11px;color:var(--subtext)">—</span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center" data-tip="Spacing between the wash dots. 1 = solid (darkest), higher = more spread out / lighter (the map shows through more).">
+                  <span style="color:var(--subtext);font-size:11px">↳ Dot spacing</span>
+                  <input type="range" id="mhunexp-spacing" min="1" max="8" step="1" value="2"
+                         oninput="document.getElementById('mhunexp-spacing-val').textContent=this.value"
+                         onchange="ahkCall('SetMapHackUnexploredSpacing', parseInt(this.value,10))" style="width:120px">
+                  <span id="mhunexp-spacing-val" style="font-family:monospace;font-size:11px;color:var(--subtext);min-width:12px">2</span>
+                </div>
+              </div>
 
               <div class="cfg-row"><span class="cfg-label">Walkable Grid (debug)</span>
                 <label class="toggle"><input type="checkbox" id="tog-walkgrid" onchange="ahkCall('ToggleWalkGrid')"
@@ -7952,6 +7966,17 @@
       if (!s) return;
       const e = document.getElementById('llc-enabled');
       if (e) e.checked = s.enabled === true || s.enabled === 1 || s.enabled === '1' || s.enabled === 'true';
+    }
+
+    // Unexplored-wash colour → shared GGPK color picker → SetMapHackUnexploredColor.
+    function mapHackUnexpOpenColor(el) {
+      const cur = (window._lastHeader && window._lastHeader.mapHackUnexploredColor) || '#181820';
+      openColorPicker('mhUnexp', {
+        title: 'Unexplored wash colour',
+        hex: cur,
+        swatchEl: el,
+        onConfirm: hex => ahkCall('SetMapHackUnexploredColor', '#' + hex.slice(0, 6))
+      });
     }
 
     // Map loot-value label color → shared GGPK color picker → SetLootRadarValue mapColor.
@@ -10806,6 +10831,18 @@
       setChk('tog-maphack', d.mapHack !== undefined ? d.mapHack : true);
       setChk('tog-walkgrid', d.walkGrid !== undefined ? d.walkGrid : false);
       setChk('tog-maphack-unexplored', d.mapHackUnexplored !== undefined ? d.mapHackUnexplored : false);
+      if (d.mapHackUnexploredColor) {
+        const sw = document.getElementById('cp-swatch-mhunexp');
+        const hx = document.getElementById('cp-hex-mhunexp');
+        if (sw) sw.style.background = d.mapHackUnexploredColor;
+        if (hx) hx.textContent = d.mapHackUnexploredColor;
+      }
+      if (d.mapHackUnexploredSpacing !== undefined) {
+        const sp = document.getElementById('mhunexp-spacing');
+        const spv = document.getElementById('mhunexp-spacing-val');
+        if (sp && document.activeElement !== sp) sp.value = d.mapHackUnexploredSpacing;
+        if (spv) spv.textContent = d.mapHackUnexploredSpacing;
+      }
       setChk('tog-maskdebug', d.maskDebug !== undefined ? d.maskDebug : false);
       // Maphack source — radio sync + GGPK action row visibility.
       // The actual "PoE2 is closed → buttons enabled" gating runs on

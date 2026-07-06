@@ -224,6 +224,8 @@ class RadarOverlay extends GdiOverlayBase
         ; player moves. Overlay is colour-key + one global alpha (no per-pixel alpha), so "dim not
         ; hide" is a stipple, not a low-alpha blend.
         this._unexploredOn        := false ; toggle from config (off by default)
+        this._unexpColor          := RadarOverlay.COLOR_UNEXPLORED ; wash colour (BGR); config-driven
+        this._unexpSpacing        := 2     ; dot spacing (1=solid, higher=sparser/lighter); config-driven
         this._mapUnexpColorDC     := 0     ; solid dark-wash colour source bitmap DC
         this._mapUnexpColorBmp    := 0
         this._mapUnexpMask        := 0     ; 1-bit mask: 1 = walkable & unexplored (stippled)
@@ -264,9 +266,34 @@ class RadarOverlay extends GdiOverlayBase
         global g_radarShowMinions, g_radarShowNpcs, g_radarShowChests
         global g_debugMode, g_zoneNavEnabled, g_mapHackEnabled, g_rangeCirclesEnabled
         global g_radarAlpha, g_highlightedEntityPath, g_walkGridEnabled, g_maphackMaskDebug
-        global g_mapHackUnexplored
+        global g_mapHackUnexplored, g_mapHackUnexploredColor, g_mapHackUnexploredSpacing
 
         this._unexploredOn := IsSet(g_mapHackUnexplored) ? g_mapHackUnexplored : false
+        ; Wash colour — a change only needs the solid colour-source bitmap refilled (cheap), NOT a full
+        ; regen, so it doesn't reset the explored (visited) progress.
+        newUnexpColor := IsSet(g_mapHackUnexploredColor) ? GroupColorToBgr(g_mapHackUnexploredColor) : RadarOverlay.COLOR_UNEXPLORED
+        if (newUnexpColor != this._unexpColor)
+        {
+            this._unexpColor := newUnexpColor
+            if (this._mapUnexpColorDC && this._mapHackW > 0)
+            {
+                rct := Buffer(16, 0)
+                NumPut("Int", this._mapHackW, rct, 8)
+                NumPut("Int", this._mapHackH, rct, 12)
+                ub := DllCall("CreateSolidBrush", "UInt", this._unexpColor, "Ptr")
+                DllCall("FillRect", "Ptr", this._mapUnexpColorDC, "Ptr", rct, "Ptr", ub)
+                DllCall("DeleteObject", "Ptr", ub)
+                this._maskCacheValid := false
+            }
+        }
+        ; Dot spacing — baked into the 1-bit mask stipple, so a change forces a maphack-bitmap regen
+        ; (rare, user-triggered; it does reset the explored progress, which is acceptable for tuning).
+        newUnexpSpacing := IsSet(g_mapHackUnexploredSpacing) ? Max(1, Min(8, g_mapHackUnexploredSpacing)) : 2
+        if (newUnexpSpacing != this._unexpSpacing)
+        {
+            this._unexpSpacing := newUnexpSpacing
+            this._DestroyMapHackBitmap()   ; regenerated next frame with the new stipple
+        }
         this.ShowEnemyNormal := g_radarShowEnemyNormal
         this.ShowEnemyRare   := g_radarShowEnemyRare
         this.ShowEnemyBoss   := g_radarShowEnemyBoss
@@ -2502,6 +2529,7 @@ class RadarOverlay extends GdiOverlayBase
         bmpH := rows // STEP
         if (bmpW < 10 || bmpH < 10)
             return
+        spc := Max(1, this._unexpSpacing)   ; unexplored-wash dot spacing (1=solid, higher=sparser)
 
         ; ── Source bitmap: solid maphack color ──
         screenDC := DllCall("GetDC", "Ptr", 0, "Ptr")
@@ -2609,12 +2637,16 @@ class RadarOverlay extends GdiOverlayBase
 
                 ; Walkable-fill mask: any walkable cell in the 2×2 block, 50%
                 ; checkerboard stipple so the underlying game map stays visible.
-                if ((b1 != 0 || b2 != 0) && ((bx + by) & 1) = 0)
+                if (b1 != 0 || b2 != 0)   ; any walkable cell in the 2×2 block
                 {
-                    DllCall("SetPixelV", "Ptr", walkMaskDC, "Int", bx, "Int", by, "UInt", 0xFFFFFF)
-                    ; Unexplored wash starts over the whole walkable area (same stipple); cleared per
-                    ; cell as the player explores. Same pixel set as walk-fill so both share the stipple.
-                    DllCall("SetPixelV", "Ptr", unexpMaskDC, "Int", bx, "Int", by, "UInt", 0xFFFFFF)
+                    ; Walk-fill: fixed 50% checkerboard (diagnostic).
+                    if (((bx + by) & 1) = 0)
+                        DllCall("SetPixelV", "Ptr", walkMaskDC, "Int", bx, "Int", by, "UInt", 0xFFFFFF)
+                    ; Unexplored wash: a dot-grid whose spacing (this._unexpSpacing) the user tunes —
+                    ; 1 = solid, higher = sparser/lighter. Starts over the whole walkable area; cleared
+                    ; per cell as the player explores.
+                    if (spc <= 1 || (Mod(bx, spc) = 0 && Mod(by, spc) = 0))
+                        DllCall("SetPixelV", "Ptr", unexpMaskDC, "Int", bx, "Int", by, "UInt", 0xFFFFFF)
                 }
 
                 if (   (b1 & 0x0F) != 0 && (b1 & 0xF0) != 0
@@ -2695,7 +2727,7 @@ class RadarOverlay extends GdiOverlayBase
         unexpColorDC := DllCall("CreateCompatibleDC", "Ptr", screenDC3, "Ptr")
         DllCall("ReleaseDC", "Ptr", 0, "Ptr", screenDC3)
         DllCall("SelectObject", "Ptr", unexpColorDC, "Ptr", hUnexpBmp)
-        ubrush := DllCall("CreateSolidBrush", "UInt", RadarOverlay.COLOR_UNEXPLORED, "Ptr")
+        ubrush := DllCall("CreateSolidBrush", "UInt", this._unexpColor, "Ptr")
         DllCall("FillRect", "Ptr", unexpColorDC, "Ptr", rct, "Ptr", ubrush)
         DllCall("DeleteObject", "Ptr", ubrush)
         this._mapUnexpColorDC  := unexpColorDC

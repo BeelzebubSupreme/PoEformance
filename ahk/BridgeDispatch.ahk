@@ -364,6 +364,24 @@ _DispatchBridgeCall(method, args)
             g_mapHackUnexplored := !g_mapHackUnexplored
             SetTimer(SaveConfig, -100)
             SetTimer(PushHeaderToWebView, -50)
+        case "SetMapHackUnexploredColor":
+            ; Unexplored-wash colour (#RRGGBB). RadarOverlay refills the colour source on change.
+            if (args.Length >= 1)
+            {
+                global g_mapHackUnexploredColor
+                g_mapHackUnexploredColor := String(args[1])
+                SetTimer(SaveConfig, -100)
+                SetTimer(PushHeaderToWebView, -50)
+            }
+        case "SetMapHackUnexploredSpacing":
+            ; Unexplored-wash dot spacing (1=solid, higher=sparser). Forces a maphack-bitmap regen.
+            if (args.Length >= 1)
+            {
+                global g_mapHackUnexploredSpacing
+                g_mapHackUnexploredSpacing := Max(1, Min(8, Integer(args[1])))
+                SetTimer(SaveConfig, -100)
+                SetTimer(PushHeaderToWebView, -50)
+            }
         case "ToggleMaskDebug":
             ; Debug: draw red outlines of the HUD clip masks on the large map so
             ; the user can see where the maphack is clipped. RadarOverlay reads
