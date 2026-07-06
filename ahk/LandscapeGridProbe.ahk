@@ -452,12 +452,16 @@ LandscapeScanDiff()
             continue
         }
         changedN += 1
-        ; grid-sized? do the detailed sampled monotonicity diff
-        if (c["size"] >= 1024 * 1024 && (c["buf"] is Buffer))
+        ; Monotonicity diff for EVERY changed candidate ≥8 KB (a fog grid may be small/bit-packed, e.g.
+        ; a coarse minimap resolution — not only the multi-MB full-res ones). Sampled step scales with
+        ; size so small buffers are read densely and big ones stay fast. Also flags 0→nonzero changes
+        ; (unexplored→explored is often a 0→value flip) and how localised the change region is.
+        if (c["size"] >= 8192 && (c["buf"] is Buffer))
         {
             oldBuf := c["buf"]
             n := Min(oldBuf.Size, newBuf.Size)
-            samples := 0, changed := 0, up := 0, down := 0, minO := n, maxO := -1
+            stepB := Max(1, n // 200000)   ; ~≤200k samples per candidate
+            samples := 0, changed := 0, up := 0, down := 0, zeroToNz := 0, minO := n, maxO := -1
             off := 0
             while (off < n)
             {
@@ -471,17 +475,26 @@ LandscapeScanDiff()
                         up += 1
                     else
                         down += 1
+                    if (ov = 0)
+                        zeroToNz += 1
                     if (off < minO)
                         minO := off
                     if (off > maxO)
                         maxO := off
                 }
-                off += 24
+                off += stepB
             }
-            mono := (changed > 0) ? Round(100 * Max(up, down) / changed) : 0
-            detail .= "    " c["name"] " sz=" c["size"]
-                . ": sampled Δ=" changed "/" samples "  up=" up " down=" down " (mono " mono "%)"
-                . "  offBox 0x" Format("{:X}", minO) "..0x" Format("{:X}", maxO) "`n"
+            if (changed > 0)
+            {
+                mono := Round(100 * Max(up, down) / changed)
+                z2n := Round(100 * zeroToNz / changed)
+                span := (maxO - minO)
+                spanPct := (n > 0) ? Round(100 * span / n) : 0
+                flag := (mono >= 90 && z2n >= 70) ? " <<< FOG-LIKE" : ""
+                detail .= "    " c["name"] " sz=" c["size"]
+                    . ": Δ=" changed "/" samples "  up=" up " down=" down " mono=" mono "% 0→val=" z2n "%"
+                    . "  span=" spanPct "%" flag "`n"
+            }
         }
         c["buf"] := newBuf
     }
@@ -490,16 +503,18 @@ LandscapeScanDiff()
 
     log := "----- Dynamic-alloc SCAN DIFF " FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") " -----`n"
         . "moved≈" moved " cells   changed=" changedN " / " g_lscanCands.Length (goneN ? ("  gone=" goneN) : "") "`n"
-        . "grid-sized (≥1MB) changed — monotonicity (fog = high mono%, one-directional):`n"
+        . "changed candidates ≥8KB — fog = high mono% (one-directional) + high 0→val% + low span%:`n"
         . (detail != "" ? detail : "    (none)`n")
         . "`n"
     _LgpLog(log)
 
     try MsgBox("Scan diff (moved≈" moved " cells): " changedN "/" g_lscanCands.Length " changed.`n`n"
-        . "Grid-sized candidates — MONOTONICITY (fog only accumulates → mono near 100%, up>>down):`n`n"
-        . (detail != "" ? detail : "(no grid-sized allocation changed)")
-        . "`n`nA candidate with mono≈100% (nearly all up) that grows toward where you walked is the`n"
-        . "explored grid. Oscillating ones (up≈down) are render/animation buffers.`n"
+        . "Per changed allocation ≥8KB:  mono% (accumulates one-way) · 0→val% (unexplored→explored`n"
+        . "flips a 0 to a value) · span% (fog changes are LOCAL → low; render buffers change everywhere).`n"
+        . "A row tagged '<<< FOG-LIKE' (mono≥90% AND 0→val≥70%) is the explored grid.`n`n"
+        . (detail != "" ? detail : "(nothing ≥8KB changed)")
+        . "`n`nIf NOTHING is FOG-LIKE across a few rounds → explored state isn't a plain CPU grid`n"
+        . "(GPU-side, per the shader maphack) → the self-tracked wash stays the answer.`n"
         . "Full detail in logs\\InGameStateMonitor.landscape_probe.log", "Landscape scan — diff")
 }
 
