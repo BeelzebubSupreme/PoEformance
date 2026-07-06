@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.233`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.234`.
 
 ## Language
 
@@ -2170,6 +2170,22 @@ Two owner-requested tweaks.
 - **Pending in-game verification:** on a map, the on-map Loot bar's name should read e.g.
   `MapRiverhold (explored: 37%)` and climb as you explore, resetting per area; the dot-spacing
   slider should look/behave like the Combat sliders and its row hide when the wash toggle is off.
+
+## Removed the "Walkable Grid (debug)" overlay (0.45.13.234)
+
+The walkable-grid fill diagnostic (blue 50%-stipple over every walkable cell) was superseded by
+"Highlight Unexplored" (same walkable-mask source, but a per-cell tunable wash that also clears as
+you explore), so per owner request it was removed entirely. Deleted: the `Walkable Grid (debug)`
+UI toggle row + its header-sync line; the `ToggleWalkGrid` bridge case; `walkGrid` in the header
+push; `g_walkGridEnabled` (InGameStateMonitor global + ConfigManager save/load, INI key `walkGrid`);
+and in `RadarOverlay` the whole walk-fill layer — `_walkGridEnabled`, `COLOR_WALKABLE`, the
+`_mapWalkColorDC`/`_mapWalkColorBmp`/`_mapWalkMask` bitmaps (creation in `_GenerateMapHackBitmap`,
+cleanup in `_DestroyMapHackBitmap`, the mid-gen zone-abort cleanup, and the per-pixel walk
+`SetPixelV`), plus the `walkOn`/`haveWalk` params of `_DrawMapLayersCached`/`_DrawMapLayersDirect`
+and the `"w"` bit in the scroll-cache `layerKey`. The wall-border maphack + unexplored-wash layers
+are untouched (they share the same generation scan and scroll cache). Static: RadarOverlay braces
+223/223, `CreateBitmap` 3→2 (walk mask gone), UI `node --check` clean; browser preview confirms the
+row is gone and a legacy `walkGrid` header key no longer throws.
 
 ## Reference
 

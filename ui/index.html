@@ -5609,12 +5609,6 @@
                 </div>
               </div>
 
-              <div class="cfg-row"><span class="cfg-label">Walkable Grid (debug)</span>
-                <label class="toggle"><input type="checkbox" id="tog-walkgrid" onchange="ahkCall('ToggleWalkGrid')"
-                    ><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-help">Diagnostic: shades every walkable cell of the memory terrain grid on the large map (blue, 50% stippled so the map shows through). Use it to compare the grid the bot pathfinds on against what the game actually allows — mismatches explain a stuck AutoPilot. Large map only.</div>
-
               <div class="cfg-row"><span class="cfg-label">Mask Outlines (debug)</span>
                 <label class="toggle"><input type="checkbox" id="tog-maskdebug" onchange="ahkCall('ToggleMaskDebug')"
                     ><span class="toggle-slider"></span></label>
@@ -10840,7 +10834,6 @@
 
       setChk('tog-zonenav', d.zoneNav !== undefined ? d.zoneNav : true);
       setChk('tog-maphack', d.mapHack !== undefined ? d.mapHack : true);
-      setChk('tog-walkgrid', d.walkGrid !== undefined ? d.walkGrid : false);
       setChk('tog-maphack-unexplored', d.mapHackUnexplored !== undefined ? d.mapHackUnexplored : false);
       mapHackUnexpSubVis(!!(d.mapHackUnexplored));
       if (d.mapHackUnexploredColor) {

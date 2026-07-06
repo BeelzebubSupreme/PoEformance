@@ -43,7 +43,7 @@ SaveConfig()
     global g_entityShowPlayer, g_entityShowMinion, g_entityShowEnemy
     global g_entityShowNPC, g_entityShowChest, g_entityShowWorldItem, g_entityShowOther
     global g_skillBuffBlacklist, g_zoneNavEnabled, g_mapHackEnabled, g_maphackSource, g_rangeCirclesEnabled
-    global g_walkGridEnabled, g_maphackMaskDebug, g_mapHackUnexplored
+    global g_maphackMaskDebug, g_mapHackUnexplored
     global g_mapHackUnexploredColor, g_mapHackUnexploredSpacing
     global g_panelHideOverlays, g_panelPauseAutoPilot, g_panelHideLootBars, g_autoPilotEnabled, g_inventoryChainDumpEnabled
     global g_overlayStatusTextEnabled, g_overlayPoeOnly
@@ -73,7 +73,6 @@ SaveConfig()
     IniWrite(g_radarShowChests       ? "1" : "0",  f, "Radar",         "showChests")
     IniWrite(g_zoneNavEnabled        ? "1" : "0",  f, "Radar",         "zoneNav")
     IniWrite(g_mapHackEnabled        ? "1" : "0",  f, "Radar",         "mapHack")
-    IniWrite(g_walkGridEnabled       ? "1" : "0",  f, "Radar",         "walkGrid")
     IniWrite(g_mapHackUnexplored     ? "1" : "0",  f, "Radar",         "mapHackUnexplored")
     IniWrite(g_mapHackUnexploredColor,             f, "Radar",         "mapHackUnexploredColor")
     IniWrite(g_mapHackUnexploredSpacing,           f, "Radar",         "mapHackUnexploredSpacing")
@@ -136,7 +135,7 @@ LoadConfig()
     global g_entityShowPlayer, g_entityShowMinion, g_entityShowEnemy
     global g_entityShowNPC, g_entityShowChest, g_entityShowWorldItem, g_entityShowOther
     global g_skillBuffBlacklist, g_zoneNavEnabled, g_mapHackEnabled, g_maphackSource, g_rangeCirclesEnabled
-    global g_walkGridEnabled, g_maphackMaskDebug, g_mapHackUnexplored
+    global g_maphackMaskDebug, g_mapHackUnexplored
     global g_mapHackUnexploredColor, g_mapHackUnexploredSpacing
     global g_panelHideOverlays, g_panelPauseAutoPilot, g_panelHideLootBars, g_autoPilotEnabled, g_inventoryChainDumpEnabled
     global g_overlayStatusTextEnabled, g_overlayPoeOnly
@@ -175,7 +174,6 @@ LoadConfig()
     g_radarShowChests          := _B("Radar",         "showChests",      true)
     g_zoneNavEnabled           := _B("Radar",         "zoneNav",         true)
     g_mapHackEnabled           := _B("Radar",         "mapHack",         true)
-    g_walkGridEnabled          := _B("Radar",         "walkGrid",        false)
     g_mapHackUnexplored        := _B("Radar",         "mapHackUnexplored", false)
     g_mapHackUnexploredColor   := _Ini("Radar",       "mapHackUnexploredColor", "#181820")
     g_mapHackUnexploredSpacing := Max(1, Min(8, Integer(_Ini("Radar", "mapHackUnexploredSpacing", "2") + 0)))

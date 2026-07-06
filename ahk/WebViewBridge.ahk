@@ -47,7 +47,7 @@ PushHeaderToWebView()
     global g_zoneNavEnabled
     global g_radarAlpha, g_mapHackEnabled, g_maphackSource, g_isConnected, g_rangeCirclesEnabled
     global g_panelHideOverlays, g_panelPauseAutoPilot, g_panelHideLootBars
-    global g_walkGridEnabled, g_maphackMaskDebug, g_mapHackUnexplored
+    global g_maphackMaskDebug, g_mapHackUnexplored
     global g_mapHackUnexploredColor, g_mapHackUnexploredSpacing
     global g_autoPilotEnabled, g_autoPilotState, g_autoPilotReason
     global g_inventoryChainDumpEnabled, g_overlayStatusTextEnabled, g_alwaysOnTop, g_localApiEnabled, g_localApiPort
@@ -108,7 +108,6 @@ PushHeaderToWebView()
         . "},"
         . '"zoneNav":' (g_zoneNavEnabled ? "true" : "false") ","
         . '"mapHack":' (g_mapHackEnabled ? "true" : "false") ","
-        . '"walkGrid":' ((IsSet(g_walkGridEnabled) && g_walkGridEnabled) ? "true" : "false") ","
         . '"mapHackUnexplored":' ((IsSet(g_mapHackUnexplored) && g_mapHackUnexplored) ? "true" : "false") ","
         . '"mapHackUnexploredColor":"' (IsSet(g_mapHackUnexploredColor) ? g_mapHackUnexploredColor : "#181820") '",'
         . '"mapHackUnexploredSpacing":' (IsSet(g_mapHackUnexploredSpacing) ? g_mapHackUnexploredSpacing : 2) ","
