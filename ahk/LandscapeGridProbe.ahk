@@ -35,16 +35,19 @@ _LscanHeapPtr(p)
     return (p > 0x10000 && p < 0x7FF000000000 && g_reader.IsProbablyValidPointer(p))
 }
 
-; Sampled, position-weighted checksum of a StdVector<byte> at `first` (size bytes). Reads the vector
-; once (capped) and folds ~16k evenly-spaced bytes so a change anywhere in the covered span flips it.
-; Returns -1 on a bad read.
-_LscanChecksum(first, size)
+; Reads a StdVector<byte> at `first` into a Buffer, capped at LSCAN_CAP (8 MB). Returns 0 on failure.
+LSCAN_CAP := 8 * 1024 * 1024
+_LscanRead(first, size)
 {
-    global g_reader
-    cap := Min(size, 8 * 1024 * 1024)
-    buf := g_reader.Mem.ReadBytes(first, cap, true)
-    if !(buf is Buffer) || buf.Size < 8
-        return -1
+    global g_reader, LSCAN_CAP
+    buf := g_reader.Mem.ReadBytes(first, Min(size, LSCAN_CAP), true)
+    return (buf is Buffer && buf.Size >= 8) ? buf : 0
+}
+
+; Sampled, position-weighted checksum of a byte Buffer — folds ~16k evenly-spaced bytes so a change
+; anywhere in the covered span flips it.
+_LscanChecksumBuf(buf)
+{
     n := buf.Size
     step := Max(1, n // 16384)
     sum := 0
@@ -81,10 +84,13 @@ _LscanScanStruct(base, range, label, out, maxTotal, seen)
         if seen.Has(first)
             continue
         seen[first] := true
-        csum := _LscanChecksum(first, size)
-        if (csum = -1)
+        buf := _LscanRead(first, size)
+        if !buf
             continue
-        out.Push(Map("name", label "+0x" Format("{:X}", off - 8), "addr", first, "size", size, "csum", csum))
+        ; Keep the bytes (already read for the checksum) so the diff can do a detailed monotonicity +
+        ; region analysis — that's the real fog discriminator (fog only accumulates: bytes go one way).
+        out.Push(Map("name", label "+0x" Format("{:X}", off - 8), "addr", first, "size", size
+            , "csum", _LscanChecksumBuf(buf), "buf", buf))
     }
 }
 
@@ -425,39 +431,76 @@ LandscapeScanDiff()
     pg := area ? _LgpPlayerGrid(area) : Map("ok", false)
     moved := (pg["ok"]) ? Round(Sqrt((pg["gx"] - g_lscanPgx) ** 2 + (pg["gy"] - g_lscanPgy) ** 2)) : -1
 
-    changedList := ""
+    ; For GRID-SIZED changed candidates, a MONOTONICITY analysis is the fog discriminator: explored
+    ; state only accumulates (bytes change in ONE direction and never revert), while animation/render
+    ; buffers oscillate (up ≈ down). Sampled (every 24th byte) so it stays fast over multi-MB buffers.
     changedN := 0
     goneN := 0
+    detail := ""     ; monotonicity lines for grid-sized (1-8 MB) changed candidates
     for c in g_lscanCands
     {
-        csum := _LscanChecksum(c["addr"], c["size"])
-        if (csum = -1)
+        newBuf := _LscanRead(c["addr"], c["size"])
+        if !newBuf
         {
             goneN += 1
             continue
         }
-        if (csum != c["csum"])
+        csum := _LscanChecksumBuf(newBuf)
+        if (csum = c["csum"])
         {
-            changedN += 1
-            changedList .= "  " c["name"] "  addr=0x" Format("{:X}", c["addr"]) "  size=" c["size"] "`n"
+            c["buf"] := newBuf
+            continue
         }
-        c["csum"] := csum
+        changedN += 1
+        ; grid-sized? do the detailed sampled monotonicity diff
+        if (c["size"] >= 1024 * 1024 && (c["buf"] is Buffer))
+        {
+            oldBuf := c["buf"]
+            n := Min(oldBuf.Size, newBuf.Size)
+            samples := 0, changed := 0, up := 0, down := 0, minO := n, maxO := -1
+            off := 0
+            while (off < n)
+            {
+                ov := NumGet(oldBuf, off, "UChar")
+                nv := NumGet(newBuf, off, "UChar")
+                samples += 1
+                if (ov != nv)
+                {
+                    changed += 1
+                    if (nv > ov)
+                        up += 1
+                    else
+                        down += 1
+                    if (off < minO)
+                        minO := off
+                    if (off > maxO)
+                        maxO := off
+                }
+                off += 24
+            }
+            mono := (changed > 0) ? Round(100 * Max(up, down) / changed) : 0
+            detail .= "    " c["name"] " sz=" c["size"]
+                . ": sampled Δ=" changed "/" samples "  up=" up " down=" down " (mono " mono "%)"
+                . "  offBox 0x" Format("{:X}", minO) "..0x" Format("{:X}", maxO) "`n"
+        }
+        c["buf"] := newBuf
     }
     if (pg["ok"])
         g_lscanPgx := pg["gx"], g_lscanPgy := pg["gy"]
 
     log := "----- Dynamic-alloc SCAN DIFF " FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") " -----`n"
         . "moved≈" moved " cells   changed=" changedN " / " g_lscanCands.Length (goneN ? ("  gone=" goneN) : "") "`n"
-        . (changedN ? ("CHANGED allocations:`n" changedList) : "NO allocation changed.`n")
+        . "grid-sized (≥1MB) changed — monotonicity (fog = high mono%, one-directional):`n"
+        . (detail != "" ? detail : "    (none)`n")
         . "`n"
     _LgpLog(log)
 
-    try MsgBox("Scan diff (moved≈" moved " cells):`n`n"
-        . changedN " of " g_lscanCands.Length " allocations CHANGED.`n`n"
-        . (changedN ? (changedList "`nRun it again while exploring — the fog/explored grid changes CONSISTENTLY`n"
-            . "with movement and is grid-sized. Erratic ones are other dynamic buffers.")
-            : "Nothing changed → the explored state is likely NOT a plain CPU grid here`n(consistent with the shader-patch maphack — it may be GPU-side).")
-        . "`n`nFull list in logs\\InGameStateMonitor.landscape_probe.log", "Landscape scan — diff")
+    try MsgBox("Scan diff (moved≈" moved " cells): " changedN "/" g_lscanCands.Length " changed.`n`n"
+        . "Grid-sized candidates — MONOTONICITY (fog only accumulates → mono near 100%, up>>down):`n`n"
+        . (detail != "" ? detail : "(no grid-sized allocation changed)")
+        . "`n`nA candidate with mono≈100% (nearly all up) that grows toward where you walked is the`n"
+        . "explored grid. Oscillating ones (up≈down) are render/animation buffers.`n"
+        . "Full detail in logs\\InGameStateMonitor.landscape_probe.log", "Landscape scan — diff")
 }
 
 ; Appends a block to the probe log (logs\ folder).
