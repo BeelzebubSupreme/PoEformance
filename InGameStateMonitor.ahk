@@ -56,7 +56,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.237"
+POEFORMANCE_VERSION := "0.45.13.238"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -183,9 +183,6 @@ g_exploreEnabled := false
 g_exploreTargetPercent := 80
 g_exploreCurrentPercent := 0.0
 g_exploreLastReason := "idle"
-; Always-on map coverage (ExploredTracker.ahk) — independent of AutoPilot; shown
-; on the on-map Loot bar. 0-100, reset per area.
-g_mapExploredPercent := 0.0
 
 ; AutoPilot — master state machine that arbitrates combat / loot / exploration.
 ; When off, none of the sub-routines run.
@@ -1041,7 +1038,6 @@ OnTreeTabChanged(*)
 #Include ahk/LootTrackerKills.ahk
 #Include ahk/LootTrackerSessions.ahk
 #Include ahk/ExplorationModule.ahk
-#Include ahk/ExploredTracker.ahk
 #Include ahk/AutoPilot.ahk
 #Include ahk/CustomHotkeys.ahk
 #Include ahk/SharedMem.ahk

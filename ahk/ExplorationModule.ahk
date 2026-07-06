@@ -26,7 +26,12 @@
 ;
 ; Params: radarSnap - full radar snapshot
 ;         gameHwnd  - resolved PoE2 window handle (must be valid + active)
-TryExploration(radarSnap, gameHwnd)
+; measureOnly (default false): run ONLY the coverage measurement (visited-disc
+; mark + reachable-region flood + g_exploreCurrentPercent) and return before any
+; navigation/clicking. Used by the always-on map-coverage readout when AutoPilot
+; is off, so the on-map Loot bar's "explored %" reuses this proven measurement
+; instead of a separate tracker.
+TryExploration(radarSnap, gameHwnd, measureOnly := false)
 {
     global g_exploreLastReason
     static _running := false
@@ -34,7 +39,7 @@ TryExploration(radarSnap, gameHwnd)
         return
     _running := true
     try
-        _RunExploration(radarSnap, gameHwnd)
+        _RunExploration(radarSnap, gameHwnd, measureOnly)
     catch as ex
     {
         ; Surface the crash in the debug overlay — a swallowed exception
@@ -47,7 +52,7 @@ TryExploration(radarSnap, gameHwnd)
         _running := false
 }
 
-_RunExploration(radarSnap, gameHwnd)
+_RunExploration(radarSnap, gameHwnd, measureOnly := false)
 {
     global g_exploreTargetPercent, g_exploreCurrentPercent
     global g_exploreLastReason, g_reader
@@ -260,14 +265,15 @@ _RunExploration(radarSnap, gameHwnd)
     g_exploreCurrentPercent := Round((_visitedWalkable / _totalWalkable) * 100, 1)
 
     ; ── Check if target reached ───────────────────────────────────────
-    if (g_exploreCurrentPercent >= g_exploreTargetPercent)
+    ; (measure-only skips the early returns so the region flood below still runs)
+    if (!measureOnly && g_exploreCurrentPercent >= g_exploreTargetPercent)
     {
         g_exploreLastReason := "done(" g_exploreCurrentPercent "%)"
         return
     }
 
     ; ── Pause navigation during combat ────────────────────────────────
-    if (g_combatState = "combat")
+    if (!measureOnly && g_combatState = "combat")
     {
         g_exploreLastReason := "combat-pause(" g_exploreCurrentPercent "%)"
         return
@@ -411,6 +417,15 @@ _RunExploration(radarSnap, gameHwnd)
     ; flood-filling, behavior unfiltered; rg:on → filters active).
     global g_exploreRegionDiag
     g_exploreRegionDiag := _regionDone ? (regionFilter ? "on" : "off") : "build"
+
+    ; Measure-only: the coverage is fully computed now (percentage above +
+    ; the region rebase). Recompute once more so the just-completed rebase is
+    ; reflected on the same tick, then return before any navigation/clicking.
+    if (measureOnly)
+    {
+        g_exploreCurrentPercent := Round((_visitedWalkable / _totalWalkable) * 100, 1)
+        return
+    }
 
     ; ── Camera anchor (shared projection sanity gate) ─────────────────
     ; The player must project near the screen centre (PoE keeps the camera

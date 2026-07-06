@@ -121,8 +121,12 @@ UpdateRadarFast()
         TryLootTrackerTick(radarSnap)
         Profiler.End("tick.loot")
 
-        ; ── Always-on map-coverage tracker (feeds the on-map Loot bar's explored %) ──
-        TryExploredTracker(radarSnap)
+        ; ── Always-on map-coverage measurement (feeds the on-map Loot bar's explored %) ──
+        ; Reuse the AutoPilot ExplorationModule's proven visited + reachable-region
+        ; measurement in measure-only mode (no navigation). When AutoPilot IS on, its
+        ; own explore tick already updates g_exploreCurrentPercent.
+        if (!g_autoPilotEnabled)
+            TryExploration(radarSnap, 0, true)
 
         ; ── Value-aware loot radar — price ground drops + threshold banner (self-throttled) ──
         TryLootRadarValue(radarSnap)

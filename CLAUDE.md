@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.237`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.238`.
 
 ## Language
 
@@ -2154,41 +2154,34 @@ Two owner-requested tweaks.
   "Highlight Unexplored" toggle: hidden by default, `mapHackUnexpSubVis(on)` flips it on the
   toggle's onchange + on header sync (and re-positions the bubble via `_posVal` inside a
   `requestAnimationFrame`, since a `display:none` slider has zero width).
-- **`ahk/ExploredTracker.ahk` (new) — always-on map coverage:** the AutoPilot ExplorationModule
-  only updates `g_exploreCurrentPercent` while the bot explores, so it can't feed a coverage
-  readout during manual play. This is a self-contained, AutoPilot-independent tracker:
-  `TryExploredTracker(radarSnap)` (called from `UpdateRadarFast` right after `TryLootTrackerTick`)
-  marks a disc of walkable coarse cells around the player as visited each tick and exposes
-  `visited/reachable × 100` as `g_mapExploredPercent` (0-100, reset per area on the terrain-size
-  key). Own static buffers — never touches the AutoPilot tracker's state.
-  - **Denominator = REACHABLE region, not the whole grid (fix 0.45.13.236):** the first cut divided
-    by ALL walkable coarse cells, which stuck at ~1% forever — PoE2's walkable grid includes huge
-    unreachable areas outside the playable zone (and every floor on multi-level maps). Now it
-    mirrors ExplorationModule's proven approach: a time-sliced, height-gated BFS **flood fill from
-    the player's seed cell** (`_regionMap`/`_regionQ`, 20 ms budget/tick, 80-unit seam gate via
-    `GetTerrainHeightContext`/`TerrainHeightAt`, reusing the global `_IsGridCellWalkable`) computes
-    the reachable walkable count, and the percentage re-bases on THAT (`_totalWalkable :=
-    _regionWalkable`, `_visitedWalkable := Min(_regionVisitedCnt, _regionWalkable)`). Not throttled
-    while the region is still flooding (so it finishes in ~1 s), then self-throttled ~300 ms;
-    `g_mapExploredPercent := 0` (bar hides the readout) until the region is built.
-  - Verified via an offline harness (scratchpad `explored_test.ahk`, stubbing the deps + synthetic
-    terrain): scenario 1 = reachable region + a large DISCONNECTED walkable blob → 100% (blob
-    excluded from the denominator; a full-grid denominator would give ~30%); scenario 2 = a long
-    corridor with the player at one end → 26.3% (region=80, visited=21) — a correct PARTIAL figure,
-    proving it's not merely always-100. Run the two scenarios in SEPARATE processes: the ~300 ms
-    throttle blocks a same-tick area re-init, which only a microsecond-apart test loop hits (real
-    zone changes are seconds apart, so it's a non-issue in game).
+- **Always-on map coverage — REUSE the ExplorationModule measurement (0.45.13.238):** the on-map Loot
+  bar shows `" (explored: NN%)"` after the map name (`_LtBuildStripSegments`, reading
+  `g_exploreCurrentPercent`; on-map strip bar only, already `g_ltOnMap`-gated). The AutoPilot
+  ExplorationModule already computes this correctly (visited-disc mark + reachable-region flood +
+  rebase), but only while the bot explores. Instead of a separate tracker, `_RunExploration` got a
+  **`measureOnly` mode**: it runs the full measurement (through the region flood + `g_exploreCurrentPercent`)
+  then returns BEFORE any navigation/clicking (the target-reached + combat-pause early returns are
+  `!measureOnly`-gated; a `measureOnly` return sits right after the region-diag line, recomputing the
+  percentage once so the just-completed rebase shows same-tick). `UpdateRadarFast` calls
+  `TryExploration(radarSnap, 0, true)` every tick **when AutoPilot is off** (when it's on, the normal
+  explore tick updates the same global). One measurement, no duplication.
+  - **History / why:** the first attempt was a standalone `ahk/ExploredTracker.ahk` that divided by ALL
+    walkable cells → stuck at ~1% (PoE2's walkable grid includes huge unreachable areas + every floor
+    on multi-level maps). It was then made to mirror ExplorationModule's reachable-region flood, but a
+    subtle in-game divergence (region never completing → readout blank) made the duplication not worth
+    it. **`ExploredTracker.ahk` + `g_mapExploredPercent` were deleted** in favour of reusing the proven
+    measurement directly. Lesson: there was already a working coverage measurement — reuse it, don't
+    reimplement.
+  - Verified: full reader/ExplorationModule stack load-checks clean via a PowerShell harness
+    (`ld_explore.ahk`) — `TryExploration`/`_RunExploration` now `MaxParams=3`; brace balance holds.
   - **Tooling lesson:** run AutoHotkey through the **PowerShell tool**, not the Bash tool. Git-bash
     mangles a leading-slash switch like `/ErrorStdOut` into a Windows path (`…/Git/ErrorStdOut`), so
     AHK treats it as a missing script file and pops a modal error dialog that HANGS (this looked like
     "AHK execution is broken in the sandbox" — it isn't). `Start-Process AutoHotkey64.exe
     -ArgumentList '/ErrorStdOut', <script> -PassThru` + `WaitForExit(ms)` works. Never `Stop-Process
     AutoHotkey64` (it can kill the owner's running tool).
-- **Loot bar readout (`ahk/LootTrackerOverlay.ahk`):** `_LtBuildStripSegments` appends
-  `" (explored: NN%)"` to the map-name segment when `g_mapExploredPercent > 0` (on-map strip bar
-  only — the bar is already `g_ltOnMap`-gated).
-- **Pending in-game verification:** on a map, the on-map Loot bar's name should read e.g.
-  `MapRiverhold (explored: 37%)` and climb as you explore, resetting per area; the dot-spacing
+- **Pending in-game verification:** on a map (AutoPilot off), the on-map Loot bar's name should read
+  e.g. `MapRiverhold (explored: 37%)` and climb as you explore, resetting per area; the dot-spacing
   slider should look/behave like the Combat sliders and its row hide when the wash toggle is off.
 
 ## Removed the "Walkable Grid (debug)" overlay (0.45.13.234)
