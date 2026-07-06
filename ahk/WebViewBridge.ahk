@@ -248,6 +248,16 @@ _DecodeComponentOnDemand(entityAddrHex, compName, compAddrHex)
         ; Reuse the inspector's existing summary serializer so the lazy
         ; result lands in the same shape as the snapshot-pushed version.
         jsonSummary := IsObject(decoded) ? _SerializeComponentSummary(canonical, decoded) : ""
+        ; A registered decoder can still yield an EMPTY summary when its output doesn't match the
+        ; scalar whitelist (e.g. NPC returns only a nested `owner` map + `isNpc`, and the whitelist
+        ; asks for a non-existent `npcName`). Rather than leave the row un-openable, fall back to the
+        ; generic raw dump so it always shows something useful.
+        if (jsonSummary = "")
+        {
+            gen := g_reader.DecodeUnknownComponentBasic(compAddr)
+            if (gen is Map)
+                jsonSummary := _SerializeGenericComponent(gen)
+        }
         _PushLazyComponentResult(entityAddrHex, compName, jsonSummary)
     }
     catch as e
