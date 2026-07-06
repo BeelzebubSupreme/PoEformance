@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.222`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.223`.
 
 ## Language
 
@@ -2106,11 +2106,19 @@ suspect for the explored grid.
   in the RE-tools row; `LoadLandscapeGridProbe()` seeds the snapshot globals.
 - **Static verification:** `LandscapeGridProbe.ahk` parse-loads clean; braces balanced; UI `node --check`
   clean.
-- **Pending in-game (owner + me):** in a NOT-fully-explored area → "Landscape Snapshot" → walk to reveal
-  new map → "Landscape Diff". If cells changed and the change box tracks the path → it IS the explored
-  grid (then wire it into the unexplored wash for exact fog). If nothing changes → `GridLandscapeData` is
-  static (a 2nd walkability/terrain layer) and the real explored state lives elsewhere (next: scan the
-  InGameState/MiniMap struct). Send me the `landscape_probe.log` blocks.
+- **Result 1 (in-game 2026-07-06): `GridLandscapeData` is STATIC** — 0 bytes changed across 76/47/321-cell
+  walks; histogram = nibble pairs of values 0-5 (mostly `0x55`) → a terrain-TYPE/height classification
+  layer, not boolean explored flags. So NOT the fog grid.
+- **Extended to 4 layers (0.45.13.223):** the owner supplied two more `StdVector<byte>` terrain grids —
+  `GridLayer3` @0x100 and `GridLayer4` @0x118 (added to `PoE2Offsets.TerrainMetadata`). The four grids
+  sit 0x18 apart (walkable @0xD0, landscape @0xE8, layer3 @0x100, layer4 @0x118). The probe now
+  snapshots + diffs ALL FOUR at once (`_LgpLayerDefs`) so one walk checks every candidate; the diff
+  flags any grid whose cells changed (with its change box) and verdicts "look at InGameState/MiniMap
+  next" if none do.
+- **Pending in-game (owner + me):** re-run Snapshot → walk → Diff. If layer3 or layer4 CHANGES near the
+  path → the explored grid is found (wire it into the unexplored wash). If all four stay static → the
+  explored/fog state is NOT in the terrain layers; next candidate is a MiniMap/fog struct off InGameState
+  (RE that separately). Send me the `landscape_probe.log` blocks.
 
 ## Reference
 

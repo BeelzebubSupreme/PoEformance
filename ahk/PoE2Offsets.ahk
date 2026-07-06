@@ -63,7 +63,9 @@ class PoE2Offsets
         "TotalTilesY", 0x20,   ; int64 — number of tile rows
         "TileDetailsPtr", 0x28,   ; StdVector<TileStructure> (each 0x38 bytes)
         "GridWalkableData", 0xD0,   ; StdVector<byte> -- absolute: AreaInstance+0x988
-        "GridLandscapeData", 0xE8,   ; StdVector<byte> -- absolute: AreaInstance+0x9A0
+        "GridLandscapeData", 0xE8,   ; StdVector<byte> -- absolute: AreaInstance+0x9A0 (static: terrain-type nibbles 0-5)
+        "GridLayer3", 0x100,   ; StdVector<byte> -- extra PoE2 terrain layer (explored-grid candidate; RE probe)
+        "GridLayer4", 0x118,   ; StdVector<byte> -- extra PoE2 terrain layer (explored-grid candidate; RE probe)
         "BytesPerRow", 0x130,  ; int32 -- absolute: AreaInstance+0x9E8
         "TileHeightMultiplier", 0x134   ; int16 -- absolute: AreaInstance+0x9EC
     )
