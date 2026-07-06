@@ -5597,18 +5597,20 @@
                     ><span class="toggle-slider"></span></label>
               </div>
               <div class="cfg-help">Puts a subtle dark wash over walkable areas you haven't reached yet, so on the revealed map you can see where you still need to explore. It clears as you move through an area. Approximate: the game exposes no fog-of-war grid, so "explored" is tracked from your own path. Large map + Map Hack only.</div>
-              <div id="mhunexp-subrow" class="cfg-sub-row" style="display:none;padding:4px 8px 6px 18px;gap:18px;align-items:center;flex-wrap:wrap">
-                <div style="display:flex;gap:8px;align-items:center" data-tip="Colour of the unexplored wash. Default is very dark; pick a lighter shade if it's too heavy.">
+              <div id="mhunexp-subrow" style="display:none">
+                <div class="cfg-sub-row" style="padding:4px 8px 2px 18px;gap:8px;align-items:center" data-tip="Colour of the unexplored wash. Default is very dark; pick a lighter shade if it's too heavy.">
                   <span style="color:var(--subtext);font-size:11px">↳ Colour</span>
                   <span id="cp-swatch-mhunexp" class="cp-swatch" onclick="mapHackUnexpOpenColor(this)"></span>
                   <span id="cp-hex-mhunexp" style="font-family:monospace;font-size:11px;color:var(--subtext)">—</span>
                 </div>
-                <div style="display:flex;gap:8px;align-items:center" data-tip="Spacing between the wash dots. 1 = solid (darkest), higher = more spread out / lighter (the map shows through more).">
-                  <span style="color:var(--subtext);font-size:11px">↳ Dot spacing</span>
-                  <input type="range" id="mhunexp-spacing" min="1" max="8" step="1" value="2"
-                         oninput="document.getElementById('mhunexp-spacing-val').textContent=this.value"
-                         onchange="ahkCall('SetMapHackUnexploredSpacing', parseInt(this.value,10))" style="width:120px">
-                  <span id="mhunexp-spacing-val" style="font-family:monospace;font-size:11px;color:var(--subtext);min-width:12px">2</span>
+                <div class="cfg-slider-row" style="padding-left:18px" data-tip="Spacing between the wash dots. 1 = solid (darkest), higher = more spread out / lighter (the map shows through more).">
+                  <span class="cfg-label">↳ Dot spacing</span>
+                  <div class="slider-wrap">
+                    <span class="slider-val" id="mhunexp-spacing-val">2</span>
+                    <input type="range" id="mhunexp-spacing" min="1" max="8" step="1" value="2"
+                           oninput="_sb(this,'mhunexp-spacing-val',this.value)"
+                           onchange="ahkCall('SetMapHackUnexploredSpacing', parseInt(this.value,10))">
+                  </div>
                 </div>
               </div>
 
@@ -7982,7 +7984,15 @@
     // Show/hide the unexplored-wash sub-row (colour + spacing) with the toggle.
     function mapHackUnexpSubVis(on) {
       const r = document.getElementById('mhunexp-subrow');
-      if (r) r.style.display = on ? 'flex' : 'none';
+      if (!r) return;
+      r.style.display = on ? 'block' : 'none';
+      // The spacing slider's value bubble can't be positioned while hidden
+      // (zero width) — reposition it once the row is laid out.
+      if (on) requestAnimationFrame(() => {
+        const sl = document.getElementById('mhunexp-spacing');
+        const bub = document.getElementById('mhunexp-spacing-val');
+        if (sl && bub) _posVal(sl, bub);
+      });
     }
 
     // Map loot-value label color → shared GGPK color picker → SetLootRadarValue mapColor.
@@ -10849,6 +10859,7 @@
         const spv = document.getElementById('mhunexp-spacing-val');
         if (sp && document.activeElement !== sp) sp.value = d.mapHackUnexploredSpacing;
         if (spv) spv.textContent = d.mapHackUnexploredSpacing;
+        if (sp && spv) _posVal(sp, spv);
       }
       setChk('tog-maskdebug', d.maskDebug !== undefined ? d.maskDebug : false);
       // Maphack source — radio sync + GGPK action row visibility.

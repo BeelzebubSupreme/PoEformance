@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.230`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.231`.
 
 ## Language
 
@@ -2140,6 +2140,36 @@ suspect for the explored grid.
   self-tracked visited-grid wash (`0.45.13.221`, "Highlight Unexplored") is therefore the correct, final
   solution — PROVEN best-available, not guessed. `LandscapeGridProbe` is kept as the RE record + a reusable
   grid snapshot/diff + dynamic-allocation scanner for future hunts.
+
+## Map-coverage % on the Loot bar + slider-theme fix (shipped 0.45.13.231)
+
+Two owner-requested tweaks.
+
+- **Themed spacing slider + conditional sub-row (`ui/index.html`):** the unexplored-wash
+  dot-spacing control was a raw `<input type="range">` (no theme). Rebuilt as the standard
+  Arcane-Codex slider — `.cfg-slider-row > .cfg-label + .slider-wrap(.slider-val bubble +
+  input)` with `oninput="_sb(this,'mhunexp-spacing-val',this.value)"` — matching the Combat/
+  Exploration sliders. **This is THE slider pattern for the whole UI; reuse it for any new
+  slider.** The colour-swatch + spacing sub-row (`#mhunexp-subrow`) is now also gated on the
+  "Highlight Unexplored" toggle: hidden by default, `mapHackUnexpSubVis(on)` flips it on the
+  toggle's onchange + on header sync (and re-positions the bubble via `_posVal` inside a
+  `requestAnimationFrame`, since a `display:none` slider has zero width).
+- **`ahk/ExploredTracker.ahk` (new) — always-on map coverage:** the AutoPilot ExplorationModule
+  only updates `g_exploreCurrentPercent` while the bot explores, so it can't feed a coverage
+  readout during manual play. This is a self-contained, AutoPilot-independent tracker:
+  `TryExploredTracker(radarSnap)` (called from `UpdateRadarFast` right after `TryLootTrackerTick`,
+  **self-throttled ~300 ms**) marks a disc of walkable coarse cells around the player as visited
+  each tick and exposes `visited/total × 100` as `g_mapExploredPercent` (0-100, reset per area on
+  the terrain-size key). Cheap: one ~21×21 disc scan per throttled tick + one full walkable-cell
+  count per area. Own static buffers — never touches the AutoPilot tracker's state (their
+  percentages can differ slightly since AutoPilot re-bases on the reachable region; the bar uses
+  `g_mapExploredPercent` consistently). Global seeded in `InGameStateMonitor.ahk`.
+- **Loot bar readout (`ahk/LootTrackerOverlay.ahk`):** `_LtBuildStripSegments` appends
+  `" (explored: NN%)"` to the map-name segment when `g_mapExploredPercent > 0` (on-map strip bar
+  only — the bar is already `g_ltOnMap`-gated).
+- **Pending in-game verification:** on a map, the on-map Loot bar's name should read e.g.
+  `MapRiverhold (explored: 37%)` and climb as you explore, resetting per area; the dot-spacing
+  slider should look/behave like the Combat sliders and its row hide when the wash toggle is off.
 
 ## Reference
 

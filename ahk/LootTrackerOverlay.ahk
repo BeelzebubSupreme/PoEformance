@@ -207,8 +207,14 @@ _LtBuildStripSegments()
     textCol := 0xE0E0E0, green := 0x80E680, red := 0x8080E6, dim := 0x9A9A9A
     segs := []
 
+    global g_mapExploredPercent
     name := _LtV(v, "name", "")
-    segs.Push(Map("text", (name = "" ? "—" : name), "color", textCol))
+    nameText := (name = "" ? "—" : name)
+    ; Append the live map-coverage percentage in parentheses (always-on tracker,
+    ; ExploredTracker.ahk). Only once a coverage figure exists (> 0).
+    if (IsSet(g_mapExploredPercent) && g_mapExploredPercent > 0)
+        nameText .= " (explored: " Round(g_mapExploredPercent) "%)"
+    segs.Push(Map("text", nameText, "color", textCol))
     segs.Push(Map("text", _LtFmtDurMs(_LtCurrentLiveTimeMs()), "color", textCol))
 
     ex := _LtV(v, "profitEx", 0)

@@ -121,6 +121,9 @@ UpdateRadarFast()
         TryLootTrackerTick(radarSnap)
         Profiler.End("tick.loot")
 
+        ; ── Always-on map-coverage tracker (feeds the on-map Loot bar's explored %) ──
+        TryExploredTracker(radarSnap)
+
         ; ── Value-aware loot radar — price ground drops + threshold banner (self-throttled) ──
         TryLootRadarValue(radarSnap)
 
