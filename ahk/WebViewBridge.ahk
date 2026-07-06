@@ -295,7 +295,7 @@ _SerializeGenericComponent(m)
 {
     if !(m is Map)
         return ""
-    order := ["componentAddr", "staticPtr", "owner", "pointers", "nonzeroInts", "floats"]
+    order := ["componentAddr", "staticPtr", "owner", "entityRefs", "pointers", "nonzeroInts", "floats"]
     out := "{"
     first := true
     for _, k in order

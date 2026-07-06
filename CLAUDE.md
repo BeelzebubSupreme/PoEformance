@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.218`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.219`.
 
 ## Language
 
@@ -2040,6 +2040,15 @@ unknown component is inspectable + reverse-engineerable live.
   on-demand switch. `staticPtr` confirms two rows are the same component type.
 - **Static verification:** braces balanced; `DecodeUnknownComponentBasic` parse-loads in the reader
   stack; `Format` placeholders (`{1:X}`/`{2}`) validated offline.
+- **Pointer classification (0.45.13.219):** in-game dumps of BaseEvents / Functions / InteractionActions
+  proved these are internal ENGINE dispatch structures (vtables in the `0x7FF6…` module range +
+  intrusive linked-list/self-referencing nodes + entity pointers), not named-field data components — so
+  a "proper decoder" would only ever surface handler counts, nothing player-meaningful. The genuinely
+  useful signal is the EMBEDDED ENTITY POINTERS (e.g. an NPC's BaseEvents references other entities), so
+  the generic dump now classifies each pointer: high-canonical (`≥ 0x7FF000000000`) → tagged `(code)`;
+  heap pointer → resolved via `ReadEntityIdentityBasic` and, if it yields a real `Metadata/` path,
+  listed under a new `entityRefs` field instead of raw. So an unknown component now shows WHICH entities
+  it points at, not just addresses.
 
 ## Reference
 

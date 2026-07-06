@@ -1628,18 +1628,38 @@ class PoE2ComponentDecoders
                 ownerPath := oid["path"]
         }
 
-        ints := "", flts := "", ptrs := ""
+        ints := "", flts := "", ptrs := "", ents := ""
         off := 0x10                          ; skip the header (0x00 static, 0x08 owner)
         while (off + 4 <= span)
         {
-            ; A plausible pointer at an 8-aligned slot: report it and skip its 8 bytes so it is not
+            ; A plausible pointer at an 8-aligned slot: classify it and skip its 8 bytes so it is not
             ; also emitted as two large "ints".
             if (Mod(off, 8) = 0 && off + 8 <= span)
             {
                 p := NumGet(buf.Ptr, off, "Ptr")
                 if this.IsProbablyValidPointer(p)
                 {
-                    ptrs .= Format("+0x{1:X}=0x{2:X}  ", off, p)
+                    if (p >= 0x7FF000000000)
+                    {
+                        ; High canonical address = game-module code / vtable / static descriptor.
+                        ptrs .= Format("+0x{1:X}=0x{2:X}(code)  ", off, p)
+                    }
+                    else
+                    {
+                        ; Heap pointer — try to resolve it as an ENTITY (reveals what the component
+                        ; references, e.g. an NPC's event targets). Only accept a real Metadata/ path.
+                        epath := ""
+                        try
+                        {
+                            eid := this.ReadEntityIdentityBasic(p, 160)
+                            if (eid is Map && eid.Has("path") && SubStr(eid["path"], 1, 9) = "Metadata/")
+                                epath := eid["path"]
+                        }
+                        if (epath != "")
+                            ents .= Format("+0x{1:X}=", off) epath "  "
+                        else
+                            ptrs .= Format("+0x{1:X}=0x{2:X}  ", off, p)
+                    }
                     off += 8
                     continue
                 }
@@ -1657,6 +1677,7 @@ class PoE2ComponentDecoders
             "componentAddr", Format("0x{:X}", componentPtr),
             "staticPtr", Format("0x{:X}", staticPtr),
             "owner", ownerPath = "" ? "(none)" : ownerPath,
+            "entityRefs", ents = "" ? "(none)" : Trim(ents),
             "pointers", ptrs = "" ? "(none)" : Trim(ptrs),
             "nonzeroInts", ints = "" ? "(none)" : Trim(ints),
             "floats", flts = "" ? "(none)" : Trim(flts)
