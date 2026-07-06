@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.227`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.228`.
 
 ## Language
 
@@ -2127,11 +2127,19 @@ suspect for the explored grid.
   and reports which CHANGED. The fog grid (if it's a CPU allocation) is a grid-sized candidate that
   flips CONSISTENTLY with exploration; erratic ones are other dynamic buffers. Bridge
   `LandscapeScanSnapshot`/`LandscapeScanDiff`; UI "🔎 Scan Snapshot"/"🔎 Scan Diff".
-- **Pending in-game (owner + me):** "🔎 Scan Snapshot" → walk → "🔎 Scan Diff", a few rounds. If a
-  grid-sized allocation changes consistently → found it (drill into its offset, wire into the wash). If
-  nothing changes consistently → the explored state is NOT a plain CPU grid (consistent with the GGPK
-  shader-patch maphack → likely GPU-side), and the self-tracked wash (0.45.13.221) stays the answer.
-  Send me the `landscape_probe.log` scan blocks.
+- **CONCLUSION — the hunt is CLOSED, negative (in-game 2026-07-06):** across many snapshot→walk→diff
+  rounds with the monotonicity/0→val/span analysis, NO allocation is consistently fog-like. The only
+  `<<< FOG-LIKE` flag was a fluke (`area+0x1238`, a REALLOCATING 12-40 KB buffer whose one flagged tick
+  had a tiny Δ; every other tick it oscillated at span 94 %). The grid-sized candidates (the ~3.8 MB
+  minimap family off a terrain sub-struct) change with `span 99-100 %` — spread over the WHOLE buffer,
+  not localised to the path → a minimap RENDER texture, not an accumulating explored state. So,
+  systematically ruled out: (1) all 4 terrain byte grids = static; (2) all dynamic CPU allocations off
+  AreaInstance/InGameState (direct + 1 level) = oscillating / whole-buffer render buffers. **The
+  explored/fog state is NOT a readable CPU grid — it is GPU-side** (consistent with the GGPK shader-patch
+  maphack revealing fog via rendering, not via read data; and why GameHelper2 never exposed it). The
+  self-tracked visited-grid wash (`0.45.13.221`, "Highlight Unexplored") is therefore the correct, final
+  solution — PROVEN best-available, not guessed. `LandscapeGridProbe` is kept as the RE record + a reusable
+  grid snapshot/diff + dynamic-allocation scanner for future hunts.
 
 ## Reference
 
