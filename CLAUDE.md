@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.236`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.237`.
 
 ## Language
 
@@ -2171,10 +2171,19 @@ Two owner-requested tweaks.
     _regionWalkable`, `_visitedWalkable := Min(_regionVisitedCnt, _regionWalkable)`). Not throttled
     while the region is still flooding (so it finishes in ~1 s), then self-throttled ~300 ms;
     `g_mapExploredPercent := 0` (bar hides the readout) until the region is built.
-  - Static-only verification: braces 24/24, parens 113/113, and the region logic is a faithful copy
-    of `_RunExploration`'s. The offline harness could NOT be run — AutoHotkey execution hangs in the
-    dev sandbox (even a trivial FileAppend+ExitApp script times out); do NOT `Stop-Process
-    AutoHotkey64` to "fix" it (it can kill the owner's running tool).
+  - Verified via an offline harness (scratchpad `explored_test.ahk`, stubbing the deps + synthetic
+    terrain): scenario 1 = reachable region + a large DISCONNECTED walkable blob → 100% (blob
+    excluded from the denominator; a full-grid denominator would give ~30%); scenario 2 = a long
+    corridor with the player at one end → 26.3% (region=80, visited=21) — a correct PARTIAL figure,
+    proving it's not merely always-100. Run the two scenarios in SEPARATE processes: the ~300 ms
+    throttle blocks a same-tick area re-init, which only a microsecond-apart test loop hits (real
+    zone changes are seconds apart, so it's a non-issue in game).
+  - **Tooling lesson:** run AutoHotkey through the **PowerShell tool**, not the Bash tool. Git-bash
+    mangles a leading-slash switch like `/ErrorStdOut` into a Windows path (`…/Git/ErrorStdOut`), so
+    AHK treats it as a missing script file and pops a modal error dialog that HANGS (this looked like
+    "AHK execution is broken in the sandbox" — it isn't). `Start-Process AutoHotkey64.exe
+    -ArgumentList '/ErrorStdOut', <script> -PassThru` + `WaitForExit(ms)` works. Never `Stop-Process
+    AutoHotkey64` (it can kill the owner's running tool).
 - **Loot bar readout (`ahk/LootTrackerOverlay.ahk`):** `_LtBuildStripSegments` appends
   `" (explored: NN%)"` to the map-name segment when `g_mapExploredPercent > 0` (on-map strip bar
   only — the bar is already `g_ltOnMap`-gated).
