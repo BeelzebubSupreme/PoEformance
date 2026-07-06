@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.235`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.236`.
 
 ## Language
 
@@ -2157,13 +2157,24 @@ Two owner-requested tweaks.
 - **`ahk/ExploredTracker.ahk` (new) — always-on map coverage:** the AutoPilot ExplorationModule
   only updates `g_exploreCurrentPercent` while the bot explores, so it can't feed a coverage
   readout during manual play. This is a self-contained, AutoPilot-independent tracker:
-  `TryExploredTracker(radarSnap)` (called from `UpdateRadarFast` right after `TryLootTrackerTick`,
-  **self-throttled ~300 ms**) marks a disc of walkable coarse cells around the player as visited
-  each tick and exposes `visited/total × 100` as `g_mapExploredPercent` (0-100, reset per area on
-  the terrain-size key). Cheap: one ~21×21 disc scan per throttled tick + one full walkable-cell
-  count per area. Own static buffers — never touches the AutoPilot tracker's state (their
-  percentages can differ slightly since AutoPilot re-bases on the reachable region; the bar uses
-  `g_mapExploredPercent` consistently). Global seeded in `InGameStateMonitor.ahk`.
+  `TryExploredTracker(radarSnap)` (called from `UpdateRadarFast` right after `TryLootTrackerTick`)
+  marks a disc of walkable coarse cells around the player as visited each tick and exposes
+  `visited/reachable × 100` as `g_mapExploredPercent` (0-100, reset per area on the terrain-size
+  key). Own static buffers — never touches the AutoPilot tracker's state.
+  - **Denominator = REACHABLE region, not the whole grid (fix 0.45.13.236):** the first cut divided
+    by ALL walkable coarse cells, which stuck at ~1% forever — PoE2's walkable grid includes huge
+    unreachable areas outside the playable zone (and every floor on multi-level maps). Now it
+    mirrors ExplorationModule's proven approach: a time-sliced, height-gated BFS **flood fill from
+    the player's seed cell** (`_regionMap`/`_regionQ`, 20 ms budget/tick, 80-unit seam gate via
+    `GetTerrainHeightContext`/`TerrainHeightAt`, reusing the global `_IsGridCellWalkable`) computes
+    the reachable walkable count, and the percentage re-bases on THAT (`_totalWalkable :=
+    _regionWalkable`, `_visitedWalkable := Min(_regionVisitedCnt, _regionWalkable)`). Not throttled
+    while the region is still flooding (so it finishes in ~1 s), then self-throttled ~300 ms;
+    `g_mapExploredPercent := 0` (bar hides the readout) until the region is built.
+  - Static-only verification: braces 24/24, parens 113/113, and the region logic is a faithful copy
+    of `_RunExploration`'s. The offline harness could NOT be run — AutoHotkey execution hangs in the
+    dev sandbox (even a trivial FileAppend+ExitApp script times out); do NOT `Stop-Process
+    AutoHotkey64` to "fix" it (it can kill the owner's running tool).
 - **Loot bar readout (`ahk/LootTrackerOverlay.ahk`):** `_LtBuildStripSegments` appends
   `" (explored: NN%)"` to the map-name segment when `g_mapExploredPercent > 0` (on-map strip bar
   only — the bar is already `g_ltOnMap`-gated).
