@@ -35,12 +35,12 @@ _LscanHeapPtr(p)
     return (p > 0x10000 && p < 0x7FF000000000 && g_reader.IsProbablyValidPointer(p))
 }
 
-; Reads a StdVector<byte> at `first` into a Buffer, capped at LSCAN_CAP (8 MB). Returns 0 on failure.
-LSCAN_CAP := 8 * 1024 * 1024
+; Reads a StdVector<byte> at `first` into a Buffer, capped at 8 MB. Returns 0 on failure. (The cap is
+; inlined — a top-level `global := value` in this #Include'd-at-bottom module would never run: init gotcha.)
 _LscanRead(first, size)
 {
-    global g_reader, LSCAN_CAP
-    buf := g_reader.Mem.ReadBytes(first, Min(size, LSCAN_CAP), true)
+    global g_reader
+    buf := g_reader.Mem.ReadBytes(first, Min(size, 8 * 1024 * 1024), true)
     return (buf is Buffer && buf.Size >= 8) ? buf : 0
 }
 
