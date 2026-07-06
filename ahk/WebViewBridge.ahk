@@ -237,10 +237,12 @@ _DecodeComponentOnDemand(entityAddrHex, compName, compAddrHex)
             case "minimapicon": decoded := g_reader.DecodeMinimapIconComponentBasic(compAddr)
             case "diesaftertime": decoded := g_reader.DecodeDiesAfterTimeComponentBasic(compAddr)
             default:
-                ; No decoder registered — push an empty result so the UI
-                ; surfaces an explicit "no decoder" hint instead of
-                ; hanging on the loading spinner.
-                return _PushLazyComponentResult(entityAddrHex, compName, "")
+                ; No specific decoder — fall back to a GENERIC raw dump (header + non-zero ints /
+                ; floats / pointers with offsets) so any unknown component (Functions, BaseEvents, …)
+                ; is still inspectable + reverse-engineerable instead of a dead "no decoder" row.
+                gen := g_reader.DecodeUnknownComponentBasic(compAddr)
+                genJson := (gen is Map) ? _SerializeGenericComponent(gen) : ""
+                return _PushLazyComponentResult(entityAddrHex, compName, genJson)
         }
 
         ; Reuse the inspector's existing summary serializer so the lazy
@@ -284,6 +286,27 @@ _RequestEntityComponents(entityAddrHex)
     }
     catch as e
         try LogError("RequestEntityComponents " entityAddrHex, e)
+}
+
+; Serialises the generic unknown-component dump (DecodeUnknownComponentBasic) to a JSON object in a
+; FIXED key order (AHK Map iteration order is unspecified, so emit explicit keys). All values are
+; strings; the ordered offset content lives INSIDE each string.
+_SerializeGenericComponent(m)
+{
+    if !(m is Map)
+        return ""
+    order := ["componentAddr", "staticPtr", "owner", "pointers", "nonzeroInts", "floats"]
+    out := "{"
+    first := true
+    for _, k in order
+    {
+        if !m.Has(k)
+            continue
+        v := StrReplace(StrReplace(String(m[k]), "\", "\\"), '"', '\"')
+        out .= (first ? "" : ",") '"' k '":"' v '"'
+        first := false
+    }
+    return out "}"
 }
 
 ; Pushes the lazy-decode result to JS. Empty `jsonSummary` becomes a JSON

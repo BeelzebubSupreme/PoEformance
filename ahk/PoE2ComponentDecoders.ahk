@@ -1602,6 +1602,67 @@ class PoE2ComponentDecoders
         )
     }
 
+    ; Generic fallback decode for a component that has NO specific decoder — a raw reverse-engineering
+    ; view. Reads the first `span` bytes at the component pointer and summarises the header plus every
+    ; non-zero int32, plausible float32 and plausible pointer with its offset. Purpose: turn any unknown
+    ; component (Functions, BaseEvents, InteractionAction, HideoutDoodad, ControlZone, …) from a dead
+    ; "no decoder" row into a live, inspectable dump so its fields can be reverse-engineered from the
+    ; offsets. `staticPtr` (0x00) is the component's TYPE descriptor — identical across all instances of
+    ; the same component, so it fingerprints the type; `ownerEntityPtr` (0x08) is the owning entity.
+    ; Returns a Map of string fields (ordered content inside each), or 0 on a bad read.
+    DecodeUnknownComponentBasic(componentPtr, span := 0xA0)
+    {
+        if !this.IsProbablyValidPointer(componentPtr)
+            return 0
+        buf := this.Mem.ReadBytes(componentPtr, span)
+        if !buf
+            return 0
+
+        staticPtr := NumGet(buf.Ptr, PoE2Offsets.ComponentHeader["StaticPtr"], "Ptr")
+        ownerPtr  := NumGet(buf.Ptr, PoE2Offsets.ComponentHeader["EntityPtr"], "Ptr")
+        ownerPath := ""
+        if this.IsProbablyValidPointer(ownerPtr)
+        {
+            oid := this.ReadEntityIdentityBasic(ownerPtr, 120)
+            if (oid is Map && oid.Has("path"))
+                ownerPath := oid["path"]
+        }
+
+        ints := "", flts := "", ptrs := ""
+        off := 0x10                          ; skip the header (0x00 static, 0x08 owner)
+        while (off + 4 <= span)
+        {
+            ; A plausible pointer at an 8-aligned slot: report it and skip its 8 bytes so it is not
+            ; also emitted as two large "ints".
+            if (Mod(off, 8) = 0 && off + 8 <= span)
+            {
+                p := NumGet(buf.Ptr, off, "Ptr")
+                if this.IsProbablyValidPointer(p)
+                {
+                    ptrs .= Format("+0x{1:X}=0x{2:X}  ", off, p)
+                    off += 8
+                    continue
+                }
+            }
+            i := NumGet(buf.Ptr, off, "Int")
+            if (i != 0)
+                ints .= Format("+0x{1:X}={2}  ", off, i)
+            f := NumGet(buf.Ptr, off, "Float")
+            if (Abs(f) > 0.0001 && Abs(f) < 1.0e9)
+                flts .= Format("+0x{1:X}={2}  ", off, Round(f, 3))
+            off += 4
+        }
+
+        return Map(
+            "componentAddr", Format("0x{:X}", componentPtr),
+            "staticPtr", Format("0x{:X}", staticPtr),
+            "owner", ownerPath = "" ? "(none)" : ownerPath,
+            "pointers", ptrs = "" ? "(none)" : Trim(ptrs),
+            "nonzeroInts", ints = "" ? "(none)" : Trim(ints),
+            "floats", flts = "" ? "(none)" : Trim(flts)
+        )
+    }
+
 
     ; Reads the MinimapIcon component's owner entity, staticPtr and icon name.
     ; Icon name chain: componentPtr + IconDatPtr(0x20) -> MinimapIcons.dat row -> name.

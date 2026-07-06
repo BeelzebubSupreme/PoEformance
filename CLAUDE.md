@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.217`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.218`.
 
 ## Language
 
@@ -2016,6 +2016,30 @@ premature complexity.
 - **Pending in-game verification:** with consume ON, open the Entities tab, expand an entity → its full
   component list should appear (not just Targetable/Actor) and each component still lazy-decodes on
   click; confirm it matches the consume-OFF inspector.
+
+### Generic fallback decoder for unknown components (0.45.13.218)
+
+The Entities inspector lists every component an entity has, but only ~20 have a specific `Decode…`
+handler; the rest (Functions, BaseEvents, InteractionAction, HideoutDoodad, ControlZone, …) showed a
+dead "no decoder" row. Now the on-demand decode's `default` case falls back to a GENERIC raw dump so ANY
+unknown component is inspectable + reverse-engineerable live.
+
+- **`ahk/PoE2ComponentDecoders.ahk` — `DecodeUnknownComponentBasic(componentPtr, span:=0xA0)`:** reads the
+  first `span` bytes and returns string fields: `componentAddr`, `staticPtr` (0x00 — the component's
+  TYPE descriptor, identical across all instances of that component → fingerprints the type), `owner`
+  (0x08 owner-entity path), and offset-labelled lists of the non-zero `pointers` (plausible ptr at each
+  8-aligned slot, its 8 bytes then skipped so it isn't re-read as two ints), `nonzeroInts` and `floats`.
+  Content inside each string is offset-ordered (AHK Map iteration order is unspecified, so the ordering
+  lives in the strings, not the keys).
+- **`ahk/WebViewBridge.ahk`:** `_DecodeComponentOnDemand`'s `default` case calls it; new
+  `_SerializeGenericComponent` emits the six fields in a FIXED key order. Flows through the existing
+  `eiApplyDecodedComponent` path — the UI renders `Object.entries(decoded)` with no whitelist, so no UI
+  change was needed.
+- **Use for RE:** click an undecoded component → see its live pointers / ints / floats by offset; from
+  there its struct can be worked out and a proper `Decode…ComponentBasic` written + registered in the
+  on-demand switch. `staticPtr` confirms two rows are the same component type.
+- **Static verification:** braces balanced; `DecodeUnknownComponentBasic` parse-loads in the reader
+  stack; `Format` placeholders (`{1:X}`/`{2}`) validated offline.
 
 ## Reference
 
