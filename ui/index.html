@@ -5593,11 +5593,11 @@
               <div class="cfg-help">Reveals the entire minimap. Two implementations — pick whichever fits your workflow.</div>
 
               <div class="cfg-row"><span class="cfg-label">Highlight Unexplored</span>
-                <label class="toggle"><input type="checkbox" id="tog-maphack-unexplored" onchange="ahkCall('ToggleMapHackUnexplored')"
+                <label class="toggle"><input type="checkbox" id="tog-maphack-unexplored" onchange="ahkCall('ToggleMapHackUnexplored');mapHackUnexpSubVis(this.checked)"
                     ><span class="toggle-slider"></span></label>
               </div>
               <div class="cfg-help">Puts a subtle dark wash over walkable areas you haven't reached yet, so on the revealed map you can see where you still need to explore. It clears as you move through an area. Approximate: the game exposes no fog-of-war grid, so "explored" is tracked from your own path. Large map + Map Hack only.</div>
-              <div class="cfg-sub-row" style="padding:4px 8px 6px 18px;gap:18px;align-items:center;flex-wrap:wrap">
+              <div id="mhunexp-subrow" class="cfg-sub-row" style="display:none;padding:4px 8px 6px 18px;gap:18px;align-items:center;flex-wrap:wrap">
                 <div style="display:flex;gap:8px;align-items:center" data-tip="Colour of the unexplored wash. Default is very dark; pick a lighter shade if it's too heavy.">
                   <span style="color:var(--subtext);font-size:11px">↳ Colour</span>
                   <span id="cp-swatch-mhunexp" class="cp-swatch" onclick="mapHackUnexpOpenColor(this)"></span>
@@ -7977,6 +7977,12 @@
         swatchEl: el,
         onConfirm: hex => ahkCall('SetMapHackUnexploredColor', '#' + hex.slice(0, 6))
       });
+    }
+
+    // Show/hide the unexplored-wash sub-row (colour + spacing) with the toggle.
+    function mapHackUnexpSubVis(on) {
+      const r = document.getElementById('mhunexp-subrow');
+      if (r) r.style.display = on ? 'flex' : 'none';
     }
 
     // Map loot-value label color → shared GGPK color picker → SetLootRadarValue mapColor.
@@ -10831,6 +10837,7 @@
       setChk('tog-maphack', d.mapHack !== undefined ? d.mapHack : true);
       setChk('tog-walkgrid', d.walkGrid !== undefined ? d.walkGrid : false);
       setChk('tog-maphack-unexplored', d.mapHackUnexplored !== undefined ? d.mapHackUnexplored : false);
+      mapHackUnexpSubVis(!!(d.mapHackUnexplored));
       if (d.mapHackUnexploredColor) {
         const sw = document.getElementById('cp-swatch-mhunexp');
         const hx = document.getElementById('cp-hex-mhunexp');
