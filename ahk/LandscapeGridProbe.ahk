@@ -21,6 +21,71 @@ LoadLandscapeGridProbe()
     global g_lgpAreaHash := 0
     global g_lgpPgx := 0
     global g_lgpPgy := 0
+    ; Dynamic-allocation scan (explored-grid hunt beyond the terrain layers)
+    global g_lscanCands := []       ; [ Map("name","addr","size","csum") ] StdVector-shaped candidates
+    global g_lscanAreaHash := 0
+    global g_lscanPgx := 0
+    global g_lscanPgy := 0
+}
+
+; True if p looks like a heap pointer (above the low reserved range, below the module/code range).
+_LscanHeapPtr(p)
+{
+    global g_reader
+    return (p > 0x10000 && p < 0x7FF000000000 && g_reader.IsProbablyValidPointer(p))
+}
+
+; Sampled, position-weighted checksum of a StdVector<byte> at `first` (size bytes). Reads the vector
+; once (capped) and folds ~16k evenly-spaced bytes so a change anywhere in the covered span flips it.
+; Returns -1 on a bad read.
+_LscanChecksum(first, size)
+{
+    global g_reader
+    cap := Min(size, 8 * 1024 * 1024)
+    buf := g_reader.Mem.ReadBytes(first, cap, true)
+    if !(buf is Buffer) || buf.Size < 8
+        return -1
+    n := buf.Size
+    step := Max(1, n // 16384)
+    sum := 0
+    off := 0
+    while (off < n)
+    {
+        sum := Mod(sum + (NumGet(buf, off, "UChar") + 1) * ((off // step) + 1), 0x7FFFFFF7)
+        off += step
+    }
+    return sum
+}
+
+; Scans `base` over [0, range) step 8 for StdVector<byte>-shaped fields (first heap-valid, last>first,
+; plausible byte size) and pushes Map(name,addr,size,csum) candidates into `out` (deduped by addr,
+; capped by maxTotal). `label` tags where each came from.
+_LscanScanStruct(base, range, label, out, maxTotal, seen)
+{
+    global g_reader
+    off := 0
+    while (off < range)
+    {
+        if (out.Length >= maxTotal)
+            return
+        first := g_reader.Mem.ReadPtr(base + off)
+        last  := g_reader.Mem.ReadPtr(base + off + 8)
+        off += 8
+        if !_LscanHeapPtr(first)
+            continue
+        if (last <= first)
+            continue
+        size := last - first
+        if (size < 4096 || size > 64 * 1024 * 1024)
+            continue
+        if seen.Has(first)
+            continue
+        seen[first] := true
+        csum := _LscanChecksum(first, size)
+        if (csum = -1)
+            continue
+        out.Push(Map("name", label "+0x" Format("{:X}", off - 8), "addr", first, "size", size, "csum", csum))
+    }
 }
 
 ; The four terrain byte grids to test (PoE2Offsets.TerrainMetadata keys + a display name).
@@ -256,6 +321,143 @@ LandscapeGridProbeDiff()
     _LgpLog(log)
     msg .= "`n" verdict "`n`n(snapshot advanced — walk more + diff to trace.)"
     try MsgBox(msg, "Landscape grids — diff")
+}
+
+; Resolves the live InGameState address (radar snapshot first, then the reader's cache), or 0.
+_LscanInGameState()
+{
+    global g_reader, g_radarLastSnap
+    if IsObject(g_radarLastSnap)
+    {
+        inGs := g_radarLastSnap.Has("inGameState") ? g_radarLastSnap["inGameState"] : 0
+        a := (inGs is Map && inGs.Has("address")) ? inGs["address"] : 0
+        if (a && g_reader.IsProbablyValidPointer(a))
+            return a
+    }
+    try
+    {
+        a := g_reader._radarInGameStateCache
+        if (a && g_reader.IsProbablyValidPointer(a))
+            return a
+    }
+    return 0
+}
+
+; Bridge LandscapeScanSnapshot: scan AreaInstance + InGameState (directly AND one pointer level deep)
+; for StdVector<byte>-shaped allocations and checksum each. Stores them for the diff. The explored/fog
+; grid — if it exists as a CPU allocation — is a dynamic one of these whose checksum flips when you
+; uncover new map.
+LandscapeScanSnapshot()
+{
+    global g_reader
+    global g_lscanCands, g_lscanAreaHash, g_lscanPgx, g_lscanPgy
+    area := _AIP_ResolveAreaInstance()
+    if !area
+    {
+        try MsgBox("Scan: no live area (get in-game first).", "Landscape scan")
+        return
+    }
+    inGs := _LscanInGameState()
+    areaHash := g_reader.Mem.ReadUInt(area + PoE2Offsets.AreaInstance["CurrentAreaHash"])
+    pg := _LgpPlayerGrid(area)
+
+    cands := []
+    seen := Map()
+    MAXC := 40
+    ; Direct scans.
+    _LscanScanStruct(area, 0x2400, "area", cands, MAXC, seen)
+    if (inGs)
+        _LscanScanStruct(inGs, 0x1200, "inGs", cands, MAXC, seen)
+    ; One pointer level deep from AreaInstance (the grid may live in a MiniMap/fog SUB-struct).
+    subs := 0
+    off := 0
+    while (off < 0x2400 && cands.Length < MAXC && subs < 24)
+    {
+        p := g_reader.Mem.ReadPtr(area + off)
+        soff := off
+        off += 8
+        if !_LscanHeapPtr(p) || seen.Has(p)
+            continue
+        _LscanScanStruct(p, 0x400, "sub@0x" Format("{:X}", soff), cands, MAXC, seen)
+        subs += 1
+    }
+
+    g_lscanCands := cands
+    g_lscanAreaHash := areaHash
+    g_lscanPgx := pg["ok"] ? pg["gx"] : 0
+    g_lscanPgy := pg["ok"] ? pg["gy"] : 0
+
+    log := "===== Dynamic-alloc SCAN " FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") " =====`n"
+        . "areaHash=0x" Format("{:X}", areaHash) "  candidates=" cands.Length
+        . "  player=" (pg["ok"] ? Round(g_lscanPgx) "," Round(g_lscanPgy) : "?") "`n"
+    for c in cands
+        log .= "  " c["name"] "  addr=0x" Format("{:X}", c["addr"]) "  size=" c["size"] "`n"
+    log .= "→ Now WALK to reveal NEW map area, then click 'Scan Diff'.`n`n"
+    _LgpLog(log)
+
+    try MsgBox("Scanned " cands.Length " StdVector allocations off AreaInstance/InGameState.`n`n"
+        . "Now WALK to uncover NEW area, then click 'Scan Diff'.`n"
+        . "Whichever allocation's checksum changed is a dynamic buffer — the fog/explored grid (if it`n"
+        . "exists in CPU memory) is a grid-sized one that changes as you explore.", "Landscape scan — snapshot")
+}
+
+; Bridge LandscapeScanDiff: re-checksum every scanned allocation and report which ones CHANGED. The
+; explored grid is the one that flips consistently with exploration (and is grid-sized).
+LandscapeScanDiff()
+{
+    global g_reader
+    global g_lscanCands, g_lscanAreaHash, g_lscanPgx, g_lscanPgy
+    if !(g_lscanCands is Array) || g_lscanCands.Length = 0
+    {
+        try MsgBox("No scan snapshot yet — click 'Scan Snapshot' first.", "Landscape scan")
+        return
+    }
+    area := _AIP_ResolveAreaInstance()
+    if area
+    {
+        areaHash := g_reader.Mem.ReadUInt(area + PoE2Offsets.AreaInstance["CurrentAreaHash"])
+        if (areaHash != g_lscanAreaHash)
+        {
+            try MsgBox("Area changed since scan — take a fresh Scan Snapshot.", "Landscape scan")
+            return
+        }
+    }
+    pg := area ? _LgpPlayerGrid(area) : Map("ok", false)
+    moved := (pg["ok"]) ? Round(Sqrt((pg["gx"] - g_lscanPgx) ** 2 + (pg["gy"] - g_lscanPgy) ** 2)) : -1
+
+    changedList := ""
+    changedN := 0
+    goneN := 0
+    for c in g_lscanCands
+    {
+        csum := _LscanChecksum(c["addr"], c["size"])
+        if (csum = -1)
+        {
+            goneN += 1
+            continue
+        }
+        if (csum != c["csum"])
+        {
+            changedN += 1
+            changedList .= "  " c["name"] "  addr=0x" Format("{:X}", c["addr"]) "  size=" c["size"] "`n"
+        }
+        c["csum"] := csum
+    }
+    if (pg["ok"])
+        g_lscanPgx := pg["gx"], g_lscanPgy := pg["gy"]
+
+    log := "----- Dynamic-alloc SCAN DIFF " FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") " -----`n"
+        . "moved≈" moved " cells   changed=" changedN " / " g_lscanCands.Length (goneN ? ("  gone=" goneN) : "") "`n"
+        . (changedN ? ("CHANGED allocations:`n" changedList) : "NO allocation changed.`n")
+        . "`n"
+    _LgpLog(log)
+
+    try MsgBox("Scan diff (moved≈" moved " cells):`n`n"
+        . changedN " of " g_lscanCands.Length " allocations CHANGED.`n`n"
+        . (changedN ? (changedList "`nRun it again while exploring — the fog/explored grid changes CONSISTENTLY`n"
+            . "with movement and is grid-sized. Erratic ones are other dynamic buffers.")
+            : "Nothing changed → the explored state is likely NOT a plain CPU grid here`n(consistent with the shader-patch maphack — it may be GPU-side).")
+        . "`n`nFull list in logs\\InGameStateMonitor.landscape_probe.log", "Landscape scan — diff")
 }
 
 ; Appends a block to the probe log (logs\ folder).

@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.223`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.224`.
 
 ## Language
 
@@ -2115,10 +2115,23 @@ suspect for the explored grid.
   snapshots + diffs ALL FOUR at once (`_LgpLayerDefs`) so one walk checks every candidate; the diff
   flags any grid whose cells changed (with its change box) and verdicts "look at InGameState/MiniMap
   next" if none do.
-- **Pending in-game (owner + me):** re-run Snapshot → walk → Diff. If layer3 or layer4 CHANGES near the
-  path → the explored grid is found (wire it into the unexplored wash). If all four stay static → the
-  explored/fog state is NOT in the terrain layers; next candidate is a MiniMap/fog struct off InGameState
-  (RE that separately). Send me the `landscape_probe.log` blocks.
+- **Result 2 (in-game 2026-07-06): ALL FOUR terrain grids are STATIC** — 0 bytes changed; layer3/layer4
+  are `distinct=1` (uniform 0x55 fill = unused placeholders). So the explored/fog state is DEFINITIVELY
+  NOT in the terrain byte grids.
+- **Dynamic-allocation scanner (0.45.13.224):** the systematic next step — hunt ANY heap allocation off
+  AreaInstance/InGameState that changes as the player explores. `LandscapeScanSnapshot` scans both
+  structs (directly, `0..0x2400`/`0..0x1200` step 8, AND one pointer level deep into sub-structs — the
+  grid may live in a MiniMap/fog object) for `StdVector<byte>`-shaped fields (heap first, last>first,
+  size 4 KB..64 MB), and stores a sampled position-weighted CHECKSUM of each (`_LscanChecksum`: reads
+  the vector once, capped 8 MB, folds ~16k evenly-spaced bytes). `LandscapeScanDiff` re-checksums each
+  and reports which CHANGED. The fog grid (if it's a CPU allocation) is a grid-sized candidate that
+  flips CONSISTENTLY with exploration; erratic ones are other dynamic buffers. Bridge
+  `LandscapeScanSnapshot`/`LandscapeScanDiff`; UI "🔎 Scan Snapshot"/"🔎 Scan Diff".
+- **Pending in-game (owner + me):** "🔎 Scan Snapshot" → walk → "🔎 Scan Diff", a few rounds. If a
+  grid-sized allocation changes consistently → found it (drill into its offset, wire into the wash). If
+  nothing changes consistently → the explored state is NOT a plain CPU grid (consistent with the GGPK
+  shader-patch maphack → likely GPU-side), and the self-tracked wash (0.45.13.221) stays the answer.
+  Send me the `landscape_probe.log` scan blocks.
 
 ## Reference
 

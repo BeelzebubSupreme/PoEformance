@@ -956,6 +956,12 @@ _DispatchBridgeCall(method, args)
         case "LandscapeGridDiff":
             ; RE diagnostic: diff GridLandscapeData vs the snapshot (did exploring change it?).
             SetTimer(() => LandscapeGridProbeDiff(), -1)
+        case "LandscapeScanSnapshot":
+            ; RE diagnostic: scan AreaInstance/InGameState for dynamic StdVector allocations (fog hunt).
+            SetTimer(() => LandscapeScanSnapshot(), -1)
+        case "LandscapeScanDiff":
+            ; RE diagnostic: diff the scanned allocations (which one changes as you explore?).
+            SetTimer(() => LandscapeScanDiff(), -1)
         case "ActorProbeRun":
             ; TEMP diagnostic: time-sample the Actor struct to locate the drifted animationId.
             SetTimer(() => ActorProbeRun(), -1)
