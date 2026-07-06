@@ -357,6 +357,13 @@ _DispatchBridgeCall(method, args)
             g_walkGridEnabled := !g_walkGridEnabled
             SetTimer(SaveConfig, -100)
             SetTimer(PushHeaderToWebView, -50)
+        case "ToggleMapHackUnexplored":
+            ; Dark wash over unexplored walkable cells on the large-map maphack.
+            ; RadarOverlay reads g_mapHackUnexplored each frame (_SyncConfig).
+            global g_mapHackUnexplored
+            g_mapHackUnexplored := !g_mapHackUnexplored
+            SetTimer(SaveConfig, -100)
+            SetTimer(PushHeaderToWebView, -50)
         case "ToggleMaskDebug":
             ; Debug: draw red outlines of the HUD clip masks on the large map so
             ; the user can see where the maphack is clipped. RadarOverlay reads

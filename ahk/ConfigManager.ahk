@@ -43,7 +43,7 @@ SaveConfig()
     global g_entityShowPlayer, g_entityShowMinion, g_entityShowEnemy
     global g_entityShowNPC, g_entityShowChest, g_entityShowWorldItem, g_entityShowOther
     global g_skillBuffBlacklist, g_zoneNavEnabled, g_mapHackEnabled, g_maphackSource, g_rangeCirclesEnabled
-    global g_walkGridEnabled, g_maphackMaskDebug
+    global g_walkGridEnabled, g_maphackMaskDebug, g_mapHackUnexplored
     global g_panelHideOverlays, g_panelPauseAutoPilot, g_panelHideLootBars, g_autoPilotEnabled, g_inventoryChainDumpEnabled
     global g_overlayStatusTextEnabled, g_overlayPoeOnly
     global g_maphackOutlineHex, g_maphackBackgroundHex
@@ -73,6 +73,7 @@ SaveConfig()
     IniWrite(g_zoneNavEnabled        ? "1" : "0",  f, "Radar",         "zoneNav")
     IniWrite(g_mapHackEnabled        ? "1" : "0",  f, "Radar",         "mapHack")
     IniWrite(g_walkGridEnabled       ? "1" : "0",  f, "Radar",         "walkGrid")
+    IniWrite(g_mapHackUnexplored     ? "1" : "0",  f, "Radar",         "mapHackUnexplored")
     IniWrite(g_maphackMaskDebug      ? "1" : "0",  f, "Radar",         "maskDebug")
     IniWrite(g_maphackSource,                      f, "Radar",         "maphackSource")
     ; Shader-color overrides for the GGPK maphack. 8-char RRGGBBAA hex,
@@ -132,7 +133,7 @@ LoadConfig()
     global g_entityShowPlayer, g_entityShowMinion, g_entityShowEnemy
     global g_entityShowNPC, g_entityShowChest, g_entityShowWorldItem, g_entityShowOther
     global g_skillBuffBlacklist, g_zoneNavEnabled, g_mapHackEnabled, g_maphackSource, g_rangeCirclesEnabled
-    global g_walkGridEnabled, g_maphackMaskDebug
+    global g_walkGridEnabled, g_maphackMaskDebug, g_mapHackUnexplored
     global g_panelHideOverlays, g_panelPauseAutoPilot, g_panelHideLootBars, g_autoPilotEnabled, g_inventoryChainDumpEnabled
     global g_overlayStatusTextEnabled, g_overlayPoeOnly
     global g_maphackOutlineHex, g_maphackBackgroundHex
@@ -171,6 +172,7 @@ LoadConfig()
     g_zoneNavEnabled           := _B("Radar",         "zoneNav",         true)
     g_mapHackEnabled           := _B("Radar",         "mapHack",         true)
     g_walkGridEnabled          := _B("Radar",         "walkGrid",        false)
+    g_mapHackUnexplored        := _B("Radar",         "mapHackUnexplored", false)
     g_maphackMaskDebug         := _B("Radar",         "maskDebug",       false)
     ; Default "memory" — the legacy behaviour. "ggpk" requires the user
     ; to have built ggpk-tools/PoePatcher.exe + oo2core.dll, so we don't

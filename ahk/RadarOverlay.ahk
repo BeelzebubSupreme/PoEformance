@@ -89,6 +89,8 @@ class RadarOverlay extends GdiOverlayBase
                               , 0x6060FF, 0xC0FF00, 0xFF00A0, 0x00FF9B, 0xFF8C40]
     static COLOR_MAPHACK        := 0x909090   ; neutral gray (BGR) — matches game map outlines
     static COLOR_WALKABLE       := 0xFF8030   ; blue (BGR) — walkable-grid fill diagnostic overlay
+    static COLOR_UNEXPLORED     := 0x201818   ; very dark cool-gray (BGR) — unexplored-area dark wash
+    static UNEXP_VISIT_R        := 22         ; radius (in half-res bitmap cells) revealed around player
     ; Terrain-layer scroll cache (see _DrawMapLayersCached): the maphack/walk layers are rendered
     ; once into a padded off-screen cache via the expensive rotated PlgBlt, then copied to the
     ; back-buffer each frame with a cheap translated TransparentBlt. MARGIN = how far (screen px)
@@ -214,6 +216,25 @@ class RadarOverlay extends GdiOverlayBase
         this._mapWalkColorBmp     := 0     ; source bitmap handle (solid walkable fill colour)
         this._mapWalkMask         := 0     ; monochrome mask bitmap (1=walkable cell, stippled)
 
+        ; Unexplored-area wash (maphack): a subtle dark stipple over walkable cells the player has
+        ; NOT been near yet, so on the revealed map you can see where you still haven't explored.
+        ; No game "explored" grid exists, so we self-track a VISITED grid (one byte per bitmap cell,
+        ; marked in a disc around the player each frame) — unexplored = walkable AND not visited. The
+        ; mask starts as the whole walkable area (nothing visited) and is incrementally CLEARED as the
+        ; player moves. Overlay is colour-key + one global alpha (no per-pixel alpha), so "dim not
+        ; hide" is a stipple, not a low-alpha blend.
+        this._unexploredOn        := false ; toggle from config (off by default)
+        this._mapUnexpColorDC     := 0     ; solid dark-wash colour source bitmap DC
+        this._mapUnexpColorBmp    := 0
+        this._mapUnexpMask        := 0     ; 1-bit mask: 1 = walkable & unexplored (stippled)
+        this._visitedBuf          := 0     ; Buffer(bmpW*bmpH): 1 = a walkable cell the player reached
+        this._visitedW            := 0
+        this._visitedH            := 0
+        this._unexpDirty          := false ; visited changed → composite cache needs a (throttled) rebuild
+        this._unexpCacheTick      := 0     ; last time the dirty flag forced a cache rebuild
+        this._lastVisitCx         := -999999 ; last player bitmap cell (skip the disc scan while unchanged)
+        this._lastVisitCy         := -999999
+
         ; Debug lines — collected each Render() when DebugMode is on, pushed to WebView
         ; (Debug tab) instead of being drawn on the overlay so they're copyable.
         this._debugLines := Map()
@@ -243,7 +264,9 @@ class RadarOverlay extends GdiOverlayBase
         global g_radarShowMinions, g_radarShowNpcs, g_radarShowChests
         global g_debugMode, g_zoneNavEnabled, g_mapHackEnabled, g_rangeCirclesEnabled
         global g_radarAlpha, g_highlightedEntityPath, g_walkGridEnabled, g_maphackMaskDebug
+        global g_mapHackUnexplored
 
+        this._unexploredOn := IsSet(g_mapHackUnexplored) ? g_mapHackUnexplored : false
         this.ShowEnemyNormal := g_radarShowEnemyNormal
         this.ShowEnemyRare   := g_radarShowEnemyRare
         this.ShowEnemyBoss   := g_radarShowEnemyBoss
@@ -834,8 +857,12 @@ class RadarOverlay extends GdiOverlayBase
         ; rendered once via the expensive rotated PlgBlt, then copied per frame with a cheap
         ; translated TransparentBlt (rotation is frame-constant; only the player position moves).
         if isLargeMap
-            this._DrawMapLayersCached(this._walkGridEnabled, this._mapHackEnabled,
+        {
+            ; Mark the area around the player as explored (clears the unexplored wash there).
+            this._UpdateUnexploredVisited(playerWorldX, playerWorldY)
+            this._DrawMapLayersCached(this._walkGridEnabled, this._mapHackEnabled, this._unexploredOn,
                 mapCenterX, mapCenterY, playerWorldX, playerWorldY, projectionCos, projectionSin)
+        }
 
         ; Player dot at the map center
         this._DrawDot(Round(mapCenterX), Round(mapCenterY), RadarOverlay.COLOR_PLAYER, isLargeMap ? 4 : 2)
@@ -2506,6 +2533,14 @@ class RadarOverlay extends GdiOverlayBase
         oldWalkBmp := DllCall("SelectObject", "Ptr", walkMaskDC, "Ptr", hWalkMask, "Ptr")
         DllCall("FillRect", "Ptr", walkMaskDC, "Ptr", rct, "Ptr", blackBrush)
 
+        ; ── Unexplored-wash mask (1-bit) — 1 wherever the 2×2 block has ANY walkable cell (50%
+        ; stippled). Starts covering the WHOLE walkable area (nothing visited yet); cleared cell by
+        ; cell as the player moves (_UpdateUnexploredVisited). Built in the same scan below. ──
+        hUnexpMask := DllCall("CreateBitmap", "Int", bmpW, "Int", bmpH, "UInt", 1, "UInt", 1, "Ptr", 0, "Ptr")
+        unexpMaskDC := DllCall("CreateCompatibleDC", "Ptr", 0, "Ptr")
+        oldUnexpBmp := DllCall("SelectObject", "Ptr", unexpMaskDC, "Ptr", hUnexpMask, "Ptr")
+        DllCall("FillRect", "Ptr", unexpMaskDC, "Ptr", rct, "Ptr", blackBrush)
+
         ; Skip outer margin to avoid drawing the terrain boundary rectangle.
         MARGIN := 6
 
@@ -2545,6 +2580,9 @@ class RadarOverlay extends GdiOverlayBase
                     DllCall("SelectObject", "Ptr", walkMaskDC, "Ptr", oldWalkBmp)
                     DllCall("DeleteDC", "Ptr", walkMaskDC)
                     DllCall("DeleteObject", "Ptr", hWalkMask)
+                    DllCall("SelectObject", "Ptr", unexpMaskDC, "Ptr", oldUnexpBmp)
+                    DllCall("DeleteDC", "Ptr", unexpMaskDC)
+                    DllCall("DeleteObject", "Ptr", hUnexpMask)
                     return
                 }
             }
@@ -2572,7 +2610,12 @@ class RadarOverlay extends GdiOverlayBase
                 ; Walkable-fill mask: any walkable cell in the 2×2 block, 50%
                 ; checkerboard stipple so the underlying game map stays visible.
                 if ((b1 != 0 || b2 != 0) && ((bx + by) & 1) = 0)
+                {
                     DllCall("SetPixelV", "Ptr", walkMaskDC, "Int", bx, "Int", by, "UInt", 0xFFFFFF)
+                    ; Unexplored wash starts over the whole walkable area (same stipple); cleared per
+                    ; cell as the player explores. Same pixel set as walk-fill so both share the stipple.
+                    DllCall("SetPixelV", "Ptr", unexpMaskDC, "Int", bx, "Int", by, "UInt", 0xFFFFFF)
+                }
 
                 if (   (b1 & 0x0F) != 0 && (b1 & 0xF0) != 0
                     && (b2 & 0x0F) != 0 && (b2 & 0xF0) != 0)
@@ -2643,6 +2686,28 @@ class RadarOverlay extends GdiOverlayBase
         DllCall("DeleteDC", "Ptr", maskDC)
         DllCall("SelectObject", "Ptr", walkMaskDC, "Ptr", oldWalkBmp)
         DllCall("DeleteDC", "Ptr", walkMaskDC)
+        DllCall("SelectObject", "Ptr", unexpMaskDC, "Ptr", oldUnexpBmp)
+        DllCall("DeleteDC", "Ptr", unexpMaskDC)
+
+        ; ── Unexplored-wash colour source bitmap (solid COLOR_UNEXPLORED) + visited grid ──
+        screenDC3 := DllCall("GetDC", "Ptr", 0, "Ptr")
+        hUnexpBmp := DllCall("CreateCompatibleBitmap", "Ptr", screenDC3, "Int", bmpW, "Int", bmpH, "Ptr")
+        unexpColorDC := DllCall("CreateCompatibleDC", "Ptr", screenDC3, "Ptr")
+        DllCall("ReleaseDC", "Ptr", 0, "Ptr", screenDC3)
+        DllCall("SelectObject", "Ptr", unexpColorDC, "Ptr", hUnexpBmp)
+        ubrush := DllCall("CreateSolidBrush", "UInt", RadarOverlay.COLOR_UNEXPLORED, "Ptr")
+        DllCall("FillRect", "Ptr", unexpColorDC, "Ptr", rct, "Ptr", ubrush)
+        DllCall("DeleteObject", "Ptr", ubrush)
+        this._mapUnexpColorDC  := unexpColorDC
+        this._mapUnexpColorBmp := hUnexpBmp
+        this._mapUnexpMask     := hUnexpMask
+        this._visitedBuf := Buffer(bmpW * bmpH, 0)   ; 0 = unvisited; marked as the player moves
+        this._visitedW := bmpW
+        this._visitedH := bmpH
+        this._unexpDirty := false
+        this._unexpCacheTick := A_TickCount
+        this._lastVisitCx := -999999   ; force a fresh disc scan on the new area
+        this._lastVisitCy := -999999
 
         ; ── Walkable fill colour source bitmap (solid COLOR_WALKABLE) ──
         ; PlgBlt takes the drawn colour from this source through hWalkMask.
@@ -2702,6 +2767,26 @@ class RadarOverlay extends GdiOverlayBase
             DllCall("DeleteDC", "Ptr", this._mapWalkColorDC)
             this._mapWalkColorDC := 0
         }
+        ; Unexplored-wash layer + visited grid
+        if this._mapUnexpMask {
+            DllCall("DeleteObject", "Ptr", this._mapUnexpMask)
+            this._mapUnexpMask := 0
+        }
+        if this._mapUnexpColorBmp {
+            stockBmp3 := DllCall("GetStockObject", "Int", 0, "Ptr")
+            if this._mapUnexpColorDC
+                DllCall("SelectObject", "Ptr", this._mapUnexpColorDC, "Ptr", stockBmp3)
+            DllCall("DeleteObject", "Ptr", this._mapUnexpColorBmp)
+            this._mapUnexpColorBmp := 0
+        }
+        if this._mapUnexpColorDC {
+            DllCall("DeleteDC", "Ptr", this._mapUnexpColorDC)
+            this._mapUnexpColorDC := 0
+        }
+        this._visitedBuf := 0
+        this._visitedW := 0
+        this._visitedH := 0
+        this._unexpDirty := false
         ; The scroll cache holds a composite of these source bitmaps — force a rebuild once the
         ; new terrain layers are generated (the cache DC itself is kept and reused).
         this._maskCacheValid := false
@@ -2817,14 +2902,92 @@ class RadarOverlay extends GdiOverlayBase
     ; the active layer set changes, or the terrain bitmap is regenerated (which sets _maskCacheValid
     ; := false) — turning a per-frame PlgBlt into an occasional one. Any failure falls back to the
     ; direct per-frame PlgBlt path, so it is never worse than before.
-    _DrawMapLayersCached(walkOn, hackOn, mapCenterX, mapCenterY, playerWorldX, playerWorldY,
+    ; Marks a disc of half-res bitmap cells around the player as VISITED and clears those cells from
+    ; the unexplored-wash mask (only cells still washed actually change). Cheap: one byte-check per
+    ; disc cell, a SetPixelV only for cells NEWLY entering the visited set; skipped entirely while the
+    ; player's bitmap cell is unchanged. Sets _unexpDirty so the composite cache picks it up on its
+    ; next throttled rebuild. Uses a temp DC so the mask isn't left selected when the composite reads it.
+    _UpdateUnexploredVisited(playerWorldX, playerWorldY)
+    {
+        if !(this._unexploredOn && this._mapUnexpMask && this._visitedBuf)
+            return
+        STEP := this._mapHackStep
+        if (STEP < 1)
+            return
+        bw := this._visitedW, bh := this._visitedH
+        pcx := Round((playerWorldX / RadarOverlay.WORLD_TO_GRID_RATIO) / STEP)
+        pcy := Round((playerWorldY / RadarOverlay.WORLD_TO_GRID_RATIO) / STEP)
+        if (pcx = this._lastVisitCx && pcy = this._lastVisitCy)
+            return   ; player hasn't crossed into a new cell → no new visited cells possible
+        this._lastVisitCx := pcx, this._lastVisitCy := pcy
+
+        R := RadarOverlay.UNEXP_VISIT_R, R2 := R * R
+        buf := this._visitedBuf
+        newCells := []
+        dy := -R
+        while (dy <= R)
+        {
+            cy := pcy + dy
+            if (cy >= 0 && cy < bh)
+            {
+                rowBase := cy * bw
+                dx := -R
+                while (dx <= R)
+                {
+                    if (dx * dx + dy * dy <= R2)
+                    {
+                        cx := pcx + dx
+                        if (cx >= 0 && cx < bw)
+                        {
+                            idx := rowBase + cx
+                            if (NumGet(buf, idx, "UChar") = 0)
+                            {
+                                NumPut("UChar", 1, buf, idx)
+                                newCells.Push(cx, cy)
+                            }
+                        }
+                    }
+                    dx += 1
+                }
+            }
+            dy += 1
+        }
+        if (newCells.Length = 0)
+            return
+
+        dc := DllCall("CreateCompatibleDC", "Ptr", 0, "Ptr")
+        if !dc
+            return
+        old := DllCall("SelectObject", "Ptr", dc, "Ptr", this._mapUnexpMask, "Ptr")
+        i := 1
+        while (i < newCells.Length)
+        {
+            DllCall("SetPixelV", "Ptr", dc, "Int", newCells[i], "Int", newCells[i + 1], "UInt", 0x000000)
+            i += 2
+        }
+        DllCall("SelectObject", "Ptr", dc, "Ptr", old)
+        DllCall("DeleteDC", "Ptr", dc)
+        this._unexpDirty := true
+    }
+
+    _DrawMapLayersCached(walkOn, hackOn, unexpOn, mapCenterX, mapCenterY, playerWorldX, playerWorldY,
                          projectionCos, projectionSin)
     {
         global Profiler
         haveHack := hackOn && this._mapHackDC && this._mapHackMask
         haveWalk := walkOn && this._mapWalkColorDC && this._mapWalkMask
-        if (!haveHack && !haveWalk)
+        haveUnexp := unexpOn && this._mapUnexpColorDC && this._mapUnexpMask
+        if (!haveHack && !haveWalk && !haveUnexp)
             return
+
+        ; The unexplored wash shrinks as the player explores; fold those changes into the cache at
+        ; most ~every 700 ms (a scroll past the margin also rebuilds and picks them up sooner).
+        if (this._unexpDirty && (A_TickCount - this._unexpCacheTick) > 700)
+        {
+            this._maskCacheValid := false
+            this._unexpDirty := false
+            this._unexpCacheTick := A_TickCount
+        }
         if (this.bufW < 1 || this.bufH < 1)
             return
 
@@ -2844,7 +3007,7 @@ class RadarOverlay extends GdiOverlayBase
             if (!this._maskCacheDC || !this._maskCacheBmp)
             {
                 this._DestroyMaskCache()
-                this._DrawMapLayersDirect(haveWalk, haveHack, mapCenterX, mapCenterY,
+                this._DrawMapLayersDirect(haveWalk, haveHack, haveUnexp, mapCenterX, mapCenterY,
                     playerWorldX, playerWorldY, projectionCos, projectionSin)
                 return
             }
@@ -2855,7 +3018,7 @@ class RadarOverlay extends GdiOverlayBase
 
         playerGX := playerWorldX / RadarOverlay.WORLD_TO_GRID_RATIO
         playerGY := playerWorldY / RadarOverlay.WORLD_TO_GRID_RATIO
-        layerKey := (haveWalk ? "w" : "") . (haveHack ? "h" : "")
+        layerKey := (haveUnexp ? "u" : "") . (haveWalk ? "w" : "") . (haveHack ? "h" : "")
 
         ; Reuse the cache when the projection and layer set match and the view has scrolled less
         ; than the padding margin. The cached image is a pure translation of the current view, so
@@ -2889,6 +3052,10 @@ class RadarOverlay extends GdiOverlayBase
             DllCall("DeleteObject", "Ptr", kbrush)
 
             ccx := mapCenterX + MARGIN, ccy := mapCenterY + MARGIN
+            ; Unexplored wash goes on the BOTTOM (under the walkable fill + wall outlines).
+            if haveUnexp
+                this._BlitMaskLayer(this._mapUnexpColorDC, this._mapUnexpMask, ccx, ccy,
+                    playerWorldX, playerWorldY, projectionCos, projectionSin, this._maskCacheDC, cw, ch)
             if haveWalk
                 this._BlitMaskLayer(this._mapWalkColorDC, this._mapWalkMask, ccx, ccy,
                     playerWorldX, playerWorldY, projectionCos, projectionSin, this._maskCacheDC, cw, ch)
@@ -2916,16 +3083,19 @@ class RadarOverlay extends GdiOverlayBase
         if !ok
         {
             this._maskCacheValid := false
-            this._DrawMapLayersDirect(haveWalk, haveHack, mapCenterX, mapCenterY,
+            this._DrawMapLayersDirect(haveWalk, haveHack, haveUnexp, mapCenterX, mapCenterY,
                 playerWorldX, playerWorldY, projectionCos, projectionSin)
         }
     }
 
     ; Fallback / non-cached path: blit each active terrain layer straight to the back-buffer with
     ; the rotated PlgBlt (walk under, wall-border on top) — the original per-frame behaviour.
-    _DrawMapLayersDirect(haveWalk, haveHack, mapCenterX, mapCenterY, playerWorldX, playerWorldY,
+    _DrawMapLayersDirect(haveWalk, haveHack, haveUnexp, mapCenterX, mapCenterY, playerWorldX, playerWorldY,
                          projectionCos, projectionSin)
     {
+        if haveUnexp
+            this._BlitMaskLayer(this._mapUnexpColorDC, this._mapUnexpMask,
+                mapCenterX, mapCenterY, playerWorldX, playerWorldY, projectionCos, projectionSin)
         if haveWalk
             this._BlitMaskLayer(this._mapWalkColorDC, this._mapWalkMask,
                 mapCenterX, mapCenterY, playerWorldX, playerWorldY, projectionCos, projectionSin)

@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.220`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.221`.
 
 ## Language
 
@@ -1865,7 +1865,7 @@ yet #Included by the running app, so it touches zero hot-path code.
 
 The reader now PACKS the awake-entity sample into the radar block each tick, and Main cross-checks it
 against its own live sample — the gate before stage 3c flips Main to CONSUME it. Same safe posture as
-stage 2: the reader independently produces data, a diagnostic proves parity; **Main's live path is
+stage 2: the reader independently produces data, a diagnostic proves parity; **Main's live  path is
 untouched** (it just reads the block on demand for the check).
 
 - **`ahk/PoE2MemoryReader.ahk` — `ReadAwakeEntitiesFlat(areaInstanceData, currentAreaHash, playerOrigin)`
@@ -2049,6 +2049,41 @@ unknown component is inspectable + reverse-engineerable live.
   heap pointer → resolved via `ReadEntityIdentityBasic` and, if it yields a real `Metadata/` path,
   listed under a new `entityRefs` field instead of raw. So an unknown component now shows WHICH entities
   it points at, not just addresses.
+
+## Unexplored-area wash on the maphack (shipped 0.45.13.221)
+
+A subtle dark stipple over walkable cells the player hasn't reached yet, so on the revealed (maphack)
+large map you can see where you still need to explore. Opt-in toggle **Config → Overlay → "Highlight
+Unexplored"** (`[Radar] mapHackUnexplored`, default OFF); large-map + maphack only.
+
+- **No game "explored" grid exists** — the terrain struct exposes the walkable nibble grid but no
+  fog-of-war/revealed state (`GridLandscapeData` @0xE8 is defined in `PoE2Offsets` but never read /
+  unverified). So "explored" is SELF-TRACKED: `RadarOverlay._visitedBuf` (one byte per half-res bitmap
+  cell) is marked in a disc (`UNEXP_VISIT_R`=22 cells) around the player each frame
+  (`_UpdateUnexploredVisited`). Unexplored = walkable AND not visited.
+- **The overlay is colour-key + one global alpha** (`WinSetTransColor("010101 " alpha)`), NOT per-pixel
+  premultiplied alpha — so "dim not hide" is a 50% checkerboard STIPPLE (like the walk-fill debug
+  layer), colour `COLOR_UNEXPLORED` (dark), not a low-alpha blend.
+- **Render:** built into `_GenerateMapHackBitmap` — a new 1-bit mask `_mapUnexpMask` (starts covering
+  the whole walkable area, same stipple as walk-fill) + a solid dark colour source `_mapUnexpColorDC`.
+  As the player moves, `_UpdateUnexploredVisited` CLEARS the just-visited cells from the mask (SetPixelV
+  black via a temp DC, only cells NEWLY entering the visited disc — cheap; skipped entirely while the
+  player's bitmap cell is unchanged) and sets `_unexpDirty`. `_DrawMapLayersCached` blits it on the
+  BOTTOM (under walk-fill + wall outlines), adds `u` to the layer-set key, and folds the shrinking wash
+  into the scroll cache at most ~every 700 ms (a scroll past the margin rebuilds sooner) so the cheap
+  offset-scroll optimisation is preserved. Freed in `_DestroyMapHackBitmap`; reset on area change.
+- **Wiring:** `g_mapHackUnexplored` (InGameStateMonitor seed + ConfigManager save/load), RadarOverlay
+  `_SyncConfig` → `_unexploredOn`, BridgeDispatch `ToggleMapHackUnexplored`, WebViewBridge header
+  `mapHackUnexplored`, UI toggle + `setChk('tog-maphack-unexplored', …)`.
+- **Static verification:** RadarOverlay braces 223/223 + all edited files balanced; UI `node --check`
+  clean. NOTE: the offline AHK interpreter could not run this round (a stuck AHK process in the sandbox
+  blocked even a trivial script — do NOT `Stop-Process AutoHotkey64`, it can kill the owner's running
+  tool), so the isolated method harness (`syn_test.ahk`) was not executed; the new `_UpdateUnexplored‌Visited`
+  logic was reviewed by hand.
+- **Pending in-game verification:** enable it on a large-map maphack — a dark stipple should cover
+  walkable areas ahead and CLEAR behind you as you move; explored cells + walls stay clear; the reveal
+  radius (`UNEXP_VISIT_R`) and darkness (`COLOR_UNEXPLORED`) are the tuning knobs; confirm no perf
+  regression (the wash rides the same scroll cache, refreshed ~1.4×/s).
 
 ## Reference
 
