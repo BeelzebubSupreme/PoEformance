@@ -950,6 +950,12 @@ _DispatchBridgeCall(method, args)
         case "StackMaxProbeRun":
             ; TEMP diagnostic: test whether Stack +0x20 is the max stack size.
             SetTimer(() => StackMaxProbeRun(), -1)
+        case "LandscapeGridSnapshot":
+            ; RE diagnostic: snapshot GridLandscapeData to hunt the explored/fog grid.
+            SetTimer(() => LandscapeGridProbeSnapshot(), -1)
+        case "LandscapeGridDiff":
+            ; RE diagnostic: diff GridLandscapeData vs the snapshot (did exploring change it?).
+            SetTimer(() => LandscapeGridProbeDiff(), -1)
         case "ActorProbeRun":
             ; TEMP diagnostic: time-sample the Actor struct to locate the drifted animationId.
             SetTimer(() => ActorProbeRun(), -1)

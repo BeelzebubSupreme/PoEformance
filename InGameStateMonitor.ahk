@@ -56,7 +56,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.221"
+POEFORMANCE_VERSION := "0.45.13.222"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -396,6 +396,7 @@ SkillHotkeysInit()
 HotkeysLoadConfig()
 LoadHkAnimCapture()
 LoadReaderProcess()         ; reader-split stage 2: persistent reader process (opt-in, default OFF)
+LoadLandscapeGridProbe()    ; RE diagnostic: GridLandscapeData snapshot/diff (explored-grid hunt)
 HotkeysSeedFlaskPresets()   ; one-time: create the default "Flasks" hotkey group (replaces AutoFlask)
 g_hkOneShotPerTick := (IniRead(_ConfigPath(), "Hotkeys", "oneShotPerTick", "0") = "1")
 
@@ -1060,6 +1061,7 @@ OnTreeTabChanged(*)
 #Include ahk/StackMaxProbe.ahk
 #Include ahk/ActorProbe.ahk
 #Include ahk/CurrencyLayoutProbe.ahk
+#Include ahk/LandscapeGridProbe.ahk
 #Include ahk/OffsetCompare.ahk
 #Include ahk/PatchMaintenance.ahk
 #Include ahk/UIHelpers.ahk

@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.221`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.222`.
 
 ## Language
 
@@ -2084,6 +2084,33 @@ Unexplored"** (`[Radar] mapHackUnexplored`, default OFF); large-map + maphack on
   walkable areas ahead and CLEAR behind you as you move; explored cells + walls stay clear; the reveal
   radius (`UNEXP_VISIT_R`) and darkness (`COLOR_UNEXPLORED`) are the tuning knobs; confirm no perf
   regression (the wash rides the same scroll cache, refreshed ~1.4×/s).
+
+## GridLandscapeData explored-grid hunt (RE diagnostic, shipped 0.45.13.222)
+
+Chasing the map's real "explored / fog-of-war" per-cell state to replace the unexplored-wash's
+self-tracked approximation. The terrain struct (`TerrainMetadata` = AreaInstance+0x8B8) has TWO parallel
+`StdVector<byte>` grids: `GridWalkableData` @0xD0 (used) and **`GridLandscapeData` @0xE8** (defined in
+`PoE2Offsets`, never read) — same shape, shared `BytesPerRow` @0x130. `GridLandscapeData` is the prime
+suspect for the explored grid.
+
+- **`ahk/LandscapeGridProbe.ahk` (new, RE diagnostic):** fog-of-war is DYNAMIC, so the test is
+  snapshot→walk→diff. `LandscapeGridProbeSnapshot` reads `GridLandscapeData` (mirrors `ReadTerrainData`'s
+  StdVector read at the 0xE8 offset) + captures a copy, its size/rows/bytesPerRow, a byte-value
+  histogram, whether it's byte-identical to the walkable grid, and the player grid pos.
+  `LandscapeGridProbeDiff` re-reads it and diffs vs the snapshot: changed-byte count, a sample of
+  changes (offset, old→new, derived cell x,y), the change bounding box + centre, and how far the player
+  moved — so a fog grid (cells flipping near the path) is distinguishable from static data (no change).
+  The diff advances the snapshot to "now" so repeated walk+diff traces it. Reuses
+  `_AIP_ResolveAreaInstance` (AreaInstanceProbe). Writes `logs\InGameStateMonitor.landscape_probe.log`.
+  Bridge `LandscapeGridSnapshot` / `LandscapeGridDiff`; UI "🗺 Landscape Snapshot" / "🗺 Landscape Diff"
+  in the RE-tools row; `LoadLandscapeGridProbe()` seeds the snapshot globals.
+- **Static verification:** `LandscapeGridProbe.ahk` parse-loads clean; braces balanced; UI `node --check`
+  clean.
+- **Pending in-game (owner + me):** in a NOT-fully-explored area → "Landscape Snapshot" → walk to reveal
+  new map → "Landscape Diff". If cells changed and the change box tracks the path → it IS the explored
+  grid (then wire it into the unexplored wash for exact fog). If nothing changes → `GridLandscapeData` is
+  static (a 2nd walkability/terrain layer) and the real explored state lives elsewhere (next: scan the
+  InGameState/MiniMap struct). Send me the `landscape_probe.log` blocks.
 
 ## Reference
 
