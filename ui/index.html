@@ -3489,9 +3489,30 @@
     /* Dim the body when the master switch is off (controls still usable). */
     .ent-junkbox.junk-disabled .ent-junkbox-body { opacity: 0.5 }
 
+    /* Junk sub-categories — "connected spine" grouping: the whole category list
+       hangs off ONE faint gold rail on the left (#junk-cats), and the OPEN
+       category lights up its own segment of that rail. Deeply nested, but reads
+       as a single group rather than a stack of standalone boxes. */
+    #junk-cats {
+      border-left: 2px solid rgba(200,168,90,0.22);
+      padding-left: 14px;
+      margin-left: 5px;
+    }
     .junk-cat {
-      border-top: 1px solid var(--codex-rule);
+      position: relative;
+      border-top: 1px solid rgba(90,62,34,0.28);
       padding: 7px 0 4px
+    }
+    .junk-cat:first-child { border-top: none }
+    /* The open category's segment of the rail, lit gold (aligns onto the
+       #junk-cats border: 14px padding + 2px border ≈ 16px left of the row). */
+    .junk-cat[open]::before {
+      content: "";
+      position: absolute;
+      left: -16px; top: 0; bottom: 0;
+      width: 2px;
+      background: var(--codex-gold);
+      box-shadow: 0 0 6px rgba(200,168,90,0.5);
     }
     /* The category header doubles as the <details> summary and carries the
        caret: a small cube when collapsed, a gold diamond (rotated 45°) when
@@ -4665,19 +4686,11 @@
       background-size: 70% 1px;
     }
 
-    /* ── Entities tab (#4): the Entity Classes / Junk Filter TOP boxes now use
-       the canonical header band (above), so they get NO underline. Only the junk
-       SUB-categories keep the old 1px open-underline for now — those boxes will
-       be reworked separately. The underline is a 1px bottom gradient inset past
-       the icon (so it starts at the text, never under the icon), open only. ── */
+    /* ── Entities tab (#4): the Entity Classes / Junk Filter TOP boxes use the
+       canonical header band (above); the junk SUB-categories use the connected
+       gold-rail spine (above). Neither has the old open-underline anymore. ── */
     .ent-junkbox-sum > .snode { margin-right: 0 }
-    .junk-cat[open] > .junk-cat-head {
-      padding-bottom: 5px;
-      background-image: linear-gradient(var(--codex-rule), var(--codex-rule));
-      background-repeat: no-repeat;
-      background-position: right bottom;
-      background-size: calc(100% - 26px) 1px;
-    }
+    .junk-cat[open] > .junk-cat-head { padding-bottom: 4px }
 
     /* ── Overlay Placement panel (Config → Overlay): one compact row per
        placeable overlay — name, optional enable, Move drag toggle, X/Y % and
