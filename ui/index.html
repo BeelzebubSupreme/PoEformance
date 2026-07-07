@@ -6942,6 +6942,72 @@
         .hk-off { opacity: .5; pointer-events: none; }
         .hk-off .hk-always { pointer-events: auto; }
       </style>
+      <style>
+      /* ══ CANONICAL BUTTON — one framed, rune-trace button family for the whole UI.
+         FULL tier (ornate: volute corners + edge lozenges) = prominent action buttons;
+         PLAIN tier (compact: frame + rune-trace, no ornaments) = small / icon buttons.
+         Reuses @property --tipAngle + codexTipFrameSweep from the tooltip. Placed last so
+         it wins over the scattered legacy *-btn rules (incl. #panel-* overrides). Not
+         routed here (kept special): .wm-btn (title bar), .hk-num-btn (steppers), and the
+         .cp-btn-row / .patch-path-btns containers. ══ */
+      :root{
+        --btnBrkTL:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><g fill='none' stroke='%23c8a85a' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'><path d='M4 14 C2.7 9.5 2.7 6 4 4 C6 2.7 9.5 2.7 14 4'/><path d='M4 14 C4 16.3 6.6 16 5.9 13.4'/><path d='M14 4 C16.3 4 16 6.6 13.4 5.9'/></g><path d='M3 1.1 l1.95 1.95 -1.95 1.95 -1.95 -1.95 z' fill='%23f0d68a'/></svg>");
+        --btnBrkTR:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><g transform='rotate(90 10 10)'><g fill='none' stroke='%23c8a85a' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'><path d='M4 14 C2.7 9.5 2.7 6 4 4 C6 2.7 9.5 2.7 14 4'/><path d='M4 14 C4 16.3 6.6 16 5.9 13.4'/><path d='M14 4 C16.3 4 16 6.6 13.4 5.9'/></g><path d='M3 1.1 l1.95 1.95 -1.95 1.95 -1.95 -1.95 z' fill='%23f0d68a'/></g></svg>");
+        --btnBrkBR:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><g transform='rotate(180 10 10)'><g fill='none' stroke='%23c8a85a' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'><path d='M4 14 C2.7 9.5 2.7 6 4 4 C6 2.7 9.5 2.7 14 4'/><path d='M4 14 C4 16.3 6.6 16 5.9 13.4'/><path d='M14 4 C16.3 4 16 6.6 13.4 5.9'/></g><path d='M3 1.1 l1.95 1.95 -1.95 1.95 -1.95 -1.95 z' fill='%23f0d68a'/></g></svg>");
+        --btnBrkBL:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'><g transform='rotate(270 10 10)'><g fill='none' stroke='%23c8a85a' stroke-width='1.3' stroke-linecap='round' stroke-linejoin='round'><path d='M4 14 C2.7 9.5 2.7 6 4 4 C6 2.7 9.5 2.7 14 4'/><path d='M4 14 C4 16.3 6.6 16 5.9 13.4'/><path d='M14 4 C16.3 4 16 6.6 13.4 5.9'/></g><path d='M3 1.1 l1.95 1.95 -1.95 1.95 -1.95 -1.95 z' fill='%23f0d68a'/></g></svg>");
+        --btnEdge:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 24'><path d='M6 2 L10 12 L6 22 L2 12 Z' fill='none' stroke='%23c8a85a' stroke-width='1.1'/><path d='M6 5.5 L8.4 12 L6 18.5 L3.6 12 Z' fill='%23f0d68a'/><circle cx='6' cy='1.4' r='.85' fill='%23c8a85a'/><circle cx='6' cy='22.6' r='.85' fill='%23c8a85a'/></svg>");
+      }
+      /* shared base — both tiers */
+      .btn,.btn-plain,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary,
+      .tree-tbtn,.hk-icon-btn,.tsv-pg-btn,.cat-btn{
+        position:relative;isolation:isolate;font-family:var(--codex-display);font-weight:600;
+        letter-spacing:.1em;text-transform:uppercase;color:var(--codex-gold-hi);cursor:pointer;text-align:center;
+        background:linear-gradient(180deg,#43301c 0%,#2f1f12 46%,#241709 55%,#3a2615 100%);
+        border:1px solid var(--codex-rule);border-radius:3px;
+        box-shadow:inset 0 1px 0 rgba(240,214,138,.10),0 1px 2px rgba(0,0,0,.55);
+        transition:color .18s,border-color .18s,box-shadow .18s}
+      /* rune-trace filament (Variante C) — both tiers, animates on hover */
+      .btn::after,.btn-plain::after,.cfg-btn::after,.hk-btn::after,.hk-key-btn::after,.uib-btn::after,.ei-btn::after,
+      .tsv-gen-btn::after,.cp-btn::after,.cp-btn-primary::after,.tree-tbtn::after,.hk-icon-btn::after,.tsv-pg-btn::after,.cat-btn::after{
+        content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;
+        background:conic-gradient(from var(--tipAngle,0deg),transparent 0deg 300deg,#fff1c7 338deg,var(--codex-gold) 350deg,transparent 360deg);
+        -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
+        mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;opacity:0;transition:opacity .25s}
+      /* hover — both tiers */
+      .btn:hover,.btn-plain:hover,.cfg-btn:hover,.hk-btn:hover,.hk-key-btn:hover,.uib-btn:hover,.ei-btn:hover,
+      .tsv-gen-btn:hover,.cp-btn:hover,.cp-btn-primary:hover,.tree-tbtn:hover,.hk-icon-btn:hover,.tsv-pg-btn:hover,.cat-btn:hover{
+        color:#fff;border-color:var(--codex-gold);box-shadow:inset 0 1px 0 rgba(240,214,138,.20),0 0 15px -5px rgba(200,168,90,.6)}
+      .btn:hover::after,.btn-plain:hover::after,.cfg-btn:hover::after,.hk-btn:hover::after,.hk-key-btn:hover::after,.uib-btn:hover::after,.ei-btn:hover::after,
+      .tsv-gen-btn:hover::after,.cp-btn:hover::after,.cp-btn-primary:hover::after,.tree-tbtn:hover::after,.hk-icon-btn:hover::after,.tsv-pg-btn:hover::after,.cat-btn:hover::after{
+        opacity:1;animation:codexTipFrameSweep 1.3s linear infinite}
+      /* ── FULL tier: sizing + ornate ornaments ── */
+      .btn,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary,
+      #panel-hotkeys .hk-btn{padding:9px 18px;font-size:11px}
+      .btn::before,.cfg-btn::before,.hk-btn::before,.hk-key-btn::before,.uib-btn::before,.ei-btn::before,.tsv-gen-btn::before,.cp-btn::before,.cp-btn-primary::before{
+        content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+        background:var(--btnBrkTL) top left/16px no-repeat,var(--btnBrkTR) top right/16px no-repeat,
+          var(--btnBrkBR) bottom right/16px no-repeat,var(--btnBrkBL) bottom left/16px no-repeat,
+          var(--btnEdge) center top/8px 14px no-repeat,var(--btnEdge) center bottom/8px 14px no-repeat;
+        transition:filter .2s;filter:saturate(.85) brightness(.82)}
+      .btn:hover::before,.cfg-btn:hover::before,.hk-btn:hover::before,.hk-key-btn:hover::before,.uib-btn:hover::before,.ei-btn:hover::before,.tsv-gen-btn:hover::before,.cp-btn:hover::before,.cp-btn-primary:hover::before{
+        filter:drop-shadow(0 0 2.5px rgba(240,214,138,.6))}
+      /* ── PLAIN tier: compact, no ornaments ── */
+      .btn-plain,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn,.cat-btn{padding:5px 11px;font-size:10px;letter-spacing:.08em}
+      .hk-icon-btn,.tsv-pg-btn,.cat-btn{padding:5px 8px}
+      /* ── PRIMARY (gold fill) ── */
+      .btn-primary,.cp-btn-primary{color:#2a1505;border-color:#8a6a2e;text-shadow:0 1px 0 rgba(255,245,215,.5);
+        background:linear-gradient(180deg,#f0d68a 0%,#d8b866 48%,#c19b48 56%,#e2c574 100%)}
+      .cp-btn-primary::before{filter:none;mix-blend-mode:multiply;opacity:.55}
+      /* ── DANGER (blood) ── */
+      .btn-danger{color:var(--codex-blood-hi);border-color:#5a2626}
+      .btn-danger::after{background:conic-gradient(from var(--tipAngle,0deg),transparent 0 300deg,#ff9a9a 338deg,var(--codex-blood-hi) 350deg,transparent 360deg)}
+      .btn-danger:hover{border-color:var(--codex-blood-hi);color:#ffd7d7;box-shadow:0 0 15px -5px rgba(197,72,72,.6)}
+      /* ── WIDE (menu-style) ── */
+      .btn-wide{width:100%;padding:12px 20px;font-size:12px;letter-spacing:.14em}
+      @media (prefers-reduced-motion:reduce){
+        .btn:hover::after,.btn-plain:hover::after,.cfg-btn:hover::after,.hk-btn:hover::after,.hk-key-btn:hover::after,.uib-btn:hover::after,.ei-btn:hover::after,.tsv-gen-btn:hover::after,.cp-btn:hover::after,.cp-btn-primary:hover::after,.tree-tbtn:hover::after,.hk-icon-btn:hover::after,.tsv-pg-btn:hover::after,.cat-btn:hover::after{animation:none;opacity:1}
+      }
+      </style>
       <div class="hk-toolbar">
         <button class="hk-btn" data-tip="Add a new hotkey group" onclick="hkAddGroup()">+ Add Group</button>
         <button class="hk-btn" data-tip="Import a hotkey group from a JSON file in hotkeys_export/" onclick="ahkCall('ImportHotkeysGroup')">⤒ Import group</button>
