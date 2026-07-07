@@ -5592,18 +5592,6 @@
               </div>
               <div class="cfg-help">Reveals the entire minimap. Two implementations — pick whichever fits your workflow.</div>
 
-              <div class="cfg-row"><span class="cfg-label">Walkable Grid (debug)</span>
-                <label class="toggle"><input type="checkbox" id="tog-walkgrid" onchange="ahkCall('ToggleWalkGrid')"
-                    ><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-help">Diagnostic: shades every walkable cell of the memory terrain grid on the large map (blue, 50% stippled so the map shows through). Use it to compare the grid the bot pathfinds on against what the game actually allows — mismatches explain a stuck AutoPilot. Large map only.</div>
-
-              <div class="cfg-row"><span class="cfg-label">Mask Outlines (debug)</span>
-                <label class="toggle"><input type="checkbox" id="tog-maskdebug" onchange="ahkCall('ToggleMaskDebug')"
-                    ><span class="toggle-slider"></span></label>
-              </div>
-              <div class="cfg-help">Diagnostic: draws red rectangles where the large-map overlay is clipped away from the game HUD (orbs, skill/flask/XP bars, area & quest panel). Shows the current mask boundaries so you can see exactly what's hidden while tuning them. Large map only.</div>
-
               <!-- Source picker. "Memory" = legacy on-the-fly overlay,
                    "GGPK" = persistent shader patch (apply/revert below). -->
               <div class="cfg-row cfg-sub-row" id="row-maphack-source" style="padding-left:18px">
@@ -5674,6 +5662,29 @@
                 <button class="cfg-btn" id="ggpk-maphack-revert" onclick="ggpkMaphackRun('revert')"
                   style="display:none">Revert</button>
               </div>
+
+              <div class="cfg-row"><span class="cfg-label">Highlight Unexplored</span>
+                <label class="toggle"><input type="checkbox" id="tog-maphack-unexplored" onchange="ahkCall('ToggleMapHackUnexplored');mapHackUnexpSubVis(this.checked)"
+                    ><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Puts a subtle dark wash over walkable areas you haven't reached yet, so on the revealed map you can see where you still need to explore. It clears as you move through an area. Approximate: the game exposes no fog-of-war grid, so "explored" is tracked from your own path. Large map + Map Hack only.</div>
+              <div id="mhunexp-subrow" class="cfg-slider-row" style="display:none;padding-left:18px;padding-right:8px;gap:8px">
+                <span class="cfg-label" style="min-width:auto" data-tip="Colour of the unexplored wash. Default is very dark; pick a lighter shade if it's too heavy.">↳ Colour</span>
+                <span id="cp-swatch-mhunexp" class="cp-swatch" onclick="mapHackUnexpOpenColor(this)"></span>
+                <span class="cfg-label" style="min-width:auto;margin-left:14px" data-tip="Spacing between the wash dots. 1 = solid (darkest), higher = more spread out / lighter (the map shows through more).">↳ Dot spacing</span>
+                <div class="slider-wrap">
+                  <span class="slider-val" id="mhunexp-spacing-val">2</span>
+                  <input type="range" id="mhunexp-spacing" min="1" max="8" step="1" value="2"
+                         oninput="_sb(this,'mhunexp-spacing-val',this.value)"
+                         onchange="ahkCall('SetMapHackUnexploredSpacing', parseInt(this.value,10))">
+                </div>
+              </div>
+
+              <div class="cfg-row"><span class="cfg-label">Mask Outlines (debug)</span>
+                <label class="toggle"><input type="checkbox" id="tog-maskdebug" onchange="ahkCall('ToggleMaskDebug')"
+                    ><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Diagnostic: draws red rectangles where the large-map overlay is clipped away from the game HUD (orbs, skill/flask/XP bars, area & quest panel). Shows the current mask boundaries so you can see exactly what's hidden while tuning them. Large map only.</div>
 
               <!-- Keep the game's on-screen loot labels readable: exclude their rects from
                    the large-map maphack wall bitmap (LootLabelClear.ahk). -->
@@ -6144,6 +6155,14 @@
                 <label class="toggle"><input type="checkbox" id="startup-trace" onchange="ahkCall('SetStartupTrace', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label>
               </div>
               <div class="cfg-help">Times every startup step (QueryPerformanceCounter) into <code>logs\InGameStateMonitor.startup_trace.log</code>. Most starts are fast — leave this <b>ON across several restarts</b> to catch the occasional slow one, then turn it off. Read the result in <b>Config → Data &amp; Logs</b> (open <code>startup_trace.log</code>).</div>
+              <div class="cfg-row"><span class="cfg-label">🔌 Reader process (split stage 2)</span>
+                <label class="toggle"><input type="checkbox" id="reader-process" onchange="ahkCall('SetReaderProcess', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Reader-split stage 2 (dev/RE, opt-in): runs a persistent second process (<code>poef_reader.ahk</code>) that independently attaches to PoE and publishes a live status via shared memory. <button class="cfg-btn" onclick="ahkCall('ReaderProcessDiag')">🔌 Reader status</button> — the reader should resolve the SAME inGameState address as the main app (a cross-process correctness check for the split).<br><br>Stage 3b: the reader now also packs the awake-entity sample into shared memory. <button class="cfg-btn" onclick="ahkCall('RadarConsumeDiag')">📡 Radar parity</button> — cross-checks the reader's published sample against Main's live sample (matched-by-id count, path/position parity). "only in main" should be 0; "only in reader" is the junk Main filters.</div>
+              <div class="cfg-row"><span class="cfg-label">📥 Consume reader sample (split stage 3c)</span>
+                <label class="toggle"><input type="checkbox" id="reader-consume" onchange="ahkCall('SetReaderConsume', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Stage 3c (needs the reader process ON): Main <b>skips its own ~40 ms entity scan</b> and rebuilds the awake sample from the reader's published records when they are <b>fresh (&lt; 500 ms)</b> and the area matches — otherwise it falls back to its own scan (never worse). Verify stage-3b "📡 Radar parity" looks good <i>before</i> enabling this. Watch for: radar dots / loot / AutoPilot behave as before, and LootTracker kills still count.</div>
             </div>
           </details>
         </div>
@@ -6256,6 +6275,10 @@
               <button class="tree-tbtn" onclick="ahkCall('ActorProbeRun')" style="font-size:11px" title="Diagnostic: locate the drifted Actor animationId offset. Resolves the local player's Actor component and TIME-SAMPLES a 4KB int32 window over ~5s while you act, then reports which offset changed (the animationId is the low-int one that cycles 0=Idle/4=Run/skill ids). Click OK, then RUN AROUND and CAST several skills for ~5s. Writes logs\InGameStateMonitor.actor_probe.log">🎭 Probe Actor</button>
               <button class="tree-tbtn" onclick="ahkCall('ActorVectorProbeRun')" style="font-size:11px" title="Diagnostic: verify/re-base the Actor ActiveSkills / Cooldowns / DeployedEntities vectors. Reads each vector at the current offset AND at current+0x10, DECODES the first entries (castType / cooldown details), and scans the region for vector-shaped pointer pairs — so the correct offset is picked by content (valid detail pointers + sane castTypes), not by a count that just looks plausible. Be in-game, then click. Writes logs\InGameStateMonitor.actor_vector_probe.log">🧬 Probe Actor Vectors</button>
               <button class="tree-tbtn" onclick="ahkCall('CurrencyLayoutProbeRun')" style="font-size:11px" title="Extracts the currency stash tab's exact slot layout from the game UI tree (each slot's real position + size + currency path) and bakes data\currency_tab_layout.json for a 1:1 currency-tab render. OPEN THE CURRENCY TAB in-game first, then click. Writes logs\InGameStateMonitor.currency_layout.log too.">🪙 Bake Currency Layout</button>
+              <button class="tree-tbtn" onclick="ahkCall('LandscapeGridSnapshot')" style="font-size:11px" title="RE: snapshot the terrain GridLandscapeData (@0xE8) byte grid to hunt the map's explored/fog-of-war state. Reports its size, value histogram and whether it matches the walkable grid. STEP 1: be in-game in an area you have NOT fully explored, click this. Then WALK to reveal new map, then click 'Landscape Diff'. Writes logs\InGameStateMonitor.landscape_probe.log">🗺 Landscape Snapshot</button>
+              <button class="tree-tbtn" onclick="ahkCall('LandscapeGridDiff')" style="font-size:11px" title="RE STEP 2: diff GridLandscapeData vs the snapshot. If exploring changed cells (clustered around your path), it IS the explored grid; if nothing changed, it's static (not fog). Take a Landscape Snapshot first, walk to uncover new area, then click this. Writes the diff to logs\InGameStateMonitor.landscape_probe.log">🗺 Landscape Diff</button>
+              <button class="tree-tbtn" onclick="ahkCall('LandscapeScanSnapshot')" style="font-size:11px" title="RE (explored-grid hunt, beyond the terrain layers): scan AreaInstance + InGameState (directly and one pointer level deep) for ALL StdVector<byte> allocations and checksum each. STEP 1: be in-game, click this. Then WALK to reveal new map, then 'Scan Diff' — whichever allocation's checksum changed is a dynamic buffer; the fog/explored grid (if it exists in CPU memory) is a grid-sized one that changes as you explore. Writes logs\InGameStateMonitor.landscape_probe.log">🔎 Scan Snapshot</button>
+              <button class="tree-tbtn" onclick="ahkCall('LandscapeScanDiff')" style="font-size:11px" title="RE STEP 2: re-checksum every scanned allocation and report which CHANGED since the Scan Snapshot. Take a Scan Snapshot, walk to uncover new area, then click this. The fog/explored grid changes CONSISTENTLY with exploration and is grid-sized; erratic ones are other dynamic buffers. Run a few rounds to isolate it. Writes logs\InGameStateMonitor.landscape_probe.log">🔎 Scan Diff</button>
               <button class="tree-tbtn" onclick="ahkCall('RitualProbeRun')" style="font-size:11px" title="RE diagnostic for the Ritual (Favours) reward window: finds the RitualWindow element by StringId, walks its subtree and reports every reward slot (StringId / rect / item at +0x4F8), plus a struct pointer-scan fallback. OPEN THE FAVOURS WINDOW FIRST, then click. Basis for value badges on ritual rewards. Writes logs\InGameStateMonitor.ritual_probe.log">🎲 Probe Ritual</button>
               <button class="tree-tbtn" onclick="ahkCall('NpcIdentifyRun')" style="font-size:11px" title="TEST: in the hideout, click the NPC 'Doryani' label, wait for his dialog window, then click 'Identify Items'. Also on hotkey F9 (while PoE2 is focused); tune via [NpcIdentify] in poeformance_config.ini (hotkey, npcName, menuText, UI paths).">🪄 Doryani Identify</button>
               <button class="tree-tbtn" onclick="ahkCall('LootLabelProbeRun')" style="font-size:11px" title="RE diagnostic for ground-item (loot) labels: sweeps the UI for effectively-visible text elements and reports StringId / parent StringId / text / screen rect (+ any item at +0x4F8). STAND NEAR SEVERAL GROUND DROPS so their labels show, then click. Basis for keeping loot labels clear of the large-map maphack walls. Writes logs\InGameStateMonitor.lootlabel_probe.log">🏷 Probe Loot Labels</button>
@@ -7934,6 +7957,31 @@
       if (!s) return;
       const e = document.getElementById('llc-enabled');
       if (e) e.checked = s.enabled === true || s.enabled === 1 || s.enabled === '1' || s.enabled === 'true';
+    }
+
+    // Unexplored-wash colour → shared GGPK color picker → SetMapHackUnexploredColor.
+    function mapHackUnexpOpenColor(el) {
+      const cur = (window._lastHeader && window._lastHeader.mapHackUnexploredColor) || '#181820';
+      openColorPicker('mhUnexp', {
+        title: 'Unexplored wash colour',
+        hex: cur,
+        swatchEl: el,
+        onConfirm: hex => ahkCall('SetMapHackUnexploredColor', '#' + hex.slice(0, 6))
+      });
+    }
+
+    // Show/hide the unexplored-wash sub-row (colour + spacing) with the toggle.
+    function mapHackUnexpSubVis(on) {
+      const r = document.getElementById('mhunexp-subrow');
+      if (!r) return;
+      r.style.display = on ? 'flex' : 'none';
+      // The spacing slider's value bubble can't be positioned while hidden
+      // (zero width) — reposition it once the row is laid out.
+      if (on) requestAnimationFrame(() => {
+        const sl = document.getElementById('mhunexp-spacing');
+        const bub = document.getElementById('mhunexp-spacing-val');
+        if (sl && bub) _posVal(sl, bub);
+      });
     }
 
     // Map loot-value label color → shared GGPK color picker → SetLootRadarValue mapColor.
@@ -10786,7 +10834,19 @@
 
       setChk('tog-zonenav', d.zoneNav !== undefined ? d.zoneNav : true);
       setChk('tog-maphack', d.mapHack !== undefined ? d.mapHack : true);
-      setChk('tog-walkgrid', d.walkGrid !== undefined ? d.walkGrid : false);
+      setChk('tog-maphack-unexplored', d.mapHackUnexplored !== undefined ? d.mapHackUnexplored : false);
+      mapHackUnexpSubVis(!!(d.mapHackUnexplored));
+      if (d.mapHackUnexploredColor) {
+        const sw = document.getElementById('cp-swatch-mhunexp');
+        if (sw) sw.style.background = d.mapHackUnexploredColor;
+      }
+      if (d.mapHackUnexploredSpacing !== undefined) {
+        const sp = document.getElementById('mhunexp-spacing');
+        const spv = document.getElementById('mhunexp-spacing-val');
+        if (sp && document.activeElement !== sp) sp.value = d.mapHackUnexploredSpacing;
+        if (spv) spv.textContent = d.mapHackUnexploredSpacing;
+        if (sp && spv) _posVal(sp, spv);
+      }
       setChk('tog-maskdebug', d.maskDebug !== undefined ? d.maskDebug : false);
       // Maphack source — radio sync + GGPK action row visibility.
       // The actual "PoE2 is closed → buttons enabled" gating runs on
@@ -10932,6 +10992,8 @@
       if (d.invChainDump !== undefined) setChk('inv-chain-dump', d.invChainDump);
       // Startup timing trace toggle (Config > Debug > Diagnostic Actions).
       if (d.startupTrace !== undefined) setChk('startup-trace', d.startupTrace);
+      if (d.readerProcess !== undefined) setChk('reader-process', d.readerProcess);
+      if (d.readerConsume !== undefined) setChk('reader-consume', d.readerConsume);
       // AutoPilot status file-log toggle (Config > AutoPilot > Live Status).
       if (d.apStatusLog !== undefined) setChk('ap-status-log', d.apStatusLog);
 
@@ -11563,7 +11625,11 @@
       lazyDecoded: new Map(),
       // Keys of lazy components whose live re-fetch is currently in flight,
       // so the per-snapshot refresh doesn't stack duplicate decode calls.
-      refreshInFlight: new Set()
+      refreshInFlight: new Set(),
+      // Reader-split stage 4: per-entity FULL component list (addr -> {components,
+      // componentCount, namedComponentCount}), fetched on expand via
+      // RequestEntityComponents. Overrides the minimal list the consumed snapshot carries.
+      fullComps: new Map()
     };
 
     function updateEntities(jsonStr) {
@@ -11582,6 +11648,10 @@
       window._eiState.compExpanded = new Set(
         [...window._eiState.compExpanded].filter(k => liveAddrs.has(k.split('::')[0]))
       );
+      // Drop the full-component override for entities that left range (addresses get recycled).
+      for (const a of [...window._eiState.fullComps.keys()]) {
+        if (!liveAddrs.has(a)) window._eiState.fullComps.delete(a);
+      }
       // Drop lazy-decoded cache for entities that left range
       for (const key of [...window._eiState.lazyDecoded.keys()]) {
         if (!liveAddrs.has(key.split('::')[0])) {
@@ -11769,6 +11839,11 @@
     }
 
     function eiBody(e) {
+      // Full-component override (reader consume mode fills this in on demand);
+      // computed once and reused for the Components summary + the component list.
+      const _ov = _eiOv(e);
+      const _compCount = _ov ? _ov.componentCount : (e.componentCount ?? '?');
+      const _namedCount = _ov ? _ov.namedComponentCount : e.namedComponentCount;
       const props = [
         ['Address',  `<span class="ei-prop-val addr">${escHtml(e.addr || '')}</span>`],
         ['Id',       `<span class="ei-prop-val">${e.id ?? '—'}</span>`],
@@ -11780,13 +11855,14 @@
         ['Alive',    `<span class="ei-prop-val">${e.alive === false ? 'no' : 'yes'}</span>`],
         ['Life',     `<span class="ei-prop-val">${e.life >= 0 ? e.life + '%' : '—'}</span>`],
         ['Distance', `<span class="ei-prop-val">${e.dist >= 0 ? e.dist + 'm' : '—'}</span>`],
-        ['Components', `<span class="ei-prop-val">${e.componentCount ?? '?'}${e.namedComponentCount !== undefined ? ` (${e.namedComponentCount} named)` : ''}</span>`]
+        ['Components', `<span class="ei-prop-val">${_compCount}${_namedCount !== undefined ? ` (${_namedCount} named)` : ''}</span>`]
       ];
       const propsHtml = props.map(([k, v]) =>
         `<div class="ei-prop-row"><span class="ei-prop-key">${k}</span>${v}</div>`
       ).join('');
 
-      const comps = Array.isArray(e.components) ? e.components : [];
+      const comps = (_ov && Array.isArray(_ov.components)) ? _ov.components
+                    : (Array.isArray(e.components) ? e.components : []);
       const compsHtml = comps.length
         ? comps.map(c => eiComponentRow(e.addr, c)).join('')
         : '<div class="ei-prop-val muted" style="padding:4px 0">No components reported.</div>';
@@ -11909,7 +11985,20 @@
 
     function eiToggle(addr) {
       const set = window._eiState.expanded;
+      const opening = !set.has(addr);
       if (set.has(addr)) set.delete(addr); else set.add(addr);
+      // Reader-split stage 4: on expand, ask AHK to re-read this ONE entity's FULL component list
+      // (the consumed snapshot carries only a minimal {Targetable,Actor} list). Cheap — one entity,
+      // read live on Main's own handle — so the inspector shows the complete list either way.
+      if (opening) ahkCall('RequestEntityComponents', addr);
+      eiRender();
+    }
+    // Reader-split stage 4: apply the full component list AHK re-read for one entity. Payload is a raw
+    // object { components, componentCount, namedComponentCount }; overrides the minimal snapshot list.
+    function eiApplyEntityComponents(addr, payload) {
+      let obj; try { obj = (typeof payload === 'string') ? JSON.parse(payload) : payload; } catch (e) { return; }
+      if (!obj || !Array.isArray(obj.components)) return;
+      window._eiState.fullComps.set(addr, obj);
       eiRender();
     }
     function eiToggleComp(addr, name) {
@@ -11931,12 +12020,23 @@
       }
       eiRender();
     }
-    // Looks up a component's live address from the current snapshot items,
-    // for re-issuing a lazy decode. Returns undefined if not found this frame.
+    // Reader-split stage 4: the full-component override for an entity (or null). Takes the entity
+    // object or its addr string.
+    function _eiOv(e) {
+      const addr = (typeof e === 'string') ? e : (e && e.addr);
+      return addr ? (window._eiState.fullComps.get(addr) || null) : null;
+    }
+    // Looks up a component's live address for re-issuing a lazy decode. Prefers the full-component
+    // override (stage 4) so components beyond the minimal snapshot list are also addressable.
     function _eiCompAddr(entityAddr, compName) {
-      const e = (window._eiState.items || []).find(x => x.addr === entityAddr);
-      if (!e || !Array.isArray(e.components)) return undefined;
-      const c = e.components.find(cc => cc.name === compName);
+      const ov = _eiOv(entityAddr);
+      let comps = (ov && Array.isArray(ov.components)) ? ov.components : null;
+      if (!comps) {
+        const e = (window._eiState.items || []).find(x => x.addr === entityAddr);
+        comps = (e && Array.isArray(e.components)) ? e.components : null;
+      }
+      if (!comps) return undefined;
+      const c = comps.find(cc => cc.name === compName);
       return c ? (c.addr || '') : undefined;
     }
     // Fire a lazy decode for one component on demand. Marks the row

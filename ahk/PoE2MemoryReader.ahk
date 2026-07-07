@@ -147,6 +147,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
         ; Reset on area change. New entities get full ReadEntityBasic decode; existing ones get
         ; cheap per-tick updates (position, life, targetable, flags) via UpdateCachedEntityRadar.
         this._radarEntityCache := Map()
+        this._radarJunkIds := Map()   ; ids path-checked as junk → skipped without RPM (Phase 1)
         this._radarEntityCacheAreaHash := 0xFFFFFFFF
 
         ; Zone navigation: continuous accumulation of important entities.
@@ -3003,6 +3004,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
         ;   first  15 s after zone change → retry every 400 ms (~38 reads max)
         ;   after  15 s                    → retry every 1500 ms
         currentAreaHash := this.Mem.ReadUInt(areaInstanceData + PoE2Offsets.AreaInstance["CurrentAreaHash"])
+        Profiler.Begin("read.world.terrain")
         if (currentAreaHash != this._radarTerrainAreaHash)
         {
             this._radarTerrainCache := 0
@@ -3046,8 +3048,10 @@ class PoE2GameStateReader extends PoE2InventoryReader
                 this._terrainLoggedError := this._terrainLastError
             }
         }
+        Profiler.End("read.world.terrain")
 
         ; World area data (town/hideout flags) — re-read only on zone change (area hash).
+        Profiler.Begin("read.world.area")
         if (currentAreaHash != this._radarWorldAreaHash)
         {
             this._radarWorldAreaCache := 0
@@ -3065,8 +3069,10 @@ class PoE2GameStateReader extends PoE2InventoryReader
             }
             this._radarWorldAreaHash := currentAreaHash
         }
+        Profiler.End("read.world.area")
 
         ; W2S camera matrix — read every tick (64 bytes, one ReadBytes call)
+        Profiler.Begin("read.world.matrix")
         w2sMatrix := []
         try {
             if !IsSet(worldData)
@@ -3082,8 +3088,10 @@ class PoE2GameStateReader extends PoE2InventoryReader
                 }
             }
         }
+        Profiler.End("read.world.matrix")
 
         ; Player world position
+        Profiler.Begin("read.world.player")
         playerInfoPtr := areaInstanceData + PoE2Offsets.AreaInstance["PlayerInfo"]
         localPlayerRawPtr := this.Mem.ReadPtr(playerInfoPtr + PoE2Offsets.LocalPlayerStruct["LocalPlayerPtr"])
         localPlayerPtr := this.ResolveEntityPointer(localPlayerRawPtr)
@@ -3098,6 +3106,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
                 this._radarPlayerVitalsCache := freshVitals
             this._radarPlayerVitalsTick := nowTick
         }
+        Profiler.End("read.world.player")
         t2 := A_TickCount  ; after player read
         Profiler.End("read.world")
         Profiler.Begin("read.ui")
@@ -3217,7 +3226,9 @@ class PoE2GameStateReader extends PoE2InventoryReader
         if (currentAreaHash != this._radarEntityCacheAreaHash)
         {
             this._radarEntityCache := Map()
+            this._radarJunkIds := Map()   ; per-entity "known junk" cache (skip re-decoding junk)
             this._radarEntityCacheAreaHash := currentAreaHash
+            this._radarSleepingTick := 0  ; invalidate the throttled sleeping cache (new zone's sleepers)
             ; Schedule zone scanner. Earlier code used a 2 s safety delay before
             ; starting; the TerrainReady diagnostic confirms terrain data is now
             ; readable on the very first attempt after a zone change, so we kick
@@ -3283,6 +3294,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
             zoneScanReady := false
         }
 
+        Profiler.Begin("read.ent.zonescan")
         if (zoneScanReady)
         {
             scanStart := A_TickCount
@@ -3338,8 +3350,66 @@ class PoE2GameStateReader extends PoE2InventoryReader
             }
         }
 
+        Profiler.End("read.ent.zonescan")
+
+        ; ── Reader-split stage 3c: consume the reader's published sample if fresh + area matches ──
+        ; When the persistent reader process is publishing a FRESH snapshot for THIS area, Main skips
+        ; its own ~40 ms entity scan (BFS + decode + cheap) and rebuilds the awake sample from the
+        ; reader's flat records instead. Junk is filtered HERE (config-dependent, Main-side);
+        ; currentEntities/fullAwakeRawPtrs are built from the FULL reader set (incl. junk) so the stale
+        ; filter's network-bubble check still works. ANY failure — consume disabled, reader off/stale,
+        ; area-mismatch, or a mid-write unpack collision — leaves consumed=false and Main runs its own
+        ; scan below, exactly as today (never worse). The Main-side zoneScan + _FilterStaleRadarEntities
+        ; (which feeds LootTracker kills) then run on the reconstructed sample unchanged.
+        consumed := false
+        currentEntities := Map()
+        fullAwakeRawPtrs := Map()
+        mapSize := 0
+        isZoneLoading := false
+        newDecodeCount := 0
+        cheapUpdateCount := 0
+        cacheErrors := 0
+        cache := this._radarEntityCache
+        awakeSample := []
+        consumedSleepingSample := 0   ; set from the reader's published sleeping list on a consume tick
+        if (ReaderConsumeEnabled())
+        {
+            rd := ConsumeReaderRadarSample(currentAreaHash)
+            if (rd is Map && rd.Has("sample"))
+            {
+                if (rd.Has("sleepingSample") && (rd["sleepingSample"] is Array))
+                    consumedSleepingSample := rd["sleepingSample"]
+                for _, entry in rd["sample"]
+                {
+                    eid := entry.Has("id") ? entry["id"] : 0
+                    rp := entry.Has("entityRawPtr") ? entry["entityRawPtr"] : 0
+                    if (eid > 0)
+                        currentEntities[eid] := rp
+                    if (rp > 0)
+                        fullAwakeRawPtrs[rp] := true
+                    jent := entry.Has("entity") ? entry["entity"] : 0
+                    if (jent is Map && IsJunkEntity(jent.Has("path") ? jent["path"] : ""))
+                        continue
+                    awakeSample.Push(entry)
+                }
+                ; mapSize must be the reader's RAW BFS count (all awake ids incl. undecoded junk), NOT
+                ; the published record count — the reader omits junk that failed to decode, so the
+                ; record count ~= the non-junk awake count and the fill ratio would read ~1.0. Using the
+                ; raw count makes the isZoneLoading ratio (non-junk decoded / raw awake) match Main's own
+                ; cacheFillRatio, so the sleeping-entity scan is gated IDENTICALLY (else it runs every
+                ; tick and costs tens of ms that Main's own path skips in junk-heavy maps).
+                rawCount := (rd.Has("rawCount") && rd["rawCount"] > 0) ? rd["rawCount"] : currentEntities.Count
+                mapSize := Max(rawCount, currentEntities.Count)
+                isZoneLoading := (mapSize > 0) ? ((awakeSample.Length / mapSize) < 0.90) : false
+                consumed := true
+            }
+        }
+
         ; Step 1: Full tree scan — get all entityId → rawPtr
         ; Throttle BFS to every 200ms; reuse cached results on intermediate ticks.
+        if (!consumed)
+        {
+        Profiler.Begin("read.ent.bfs")
         bfsInterval := 200
         doFullBfs := !this._radarLastBfsTick
             || (nowTick - this._radarLastBfsTick) >= bfsInterval
@@ -3370,6 +3440,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
             currentEntities := this._radarLastCurrentEntities
             fullAwakeRawPtrs := this._radarLastFullAwakeRawPtrs
         }
+        Profiler.End("read.ent.bfs")
         mapSize := currentEntities.Count
 
         ; Step 2+3: Update cache — new entities get full decode, existing get cheap update
@@ -3377,6 +3448,9 @@ class PoE2GameStateReader extends PoE2InventoryReader
         ;   Phase 2: Decode new + changed entities FIRST (priority time budget)
         ;   Phase 3: Cheap-update existing cached entities (separate budget, round-robin)
         cache := this._radarEntityCache
+        if !this.HasOwnProp("_radarJunkIds")
+            this._radarJunkIds := Map()
+        junkIds := this._radarJunkIds
         newDecodeCount := 0
         cheapUpdateCount := 0
         cacheErrors := 0
@@ -3399,6 +3473,13 @@ class PoE2GameStateReader extends PoE2InventoryReader
                 if (cachedRawPtr != rawPtr)
                     changedEntityList.Push(Map("id", entityId, "rawPtr", rawPtr, "cached", cached))
             }
+            else if (junkIds.Has(entityId) && junkIds[entityId] = rawPtr)
+            {
+                ; Known junk (same id+pointer → same entity) — skip the expensive full decode and
+                ; caching entirely. It was path-checked once in Phase 2 when first seen; an entity's
+                ; path is stable for its lifetime, so no RPM is needed to re-confirm here. A recycled
+                ; id gets a new rawPtr → guard fails → falls through and is re-evaluated below.
+            }
             else
                 newEntityList.Push(Map("id", entityId, "rawPtr", rawPtr))
         }
@@ -3407,6 +3488,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
         decodeDeadline := A_TickCount + decodeBudgetMs
         this._radarMode := true
 
+        Profiler.Begin("read.ent.decode.new")
         for _, item in newEntityList
         {
             if (A_TickCount >= decodeDeadline)
@@ -3416,6 +3498,20 @@ class PoE2GameStateReader extends PoE2InventoryReader
                 entityPtr := this.ResolveEntityPointer(item["rawPtr"])
                 if !this.IsProbablyValidPointer(entityPtr)
                     continue
+                ; ── Junk pre-filter ────────────────────────────────────────────────────────
+                ; Read only id+flags+path (cheap) and SKIP the full component decode for junk
+                ; (effects / projectiles / daemons / …) that the sample-build filter would drop
+                ; anyway. In dense combat ~half the awake map is junk (raw≫sample), so this keeps
+                ; the decode budget for real entities. Remember id→rawPtr so Phase 1 skips it with
+                ; NO RPM on later ticks; the set is dropped on a filter change (RebuildJunkActive)
+                ; and on area change so live-toggling the filter still works.
+                ident := this.ReadEntityIdentityBasic(entityPtr)
+                if (ident && Type(ident) = "Map"
+                    && IsJunkEntity(ident.Has("path") ? ident["path"] : ""))
+                {
+                    junkIds[item["id"]] := item["rawPtr"]
+                    continue
+                }
                 entityBasic := this.ReadEntityBasic(entityPtr, item["id"])
                 if (entityBasic && Type(entityBasic) = "Map")
                 {
@@ -3435,7 +3531,9 @@ class PoE2GameStateReader extends PoE2InventoryReader
             catch as err
                 cacheErrors += 1
         }
+        Profiler.End("read.ent.decode.new")
 
+        Profiler.Begin("read.ent.decode.changed")
         for _, item in changedEntityList
         {
             if (A_TickCount >= decodeDeadline)
@@ -3462,7 +3560,10 @@ class PoE2GameStateReader extends PoE2InventoryReader
                 cacheErrors += 1
         }
 
+        Profiler.End("read.ent.decode.changed")
+
         ; ── Phase 3: Cheap updates (time-budgeted, round-robin) ──────────
+        Profiler.Begin("read.ent.cheap")
         ; Build array of cached entity IDs for round-robin traversal.
         ; Start from where we left off last tick so every entity gets updated eventually.
         cachedIds := []
@@ -3496,6 +3597,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
             }
             this._cheapUpdateOffset := Mod(offset + cheapUpdateCount, Max(cachedCount, 1))
         }
+        Profiler.End("read.ent.cheap")
         this._radarMode := false
 
         ; Step 4: Remove entities no longer in the tree
@@ -3522,6 +3624,7 @@ class PoE2GameStateReader extends PoE2InventoryReader
                 continue
             awakeSample.Push(entry)
         }
+        }   ; end if (!consumed) — stage 3c
 
         awakeEntities := Map(
             "address", awakeMapAddress,
@@ -3537,23 +3640,42 @@ class PoE2GameStateReader extends PoE2InventoryReader
         ; Once the cache is >90% full (steady state), scan sleeping entities with a small limit.
         sleepingMapAddress := awakeMapAddress + (PoE2Offsets.AreaInstance["SleepingEntities"] - PoE2Offsets.AreaInstance["AwakeEntities"])  ; next std::map in EntityListStruct
         emptyEntitySummary := Map("address", 0, "size", 0, "sample", [], "sampleCount", 0)
-        if (isZoneLoading)
+        if (consumed && (consumedSleepingSample is Array))
+        {
+            ; Stage 3c: the reader publishes sleeping entities too, so on a consume tick Main NEVER scans
+            ; the sleeping std::map itself (that traversal is the 100s-of-ms cost read.sleep used to show).
+            sleepingEntities := Map("address", sleepingMapAddress, "size", consumedSleepingSample.Length,
+                "sample", consumedSleepingSample, "sampleCount", consumedSleepingSample.Length)
+        }
+        else if (isZoneLoading)
         {
             sleepingEntities := emptyEntitySummary
         }
         else
         {
             sleepingLimit := this.RadarSleepingEntityLimit
-            try
-            {
-                if (sleepingLimit > 0)
-                    sleepingEntities := this.ReadAreaEntityMapSummaryForRadar(sleepingMapAddress, sleepingLimit, playerOrigin)
-                else
-                    sleepingEntities := emptyEntitySummary
-            }
-            catch
+            if (sleepingLimit <= 0)
             {
                 sleepingEntities := emptyEntitySummary
+            }
+            else if (this.HasOwnProp("_radarSleepingCache") && (this._radarSleepingCache is Map)
+                && (A_TickCount - this._radarSleepingTick) < 750)
+            {
+                ; Throttle the (potentially expensive) sleeping-map scan. Sleeping entities are static, so
+                ; a ~750 ms refresh is imperceptible on the radar, but the scan can traverse a large
+                ; std::map (a dense area's sleeping tree costs 100s of ms even for an 8-entity sample).
+                ; Bounding it here keeps read.sleep low regardless of how the isZoneLoading gate flaps —
+                ; notably on reader-consume FALLBACK ticks, where it would otherwise fire full-cost.
+                sleepingEntities := this._radarSleepingCache
+            }
+            else
+            {
+                try
+                    sleepingEntities := this.ReadAreaEntityMapSummaryForRadar(sleepingMapAddress, sleepingLimit, playerOrigin)
+                catch
+                    sleepingEntities := emptyEntitySummary
+                this._radarSleepingCache := sleepingEntities
+                this._radarSleepingTick := A_TickCount
             }
         }
         t5 := A_TickCount  ; after sleeping entity read
@@ -3726,7 +3848,8 @@ class PoE2GameStateReader extends PoE2InventoryReader
             "cacheErrors", cacheErrors,
             "filterPre", filterPre,
             "filterPost", filterPost,
-            "filterBL", filterBL
+            "filterBL", filterBL,
+            "consumed", consumed ? 1 : 0
         )
 
         return Map(
@@ -3755,6 +3878,275 @@ class PoE2GameStateReader extends PoE2InventoryReader
                 )
             )
         )
+    }
+
+    ; ── Reader-split stage 3b: publish-side awake-entity scan ─────────────────────────────────────
+    ; A self-contained copy of ReadRadarSnapshot's awake-entity scan (BFS → decode new/changed →
+    ; cheap-update → build sample), used ONLY by the persistent reader process to produce the RAW
+    ; awake sample it publishes over shared memory. It keeps its OWN cache state (_flat* props,
+    ; separate from the live _radar* cache) so it never touches the main app's hot path, and it does
+    ; NOT apply the junk filter — the reader publishes everything and Main derives the junk verdict on
+    ; consume (design: config-dependent data stays in Main). Mirrors the live scan's phases/budgets so
+    ; the published sample matches what Main would build; a parity diagnostic cross-checks this
+    ; in-game before Main ever consumes it (stage 3c). Returns the awake sample array (pre-filter).
+    ReadAwakeEntitiesFlat(areaInstanceData, currentAreaHash, playerOrigin)
+    {
+        if !this.HasOwnProp("_flatEntityCache")
+        {
+            this._flatEntityCache := Map()
+            this._flatCacheAreaHash := 0
+            this._flatBfsTick := 0
+            this._flatLastEntities := 0
+            this._flatCheapOffset := 0
+        }
+
+        entityListOffset := PoE2Offsets.AreaInstance["AwakeEntities"]
+        awakeMapAddress := areaInstanceData + entityListOffset
+
+        ; Reset the flat cache on area change (mirrors the live cache reset).
+        if (currentAreaHash != this._flatCacheAreaHash)
+        {
+            this._flatEntityCache := Map()
+            this._flatCacheAreaHash := currentAreaHash
+            this._flatBfsTick := 0
+            this._flatLastEntities := 0
+            this._flatCheapOffset := 0
+        }
+
+        nowTick := A_TickCount
+
+        ; Step 1: full-tree BFS (throttled to 200 ms, reuse cache between).
+        doFullBfs := !this._flatBfsTick || (nowTick - this._flatBfsTick) >= 200 || !this._flatLastEntities
+        if (doFullBfs)
+        {
+            currentEntities := 0
+            try currentEntities := this.ScanEntityMapIdsAndPtrs(awakeMapAddress)
+            catch
+                currentEntities := Map()
+            if !currentEntities
+                currentEntities := Map()
+            this._flatLastEntities := currentEntities
+            this._flatBfsTick := nowTick
+        }
+        else
+            currentEntities := this._flatLastEntities
+
+        cache := this._flatEntityCache
+        mapSize := currentEntities.Count
+
+        ; The reader has spare CPU (no render competes), so give the decode a generous budget so the
+        ; cache fills quickly after a zone change.
+        cacheFillRatio := mapSize > 0 ? (cache.Count / mapSize) : 1.0
+        decodeBudgetMs := (cacheFillRatio < 0.90) ? 60 : 40
+        cheapBudgetMs  := (cacheFillRatio < 0.90) ? 15 : 30
+
+        ; Phase 1: classify new / changed (pure CPU).
+        newEntityList := []
+        changedEntityList := []
+        for entityId, rawPtr in currentEntities
+        {
+            if cache.Has(entityId)
+            {
+                cached := cache[entityId]
+                cachedRawPtr := cached.Has("entityRawPtr") ? cached["entityRawPtr"] : 0
+                if (cachedRawPtr != rawPtr)
+                    changedEntityList.Push(Map("id", entityId, "rawPtr", rawPtr, "cached", cached))
+            }
+            else
+                newEntityList.Push(Map("id", entityId, "rawPtr", rawPtr))
+        }
+
+        this._radarMode := true
+
+        ; Phase 2: decode new + changed (priority budget). No junk pre-filter — publish everything.
+        decodeDeadline := A_TickCount + decodeBudgetMs
+        for _, item in newEntityList
+        {
+            if (A_TickCount >= decodeDeadline)
+                break
+            try
+            {
+                entityPtr := this.ResolveEntityPointer(item["rawPtr"])
+                if !this.IsProbablyValidPointer(entityPtr)
+                    continue
+                entityBasic := this.ReadEntityBasic(entityPtr, item["id"])
+                if (entityBasic && Type(entityBasic) = "Map")
+                {
+                    entityPos := this.ExtractEntityWorldPositionFromEntityBasic(entityBasic, playerOrigin)
+                    cache[item["id"]] := Map(
+                        "id", item["id"],
+                        "entityPtr", entityPtr,
+                        "entityRawPtr", item["rawPtr"],
+                        "entity", entityBasic,
+                        "distance", this.ComputeDistance3DFromMaps(playerOrigin, entityPos),
+                        "priority", this.ComputeSampleEntryPriority(entityBasic, 0)
+                    )
+                }
+            }
+            catch
+            {
+            }
+        }
+        for _, item in changedEntityList
+        {
+            if (A_TickCount >= decodeDeadline)
+                break
+            try
+            {
+                entityPtr := this.ResolveEntityPointer(item["rawPtr"])
+                if !this.IsProbablyValidPointer(entityPtr)
+                    continue
+                entityBasic := this.ReadEntityBasic(entityPtr, item["id"])
+                if (entityBasic && Type(entityBasic) = "Map")
+                {
+                    entityPos := this.ExtractEntityWorldPositionFromEntityBasic(entityBasic, playerOrigin)
+                    cached := item["cached"]
+                    cached["entity"] := entityBasic
+                    cached["entityPtr"] := entityPtr
+                    cached["entityRawPtr"] := item["rawPtr"]
+                    cached["distance"] := this.ComputeDistance3DFromMaps(playerOrigin, entityPos)
+                    cached["priority"] := this.ComputeSampleEntryPriority(entityBasic, 0)
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        ; Phase 3: cheap-update existing (round-robin, time-budgeted).
+        cachedIds := []
+        for entityId, _ in cache
+        {
+            if currentEntities.Has(entityId)
+                cachedIds.Push(entityId)
+        }
+        cachedCount := cachedIds.Length
+        cheapUpdateCount := 0
+        if (cachedCount > 0)
+        {
+            cheapDeadline := A_TickCount + cheapBudgetMs
+            offset := this._flatCheapOffset
+            if (offset >= cachedCount)
+                offset := 0
+            Loop cachedCount
+            {
+                if (A_TickCount >= cheapDeadline)
+                    break
+                idx := Mod(offset + A_Index - 1, cachedCount) + 1
+                entityId := cachedIds[idx]
+                if !cache.Has(entityId)
+                    continue
+                try
+                {
+                    this.UpdateCachedEntityRadar(cache[entityId], playerOrigin)
+                    cheapUpdateCount += 1
+                }
+                catch
+                {
+                }
+            }
+            this._flatCheapOffset := Mod(offset + cheapUpdateCount, Max(cachedCount, 1))
+        }
+        this._radarMode := false
+
+        ; Phase 4: remove entities no longer in the tree.
+        removeIds := []
+        for cachedId, _ in cache
+        {
+            if !currentEntities.Has(cachedId)
+                removeIds.Push(cachedId)
+        }
+        for _, rid in removeIds
+            cache.Delete(rid)
+
+        ; Build the RAW sample (no junk filter — Main derives that on consume).
+        awakeSample := []
+        for _, entry in cache
+            awakeSample.Push(entry)
+        ; Stash the RAW BFS count (all awake ids, incl. junk that never decoded). Main consumes this as
+        ; mapSize for its isZoneLoading ratio — the published sample omits undecoded junk, so its own
+        ; length would over-estimate the fill ratio and wrongly run the sleeping scan every tick.
+        this._flatRawCount := mapSize
+        return awakeSample
+    }
+
+    ; Reader-side entry point: from a resolved inGameState address, resolve the area + player origin
+    ; and run ReadAwakeEntitiesFlat. Returns a Map(sample, areaHash, playerX/Y/Z) for the wire pack,
+    ; or 0 if the area/player pointers are not resolvable. The reader already has inGameStateAddress
+    ; from its lightweight ReadAutoFlaskSnapshot, so this avoids re-running the 12-state resolve.
+    ReadAwakeFlatForPublish(inGameStateAddress)
+    {
+        if !this.IsProbablyValidPointer(inGameStateAddress)
+            return 0
+        areaInstanceData := this.Mem.ReadPtr(inGameStateAddress + PoE2Offsets.InGameState["AreaInstanceData"])
+        if !this.IsProbablyValidPointer(areaInstanceData)
+            return 0
+        currentAreaHash := this.Mem.ReadUInt(areaInstanceData + PoE2Offsets.AreaInstance["CurrentAreaHash"])
+
+        playerInfoPtr := areaInstanceData + PoE2Offsets.AreaInstance["PlayerInfo"]
+        localPlayerRawPtr := this.Mem.ReadPtr(playerInfoPtr + PoE2Offsets.LocalPlayerStruct["LocalPlayerPtr"])
+        localPlayerPtr := this.ResolveEntityPointer(localPlayerRawPtr)
+        playerRenderComponent := this.ReadPlayerRenderComponent(localPlayerPtr)
+        playerOrigin := this.ExtractWorldPositionFromRenderComponent(playerRenderComponent)
+
+        sample := this.ReadAwakeEntitiesFlat(areaInstanceData, currentAreaHash, playerOrigin)
+        rawCount := this.HasOwnProp("_flatRawCount") ? this._flatRawCount : sample.Length
+
+        ; Publish the SLEEPING entities too (throttled reader-side), tagged so Main routes them to
+        ; sleepingEntities and never scans the sleeping std::map itself on a consume tick.
+        sleeping := this._ReaderSleepingSample(areaInstanceData, currentAreaHash, playerOrigin)
+        for _, se in sleeping
+        {
+            if (se is Map)
+            {
+                se["_sleeping"] := true
+                sample.Push(se)
+            }
+        }
+
+        px := (playerOrigin is Map && playerOrigin.Has("x")) ? playerOrigin["x"] : 0.0
+        py := (playerOrigin is Map && playerOrigin.Has("y")) ? playerOrigin["y"] : 0.0
+        pz := (playerOrigin is Map && playerOrigin.Has("z")) ? playerOrigin["z"] : 0.0
+        return Map("sample", sample, "rawCount", rawCount, "areaHash", currentAreaHash, "playerX", px, "playerY", py, "playerZ", pz)
+    }
+
+    ; Reader-side SLEEPING-entity sample, throttled to ~750 ms (the sleeping std::map traversal is
+    ; expensive — 100s of ms in a dense area). Cached per area so most reader ticks reuse it and the
+    ; publish cadence stays tight; Main consumes the published sleeping list instead of scanning it.
+    _ReaderSleepingSample(areaInstanceData, currentAreaHash, playerOrigin)
+    {
+        if !this.HasOwnProp("_flatSleepingCache")
+        {
+            this._flatSleepingCache := []
+            this._flatSleepingTick := 0
+            this._flatSleepingArea := 0
+        }
+        if (currentAreaHash != this._flatSleepingArea)
+        {
+            this._flatSleepingCache := []
+            this._flatSleepingTick := 0
+            this._flatSleepingArea := currentAreaHash
+        }
+        now := A_TickCount
+        if (this._flatSleepingTick != 0 && (now - this._flatSleepingTick) < 750)
+            return this._flatSleepingCache
+
+        sleepingLimit := this.RadarSleepingEntityLimit
+        if (sleepingLimit <= 0)
+        {
+            this._flatSleepingCache := []
+            this._flatSleepingTick := now
+            return this._flatSleepingCache
+        }
+
+        sleepingMapAddress := areaInstanceData + PoE2Offsets.AreaInstance["SleepingEntities"]
+        summary := 0
+        try summary := this.ReadAreaEntityMapSummaryForRadar(sleepingMapAddress, sleepingLimit, playerOrigin)
+        catch
+            summary := 0
+        this._flatSleepingCache := (summary is Map && summary.Has("sample")) ? summary["sample"] : []
+        this._flatSleepingTick := now
+        return this._flatSleepingCache
     }
 
     ; Records a deep-scan entry in the per-path "needs refine" queue so the

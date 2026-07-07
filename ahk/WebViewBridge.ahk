@@ -47,7 +47,8 @@ PushHeaderToWebView()
     global g_zoneNavEnabled
     global g_radarAlpha, g_mapHackEnabled, g_maphackSource, g_isConnected, g_rangeCirclesEnabled
     global g_panelHideOverlays, g_panelPauseAutoPilot, g_panelHideLootBars
-    global g_walkGridEnabled, g_maphackMaskDebug
+    global g_maphackMaskDebug, g_mapHackUnexplored
+    global g_mapHackUnexploredColor, g_mapHackUnexploredSpacing
     global g_autoPilotEnabled, g_autoPilotState, g_autoPilotReason
     global g_inventoryChainDumpEnabled, g_overlayStatusTextEnabled, g_alwaysOnTop, g_localApiEnabled, g_localApiPort
     global g_overlayPoeOnly
@@ -107,7 +108,9 @@ PushHeaderToWebView()
         . "},"
         . '"zoneNav":' (g_zoneNavEnabled ? "true" : "false") ","
         . '"mapHack":' (g_mapHackEnabled ? "true" : "false") ","
-        . '"walkGrid":' ((IsSet(g_walkGridEnabled) && g_walkGridEnabled) ? "true" : "false") ","
+        . '"mapHackUnexplored":' ((IsSet(g_mapHackUnexplored) && g_mapHackUnexplored) ? "true" : "false") ","
+        . '"mapHackUnexploredColor":"' (IsSet(g_mapHackUnexploredColor) ? g_mapHackUnexploredColor : "#181820") '",'
+        . '"mapHackUnexploredSpacing":' (IsSet(g_mapHackUnexploredSpacing) ? g_mapHackUnexploredSpacing : 2) ","
         . '"maskDebug":' ((IsSet(g_maphackMaskDebug) && g_maphackMaskDebug) ? "true" : "false") ","
         . '"maphackSource":' _JsStr(IsSet(g_maphackSource) ? g_maphackSource : "memory") ","
         . '"maphackOutlineHex":' _JsStr(IsSet(g_maphackOutlineHex) ? g_maphackOutlineHex : "8080FFCC") ","
@@ -158,6 +161,8 @@ PushHeaderToWebView()
         . ',"lootTradePricing":' BuildLootTradePricingHeaderJson()
         . ',"overlayPlacement":' BuildOverlayPlacementHeaderJson()
         . ',"startupTrace":' BuildStartupTraceHeaderJson()
+        . ',"readerProcess":' BuildReaderProcessHeaderJson()
+        . ',"readerConsume":' BuildReaderConsumeHeaderJson()
         . ',"apStatusLog":' BuildAutoPilotStatusLogHeaderJson()
         . ',"customLandmarks":' BuildCustomLandmarksHeaderJson()
         . "}"
@@ -235,15 +240,27 @@ _DecodeComponentOnDemand(entityAddrHex, compName, compAddrHex)
             case "minimapicon": decoded := g_reader.DecodeMinimapIconComponentBasic(compAddr)
             case "diesaftertime": decoded := g_reader.DecodeDiesAfterTimeComponentBasic(compAddr)
             default:
-                ; No decoder registered — push an empty result so the UI
-                ; surfaces an explicit "no decoder" hint instead of
-                ; hanging on the loading spinner.
-                return _PushLazyComponentResult(entityAddrHex, compName, "")
+                ; No specific decoder — fall back to a GENERIC raw dump (header + non-zero ints /
+                ; floats / pointers with offsets) so any unknown component (Functions, BaseEvents, …)
+                ; is still inspectable + reverse-engineerable instead of a dead "no decoder" row.
+                gen := g_reader.DecodeUnknownComponentBasic(compAddr)
+                genJson := (gen is Map) ? _SerializeGenericComponent(gen) : ""
+                return _PushLazyComponentResult(entityAddrHex, compName, genJson)
         }
 
         ; Reuse the inspector's existing summary serializer so the lazy
         ; result lands in the same shape as the snapshot-pushed version.
         jsonSummary := IsObject(decoded) ? _SerializeComponentSummary(canonical, decoded) : ""
+        ; A registered decoder can still yield an EMPTY summary when its output doesn't match the
+        ; scalar whitelist (e.g. NPC returns only a nested `owner` map + `isNpc`, and the whitelist
+        ; asks for a non-existent `npcName`). Rather than leave the row un-openable, fall back to the
+        ; generic raw dump so it always shows something useful.
+        if (jsonSummary = "")
+        {
+            gen := g_reader.DecodeUnknownComponentBasic(compAddr)
+            if (gen is Map)
+                jsonSummary := _SerializeGenericComponent(gen)
+        }
         _PushLazyComponentResult(entityAddrHex, compName, jsonSummary)
     }
     catch as e
@@ -251,6 +268,58 @@ _DecodeComponentOnDemand(entityAddrHex, compName, compAddrHex)
         try LogError("DecodeComponentOnDemand " compName " " compAddrHex, e)
         _PushLazyComponentResult(entityAddrHex, compName, "")
     }
+}
+
+; Reader-split stage 4 — on-demand FULL component list for ONE entity. When Main CONSUMES the reader's
+; sample (opt-in), the reconstructed snapshot entry carries only a MINIMAL components array
+; ({Targetable, Actor}), so the Entities inspector would list just those. When the user expands an
+; entity, the UI calls this to re-read the entity's FULL component list LOCALLY (Main keeps its own PoE
+; handle and the reconstructed entry carries the real entity address); the result replaces the minimal
+; list in the inspector. Cheap and rare — ONE entity, only when the user actually looks — so it never
+; touches the radar hot path. Also fires when NOT consuming (harmless: same data, freshly read).
+_RequestEntityComponents(entityAddrHex)
+{
+    global g_reader
+    try
+    {
+        addr := _ParseHexToUInt(entityAddrHex)
+        if !addr || !g_reader.IsProbablyValidPointer(addr)
+            return
+        full := g_reader.ReadEntityBasic(addr)   ; non-radar mode → full component decode
+        if !(full is Map)
+            return
+        comps      := full.Has("components") ? full["components"] : 0
+        decoded    := full.Has("decodedComponents") ? full["decodedComponents"] : 0
+        compCount  := full.Has("componentCount") ? full["componentCount"] : 0
+        namedCount := full.Has("namedComponentCount") ? full["namedComponentCount"] : 0
+        json := '{"components":' _SerializeComponents(comps, decoded)
+            . ',"componentCount":' compCount
+            . ',"namedComponentCount":' namedCount '}'
+        WebViewExec("eiApplyEntityComponents(" _JsStr(entityAddrHex) "," json ")")
+    }
+    catch as e
+        try LogError("RequestEntityComponents " entityAddrHex, e)
+}
+
+; Serialises the generic unknown-component dump (DecodeUnknownComponentBasic) to a JSON object in a
+; FIXED key order (AHK Map iteration order is unspecified, so emit explicit keys). All values are
+; strings; the ordered offset content lives INSIDE each string.
+_SerializeGenericComponent(m)
+{
+    if !(m is Map)
+        return ""
+    order := ["componentAddr", "staticPtr", "owner", "entityRefs", "pointers", "nonzeroInts", "floats"]
+    out := "{"
+    first := true
+    for _, k in order
+    {
+        if !m.Has(k)
+            continue
+        v := StrReplace(StrReplace(String(m[k]), "\", "\\"), '"', '\"')
+        out .= (first ? "" : ",") '"' k '":"' v '"'
+        first := false
+    }
+    return out "}"
 }
 
 ; Pushes the lazy-decode result to JS. Empty `jsonSummary` becomes a JSON

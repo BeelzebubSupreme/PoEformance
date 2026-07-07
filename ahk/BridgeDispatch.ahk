@@ -211,6 +211,22 @@ _DispatchBridgeCall(method, args)
             if (args.Length >= 1)
                 SetStartupTrace(args[1])
             SetTimer(PushHeaderToWebView, -50)
+        case "SetReaderProcess":
+            ; Reader-split stage 2: persistent reader-process toggle ([Diagnostics] readerProcess).
+            if (args.Length >= 1)
+                SetReaderProcess(args[1])
+            SetTimer(PushHeaderToWebView, -50)
+        case "ReaderProcessDiag":
+            ; Stage-2 verification: MsgBox the reader's live status + inGameState cross-check.
+            SetTimer(ReaderProcessDiagnose, -1)
+        case "RadarConsumeDiag":
+            ; Stage-3b verification: MsgBox the reader's published awake sample vs Main's live sample.
+            SetTimer(RadarConsumeDiagnose, -1)
+        case "SetReaderConsume":
+            ; Reader-split stage 3c: toggle whether Main CONSUMES the reader's sample ([Diagnostics] readerConsume).
+            if (args.Length >= 1)
+                SetReaderConsume(args[1])
+            SetTimer(PushHeaderToWebView, -50)
         case "SetAutoPilotStatusLog":
             ; Persistent AutoPilot status file-log toggle ([Diagnostics] apStatusLog). args[1]=on.
             if (args.Length >= 1)
@@ -318,6 +334,11 @@ _DispatchBridgeCall(method, args)
             ; args: [entityAddrHex, componentName, componentAddrHex]
             if (args.Length >= 3)
                 SetTimer(() => _DecodeComponentOnDemand(args[1], args[2], args[3]), -1)
+        case "RequestEntityComponents":
+            ; Reader-split stage 4: re-read one entity's FULL component list locally when the user
+            ; expands it — restores the full inspector list that the consumed (minimal) snapshot omits.
+            if (args.Length >= 1)
+                SetTimer(() => _RequestEntityComponents(args[1]), -1)
         case "ToggleZoneNav":
             global g_zoneNavEnabled
             g_zoneNavEnabled := !g_zoneNavEnabled
@@ -329,13 +350,31 @@ _DispatchBridgeCall(method, args)
             ; RadarOverlay reads g_mapHackEnabled itself each frame (_SyncConfig).
             SetTimer(SaveConfig, -100)
             SetTimer(PushHeaderToWebView, -50)
-        case "ToggleWalkGrid":
-            ; Walkable-grid fill diagnostic overlay (large map). RadarOverlay
-            ; reads g_walkGridEnabled each frame (_SyncConfig).
-            global g_walkGridEnabled
-            g_walkGridEnabled := !g_walkGridEnabled
+        case "ToggleMapHackUnexplored":
+            ; Dark wash over unexplored walkable cells on the large-map maphack.
+            ; RadarOverlay reads g_mapHackUnexplored each frame (_SyncConfig).
+            global g_mapHackUnexplored
+            g_mapHackUnexplored := !g_mapHackUnexplored
             SetTimer(SaveConfig, -100)
             SetTimer(PushHeaderToWebView, -50)
+        case "SetMapHackUnexploredColor":
+            ; Unexplored-wash colour (#RRGGBB). RadarOverlay refills the colour source on change.
+            if (args.Length >= 1)
+            {
+                global g_mapHackUnexploredColor
+                g_mapHackUnexploredColor := String(args[1])
+                SetTimer(SaveConfig, -100)
+                SetTimer(PushHeaderToWebView, -50)
+            }
+        case "SetMapHackUnexploredSpacing":
+            ; Unexplored-wash dot spacing (1=solid, higher=sparser). Forces a maphack-bitmap regen.
+            if (args.Length >= 1)
+            {
+                global g_mapHackUnexploredSpacing
+                g_mapHackUnexploredSpacing := Max(1, Min(8, Integer(args[1])))
+                SetTimer(SaveConfig, -100)
+                SetTimer(PushHeaderToWebView, -50)
+            }
         case "ToggleMaskDebug":
             ; Debug: draw red outlines of the HUD clip masks on the large map so
             ; the user can see where the maphack is clipped. RadarOverlay reads
@@ -922,6 +961,18 @@ _DispatchBridgeCall(method, args)
         case "StackMaxProbeRun":
             ; TEMP diagnostic: test whether Stack +0x20 is the max stack size.
             SetTimer(() => StackMaxProbeRun(), -1)
+        case "LandscapeGridSnapshot":
+            ; RE diagnostic: snapshot GridLandscapeData to hunt the explored/fog grid.
+            SetTimer(() => LandscapeGridProbeSnapshot(), -1)
+        case "LandscapeGridDiff":
+            ; RE diagnostic: diff GridLandscapeData vs the snapshot (did exploring change it?).
+            SetTimer(() => LandscapeGridProbeDiff(), -1)
+        case "LandscapeScanSnapshot":
+            ; RE diagnostic: scan AreaInstance/InGameState for dynamic StdVector allocations (fog hunt).
+            SetTimer(() => LandscapeScanSnapshot(), -1)
+        case "LandscapeScanDiff":
+            ; RE diagnostic: diff the scanned allocations (which one changes as you explore?).
+            SetTimer(() => LandscapeScanDiff(), -1)
         case "ActorProbeRun":
             ; TEMP diagnostic: time-sample the Actor struct to locate the drifted animationId.
             SetTimer(() => ActorProbeRun(), -1)

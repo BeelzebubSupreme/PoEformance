@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.190`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.240`.
 
 ## Language
 
@@ -34,8 +34,7 @@ inline when authoring commit messages, PR bodies, etc.
   substantially.
 - New functions get a short 2-3 line comment explaining purpose, parameters, and return value.
 - Variable names follow the existing camelCase / snake_case style of surrounding code.
-- The user often cannot runtime-test (the game is ~140 GB). When a change can only be
-  verified in-game, say so and list exactly what to check.
+- When a change can only be verified in-game, say so and list exactly what to check.
 - **Bump the version after every change.** Increment the last segment of the version
   number on each adjustment — in **all three** of `InGameStateMonitor.ahk`
   (`POEFORMANCE_VERSION := "x.y.z.N"`), `CLAUDE.md` (the `Version` line above), and
@@ -44,6 +43,13 @@ inline when authoring commit messages, PR bodies, etc.
   Always count up from the dev branch's own latest value; never reset it to match
   `master`. `master` is not bumped independently, so on merge the dev-branch version
   always wins (resolve any version-line conflict by taking the dev-branch value).
+  A **merge driver automates this for LOCAL merges**: `.gitattributes` maps the three
+  version files to `merge=poever` (`tools/git-merge-version.py`), which keeps the higher
+  version on a version-only conflict (direction-independent). It needs a one-time local
+  setup — `sh tools/setup-git-merge-driver.sh` (or `tools\setup-git-merge-driver.bat`) —
+  since the driver definition lives in `.git/config`, not the repo. GitHub's web "Merge"
+  button does NOT run merge drivers, so merge LOCALLY to benefit
+  (`git checkout master && git merge <dev-branch> && git push`).
 - **Always end a reply that committed & pushed with the exact pull command** so the
   user can grab it locally, e.g. `git pull origin <current-dev-branch>`. Every time a
   change is pushed — no exceptions. The user merges the dev branch onto `master`
@@ -224,8 +230,6 @@ both halves.
 
 ## AutoPilot navigation (v0.45.12.0) — distance-field architecture
 
-Modeled on `myrahz/Radar` (`PathFinder.cs`): never follow a stored path.
-
 **Verified in-game (2026-06-24):** exploration + combat navigation work end-to-end (click
 projection / anchor gating, per-tick distance-field pathing, arrival + stuck handling).
 
@@ -266,6 +270,7 @@ keeps an on-disk session history. Reuses the existing inventory reader / radar s
 area-state instead of re-reading memory.
 
 ### New files (`ahk/`)
+
 - **LootTracker.ahk** — run state machine + per-tick entry `TryLootTrackerTick(radarSnap)`
   (runs in `UpdateRadarFast` right after `TryEntityAlerts`, self-throttled), session
   totals, valuation, the cached display model `g_ltLiveView` (rebuilt ~4 Hz, read by the
@@ -987,18 +992,17 @@ holding the active league name — EXACTLY poe.ninja/poe2scout's value (`"Standa
 - **Pending in-game verification:** with auto on, the league field should show the character's real
   league (e.g. `detected: HC Runes of Aldur`), prices refetch on a league change, no manual entry.
 
-## Custom landmark labels on the radar (shipped 0.45.13.123) — port of Sikaka/POE2Radar `CustomLandmarkData`
+## Custom landmark labels on the radar (shipped 0.45.13.123)
 
 Draws curated, human-readable labels on the radar for known terrain tiles — boss arenas (with
 their reward, e.g. "Beira of the Rotten (10% Cold Res)"), named POIs, and area-transition
-destinations. Ports `Sikaka/POE2Radar`'s `CustomLandmarkData.cs`: a big JSON keyed by area code →
-tile-path pattern → label, matched by SUBSTRING against the tile paths we already scan.
+destinations. Ports `CustomLandmarkData.cs`: a big JSON keyed by area code → tile-path pattern
+→ label, matched by SUBSTRING against the tile paths we already scan.
 
-- **`data/custom_landmarks.json` (committed source data)** — the full label map shipped verbatim
-  from Sikaka/POE2Radar (`CustomLandmarks.json`): 91 area codes, 272 entries, plus a global `*`
-  bucket. Keys look like
-  `"Metadata/Terrain/Woods/Slash/HagWitchArena_01.tdtx:5-y:0"` → `"Beira of the Rotten (10% Cold Res)"`.
-  Tracked (NOT gitignored). Data credit: Sikaka/POE2Radar.
+- **`data/custom_landmarks.json` (committed source data)** — the full label map: 91 area codes,
+272 entries, plus a global `*` bucket. Keys look like
+`"Metadata/Terrain/Woods/Slash/HagWitchArena_01.tdtx:5-y:0"` → `"Beira of the Rotten (10% Cold Res)"`.
+  Tracked (NOT gitignored).
 - **`ahk/CustomLandmarks.ahk` (new)** — the lookup. `LoadCustomLandmarks()` seeds all globals
   (init gotcha) — `g_clmEnabled` (default ON, `[CustomLandmarks] enabled`), `g_clmFile`,
   `g_clmData`, `g_clmCount` — and calls `_ClmLoadData()`. `_ClmLoadData()` parses the JSON with the
@@ -1024,8 +1028,6 @@ tile-path pattern → label, matched by SUBSTRING against the tile paths we alre
   `BridgeDispatch.ahk` case `SetCustomLandmarks`; `WebViewBridge.ahk` pushes `customLandmarks`; UI
   **Config → Overlay → "🗺️ Custom Landmarks"** (toggle, shows the loaded-label count),
   `customLandmarksSyncFromHeader`. Default ON.
-- **Pending in-game verification:** confirm labels render at the right tiles (boss arenas / POIs /
-  transitions) for the current area, the amber colour/outline is legible, and toggling off hides them.
 - **Label de-dupe fix (0.45.13.124):** first in-game test showed the SAME label stacked many times
   across the map (e.g. a wall/arena tile such as Machinarium `BossWall01` → "Boss" is placed at many
   spots; the zone scan emits ONE POI per tile, so each drew its own "Boss (Nm)" label — a cluttered
@@ -1215,8 +1217,8 @@ The C# reference (GameHelper2 `UiElementBase.GetUnScaledPosition` + `GameWindowS
   `GameCullSize` static address — our pattern scanner already found it, nobody read it) and the
   origin is the CLIENT area (GetClientRect), never WinGetPos.
 
-Implementation (`ahk/UiTreeBrowser.ahk`): `UiTree_ScaleCtx(reader, hwnd)` (client rect + cull
-+ v1/v2, one cheap ReadInt; cull sanity-clamped to 0), `_UiScalePair(idx, mult, sc)`,
+Implementation (`ahk/UiTreeBrowser.ahk`): `UiTree_ScaleCtx(reader, hwnd)` (client rect + cull +
+v1/v2, one cheap ReadInt; cull sanity-clamped to 0), `_UiScalePair(idx, mult, sc)`,
 `UiTree_GetScreenPos(reader, elem, sc:=0)` (faithful GetUnScaledPosition port; now also returns
 the leaf's `scaleIndex`/`localMult`; degrades to the old plain sum without a window),
 `UiTree_ScreenRectOf(reader, elem, sc:=0, sizeW:="", sizeH:="")` (absolute screen-px rect =
@@ -1231,46 +1233,42 @@ the overlay window origin (`this._lastX/_lastY`) instead of re-scaling with the 
 On a 16:10 window with cull 0 and uniform scale chains the new math reduces exactly to the old
 formula — differences appear only where the old math was wrong (mixed scale spaces, non-16:10
 aspects, windowed mode, localMult ≠ 1).
-**Pending in-game verification:** UI-browser highlight sits exactly on the selected element
-(e.g. Guild Stash), hover-price/ritual badges pixel-exact on their cells, loot-label click
-accuracy, stash-mover button/grid anchor (existing offsetX/offsetY calibrations may now
-double-correct — re-zero them if the grid is offset the other way).
-- **Hotfix 0.45.13.142 — hover-price died; hardened against bad memory scale data:** first
-  in-game test broke price-on-hover entirely. An OFFLINE harness (fake reader + synthetic
-  UiElement tree, 35 checks incl. hand-computed C#-reference values) proved the core math
-  correct — so the in-game breakage comes from the MEMORY values, with two prime suspects:
-  (a) the `GameCullSize` static was never consumed before, so a mis-resolved pattern
-  (garbage cull int) silently poisons `v1` and collapses every width-scaled rect — the
-  root is ScaleIndex 3, killing the whole descent; (b) the ScaleIndex/LocalScaleMultiplier
-  offsets (0x18A/0x130) are from the 0.4.x reference layout and other UiElement fields HAVE
-  drifted in 0.5.x (StringId 0x140→0x098), so they may read garbage. Hardening (all in
-  `UiTreeBrowser.ahk`): `UiTree_ScaleCtx` clamps v1 into a plausibility band (0.7–1.3 × v2;
-  outside → distrust the cull, then fall back to v1=v2); `_UiScalePair` sanitizes
-  localMult (accept 0.2–5.0, else 1.0), unknown ScaleIndex → uniform (v2,v2), and honors a
-  `sc["uniform"]` legacy-override flag (exact pre-scale-aware behavior); `UiTree_HitTest`
-  retries once in uniform mode when the descent never leaves the root (descent split into
-  `_UiHitDescend`). `UiHoverPrice._UhpResolveHoveredItem` retries its hit test + chain scan
-  once with `sc["uniform"] := true` when NO item slot was found (partial-chain failures the
-  root-level fallback can't see); scan extracted into `_UhpScanChainForItem`. The
-  UIHover probe (`Ctrl+Alt+Shift+H`) now prints per-chain-element `scIdx`/`lMult` and the
-  ctx `v1/v2/cull` — capture it over an inventory item to see the REAL memory values if
-  anything still misbehaves. (0.45.13.146: the probe threads its ONE scale ctx through every
-  report line — `_UiHoverChainLine(reader, addr, sc)` — and prints the `scaleMode`, so when
-  the hit test flips the uniform fallback the printed positions match the hit geometry.)
-  Offline harness lives in the session scratchpad
-  (`ui_scale_test.ahk`), validated: uniform 16:10 ≡ old math, 16:9 + client offset, mixed
-  scale-space conversion, real cull (+128), poisoned cull (700 → rejected), garbage
-  index/mult leaf (→ uniform behavior), partial-chain + uniform retry.
-- **UI Browser hover highlight (0.45.13.143):** hovering a node in the CHILDREN list (and in
-  the search-results list) draws a BLUE rect (BGR `0xFF0000`) on that element's live screen
-  rect, alongside the red selection rect. `ui/index.html`: `onmouseenter`/`onmouseleave` on
-  `.uib-child-row` + `.uib-sr-row` → `ahkCall('UiBrowseHover', ptr)` ('' clears; the static
-  `#uib-children-list` also clears on `onmouseleave` as a safety net against re-renders).
-  `BridgeDispatch` case `UiBrowseHover` → `UiBrowserHoverHighlight(hex)`
-  (`UiBrowserHandler.ahk`): resolves the ptr, caches the ABSOLUTE screen-px rect
-  (`UiTree_ScreenRectOf`) in `g_uiBrowserHoverHighlight` (0 clears; also cleared by
-  `UiBrowserClearHighlight`). `OverlayManager` counts the hover rect toward
-  `ctx.inspectOverride`; `RadarOverlay._FinishFrame` draws it after the red rect.
+**Hotfix 0.45.13.142 — hover-price died; hardened against bad memory scale data:** first
+in-game test broke price-on-hover entirely. An OFFLINE harness (fake reader + synthetic
+UiElement tree, 35 checks incl. hand-computed C#-reference values) proved the core math
+correct — so the in-game breakage comes from the MEMORY values, with two prime suspects:
+(a) the `GameCullSize` static was never consumed before, so a mis-resolved pattern
+(garbage cull int) silently poisons `v1` and collapses every width-scaled rect — the
+root is ScaleIndex 3, killing the whole descent; (b) the ScaleIndex/LocalScaleMultiplier
+offsets (0x18A/0x130) are from the 0.4.x reference layout and other UiElement fields HAVE
+drifted in 0.5.x (StringId 0x140→0x098), so they may read garbage. Hardening (all in
+`UiTreeBrowser.ahk`): `UiTree_ScaleCtx` clamps v1 into a plausibility band (0.7–1.3 × v2;
+outside → distrust the cull, then fall back to v1=v2); `_UiScalePair` sanitizes
+localMult (accept 0.2–5.0, else 1.0), unknown ScaleIndex → uniform (v2,v2), and honors a
+`sc["uniform"]` legacy-override flag (exact pre-scale-aware behavior); `UiTree_HitTest`
+retries once in uniform mode when the descent never leaves the root (descent split into
+`_UiHitDescend`). `UiHoverPrice._UhpResolveHoveredItem` retries its hit test + chain scan
+once with `sc["uniform"] := true` when NO item slot was found (partial-chain failures the
+root-level fallback can't see); scan extracted into `_UhpScanChainForItem`. The
+UIHover probe (`Ctrl+Alt+Shift+H`) now prints per-chain-element `scIdx`/`lMult` and the
+ctx `v1/v2/cull` — capture it over an inventory item to see the REAL memory values if
+anything still misbehaves. (0.45.13.146: the probe threads its ONE scale ctx through every
+report line — `_UiHoverChainLine(reader, addr, sc)` — and prints the `scaleMode`, so when
+the hit test flips the uniform fallback the printed positions match the hit geometry.)
+Offline harness lives in the session scratchpad
+(`ui_scale_test.ahk`), validated: uniform 16:10 ≡ old math, 16:9 + client offset, mixed
+scale-space conversion, real cull (+128), poisoned cull (700 → rejected), garbage
+index/mult leaf (→ uniform behavior), partial-chain + uniform retry.
+**UI Browser hover highlight (0.45.13.143):** hovering a node in the CHILDREN list (and in
+the search-results list) draws a BLUE rect (BGR `0xFF0000`) on that element's live screen
+rect, alongside the red selection rect. `ui/index.html`: `onmouseenter`/`onmouseleave` on
+`.uib-child-row` + `.uib-sr-row` → `ahkCall('UiBrowseHover', ptr)` ('' clears; the static
+`#uib-children-list` also clears on `onmouseleave` as a safety net against re-renders).
+`BridgeDispatch` case `UiBrowseHover` → `UiBrowserHoverHighlight(hex)`
+(`UiBrowserHandler.ahk`): resolves the ptr, caches the ABSOLUTE screen-px rect
+(`UiTree_ScreenRectOf`) in `g_uiBrowserHoverHighlight` (0 clears; also cleared by
+`UiBrowserClearHighlight`). `OverlayManager` counts the hover rect toward
+`ctx.inspectOverride`; `RadarOverlay._FinishFrame` draws it after the red rect.
 
 ## NPC "Identify Items" hotkey (TEST, shipped 0.45.13.144) — `ahk/NpcIdentify.ahk`
 
@@ -1290,13 +1288,11 @@ discoverable in `poeformance_config.ini`. Wiring: `#Include ahk/NpcIdentify.ahk`
 `LoadNpcIdentify()` + `RegisterNpcIdentifyHotkey()` at startup (HotIf-gated to the PoE window,
 StashMover pattern); bridge case `NpcIdentifyRun`; "🪄 Doryani Identify" button in the RE-tools
 row. Verified: full-script `AutoHotkey64.exe /validate` passes.
-**Pending in-game verification:** label click walks to Doryani and opens the dialog; the
-window/menu paths resolve on the live client; the final click fires identification; tooltip
-reasons on each abort gate.
 
 ## AutoPilot panel polish (shipped 0.45.13.150)
 
 Four owner-requested tweaks to Automation → AutoPilot:
+
 - **Summary underline incl. status:** `#det-autopilot > summary` draws a bottom-gradient rule
   (junkbox trick, inset 26px past the icon, ending at the right edge) in BOTH open and closed
   state, covering the live-status string next to the caret; the box's open-only `.cfg-header`
@@ -1428,18 +1424,18 @@ composited PNGs, mirrored in `tools/skillnode_map.json`).
 **Pending in-game verification:** category/tab switching incl. the sliding marker on the new
 rows, alias tabs showing the right sub-panels, Config remembering general/debug/data, vitals
 edit-mode from the new Vitals tab, snode icons on all new nav chips.
-- **Header-sync isolation + JS→AHK error log (0.45.13.147):** follow-up to a "Vitals Life/
-  Mana/ES boxes missing" report. Browser repro (static `http-server` + driving `updateHeader`
-  with a realistic payload) shows the CURRENT code builds and shows all three `det-vitals-*`
-  sections — the likely in-app cause is a JS exception in an EARLIER `updateHeader` feature
-  block (real data) starving `vitalsSyncFromHeader` (which is the only `renderVitalsBars`
-  trigger). Hardening: every feature-sync call in `updateHeader` now runs isolated via
-  `_hdrTry(name, fn)` (one throwing block can no longer kill the rest, the error is logged),
-  and `_jsReport(msg)` forwards JS errors — incl. `window.onerror` — over the bridge (new
-  `JsError` case → `LogError("WebViewJS: …")`), so WebView exceptions finally show up in the
-  error log (readable in Config → Data & Logs). Note: the vitals sections may also simply be
-  COLLAPSED (their open state persists in `[…] cfgSections`, and the default list doesn't
-  include `vitals-life/mana/es`).
+**Header-sync isolation + JS→AHK error log (0.45.13.147):** follow-up to a "Vitals Life/
+Mana/ES boxes missing" report. Browser repro (static `http-server` + driving `updateHeader`
+with a realistic payload) shows the CURRENT code builds and shows all three `det-vitals-*`
+sections — the likely in-app cause is a JS exception in an EARLIER `updateHeader` feature
+block (real data) starving `vitalsSyncFromHeader` (which is the only `renderVitalsBars`
+trigger). Hardening: every feature-sync call in `updateHeader` now runs isolated via
+`_hdrTry(name, fn)` (one throwing block can no longer kill the rest, the error is logged),
+and `_jsReport(msg)` forwards JS errors — incl. `window.onerror` — over the bridge (new
+`JsError` case → `LogError("WebViewJS: …")`), so WebView exceptions finally show up in the
+error log (readable in Config → Data & Logs). Note: the vitals sections may also simply be
+COLLAPSED (their open state persists in `[…] cfgSections`, and the default list doesn't
+include `vitals-life/mana/es`).
 
 ## Stack max-size probe (0.45.13.159) — testing Stack +0x20
 
@@ -1454,16 +1450,16 @@ raw hex, and derefs `UnknownPtr(+0x10)` (the max size may instead live in a refe
 StackData/dat row). Writes `logs\InGameStateMonitor.stack_max_probe.log` (readable in Data &
 Logs) + a summary MsgBox. Owner test case: one stack of 19 Scrolls of Wisdom (real max 40).
 Reuses `_HPP_HexDump` / `_SmResolveServerData`.
-- **RESULT (confirmed in-game 2026-07-04):** the max size is NOT on the Stack component
-  directly (its +0x20 is a pointer, +0x28 is ~always 0). It lives in the struct the Stack
-  component points to at **+0x10** (a SHARED per-base-type `StackSizeData` descriptor — two
-  Scroll-of-Wisdom stacks resolved to the same pointer), at **+0x28**: Scroll of Wisdom read
-  40, and across a full currency tab the field only ever yielded the real PoE2 caps
-  10/20/30/40. (In that descriptor +0x20=5000 = currency-tab cap and +0x24=100 are other
-  fields, not the per-item max.) **Wired 0.45.13.160:** `PoE2Offsets.Stack` renamed
-  `UnknownPtr`→`StackSizeDataPtr` (0x10) + new `PoE2Offsets.StackSizeData` (`MaxStack` 0x28);
-  `PoE2InventoryReader` reads `stackMax` alongside `stackCount` (deref +0x10 → +0x28);
-  `WebViewBridge` emits `smax`; the inventory tooltip shows "Stack Size: 19 / 40".
+**RESULT (confirmed in-game 2026-07-04):** the max size is NOT on the Stack component
+directly (its +0x20 is a pointer, +0x28 is ~always 0). It lives in the struct the Stack
+component points to at **+0x10** (a SHARED per-base-type `StackSizeData` descriptor — two
+Scroll-of-Wisdom stacks resolved to the same pointer), at **+0x28**: Scroll of Wisdom read
+40, and across a full currency tab the field only ever yielded the real PoE2 caps
+10/20/30/40. (In that descriptor +0x20=5000 = currency-tab cap and +0x24=100 are other
+fields, not the per-item max.) **Wired 0.45.13.160:** `PoE2Offsets.Stack` renamed
+`UnknownPtr`→`StackSizeDataPtr` (0x10) + new `PoE2Offsets.StackSizeData` (`MaxStack` 0x28);
+`PoE2InventoryReader` reads `stackMax` alongside `stackCount` (deref +0x10 → +0x28);
+`WebViewBridge` emits `smax`; the inventory tooltip shows "Stack Size: 19 / 40".
 
 ## Max stack size is container-dependent (0.45.13.164)
 
@@ -1473,6 +1469,7 @@ selects which applies. The normal inventory uses +0x28 (40); a **currency stash 
 far more (the owner's tab #143 had a Wisdom stack of 1231, and every currency there with
 Count > 100 has +0x20=5000), so it selects **+0x20**. So `stackMax` (the +0x28 read) is only
 correct for the backpack.
+
 - **Interim UI fix (shipped):** the inventory tooltip shows "/ max" ONLY when Count ≤ max, so
   the nonsensical "1231 / 40" is gone (it now shows just "1231" until the container cap is
   wired). "19 / 40" in the backpack is unaffected.
@@ -1732,6 +1729,476 @@ action (a dodge/guard/defensive key, a flask, a chain) — not under Automation.
 - **Pending in-game verification:** add an `enemyAnim` condition to a macro (IDs = a monster's attack
   animationId, radius, a dodge/guard key action), stand near that monster → the macro fires on that
   animation and not otherwise; the 🐞 debug shows the range circle + live MATCH state.
+
+## Performance pass + reader-split foundation (0.45.13.192–202)
+
+A measure-first performance investigation that removed the worst per-tick costs with cheap,
+single-process fixes, then laid the foundation for a multi-process architecture. **Full design +
+rationale: `docs/reader-split.md`.** Motivation for the split is HEADROOM for future read-heavy
+features (a detailed DPS meter / death recap especially), NOT the current numbers.
+
+### Profiler tooling (how to measure — use this before "optimising" any read)
+
+- `ahk/Profiler.ahk` — QPC per-label timing, disabled by default (near-zero when off). Two-click
+  flow: **Shift+F3** (or click the ⏱ status pill) starts a measurement window, press again to stop.
+  On stop it appends the table to `logs\InGameStateMonitor.profiler.log` (readable in **Data &
+  Logs**), with a header stamping area + `awake=<sampleCount>` + `raw=<mapSize>`. This file dump is
+  what makes real-play measurement possible (the game is foreground, not the WebView).
+- Per-tick sub-markers already exist and are the map of the tick: `tick.read` (=`read.state/world/
+  ui/entities/sleep/filter`), `tick.overlays` (per-overlay `ov.*` + `radar.mask.*`), `tick.autopilot
+  /alerts/loot`. `read.world` and `read.entities` are further split (`read.world.terrain/area/matrix/
+  player`; `read.ent.zonescan/bfs/decode.new/decode.changed/cheap`). **Lesson, twice proven: an
+  "expensive marker" is often a bug/redundancy, not a fundamental cost — sub-mark and MEASURE before
+  building a fix** (the terrain hypothesis for read.world was wrong; it was a double stats read).
+
+### Shipped single-process fixes (do not regress these)
+
+- **read.world 112→2 ms** — `PoE2PlayerReader.BuildVitalsResult` read the player Stats component
+  TWICE per vitals tick (once for Rage, once for Spirit), each doing two full stats-array scans.
+  Fix: read it ONCE (dedup) + `_CachedPlayerStatsComponent()` (~500 ms TTL, keyed on the player
+  pointer; rage/spirit change slowly, Life/Mana/ES stay fresh).
+- **radar.mask 55→8 ms** — the maphack/walk mask blit (`_BlitMaskLayer` PlgBlt) is a per-frame
+  rotated software blit filling the window. The projection (cos/sin) is frame-CONSTANT — only the
+  player position moves — so `RadarOverlay._DrawMapLayersCached` renders the composited layers ONCE
+  into a padded off-screen cache (window + 2×`MASK_CACHE_MARGIN`) via PlgBlt, then per frame copies
+  it with a translated `msimg32\TransparentBlt` (key 0xFF00FF; offset = the player screen delta).
+  Rebuild only on scroll past the margin / projection change / terrain regen. `_DrawMapLayersDirect`
+  is the fallback (never worse than the old path).
+- **read.entities junk pre-filter** — in dense combat ~half the awake map is junk (effects/
+  projectiles: `raw=182` vs `awake=96`) that was fully decoded then dropped by the sample-build
+  junk filter. Fix: in Phase 2, a cheap `ReadEntityIdentityBasic` (id+flags+path) runs before the
+  full `ReadEntityBasic`; junk paths skip the decode + caching and their id→rawPtr is remembered in
+  `_radarJunkIds` (Phase 1 then skips them with no RPM; rawPtr guard handles recycled ids). Cleared
+  on area change + on any junk-filter change (`RebuildJunkActive` reaches into `g_reader`). Safe: the
+  SAME `IsJunkEntity` already ran at sample-build, so nothing is newly hidden. Cut decode.new ~35 %,
+  cheap ~50 %, and the read tail 1.5 s → 0.4 s.
+
+### Reader-split infrastructure (stage 1 — SHIPPED + proven; stages 2–5 pending)
+
+The generalisable transport for moving reads off the render thread. See `docs/reader-split.md` for
+the staged plan (2 = reader-process scaffolding, 3 = radar snapshot to the reader, 4 = on-demand
+decode channel, 5 = DPS sampler).
+
+- **`ahk/SharedMem.ahk`** — `SharedMemBlock(name, bytes)` = named pagefile-backed file mapping
+  (`CreateFileMapping(-1,…)`/`MapViewOfFile`; one process creates, others open the same name; isOwner
+  from `ERROR_ALREADY_EXISTS`). `Put/Get` U32/I32/I64/F32 + `PutBytes/GetBytes` + `Clear`. `SeqLock
+  (block, seqOffset)` — single-writer/single-reader: `WriteBegin/WriteEnd` bracket a write (seq odd
+  while writing), `Read(copyFn)` retries until a stable EVEN sequence around the copy and returns ""
+  on a mid-write collision (→ use last value; STALENESS, never a torn payload). Pure DllCall, no
+  deps, classes-only (safe to #Include anywhere). Verified cross-process (torn=0 over ~62k reads
+  while a writer wrote ~300k times).
+- **The sampler pattern** — each read-heavy feature becomes its OWN process that owns its raw
+  high-frequency reads + computation and publishes a compact DIGEST via shared memory; the main app
+  renders the digest and never touches raw memory for that feature. Offsets stay compile-time
+  `#Include` (only the wire-struct needs sync, guarded by a `VERSION`/`MAGIC`). A_TickCount is
+  system-wide, so heartbeats/ages are consistent across processes. Absolute addresses one process
+  reads are valid in another's handle (same target process).
+
+### First sampler: anim-fishing out-of-process (0.45.13.202)
+
+The live enemy-animation capture (Macro Engine `enemyAnim`) moved off the render thread — it used to
+HIJACK the radar tick into a 10 ms turbo loop that froze every overlay.
+
+- **`ahk/HkFishProtocol.ahk`** — the shared wire layout, #Include'd by BOTH sides. Region A
+  (Main→Fisher) = monster Actor-component addresses + distances; Region B (Fisher→Main) = animId→
+  {count,last,dist} rows; a control header (run flag, `Actor.AnimationId` offset, both heartbeats);
+  two seqlocks.
+- **`poef_fisher.ahk`** (repo-root entry point) — the lean sampler process: only SharedMem + the
+  protocol + `ProcessMemory` (its OWN PoE handle). Every ~10 ms it reads the published addresses and
+  each monster's animationId, accumulates the table, publishes it back. Exits on run=0 or a stale
+  Main heartbeat; silent on transient errors.
+- **`ahk/HkAnimCapture.ahk`** — TWO backends. `"proc"` (preferred): publishes the address list
+  (free — Main already has the radar snapshot) via `TryHkAnimFishPublish(radarSnap)` in the NORMAL
+  tick flow and renders the digest, NO tick hijack → overlays keep rendering. `"inproc"` (fallback):
+  the unchanged legacy turbo path (`HkAnimFishTick`, timer bumped), used only if shared memory / the
+  fisher can't start → never worse than before. Main owns the block (`LoadHkAnimCapture`), spawns/
+  kills/heartbeats the fisher, `OnExit` guarantees no orphan. `AutoFlask.ahk` hijack branch now fires
+  only in inproc mode.
+- **Verified in-game (2026-07-05):** the fisher process starts on arm / stops on disarm, reads enemy
+  animationIds correctly, the round-trip digest is bug-free, and (the whole point) the main tick keeps
+  rendering the overlays during fishing. The Stage-1 foundation (shared memory + seqlock + lifecycle
+  + the sampler pattern) is thus proven end-to-end on a real feature.
+
+### Stage 3a: the radar-snapshot wire format + offline harness (0.45.13.207)
+
+The high-stakes step — moving the radar snapshot to the reader — starts with the WIRE FORMAT, proven
+losslessly offline BEFORE any hot-path wiring (safety principle 3: never worse). Full design +
+record contract in `docs/reader-split.md` (Stage 3 design). This cut adds the format only; it is NOT
+yet #Included by the running app, so it touches zero hot-path code.
+
+- **`ahk/PoefRadarProto.ahk` (new)** — the shared byte layout for the radar snapshot block (a SEPARATE
+  named mapping `Local\PoEformanceRadarSnap` from the stage-2 status block). A fixed header + one
+  seqlock-guarded payload: `MAX_RECORDS`=512 flat per-entity records (`RECORD_SIZE`=120 B) + a
+  `HEAP_BYTES`=128 KB interned UTF-8 string heap (paths). Each record carries exactly the leaf fields
+  a full 21-file consumer audit found are read off `decodedComponents` on the radar path — render
+  (worldX/Y/Z, terrainHeight; gridPosition derived), life (curHP/maxHP/isAlive/lifeCurrentPercentMax),
+  positioned (reaction → isFriendly), rarityId, chest (opened/labelVis/strongbox bits), targetable
+  (a BARE BOOL on the radar path), actor (animationId) — plus the Targetable/Actor **component
+  addresses** for consumers that walk `entity["components"]` for a live re-read. A `R_PRESENCE`
+  bitfield gates which components are present. Classes-only (safe to #Include anywhere).
+- **`ahk/RadarSnapshotWire.ahk` (new)** — `RadarWirePack(blk, lock, sample, px,py,pz, areaHash)`
+  (reader side: serialise the awake sample under the seqlock, dedup paths into the heap, flag
+  truncation past 512) and `RadarWireUnpack(blk, lock)` (main side: copy the block out under the
+  seqlock — staleness on a mid-write collision, never torn — then RECONSTRUCT the exact nested-Map
+  `awakeEntities.sample` shape so NO consumer changes, safety principle 1). Handles the three shape
+  nuances the audit pinned: targetable rebuilt as a bare bool (defensive against a Map form), life
+  populated in BOTH flat (`curHP`/`maxHP`) and nested (`life["life"]["current"/"max"]`) forms, and a
+  minimal `entity["components"]` = `[{name:"Targetable",address},{name:"Actor",address}]` rebuilt for
+  the live-re-read walkers (CombatAutomation / ExplorationModule / HkAnimCapture / EntityFocus /
+  PoE2MemoryReader). Deep inspector fields (`components` full array, `mods`, deep dumps) are NOT
+  carried — not hot-path; they stay on Main's own on-demand read (stage 4). Reconstruction fills
+  `componentCount`/`namedComponentCount`/`decodedComponentCount` best-effort so those consumers never
+  error (minimal numbers, not the full decode — an accepted degradation for the opt-in path).
+- **`ahk/SharedMem.ahk`** — added `PutU8`/`GetU8`/`PutU16`/`GetU16` (byte/word accessors the record
+  bytes + heap length-prefixes need).
+- **Offline harness (scratchpad `radar_wire_test.ahk`)** — the doc's testing strategy: builds synthetic
+  sample entries covering every component combo (full monster, opened strongbox, friendly minion,
+  currency ground item, empty/invalid entity, targetable-as-Map), packs → unpacks → asserts every
+  carried leaf survived. **27/27 pass**, incl. unicode paths, gridPosition derivation, 600→512
+  truncation + the truncated flag, and a forced mid-write (odd seq) read returning `ok=false`. Not
+  committed (harnesses live in scratchpad, like `ui_scale_test.ahk`). AHK v2 lesson re-confirmed: the
+  interpreter refuses function definitions interspersed between top-level executable statements —
+  group all `func(){}` defs before the executable body (or the whole script fails to load with no
+  runtime error / OnError never fires).
+  
+### Stage 3b: reader publishes the awake sample + parity diagnostic (0.45.13.208)
+
+The reader now PACKS the awake-entity sample into the radar block each tick, and Main cross-checks it
+against its own live sample — the gate before stage 3c flips Main to CONSUME it. Same safe posture as
+stage 2: the reader independently produces data, a diagnostic proves parity; **Main's live  path is
+untouched** (it just reads the block on demand for the check).
+
+- **`ahk/PoE2MemoryReader.ahk` — `ReadAwakeEntitiesFlat(areaInstanceData, currentAreaHash, playerOrigin)`
+  (new):** a SELF-CONTAINED copy of ReadRadarSnapshot's awake-entity scan (BFS → decode new/changed →
+  cheap-update → build sample) with its OWN cache state (`_flat*` props, separate from the live
+  `_radar*` cache so it never touches Main's hot path) and a generous decode budget (the reader has no
+  render competing). It does NOT apply the junk filter — the reader publishes everything and Main
+  derives the junk verdict on consume (config-dependent data stays in Main). Mirrors the live scan's
+  phases so the published sample matches what Main builds. **Currently DUPLICATES the live
+  orchestration** (reusing the same helpers `ScanEntityMapIdsAndPtrs`/`ReadEntityBasic`/
+  `UpdateCachedEntityRadar`/…); the duplication resolves in 3c when Main's inline scan is replaced by
+  consuming the reader.
+- **`ahk/PoE2MemoryReader.ahk` — `ReadAwakeFlatForPublish(inGameStateAddress)` (new):** resolves
+  area+player from a given inGameState addr (the reader already has it from its lightweight
+  `ReadAutoFlaskSnapshot`, so this avoids re-running the 12-state resolve) and returns
+  `Map(sample, areaHash, playerX/Y/Z)` for the wire pack.
+- **`poef_reader.ahk`:** #Includes `PoefRadarProto` + `RadarSnapshotWire`, opens the radar block by
+  name, and each in-game tick calls `ReadAwakeFlatForPublish` → `RadarWirePack` (guarded so a transient
+  read never crashes the reader or blocks its status heartbeat) + writes `O_RDHEART`.
+- **`ahk/ReaderProcess.ahk`:** Main OWNS the radar block — `LoadReaderProcess` creates it + stamps
+  MAGIC/VERSION (alongside the stage-2 status block). New `RadarConsumeDiagnose()` unpacks the reader's
+  latest sample and cross-checks it vs Main's live `g_radarLastSnap` sample: matched-by-id count, path
+  mismatch, world-X mismatch, "only in reader" (= junk Main filters, expected) and "only in main"
+  (must be 0 — Main should never have an entity the reader lacks) + areaHash MATCH + a frame counter
+  that must increase between clicks.
+- **`ahk/SharedMem.ahk` / `ahk/PoefRadarProto.ahk`:** `O_RDHEART` added to the radar block header
+  (reader heartbeat) so the diagnostic can show the publish liveness.
+- **Wiring:** `BridgeDispatch` case `RadarConsumeDiag` → `RadarConsumeDiagnose`; UI **Config → Debug →
+  Diagnostic Actions**, next to "🔌 Reader status", a "📡 Radar parity" button (in the reader-process
+  help block).
+- **Static verification:** the full reader stack (`poef_reader.ahk` include chain) parse-loads clean
+  (offline harness `ld_reader.ahk` confirms both new methods exist on the class), the reader entry
+  point loads and self-exits correctly when Main's run flag isn't set, and all edited files brace-check.
+- **Pending in-game verification:** enable "🔌 Reader process", get in-game, click "📡 Radar parity"
+  repeatedly — the frame counter should climb, areaHash should MATCH, matched-by-id should be most of
+  Main's sample, path/pos mismatches 0, and "only in main" 0 (the reader's extra entries are the junk
+  Main filters). That confirms the reader builds the same awake sample Main does, gating stage 3c.
+- **Verified in-game (2026-07-05, stage 3b):** parity is byte-perfect in the SETTLED state — a stable
+  area with a fresh reader heartbeat gave matched 25/25, path mismatch 0, pos mismatch 0, only-in-main
+  0, areaHash MATCH. The nonzero mismatches seen while moving/in combat (a few pos/only-in-main) are
+  pure TEMPORAL SKEW (two async scans sampling at slightly different instants), and one sample with a
+  ~20 s stale heartbeat was a frozen publish — both are exactly what stage 3c's freshness gate handles.
+
+### Stage 3c: Main consumes the reader's sample, with fallback (0.45.13.210)
+
+The payoff: when the reader is publishing a FRESH sample for the current area, Main skips its own
+~40 ms entity scan and rebuilds the awake sample from the reader's flat records. A SECOND opt-in
+toggle keeps it separable from 3b so the parity check can gate it.
+
+- **`ahk/PoE2MemoryReader.ahk` (`ReadRadarSnapshot`):** right after the zoneScan block, a consume
+  branch: if `ReaderConsumeEnabled()` and `ConsumeReaderRadarSample(currentAreaHash)` returns a fresh
+  same-area snapshot, Main builds `awakeSample` (junk-filtered Main-side) + `currentEntities` +
+  `fullAwakeRawPtrs` (from the FULL reader set incl. junk, so the stale filter's network-bubble check
+  still works) from the reader's records and sets `consumed=true`. The whole existing scan
+  (BFS/decode/cheap/build) is wrapped in `if (!consumed) { … }`, so on ANY failure (consume off,
+  reader off/stale/area-mismatch, mid-write unpack) Main runs its own scan exactly as today (never
+  worse). The Main-side zoneScan accumulation + `_FilterStaleRadarEntities` then run on the
+  reconstructed sample unchanged — and the filter LIVE-RE-READS the Targetable byte from the carried
+  component address, so dead-entity detection + LootTracker kill counting stay fresh even though the
+  reader's decoded targetable may lag. `RadarTimings["consumed"]` (0/1) flags which path ran.
+- **`ahk/ReaderProcess.ahk`:** `ReaderConsumeEnabled()` (both toggles on + block exists),
+  `ConsumeReaderRadarSample(currentAreaHash)` (freshness gate `O_RDHEART` age < 300 ms + area gate →
+  RadarWireUnpack, else 0), `SetReaderConsume` (persist `[Diagnostics] readerConsume`),
+  `BuildReaderConsumeHeaderJson`. `LoadReaderProcess` seeds `g_rpConsume` + reads the INI.
+- **Wiring:** `BridgeDispatch` case `SetReaderConsume`; `WebViewBridge` pushes `readerConsume`; UI
+  **Config → Debug → Diagnostic Actions**, a "📥 Consume reader sample (split stage 3c)" toggle under
+  the reader-process one (+ `reader-consume` in the header sync). Default OFF.
+- **Why a second toggle:** enabling `readerProcess` alone stays at 3b (publish + parity diagnostic, no
+  behaviour change); `readerConsume` additionally flips Main to consume — so the owner verifies parity
+  first, then A/B tests consume vs. Main's own scan.
+- **Static verification:** `PoE2MemoryReader.ahk` braces balanced (370/370) + full reader stack
+  parse-loads; `ReaderProcess`/`WebViewBridge` balanced; UI inline script `node --check` clean.
+- **Verified in-game (2026-07-06, MapRiverhold A/B):** functional PASS — no visual regression,
+  LootTracker kills keep counting, clean toggle-off. Profiler proved the mechanism: consume ran ~95 %
+  of ticks (`read.ent.decode.new` 4/82 calls) and **`read.entities` dropped 59 ms → 4.9 ms**. BUT the
+  owner's A/B exposed a regression (fixed 0.45.13.213): consuming made `read.sleep` balloon 0 → 35.7 ms
+  (206 ms spikes), so `tick.read` only fell 65 → 46 ms instead of ~10 ms. Cause: the consume branch
+  hardcoded `isZoneLoading := false`, which runs the sleeping-entity scan every tick; Main's own path
+  keeps `isZoneLoading` TRUE in junk-heavy maps (its cacheFillRatio stays < 0.90 because junk inflates
+  mapSize) and thus SKIPS sleeping. First fix (0.45.13.211) computed `isZoneLoading` from a fill ratio
+  but was still insufficient (re-measure: `read.sleep` only 35 → 29.7 ms) because the consume `mapSize`
+  used the PUBLISHED record count, and the reader OMITS junk that fails to decode (projectiles/effects),
+  so that count ≈ the non-junk awake count → ratio ≈ 1.0 → sleeping still ran every tick. Second fix
+  (0.45.13.212): the reader also publishes its RAW awake-map BFS count (`PoefRadarProto.O_RAWCOUNT`,
+  set from `ReadAwakeEntitiesFlat`'s `_flatRawCount`), and the consume branch uses
+  `Max(rawCount, currentEntities.Count)` as mapSize — so the ratio (non-junk decoded / raw awake)
+  matches Main's own `cacheFillRatio`. Wire change is backward-compatible (a reserved header slot; a
+  stale reader writing 0 falls back to the record count). That correctly made CONSUME ticks skip
+  sleeping (5 µs), but re-measure showed ~18 % of ticks were reader-consume FALLBACKS (freshness/area
+  gate) whose `isZoneLoading` flips FALSE and fires the sleeping scan at full cost — and that scan
+  traverses the whole sleeping std::map (100s of ms even for an 8-entity sample in a dense area), so
+  ~49 fallback ticks × ~200 ms averaged read.sleep back to 35 ms. Third fix (0.45.13.213): **throttle
+  the sleeping scan to ~750 ms** (`_radarSleepingCache` / `_radarSleepingTick`, invalidated on area
+  change) — sleeping entities are static so the refresh is imperceptible, but it bounds `read.sleep`
+  regardless of how `isZoneLoading` flaps (helps the non-consume path too). **Re-measure confirmed
+  (0.45.13.213, MapRiverhold):** `read.sleep` 35.7 → 4.2 ms, `tick.read` 50.7 → 24 ms. The remaining
+  cost is the reader-consume FALLBACK rate — 16 % of ticks (`read.ent.decode.new` 86/546) ran Main's
+  full ~50 ms scan (a dense-map reader hitch missed the 300 ms freshness window). Fix (0.45.13.214):
+  raised `RP_CONSUME_MAX_AGE` 300 → 500 ms so one reader hitch is tolerated (a 500 ms-old radar sample
+  is acceptable; AutoPilot re-reads player pos + targetable live). Expected: fallback down, `tick.read`
+  toward ~10-15 ms. If fallback stays high, the reader tick itself needs slimming (it also runs
+  `ReadAutoFlaskSnapshot` each tick) or the sleeping scan moves to the reader too.
+- **Reader-tick slimming + sleeping in the reader (0.45.13.215–216):** two follow-ups to push more
+  ticks onto the cheap consume path and drop Main's residual `read.sleep`.
+  - **0.45.13.215 — cache the reader's inGameState resolve.** `poef_reader.ahk` called
+    `ReadAutoFlaskSnapshot` (the 12-state ~15-RPM resolve loop) every 50 ms tick just to get the
+    inGameState address for the publish scan. Now it caches the resolve and re-runs it at most every
+    ~500 ms; the publish scan reuses the cached address and self-guards on an invalid areaInstance (a
+    stale address just yields no publish → Main falls back). Invalidated on reconnect.
+  - **0.45.13.216 — publish SLEEPING entities from the reader.** The sleeping std::map scan (100s of ms
+    in a dense area) was the residual `read.sleep`. New `PoefRadarProto.P_SLEEPING` record bit;
+    `_ReaderSleepingSample` (reader-side, THROTTLED ~750 ms per area so the reader tick stays tight)
+    reads the sleeping sample and `ReadAwakeFlatForPublish` appends it to the published records tagged
+    `_sleeping`; `RadarWirePack` sets the bit, `RadarWireUnpack` SPLITS records into `sample` (awake) +
+    `sleepingSample`. Main's consume routes `sleepingSample` straight into `sleepingEntities` and NEVER
+    scans the sleeping map on a consume tick (fallback ticks still scan locally, throttled). Verified
+    offline: `radar_wire_test.ahk` 29/29 (awake/sleeping split) + `h_sleep.ahk` linear split test.
+  - **Pending in-game verification:** re-measure — fallback rate (`read.ent.decode.new` calls /
+    `read.entities` calls) should fall and `read.sleep` should approach ~0 on consume ticks, pushing
+    `tick.read` toward ~10-15 ms; confirm sleeping NPCs / radar dots still appear.
+
+### Stage 4: on-demand full component list for the Entities inspector (0.45.13.217)
+
+Fixes the one real degradation of consume mode: the reconstructed snapshot entry carries only a MINIMAL
+`components` array ({Targetable, Actor}) + the radar-decoded `decodedComponents`, so the Entities
+inspector would LIST only those and couldn't reach the deeper components (Buffs / Stats / Mods / NPC /
+…). The design's literal Stage 4 was a WM_COPYDATA request/reply to the reader — but Main keeps its OWN
+PoE handle (for the latency-critical local reads) and each reconstructed entry carries the real entity
+ADDRESS, so Main can re-read the full entity LOCALLY. No IPC needed; the WM_COPYDATA channel would be
+premature complexity.
+
+- **`ahk/WebViewBridge.ahk` — `_RequestEntityComponents(entityAddrHex)`:** re-reads ONE entity's FULL
+  component list via `g_reader.ReadEntityBasic(addr)` (non-radar mode → full decode) and pushes
+  `{components, componentCount, namedComponentCount}` to JS `eiApplyEntityComponents`. Cheap + rare
+  (one entity, only when the user expands it) → never touches the radar hot path. Fires whether or not
+  consuming (harmless when not — same data, freshly read). Reuses `_SerializeComponents`.
+- **`ahk/BridgeDispatch.ahk`:** case `RequestEntityComponents` → `SetTimer(() => _RequestEntityComponents(args[1]), -1)`.
+- **`ui/index.html`:** `_eiState.fullComps` (addr → full-list override, pruned when the entity leaves);
+  `eiToggle` calls `ahkCall('RequestEntityComponents', addr)` on expand; `eiApplyEntityComponents`
+  stores the override + re-renders; `eiRenderDetail` + `_eiCompAddr` prefer the override (so the full
+  list shows AND per-component lazy-decode `_DecodeComponentOnDemand` can address components beyond the
+  minimal set). `_eiOv(e)` helper.
+- **Why this is the whole job:** the per-component deep decode was ALREADY on-demand + live
+  (`_DecodeComponentOnDemand` re-reads a component from its address). The only gap consume opened was
+  the LIST of components (their names+addresses); this restores it. `mods` etc. then decode via the
+  existing lazy path.
+- **Static verification:** `WebViewBridge` braces balanced; UI inline script `node --check` clean.
+- **Pending in-game verification:** with consume ON, open the Entities tab, expand an entity → its full
+  component list should appear (not just Targetable/Actor) and each component still lazy-decodes on
+  click; confirm it matches the consume-OFF inspector.
+
+### Generic fallback decoder for unknown components (0.45.13.218)
+
+The Entities inspector lists every component an entity has, but only ~20 have a specific `Decode…`
+handler; the rest (Functions, BaseEvents, InteractionAction, HideoutDoodad, ControlZone, …) showed a
+dead "no decoder" row. Now the on-demand decode's `default` case falls back to a GENERIC raw dump so ANY
+unknown component is inspectable + reverse-engineerable live.
+
+- **`ahk/PoE2ComponentDecoders.ahk` — `DecodeUnknownComponentBasic(componentPtr, span:=0xA0)`:** reads the
+  first `span` bytes and returns string fields: `componentAddr`, `staticPtr` (0x00 — the component's
+  TYPE descriptor, identical across all instances of that component → fingerprints the type), `owner`
+  (0x08 owner-entity path), and offset-labelled lists of the non-zero `pointers` (plausible ptr at each
+  8-aligned slot, its 8 bytes then skipped so it isn't re-read as two ints), `nonzeroInts` and `floats`.
+  Content inside each string is offset-ordered (AHK Map iteration order is unspecified, so the ordering
+  lives in the strings, not the keys).
+- **`ahk/WebViewBridge.ahk`:** `_DecodeComponentOnDemand`'s `default` case calls it; new
+  `_SerializeGenericComponent` emits the six fields in a FIXED key order. Flows through the existing
+  `eiApplyDecodedComponent` path — the UI renders `Object.entries(decoded)` with no whitelist, so no UI
+  change was needed.
+- **Use for RE:** click an undecoded component → see its live pointers / ints / floats by offset; from
+  there its struct can be worked out and a proper `Decode…ComponentBasic` written + registered in the
+  on-demand switch. `staticPtr` confirms two rows are the same component type.
+- **Static verification:** braces balanced; `DecodeUnknownComponentBasic` parse-loads in the reader
+  stack; `Format` placeholders (`{1:X}`/`{2}`) validated offline.
+- **Pointer classification (0.45.13.219):** in-game dumps of BaseEvents / Functions / InteractionActions
+  proved these are internal ENGINE dispatch structures (vtables in the `0x7FF6…` module range +
+  intrusive linked-list/self-referencing nodes + entity pointers), not named-field data components — so
+  a "proper decoder" would only ever surface handler counts, nothing player-meaningful. The genuinely
+  useful signal is the EMBEDDED ENTITY POINTERS (e.g. an NPC's BaseEvents references other entities), so
+  the generic dump now classifies each pointer: high-canonical (`≥ 0x7FF000000000`) → tagged `(code)`;
+  heap pointer → resolved via `ReadEntityIdentityBasic` and, if it yields a real `Metadata/` path,
+  listed under a new `entityRefs` field instead of raw. So an unknown component now shows WHICH entities
+  it points at, not just addresses.
+
+## Unexplored-area wash on the maphack (shipped 0.45.13.221)
+
+A subtle dark stipple over walkable cells the player hasn't reached yet, so on the revealed (maphack)
+large map you can see where you still need to explore. Opt-in toggle **Config → Overlay → "Highlight
+Unexplored"** (`[Radar] mapHackUnexplored`, default OFF); large-map + maphack only.
+
+- **No game "explored" grid exists** — the terrain struct exposes the walkable nibble grid but no
+  fog-of-war/revealed state (`GridLandscapeData` @0xE8 is defined in `PoE2Offsets` but never read /
+  unverified). So "explored" is SELF-TRACKED: `RadarOverlay._visitedBuf` (one byte per half-res bitmap
+  cell) is marked in a disc (`UNEXP_VISIT_R`=22 cells) around the player each frame
+  (`_UpdateUnexploredVisited`). Unexplored = walkable AND not visited.
+- **The overlay is colour-key + one global alpha** (`WinSetTransColor("010101 " alpha)`), NOT per-pixel
+  premultiplied alpha — so "dim not hide" is a 50% checkerboard STIPPLE (like the walk-fill debug
+  layer), colour `COLOR_UNEXPLORED` (dark), not a low-alpha blend.
+- **Render:** built into `_GenerateMapHackBitmap` — a new 1-bit mask `_mapUnexpMask` (starts covering
+  the whole walkable area, same stipple as walk-fill) + a solid dark colour source `_mapUnexpColorDC`.
+  As the player moves, `_UpdateUnexploredVisited` CLEARS the just-visited cells from the mask (SetPixelV
+  black via a temp DC, only cells NEWLY entering the visited disc — cheap; skipped entirely while the
+  player's bitmap cell is unchanged) and sets `_unexpDirty`. `_DrawMapLayersCached` blits it on the
+  BOTTOM (under walk-fill + wall outlines), adds `u` to the layer-set key, and folds the shrinking wash
+  into the scroll cache at most ~every 700 ms (a scroll past the margin rebuilds sooner) so the cheap
+  offset-scroll optimisation is preserved. Freed in `_DestroyMapHackBitmap`; reset on area change.
+- **Wiring:** `g_mapHackUnexplored` (InGameStateMonitor seed + ConfigManager save/load), RadarOverlay
+  `_SyncConfig` → `_unexploredOn`, BridgeDispatch `ToggleMapHackUnexplored`, WebViewBridge header
+  `mapHackUnexplored`, UI toggle + `setChk('tog-maphack-unexplored', …)`.
+- **Static verification:** RadarOverlay braces 223/223 + all edited files balanced; UI `node --check`
+  clean. NOTE: the offline AHK interpreter could not run this round (a stuck AHK process in the sandbox
+  blocked even a trivial script — do NOT `Stop-Process AutoHotkey64`, it can kill the owner's running
+  tool), so the isolated method harness (`syn_test.ahk`) was not executed; the new `_UpdateUnexplored‌Visited`
+  logic was reviewed by hand.
+- **Pending in-game verification:** enable it on a large-map maphack — a dark stipple should cover
+  walkable areas ahead and CLEAR behind you as you move; explored cells + walls stay clear; the reveal
+  radius (`UNEXP_VISIT_R`) and darkness (`COLOR_UNEXPLORED`) are the tuning knobs; confirm no perf
+  regression (the wash rides the same scroll cache, refreshed ~1.4×/s).
+
+## GridLandscapeData explored-grid hunt (RE diagnostic, shipped 0.45.13.222)
+
+Chasing the map's real "explored / fog-of-war" per-cell state to replace the unexplored-wash's
+self-tracked approximation. The terrain struct (`TerrainMetadata` = AreaInstance+0x8B8) has TWO parallel
+`StdVector<byte>` grids: `GridWalkableData` @0xD0 (used) and **`GridLandscapeData` @0xE8** (defined in
+`PoE2Offsets`, never read) — same shape, shared `BytesPerRow` @0x130. `GridLandscapeData` is the prime
+suspect for the explored grid.
+
+- **`ahk/LandscapeGridProbe.ahk` (new, RE diagnostic):** fog-of-war is DYNAMIC, so the test is
+  snapshot→walk→diff. `LandscapeGridProbeSnapshot` reads `GridLandscapeData` (mirrors `ReadTerrainData`'s
+  StdVector read at the 0xE8 offset) + captures a copy, its size/rows/bytesPerRow, a byte-value
+  histogram, whether it's byte-identical to the walkable grid, and the player grid pos.
+  `LandscapeGridProbeDiff` re-reads it and diffs vs the snapshot: changed-byte count, a sample of
+  changes (offset, old→new, derived cell x,y), the change bounding box + centre, and how far the player
+  moved — so a fog grid (cells flipping near the path) is distinguishable from static data (no change).
+  The diff advances the snapshot to "now" so repeated walk+diff traces it. Reuses
+  `_AIP_ResolveAreaInstance` (AreaInstanceProbe). Writes `logs\InGameStateMonitor.landscape_probe.log`.
+  Bridge `LandscapeGridSnapshot` / `LandscapeGridDiff`; UI "🗺 Landscape Snapshot" / "🗺 Landscape Diff"
+  in the RE-tools row; `LoadLandscapeGridProbe()` seeds the snapshot globals.
+- **Static verification:** `LandscapeGridProbe.ahk` parse-loads clean; braces balanced; UI `node --check`
+  clean.
+- **Result 1 (in-game 2026-07-06): `GridLandscapeData` is STATIC** — 0 bytes changed across 76/47/321-cell
+  walks; histogram = nibble pairs of values 0-5 (mostly `0x55`) → a terrain-TYPE/height classification
+  layer, not boolean explored flags. So NOT the fog grid.
+- **Extended to 4 layers (0.45.13.223):** the owner supplied two more `StdVector<byte>` terrain grids —
+  `GridLayer3` @0x100 and `GridLayer4` @0x118 (added to `PoE2Offsets.TerrainMetadata`). The four grids
+  sit 0x18 apart (walkable @0xD0, landscape @0xE8, layer3 @0x100, layer4 @0x118). The probe now
+  snapshots + diffs ALL FOUR at once (`_LgpLayerDefs`) so one walk checks every candidate; the diff
+  flags any grid whose cells changed (with its change box) and verdicts "look at InGameState/MiniMap
+  next" if none do.
+- **Result 2 (in-game 2026-07-06): ALL FOUR terrain grids are STATIC** — 0 bytes changed; layer3/layer4
+  are `distinct=1` (uniform 0x55 fill = unused placeholders). So the explored/fog state is DEFINITIVELY
+  NOT in the terrain byte grids.
+- **Dynamic-allocation scanner (0.45.13.224):** the systematic next step — hunt ANY heap allocation off
+  AreaInstance/InGameState that changes as the player explores. `LandscapeScanSnapshot` scans both
+  structs (directly, `0..0x2400`/`0..0x1200` step 8, AND one pointer level deep into sub-structs — the
+  grid may live in a MiniMap/fog object) for `StdVector<byte>`-shaped fields (heap first, last>first,
+  size 4 KB..64 MB), and stores a sampled position-weighted CHECKSUM of each (`_LscanChecksum`: reads
+  the vector once, capped 8 MB, folds ~16k evenly-spaced bytes). `LandscapeScanDiff` re-checksums each
+  and reports which CHANGED. The fog grid (if it's a CPU allocation) is a grid-sized candidate that
+  flips CONSISTENTLY with exploration; erratic ones are other dynamic buffers. Bridge
+  `LandscapeScanSnapshot`/`LandscapeScanDiff`; UI "🔎 Scan Snapshot"/"🔎 Scan Diff".
+- **CONCLUSION — the hunt is CLOSED, negative (in-game 2026-07-06):** across many snapshot→walk→diff
+  rounds with the monotonicity/0→val/span analysis, NO allocation is consistently fog-like. The only
+  `<<< FOG-LIKE` flag was a fluke (`area+0x1238`, a REALLOCATING 12-40 KB buffer whose one flagged tick
+  had a tiny Δ; every other tick it oscillated at span 94 %). The grid-sized candidates (the ~3.8 MB
+  minimap family off a terrain sub-struct) change with `span 99-100 %` — spread over the WHOLE buffer,
+  not localised to the path → a minimap RENDER texture, not an accumulating explored state. So,
+  systematically ruled out: (1) all 4 terrain byte grids = static; (2) all dynamic CPU allocations off
+  AreaInstance/InGameState (direct + 1 level) = oscillating / whole-buffer render buffers. **The
+  explored/fog state is NOT a readable CPU grid — it is GPU-side** (consistent with the GGPK shader-patch
+  maphack revealing fog via rendering, not via read data; and why GameHelper2 never exposed it). The
+  self-tracked visited-grid wash (`0.45.13.221`, "Highlight Unexplored") is therefore the correct, final
+  solution — PROVEN best-available, not guessed. `LandscapeGridProbe` is kept as the RE record + a reusable
+  grid snapshot/diff + dynamic-allocation scanner for future hunts.
+
+## Map-coverage % on the Loot bar + slider-theme fix (shipped 0.45.13.231)
+
+Two owner-requested tweaks.
+
+- **Themed spacing slider + conditional sub-row (`ui/index.html`):** the unexplored-wash
+  dot-spacing control was a raw `<input type="range">` (no theme). Rebuilt as the standard
+  Arcane-Codex slider — `.cfg-slider-row > .cfg-label + .slider-wrap(.slider-val bubble +
+  input)` with `oninput="_sb(this,'mhunexp-spacing-val',this.value)"` — matching the Combat/
+  Exploration sliders. **This is THE slider pattern for the whole UI; reuse it for any new
+  slider.** The colour-swatch + spacing sub-row (`#mhunexp-subrow`) is now also gated on the
+  "Highlight Unexplored" toggle: hidden by default, `mapHackUnexpSubVis(on)` flips it on the
+  toggle's onchange + on header sync (and re-positions the bubble via `_posVal` inside a
+  `requestAnimationFrame`, since a `display:none` slider has zero width).
+- **Always-on map coverage — REUSE the ExplorationModule measurement (0.45.13.238):** the on-map Loot
+  bar shows `" (explored: NN%)"` after the map name (`_LtBuildStripSegments`, reading
+  `g_exploreCurrentPercent`; on-map strip bar only, already `g_ltOnMap`-gated). The AutoPilot
+  ExplorationModule already computes this correctly (visited-disc mark + reachable-region flood +
+  rebase), but only while the bot explores. Instead of a separate tracker, `_RunExploration` got a
+  **`measureOnly` mode**: it runs the full measurement (through the region flood + `g_exploreCurrentPercent`)
+  then returns BEFORE any navigation/clicking (the target-reached + combat-pause early returns are
+  `!measureOnly`-gated; a `measureOnly` return sits right after the region-diag line, recomputing the
+  percentage once so the just-completed rebase shows same-tick). `UpdateRadarFast` calls
+  `TryExploration(radarSnap, 0, true)` every tick **when AutoPilot is off** (when it's on, the normal
+  explore tick updates the same global). One measurement, no duplication.
+  - **History / why:** the first attempt was a standalone `ahk/ExploredTracker.ahk` that divided by ALL
+    walkable cells → stuck at ~1% (PoE2's walkable grid includes huge unreachable areas + every floor
+    on multi-level maps). It was then made to mirror ExplorationModule's reachable-region flood, but a
+    subtle in-game divergence (region never completing → readout blank) made the duplication not worth
+    it. **`ExploredTracker.ahk` + `g_mapExploredPercent` were deleted** in favour of reusing the proven
+    measurement directly. Lesson: there was already a working coverage measurement — reuse it, don't
+    reimplement.
+  - Verified: full reader/ExplorationModule stack load-checks clean via a PowerShell harness
+    (`ld_explore.ahk`) — `TryExploration`/`_RunExploration` now `MaxParams=3`; brace balance holds.
+  - **Tooling lesson:** run AutoHotkey through the **PowerShell tool**, not the Bash tool. Git-bash
+    mangles a leading-slash switch like `/ErrorStdOut` into a Windows path (`…/Git/ErrorStdOut`), so
+    AHK treats it as a missing script file and pops a modal error dialog that HANGS (this looked like
+    "AHK execution is broken in the sandbox" — it isn't). `Start-Process AutoHotkey64.exe
+    -ArgumentList '/ErrorStdOut', <script> -PassThru` + `WaitForExit(ms)` works. Never `Stop-Process
+    AutoHotkey64` (it can kill the owner's running tool).
+- **Pending in-game verification:** on a map (AutoPilot off), the on-map Loot bar's name should read
+  e.g. `MapRiverhold (explored: 37%)` and climb as you explore, resetting per area; the dot-spacing
+  slider should look/behave like the Combat sliders and its row hide when the wash toggle is off.
+
+## Removed the "Walkable Grid (debug)" overlay (0.45.13.234)
+
+The walkable-grid fill diagnostic (blue 50%-stipple over every walkable cell) was superseded by
+"Highlight Unexplored" (same walkable-mask source, but a per-cell tunable wash that also clears as
+you explore), so per owner request it was removed entirely. Deleted: the `Walkable Grid (debug)`
+UI toggle row + its header-sync line; the `ToggleWalkGrid` bridge case; `walkGrid` in the header
+push; `g_walkGridEnabled` (InGameStateMonitor global + ConfigManager save/load, INI key `walkGrid`);
+and in `RadarOverlay` the whole walk-fill layer — `_walkGridEnabled`, `COLOR_WALKABLE`, the
+`_mapWalkColorDC`/`_mapWalkColorBmp`/`_mapWalkMask` bitmaps (creation in `_GenerateMapHackBitmap`,
+cleanup in `_DestroyMapHackBitmap`, the mid-gen zone-abort cleanup, and the per-pixel walk
+`SetPixelV`), plus the `walkOn`/`haveWalk` params of `_DrawMapLayersCached`/`_DrawMapLayersDirect`
+and the `"w"` bit in the scroll-cache `layerKey`. The wall-border maphack + unexplored-wash layers
+are untouched (they share the same generation scan and scroll cache). Static: RadarOverlay braces
+223/223, `CreateBitmap` 3→2 (walk mask gone), UI `node --check` clean; browser preview confirms the
+row is gone and a legacy `walkGrid` header key no longer throws.
 
 ## Reference
 

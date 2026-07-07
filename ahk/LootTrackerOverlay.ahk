@@ -207,8 +207,16 @@ _LtBuildStripSegments()
     textCol := 0xE0E0E0, green := 0x80E680, red := 0x8080E6, dim := 0x9A9A9A
     segs := []
 
+    global g_exploreCurrentPercent
     name := _LtV(v, "name", "")
-    segs.Push(Map("text", (name = "" ? "—" : name), "color", textCol))
+    nameText := (name = "" ? "—" : name)
+    ; Append the live map-coverage percentage in parentheses. Reuses the AutoPilot
+    ; ExplorationModule's measurement (g_exploreCurrentPercent), kept fresh every
+    ; tick via TryExploration(..., measureOnly) when AutoPilot is off. Only once a
+    ; coverage figure exists (> 0).
+    if (IsSet(g_exploreCurrentPercent) && g_exploreCurrentPercent > 0)
+        nameText .= " (explored: " Round(g_exploreCurrentPercent) "%)"
+    segs.Push(Map("text", nameText, "color", textCol))
     segs.Push(Map("text", _LtFmtDurMs(_LtCurrentLiveTimeMs()), "color", textCol))
 
     ex := _LtV(v, "profitEx", 0)

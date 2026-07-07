@@ -64,7 +64,7 @@ IsJunkEntity(entityPath)
 ; so IsJunkEntity never re-evaluates toggles per entity. Returns nothing.
 RebuildJunkActive()
 {
-    global g_junkPatDisabled, g_junkCustom, g_junkActive
+    global g_junkPatDisabled, g_junkCustom, g_junkActive, g_reader
     out := []
     for _, cat in _JunkFilterCategoryDefs()
         for _, p in cat["patterns"]
@@ -77,6 +77,11 @@ RebuildJunkActive()
             out.Push(t)
     }
     g_junkActive := out
+    ; The radar hot path keeps a per-entity "known junk" id cache (skips re-decoding junk every
+    ; tick). It reflects the patterns active AT decision time, so a filter change must drop it —
+    ; otherwise entities the user just un-junked would stay hidden (and vice-versa).
+    if (IsSet(g_reader) && IsObject(g_reader) && g_reader.HasOwnProp("_radarJunkIds"))
+        g_reader._radarJunkIds := Map()
 }
 
 ; Applies a single setting from the web UI (BridgeDispatch "SetJunk"). key forms:

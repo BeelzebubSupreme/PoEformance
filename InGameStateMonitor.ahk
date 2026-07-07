@@ -56,7 +56,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.190"
+POEFORMANCE_VERSION := "0.45.13.240"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -267,7 +267,9 @@ g_skillBuffBlacklist := []
 ; Zone navigation toggle
 g_zoneNavEnabled := true
 g_mapHackEnabled := true
-g_walkGridEnabled := false   ; walkable-grid fill overlay (diagnostic, off by default)
+g_mapHackUnexplored := false ; maphack: dark wash over unexplored walkable cells (off by default)
+g_mapHackUnexploredColor := "#181820" ; unexplored-wash colour (hex #RRGGBB)
+g_mapHackUnexploredSpacing := 2        ; unexplored-wash dot spacing (1=solid, higher=sparser)
 g_maphackMaskDebug := false  ; red outlines of the HUD clip masks (debug, off by default)
 ; Maphack source: "memory" = render an overlay on top of the unexplored
 ; minimap cells (requires PoE2 attached + the radar reading working);
@@ -394,6 +396,8 @@ HotkeysInit()
 SkillHotkeysInit()
 HotkeysLoadConfig()
 LoadHkAnimCapture()
+LoadReaderProcess()         ; reader-split stage 2: persistent reader process (opt-in, default OFF)
+LoadLandscapeGridProbe()    ; RE diagnostic: GridLandscapeData snapshot/diff (explored-grid hunt)
 HotkeysSeedFlaskPresets()   ; one-time: create the default "Flasks" hotkey group (replaces AutoFlask)
 g_hkOneShotPerTick := (IniRead(_ConfigPath(), "Hotkeys", "oneShotPerTick", "0") = "1")
 
@@ -1036,7 +1040,13 @@ OnTreeTabChanged(*)
 #Include ahk/ExplorationModule.ahk
 #Include ahk/AutoPilot.ahk
 #Include ahk/CustomHotkeys.ahk
+#Include ahk/SharedMem.ahk
+#Include ahk/HkFishProtocol.ahk
 #Include ahk/HkAnimCapture.ahk
+#Include ahk/PoefReaderProto.ahk
+#Include ahk/PoefRadarProto.ahk
+#Include ahk/RadarSnapshotWire.ahk
+#Include ahk/ReaderProcess.ahk
 #Include ahk/CustomHotkeysBindings.ahk
 #Include ahk/SkillBarReader.ahk
 #Include ahk/CustomHotkeysBridge.ahk
@@ -1052,6 +1062,7 @@ OnTreeTabChanged(*)
 #Include ahk/StackMaxProbe.ahk
 #Include ahk/ActorProbe.ahk
 #Include ahk/CurrencyLayoutProbe.ahk
+#Include ahk/LandscapeGridProbe.ahk
 #Include ahk/OffsetCompare.ahk
 #Include ahk/PatchMaintenance.ahk
 #Include ahk/UIHelpers.ahk
@@ -1059,5 +1070,9 @@ OnTreeTabChanged(*)
 ; F3: one-shot debug dump — TreeView content, game window screenshot, radar entity TSV.
 F3:: OnF3DebugDump()
 
-; The per-tick QPC profiler is toggled by CLICKING the ⏱ status pill in the header
-; (ProfilerToggle bridge case → ProfilerToggleDump). It no longer has a hotkey.
+; Shift+F3: toggle the per-tick QPC profiler measurement window (also available by clicking the
+; ⏱ status pill → ProfilerToggle bridge case → ProfilerToggleDump). 1st press starts recording,
+; 2nd press stops and both surfaces the table on the pill AND appends it to
+; logs\InGameStateMonitor.profiler.log (readable in Config → Data & Logs), so a window recorded
+; during real play — game focused, tool in the background — can be reviewed later.
++F3:: ProfilerToggleDump()

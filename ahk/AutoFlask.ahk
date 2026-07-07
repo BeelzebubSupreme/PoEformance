@@ -40,8 +40,11 @@ UpdateRadarFast()
         ; high-rate direct read of nearby monsters' animationId so very short
         ; animations are caught. StartHkAnimCapture already bumped this timer to
         ; ~10 ms; StopHkAnimCapture restores 50 ms.
-        global g_hkAnimCapOn
-        if (IsSet(g_hkAnimCapOn) && g_hkAnimCapOn)
+        ; The out-of-process fisher (proc mode) does NOT hijack the tick — it runs in a separate
+        ; process and Main just publishes/reads via shared memory in the normal flow below
+        ; (TryHkAnimFishPublish). Only the inproc FALLBACK takes over the tick with the turbo loop.
+        global g_hkAnimCapOn, g_hkFishMode
+        if (IsSet(g_hkAnimCapOn) && g_hkAnimCapOn && IsSet(g_hkFishMode) && g_hkFishMode = "inproc")
         {
             HkAnimFishTick()
             return
@@ -87,6 +90,14 @@ UpdateRadarFast()
         g_radarLastSnap := radarSnap  ; cache for Dump Entities button
         HotkeyBindingsOnAreaChange(radarSnap)
 
+        ; ── Anim-fishing (out-of-process sampler) — publish addresses + render the digest ──
+        ; No-op unless the live capture is armed in proc mode; the fisher process does the 10 ms
+        ; reads, so this stays cheap and the overlays below keep rendering at the normal cadence.
+        TryHkAnimFishPublish(radarSnap)
+
+        ; ── Reader-split stage 2: persistent reader-process heartbeat + watchdog (opt-in, no-op off) ──
+        ReaderProcessTick()
+
         ; ── AutoPilot (state machine: combat → explore, owns shared guards) ──
         Profiler.Begin("tick.autopilot")
         TryAutoPilot(radarSnap)
@@ -109,6 +120,13 @@ UpdateRadarFast()
         Profiler.Begin("tick.loot")
         TryLootTrackerTick(radarSnap)
         Profiler.End("tick.loot")
+
+        ; ── Always-on map-coverage measurement (feeds the on-map Loot bar's explored %) ──
+        ; Reuse the AutoPilot ExplorationModule's proven visited + reachable-region
+        ; measurement in measure-only mode (no navigation). When AutoPilot IS on, its
+        ; own explore tick already updates g_exploreCurrentPercent.
+        if (!g_autoPilotEnabled)
+            TryExploration(radarSnap, 0, true)
 
         ; ── Value-aware loot radar — price ground drops + threshold banner (self-throttled) ──
         TryLootRadarValue(radarSnap)
