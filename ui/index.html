@@ -7093,6 +7093,7 @@
     window.addEventListener('resize', updateAllBarMarkers);
     window.addEventListener('load', () => {
       snodeInit();   // inject skill-node icons before measuring (they change tab widths)
+      navTitlesInit();   // themed hover tooltip (label text) on every cat / sub-tab
       hkBuildAnimDatalist();   // populate the enemy-animation name typeahead
       // Fonts can still be loading when 'load' fires; once they settle
       // the active-tab width changes, so re-measure.
@@ -7101,6 +7102,20 @@
       }
       updateAllBarMarkers();
     });
+
+    // Give every category / sub-tab a themed hover tooltip showing its label
+    // (the [data-tip] auto-bind renders it). Essential once the bars iconify at
+    // narrow widths — the .nav-label is visually hidden then — and harmless when
+    // the label is visible. Reads the live label text so it stays correct for
+    // any current or future tab. Skips items that already carry a data-tip.
+    function navTitlesInit() {
+      document.querySelectorAll('#cat-bar .cat, .subtab-row .tab').forEach(el => {
+        if (el.hasAttribute('data-tip')) return;
+        const label = el.querySelector('.nav-label');
+        const txt = label ? label.textContent.trim() : '';
+        if (txt) el.setAttribute('data-tip', txt);
+      });
+    }
 
     // ═══ Skill-node icons — replace the old emoji / nav-SVG icons with PoE2
     // passive-tree node icons (img/skillnodes/). Each slot's icon is named in
