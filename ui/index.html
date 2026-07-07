@@ -4573,8 +4573,15 @@
     .cfg-section details > summary > .cfg-header { border-bottom: none }
     .cfg-section details[open] > summary > .cfg-header { border-bottom: none; padding-bottom: 5px }
 
-    /* The band itself — on every open box header. */
-    .cfg-section details[open] > summary { background: rgba(0,0,0,0.30) }
+    /* The band itself — on every open box header. Solid for the top two thirds,
+       then fades to transparent over the bottom third so the heading melts into
+       the content area instead of ending on a hard edge. */
+    .cfg-section details[open] > summary {
+      background: linear-gradient(180deg,
+        rgba(0,0,0,0.30) 0%,
+        rgba(0,0,0,0.30) 66%,
+        rgba(0,0,0,0) 100%);
+    }
     /* Top-level chapters (and the AutoPilot/Radar category boxes): the .cfg-section
        carries 4px top / 12px side padding, so bleed the band out to the box's inner
        edges and round its top to the 2px box radius. Negative margin + equal padding
