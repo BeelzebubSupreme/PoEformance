@@ -5548,7 +5548,7 @@
                     <span class="cfg-label">Hotkey</span>
                     <span style="display:flex;gap:6px;align-items:center">
                       <button class="hk-btn hk-key-btn" id="sm-hotkey-btn" data-tip="Click, then press a key or key combo" onclick="smCaptureHotkey()">none</button>
-                      <button class="hk-btn" id="sm-hotkey-clear" data-tip="Clear hotkey" onclick="ahkCall('SetStashMover','hotkey','')">✕</button>
+                      <button class="hk-btn hk-sm" id="sm-hotkey-clear" data-tip="Clear hotkey" onclick="ahkCall('SetStashMover','hotkey','')">✕</button>
                     </span>
                   </div>
                   <div class="cfg-row"><span class="cfg-label">Detected destination</span>
@@ -5592,7 +5592,7 @@
                   Hotkey:
                   <button class="hk-btn hk-key-btn" id="cfg-combat-hotkey"
                           data-tip="Click, then press a key or key combo" onclick="apCaptureHotkey()">F10</button>
-                  <button class="hk-btn" data-tip="Clear hotkey" onclick="ahkCall('SetCombatHotkey','')">✕</button>
+                  <button class="hk-btn hk-sm" data-tip="Clear hotkey" onclick="ahkCall('SetCombatHotkey','')">✕</button>
                 </span>
               </div>
               <div class="cfg-help">
@@ -7118,6 +7118,15 @@
       /* ── PLAIN tier: compact, no ornaments ── */
       :is(.btn-plain,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn,.cat-btn){padding:5px 11px;font-size:10px;letter-spacing:.08em}
       :is(.hk-icon-btn,.tsv-pg-btn,.cat-btn){padding:5px 8px}
+      /* ── ICON tier: ornament-free minis ── The corner volutes + edge bars are
+         designed for ≥~90px buttons and turn to mush at icon scale, burying the
+         glyph. Icon buttons and the tiny per-row ✕/⤓ minis (.hk-sm) keep the
+         base chrome + rune-trace hover only, and re-assert their compact
+         geometry over the FULL "#panel-hotkeys .hk-btn" sizing (which otherwise
+         out-specifies them for "hk-btn hk-icon-btn" combos). */
+      :is(.hk-icon-btn,.hk-sm)::before{content:none}
+      .hk-icon-btn,#panel-hotkeys .hk-icon-btn{width:28px;height:28px;padding:0}
+      .hk-sm,#panel-hotkeys .hk-sm{padding:3px 9px;font-size:10px}
       /* ── PRIMARY (gold fill) ── */
       :is(.btn-primary,.cp-btn-primary){color:#2a1505;border-color:#8a6a2e;text-shadow:0 1px 0 rgba(255,245,215,.5);
         background:linear-gradient(180deg,#f0d68a 0%,#d8b866 48%,#c19b48 56%,#e2c574 100%)}
@@ -8939,7 +8948,7 @@
             <span class="hk-cap"><label class="toggle"><input type="checkbox" ${hkBool(mods.gamepadLT) ? 'checked' : ''}
                    onchange="hkSetMod(${gi},${hi},'gamepadLT',this.checked?1:0)"><span class="toggle-slider"></span></label>LT</span>`}
             <span class="hk-spacer"></span>
-            <button class="hk-btn danger hk-always" data-tip="Delete this hotkey" onclick="hkAskDelete('hotkey',${gi},${hi})">✕</button>
+            <button class="hk-btn hk-sm danger hk-always" data-tip="Delete this hotkey" onclick="hkAskDelete('hotkey',${gi},${hi})">✕</button>
           </div>
           ${body}
         </div>`;
@@ -9285,8 +9294,8 @@
                 <span class="hk-act-tools">
                   <span class="hk-cap" data-tip="Show this action's debug info on the game overlay (name/id, range circle, monster counts, cooldown, charges)"><label class="toggle"><input type="checkbox" ${hkBool(a.debug) ? 'checked' : ''} onchange="hkSetAct(${gi},${hi},${ai},'debug',this.checked?1:0)"><span class="toggle-slider"></span></label>🐞</span>
                   ${(t === 'monsterCount' && hkBool(a.debug)) ? `<span class="cp-swatch" style="--swatch-color:${hkEsc(a.circleColor || '#FFA8C0')}" data-tip="Range circle color" onclick="hkOpenCircleColor(${gi},${hi},${ai},this)"></span>` : ''}
-                  <button class="hk-btn" data-tip="Export this action to hotkeys_export/" onclick="hkExportAction(${gi},${hi},${ai})">⤓</button>
-                  <button class="hk-btn danger" data-tip="Remove this action" onclick="hkDelAction(${gi},${hi},${ai})">✕</button>
+                  <button class="hk-btn hk-sm" data-tip="Export this action to hotkeys_export/" onclick="hkExportAction(${gi},${hi},${ai})">⤓</button>
+                  <button class="hk-btn hk-sm danger" data-tip="Remove this action" onclick="hkDelAction(${gi},${hi},${ai})">✕</button>
                 </span>
               </div>`;
     }
@@ -9761,7 +9770,7 @@
       const modeSel = `<select class="hk-cmode" data-tip="ALL = every entry must match (AND). ANY = at least one must match (OR)." onchange="hkSetCondMode(${gi},${hi},${cid},this.value)">`
           + `<option value="all" ${mode === 'all' ? 'selected' : ''}>ALL (and)</option>`
           + `<option value="any" ${mode === 'any' ? 'selected' : ''}>ANY (or)</option></select>`;
-      const del = isRoot ? '' : `<button class="hk-btn danger" data-tip="Remove this group and everything in it" onclick="hkDelCond(${gi},${hi},${cid})">✕ group</button>`;
+      const del = isRoot ? '' : `<button class="hk-btn hk-sm danger" data-tip="Remove this group and everything in it" onclick="hkDelCond(${gi},${hi},${cid})">✕ group</button>`;
       const addOpen = hkAddOpen.has('c:' + cid);
       const addCtrls = addOpen ? `<select id="hk-addcond-${cid}" data-tip="Pick a condition type to add">
             <option value="vitals">Vitals</option><option value="buff">Buff</option>
@@ -9833,7 +9842,7 @@
         <span class="hk-act-tools">
           <span class="hk-cap" data-tip="Show this condition's debug info on the game overlay (range circle, monster counts, etc.)"><label class="toggle"><input type="checkbox" ${hkBool(a.debug) ? 'checked' : ''} onchange="hkSetCond(${gi},${hi},${cid},'debug',this.checked?1:0)"><span class="toggle-slider"></span></label>🐞</span>
           ${swatch}
-          <button class="hk-btn danger" data-tip="Remove this condition" onclick="hkDelCond(${gi},${hi},${cid})">✕</button>
+          <button class="hk-btn hk-sm danger" data-tip="Remove this condition" onclick="hkDelCond(${gi},${hi},${cid})">✕</button>
         </span>
       </div>`;
     }
