@@ -225,10 +225,14 @@
        now carries a .snode skill-node icon (snodeInit removed the old inline
        SVGs), so drop the .nav-label text + the Live/Tools group captions and
        keep only the icon — the widest row (Game, 7 tabs) would otherwise
-       overflow the bar around ~990px. data-tip surfaces each label on hover,
-       so nothing is lost. */
+       overflow the bar around ~990px. The label is VISUALLY hidden (not
+       display:none) so it stays in the accessibility tree — the .snode icon
+       carries no accessible name, so screen readers still announce each tab. */
     @media (max-width: 1080px) {
-      .subtab-row .tab > .nav-label { display: none; }
+      .subtab-row .tab > .nav-label {
+        position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+        overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+      }
       .subtab-row .tab { padding: 6px 10px; gap: 0; }
       .subtab-row .tab > .snode { width: 16px; height: 16px; margin-right: 0; }
       /* Group captions collapse; the slim divider still separates the two
@@ -242,7 +246,12 @@
        start to crowd the bar around ~880px, so it collapses to its .snode
        icons a little above that. */
     @media (max-width: 950px) {
-      #cat-bar .cat > .nav-label { display: none; }
+      /* Visually hidden, not display:none — keeps the label for screen readers
+         (the .snode icon has no accessible name), same as the sub-tab rule. */
+      #cat-bar .cat > .nav-label {
+        position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+        overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+      }
       #cat-bar .cat { padding: 7px 12px; gap: 0; }
       #cat-bar .cat > .snode { width: 17px; height: 17px; margin-right: 0; }
     }
