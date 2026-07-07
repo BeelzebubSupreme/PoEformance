@@ -1204,13 +1204,28 @@
     select:not(.no-codex) {
       background: linear-gradient(180deg, var(--codex-vellum), var(--codex-parchment));
       border: 1px solid var(--codex-rule);
-      border-radius: 1px;
+      border-radius: 2px;
       color: var(--codex-text);
       padding: 4px 8px;
       font-family: var(--codex-serif);
       font-size: 12px;
       outline: none;
+      /* Inscribed-slot groove: a soft inset shadow at the top edge so the
+         vellum field reads as pressed into the page (parity with the raised
+         leather buttons). */
+      box-shadow: inset 0 1px 2px rgba(0,0,0,0.32);
       transition: border-color .15s, box-shadow .15s
+    }
+    /* Hover warms the border toward gold (affordance parity with buttons);
+       suppressed while focused so the focus ring always wins. */
+    .tree-filter:hover:not(:focus),
+    .cfg-input:hover:not(:focus),
+    .wl-filter:hover:not(:focus),
+    input[type="text"]:not(.no-codex):hover:not(:focus),
+    input[type="number"]:not(.no-codex):hover:not(:focus),
+    select:not(.no-codex):hover:not(:focus) {
+      border-color: #7d5a2c;
+      box-shadow: inset 0 1px 2px rgba(0,0,0,0.32), 0 0 0 1px rgba(200,168,90,0.12)
     }
     .tree-filter:focus,
     .cfg-input:focus,
@@ -1219,7 +1234,7 @@
     input[type="number"]:focus,
     select:focus {
       border-color: var(--codex-gold);
-      box-shadow: 0 0 0 2px rgba(200,168,90,0.18)
+      box-shadow: inset 0 1px 2px rgba(0,0,0,0.30), 0 0 0 2px rgba(200,168,90,0.20)
     }
     select:not(.no-codex) {
       padding-right: 22px;
@@ -2555,20 +2570,16 @@
       flex-shrink: 0;
       min-width: 38px;
     }
+    /* Entity-inspector filter fields inherit the shared codex input theme
+       (vellum, groove, gold caret, focus ring); only their compact size and
+       flex layout are overridden here. */
     .ei-filter > input, .ei-filter > select {
       flex: 1 1 auto;
       min-width: 0;
-      padding: 3px 6px;
       font-size: 11px;
-      background: rgba(20,12,6,0.7);
-      border: 1px solid var(--codex-rule);
-      color: var(--codex-text);
-      border-radius: 2px;
     }
-    .ei-filter > input:focus, .ei-filter > select:focus {
-      outline: none;
-      border-color: var(--codex-gold);
-    }
+    .ei-filter > input { padding: 3px 6px }
+    .ei-filter > select { padding: 3px 20px 3px 6px; background-position: right 6px center }
     .ei-list {
       display: flex;
       flex-direction: column;
