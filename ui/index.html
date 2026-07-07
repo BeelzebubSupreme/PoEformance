@@ -10505,9 +10505,10 @@
         CurrencyUpgradeMagicToRare: [0,2], CurrencyUpgradeMagicToRare2: [1,2], CurrencyUpgradeMagicToRare3: [2,2],
         CurrencyAddModToRare: [0,3], CurrencyAddModToRare2: [1,3], CurrencyAddModToRare3: [2,3],
         CurrencyRerollRare: [0,4], CurrencyRerollRare2: [1,4], CurrencyRerollRare3: [2,4],
-        // Middle block (cols 3-5, rows 0-1)
-        CurrencyUpgradeToRare: [3,0], CurrencyCorrupt: [4,0], CurrencyModValues: [5,0],
-        CurrencyUpgradeRandomly: [3,1], CurrencyRemoveMod: [5,1],
+        // Middle block (cols 3-5, rows 0-1) — right column: Annulment (RemoveMod)
+        // on top, Divine (ModValues) below it (owner-verified against the game).
+        CurrencyUpgradeToRare: [3,0], CurrencyCorrupt: [4,0], CurrencyRemoveMod: [5,0],
+        CurrencyUpgradeRandomly: [3,1], CurrencyModValues: [5,1],
         // Sockets (cols 6-8, rows 0-1)
         CurrencyAddSkillGemSocket3: [6,0], CurrencyAddSkillGemSocket4: [7,0], CurrencyAddSkillGemSocket5: [8,0],
         CurrencyAddEquipmentSocket: [8,1],
@@ -10516,8 +10517,12 @@
         CurrencyFlaskQuality: [7,3], CurrencyGemQuality: [8,3],
       },
       // Shard row (above the misc grid): a centered row of 4 slots holding any
-      // shard-type currency (base name contains "Shard"), filled in slot order.
+      // shard-type currency (base name contains "Shard"). The game's visual
+      // order is fixed: Transmutation, Regal, Chance, Artificer — curated here;
+      // unknown shard types append in slot order.
       shardRow: { count: 4, row: 7 },
+      shardOrder: ['CurrencyUpgradeToMagicShard', 'CurrencyUpgradeToRareShard',
+                   'CurrencyUpgradeRandomlyShard', 'CurrencyAddEquipmentSocketShard'],
       // Always-empty framed slots the game shows without a bound currency type
       // (e.g. the cell below the Vaal/Corrupt orb).
       emptySlots: [[4,1]],
@@ -10625,8 +10630,10 @@
       const eay = _curPos(0, L.emptyAbove.row).y;
       for (let i = 0; i < L.emptyAbove.count; i++) { frame(eax, eay, C, C); eax += C + 2; }
 
-      // 4) Shard row (centered) — the shard-type currencies, in slot order.
-      shards.sort((a, b) => (a.sx | 0) - (b.sx | 0));
+      // 4) Shard row (centered) — the shard-type currencies in the game's fixed
+      // visual order (L.shardOrder); unknown shard types append in slot order.
+      const shardIdx = (it) => { const i = (L.shardOrder || []).indexOf(it.mp); return i < 0 ? 99 : i; };
+      shards.sort((a, b) => (shardIdx(a) - shardIdx(b)) || ((a.sx | 0) - (b.sx | 0)));
       const shW = L.shardRow.count * C, shX0 = Math.round((rightEdge - shW) / 2);
       const shY = _curPos(0, L.shardRow.row).y;
       for (let i = 0; i < L.shardRow.count; i++) {
