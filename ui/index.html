@@ -4564,25 +4564,29 @@
     .sm-sub-body { padding: 6px 13px 9px 35px }
     .ent-junkbox-sum, .junk-cat > summary { padding-right: 26px }
 
-    /* ── Heading underline: ONLY while open, and starting at the TEXT (the icon
-       is never underlined). The summary's own full-row rule is dropped; the
-       .cfg-header (flex:1, after the icon) carries the line so it spans
-       text → right edge. Collapsed = no line. ──────────────────────────────── */
-    .cfg-section > details > summary { border-bottom: none }
+    /* ── Open-state heading band ─────────────────────────────────────────────
+       An underline between the left icon and the right diamond always looked
+       busy, so while a box is OPEN the whole heading row is tinted a touch
+       darker than the box body instead — a clean header band. No underline at
+       any level; collapsed boxes stay flat. */
+    .cfg-section > details > summary,
     .cfg-section details > summary > .cfg-header { border-bottom: none }
-    .cfg-section details[open] > summary > .cfg-header {
-      border-bottom: 1px solid var(--codex-rule);
-      padding-bottom: 5px;
+    .cfg-section details[open] > summary > .cfg-header { border-bottom: none; padding-bottom: 5px }
+
+    /* The band itself — on every open box header. */
+    .cfg-section details[open] > summary { background: rgba(0,0,0,0.30) }
+    /* Top-level chapters (and the AutoPilot/Radar category boxes): the .cfg-section
+       carries 4px top / 12px side padding, so bleed the band out to the box's inner
+       edges and round its top to the 2px box radius. Negative margin + equal padding
+       keeps the icon/title/diamond exactly where they were. */
+    .cfg-section > details[open] > summary {
+      margin: -4px -12px 0;
+      padding: 4px 12px 0;
+      border-radius: 2px 2px 0 0;
     }
-    /* …EXCEPT the bordered sub-boxes (Stash Mover's Auto Stashing/Selling and
-       their Ignore/Randomization boxes): they already have their own box
-       outline, so the under-title rule read as a doubled line inside the box.
-       Drop it there so the title sits clean at the top of the box — matching
-       the borderless-title look of the Entities junk boxes. */
-    .cfg-section .sm-sub[open] > summary > .cfg-header {
-      border-bottom: none;
-      padding-bottom: 0;
-    }
+    /* Bordered sub-boxes (Stash Mover): the summary already spans the box flush to
+       its border, so only round the band's top corners. */
+    .cfg-section .sm-sub[open] > summary { border-radius: 2px 2px 0 0 }
     /* Box body lines up under the text (icon width + gap ≈ 26px), not the icon. */
     .cfg-section > details[open] > :not(summary) { padding-left: 26px }
 
