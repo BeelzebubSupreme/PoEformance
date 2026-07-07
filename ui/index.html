@@ -4582,8 +4582,7 @@
        states so a collapsed box keeps its dark header; the icon, title and
        diamond all sit centred within the solid band. */
     .cfg-section details > summary,
-    .ent-junkbox > summary,
-    .junk-cat > summary { background: rgba(0,0,0,0.20) }
+    .ent-junkbox > summary { background: rgba(0,0,0,0.20) }
     /* Open state: fade the band into the content with a strip drawn just BELOW
        the summary (not inside it), so the fade never touches the centred icon /
        title / diamond — the header row stays fully in the solid dark. The strip
@@ -4592,11 +4591,9 @@
        and z-index:-1 keeps it BEHIND the content text (the box isolates a
        stacking context so the negative layer still paints above the box bg). */
     .cfg-section details[open],
-    .ent-junkbox[open],
-    .junk-cat[open] { isolation: isolate }
+    .ent-junkbox[open] { isolation: isolate }
     .cfg-section details[open] > summary::before,
-    .ent-junkbox[open] > summary::before,
-    .junk-cat[open] > summary::before {
+    .ent-junkbox[open] > summary::before {
       content: "";
       position: absolute;
       left: 0; right: 0; top: 100%;
@@ -4625,13 +4622,10 @@
     .cfg-section .sm-sub[open] > summary { border-radius: 2px 2px 0 0 }
     .cfg-section .sm-sub:not([open]) > summary { border-radius: 2px }
     /* Entities junk boxes: same as the Stash Mover boxes — the summary already
-       spans the box flush to its 2px-radius border, so only round the band. */
+       spans the box flush to its 2px-radius border, so only round the band.
+       (The junk SUB-categories keep their old look for now — reworked later.) */
     .ent-junkbox[open] > summary { border-radius: 2px 2px 0 0 }
     .ent-junkbox:not([open]) > summary { border-radius: 2px }
-    /* Junk sub-categories: no box border of their own (a top separator instead),
-       so bleed the band up to that separator; the padding is restored so the
-       icon/name/desc don't move. */
-    .junk-cat > summary { margin-top: -7px; padding-top: 7px }
     /* Box body lines up under the text (icon width + gap ≈ 26px), not the icon. */
     .cfg-section > details[open] > :not(summary) { padding-left: 26px }
 
@@ -4671,18 +4665,12 @@
       background-size: 70% 1px;
     }
 
-    /* ── Entities tab (#4): the same icon + open-underline rhythm for the boxed
-       Entity Classes / Junk Filter summaries and the junk sub-categories. These
-       are .ent-junkbox / .junk-cat <details>, not .cfg-section, so the underline
-       is drawn as a 1px bottom gradient inset past the icon (so it starts at the
-       text, never under the icon) and only while open. ── */
+    /* ── Entities tab (#4): the Entity Classes / Junk Filter TOP boxes now use
+       the canonical header band (above), so they get NO underline. Only the junk
+       SUB-categories keep the old 1px open-underline for now — those boxes will
+       be reworked separately. The underline is a 1px bottom gradient inset past
+       the icon (so it starts at the text, never under the icon), open only. ── */
     .ent-junkbox-sum > .snode { margin-right: 0 }
-    .ent-junkbox[open] > .ent-junkbox-sum {
-      background-image: linear-gradient(var(--codex-rule), var(--codex-rule));
-      background-repeat: no-repeat;
-      background-position: right bottom;
-      background-size: calc(100% - 40px) 1px;
-    }
     .junk-cat[open] > .junk-cat-head {
       padding-bottom: 5px;
       background-image: linear-gradient(var(--codex-rule), var(--codex-rule));
