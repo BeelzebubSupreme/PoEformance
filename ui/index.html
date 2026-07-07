@@ -1858,6 +1858,10 @@
           var(--codex-gold) 0deg 315deg,
           rgba(255, 241, 199, 0.98) 340deg,
           var(--codex-gold) 360deg) border-box;
+      /* Keep the base opacity backstop: the `background` shorthand above resets
+         background-color to transparent, so restore #1a100a behind the layers in
+         case --codex-parchment/vellum ever gain alpha. */
+      background-color: #1a100a;
       animation: codexTipIn 190ms ease-out both,
                  codexTipFrameSweep 2.8s linear infinite;
     }
