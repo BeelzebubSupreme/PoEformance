@@ -4574,6 +4574,15 @@
       border-bottom: 1px solid var(--codex-rule);
       padding-bottom: 5px;
     }
+    /* …EXCEPT the bordered sub-boxes (Stash Mover's Auto Stashing/Selling and
+       their Ignore/Randomization boxes): they already have their own box
+       outline, so the under-title rule read as a doubled line inside the box.
+       Drop it there so the title sits clean at the top of the box — matching
+       the borderless-title look of the Entities junk boxes. */
+    .cfg-section .sm-sub[open] > summary > .cfg-header {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
     /* Box body lines up under the text (icon width + gap ≈ 26px), not the icon. */
     .cfg-section > details[open] > :not(summary) { padding-left: 26px }
 
