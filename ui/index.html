@@ -1856,13 +1856,18 @@
       border-color: transparent;
       background:
         linear-gradient(180deg, var(--codex-parchment) 0%, var(--codex-vellum) 100%) padding-box,
+        linear-gradient(#1a100a, #1a100a) padding-box,
         conic-gradient(from var(--tipAngle, 0deg),
           var(--codex-gold) 0deg 315deg,
           rgba(224, 83, 59, 0.98) 340deg,
           var(--codex-gold) 360deg) border-box;
-      /* Keep the base opacity backstop: the `background` shorthand above resets
-         background-color to transparent, so restore #1a100a behind the layers in
-         case --codex-parchment/vellum ever gain alpha. */
+      /* Opacity backstops (the `background` shorthand resets background-color to
+         transparent). Layer order top→bottom: parchment (padding-box) over a
+         SOLID #1a100a (padding-box) over the conic border (border-box). The solid
+         padding-box layer sits UNDER the parchment but ABOVE the conic, so if
+         --codex-parchment/vellum ever gain alpha the interior falls back to
+         #1a100a — NOT the conic red/gold (border-box fills the whole box). The
+         background-color below backs the border ring behind the conic. */
       background-color: #1a100a;
       animation: codexTipIn 190ms ease-out both,
                  codexTipFrameSweep 2.8s linear infinite;
