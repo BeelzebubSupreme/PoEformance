@@ -173,14 +173,14 @@
         letter-spacing: 0.10em;
         gap: 6px;
       }
-      #cat-bar .cat svg { width: 13px; height: 13px; }
+      #cat-bar .cat > .snode { width: 15px; height: 15px; margin-right: 5px; }
       .subtab-row .tab {
         padding: 6px 9px;
         font-size: 10px;
         letter-spacing: 0.08em;
         gap: 5px;
       }
-      .subtab-row .tab svg { width: 12px; height: 12px; }
+      .subtab-row .tab > .snode { width: 14px; height: 14px; margin-right: 4px; }
       .subtab-group-label {
         padding: 0 6px 0 10px;
         font-size: 8px;
@@ -220,27 +220,31 @@
       }
     }
 
-    /* ── Compact stage 2b: ≤ 850px — iconify the SUB-TAB bars ──────────
-       Same idea as the pills above, one step further down: drop the text
-       label, keep only the SVG glyph. Config's sub-tabs have no icon, so
-       the :has(svg) guard leaves their (smaller) text intact instead of
-       collapsing them to empty buttons. The cat-bar iconifies later (2d). */
-    @media (max-width: 850px) {
-      .subtab-row .tab:has(svg) > .nav-label { display: none; }
-      .subtab-row .tab { padding: 6px 9px; }
-      /* Group headers (Live / Tools) collapse; the divider still separates
-         the two groups so the grouping still reads without labels. */
+    /* ── Compact stage 2b: ≤ 1080px — iconify the SUB-TAB bars ─────────
+       In lockstep with the pills (also icon-only at 1080px). Every sub-tab
+       now carries a .snode skill-node icon (snodeInit removed the old inline
+       SVGs), so drop the .nav-label text + the Live/Tools group captions and
+       keep only the icon — the widest row (Game, 7 tabs) would otherwise
+       overflow the bar around ~990px. data-tip surfaces each label on hover,
+       so nothing is lost. */
+    @media (max-width: 1080px) {
+      .subtab-row .tab > .nav-label { display: none; }
+      .subtab-row .tab { padding: 6px 10px; gap: 0; }
+      .subtab-row .tab > .snode { width: 16px; height: 16px; margin-right: 0; }
+      /* Group captions collapse; the slim divider still separates the two
+         icon groups so the Live | Tools split still reads. */
       .subtab-group-label { display: none; }
     }
 
-    /* ── Compact stage 2d: ≤ 640px — iconify the category bar LAST ──────
-       The cat-bar carries only 5 short labels (Game / RE / Data / Hotkeys /
-       Config), so it keeps its text far longer than the pill + sub-tab bars
-       (icon-only at 1080 / 850px). It only collapses to icons down here,
-       where the labels would otherwise start to crowd the row. */
-    @media (max-width: 640px) {
+    /* ── Compact stage 2d: ≤ 950px — iconify the CATEGORY bar ──────────
+       The cat-bar carries only 6 short labels, so it keeps its text one stage
+       longer than the sub-tabs (icon-only at 1080px). Its compact text would
+       start to crowd the bar around ~880px, so it collapses to its .snode
+       icons a little above that. */
+    @media (max-width: 950px) {
       #cat-bar .cat > .nav-label { display: none; }
-      #cat-bar .cat { padding: 7px 11px; }
+      #cat-bar .cat { padding: 7px 12px; gap: 0; }
+      #cat-bar .cat > .snode { width: 17px; height: 17px; margin-right: 0; }
     }
 
     /* ── Compact stage 2c: ≤ 700px — shrink the pills harder ───────────
