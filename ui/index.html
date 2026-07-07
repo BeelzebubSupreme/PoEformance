@@ -6162,7 +6162,7 @@
               <div class="cfg-row"><span class="cfg-label">📥 Consume reader sample (split stage 3c)</span>
                 <label class="toggle"><input type="checkbox" id="reader-consume" onchange="ahkCall('SetReaderConsume', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label>
               </div>
-              <div class="cfg-help">Stage 3c (needs the reader process ON): Main <b>skips its own ~40 ms entity scan</b> and rebuilds the awake sample from the reader's published records when they are <b>fresh (&lt; 300 ms)</b> and the area matches — otherwise it falls back to its own scan (never worse). Verify stage-3b "📡 Radar parity" looks good <i>before</i> enabling this. Watch for: radar dots / loot / AutoPilot behave as before, and LootTracker kills still count.</div>
+              <div class="cfg-help">Stage 3c (needs the reader process ON): Main <b>skips its own ~40 ms entity scan</b> and rebuilds the awake sample from the reader's published records when they are <b>fresh (&lt; 500 ms)</b> and the area matches — otherwise it falls back to its own scan (never worse). Verify stage-3b "📡 Radar parity" looks good <i>before</i> enabling this. Watch for: radar dots / loot / AutoPilot behave as before, and LootTracker kills still count.</div>
             </div>
           </details>
         </div>
@@ -11839,6 +11839,11 @@
     }
 
     function eiBody(e) {
+      // Full-component override (reader consume mode fills this in on demand);
+      // computed once and reused for the Components summary + the component list.
+      const _ov = _eiOv(e);
+      const _compCount = _ov ? _ov.componentCount : (e.componentCount ?? '?');
+      const _namedCount = _ov ? _ov.namedComponentCount : e.namedComponentCount;
       const props = [
         ['Address',  `<span class="ei-prop-val addr">${escHtml(e.addr || '')}</span>`],
         ['Id',       `<span class="ei-prop-val">${e.id ?? '—'}</span>`],
@@ -11850,13 +11855,12 @@
         ['Alive',    `<span class="ei-prop-val">${e.alive === false ? 'no' : 'yes'}</span>`],
         ['Life',     `<span class="ei-prop-val">${e.life >= 0 ? e.life + '%' : '—'}</span>`],
         ['Distance', `<span class="ei-prop-val">${e.dist >= 0 ? e.dist + 'm' : '—'}</span>`],
-        ['Components', `<span class="ei-prop-val">${_eiOv(e) ? _eiOv(e).componentCount : (e.componentCount ?? '?')}${(_eiOv(e) ? _eiOv(e).namedComponentCount : e.namedComponentCount) !== undefined ? ` (${_eiOv(e) ? _eiOv(e).namedComponentCount : e.namedComponentCount} named)` : ''}</span>`]
+        ['Components', `<span class="ei-prop-val">${_compCount}${_namedCount !== undefined ? ` (${_namedCount} named)` : ''}</span>`]
       ];
       const propsHtml = props.map(([k, v]) =>
         `<div class="ei-prop-row"><span class="ei-prop-key">${k}</span>${v}</div>`
       ).join('');
 
-      const _ov = _eiOv(e);
       const comps = (_ov && Array.isArray(_ov.components)) ? _ov.components
                     : (Array.isArray(e.components) ? e.components : []);
       const compsHtml = comps.length

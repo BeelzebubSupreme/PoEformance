@@ -1,7 +1,10 @@
 # Reader-split architecture
 
-Status: **design / not yet built.** This document is the plan; nothing here is wired up yet.
-Version target when the pilot lands: bump as usual.
+Status: **stages 1–4 shipped + wired (opt-in).** SharedMem + seqlock, the anim-fishing
+out-of-process sampler, the persistent reader process, the radar-snapshot wire format, Main's
+consume-with-fallback path, and the inspector's on-demand full component list (stage 4) are all
+implemented and toggleable in-app (`readerProcess` / `readerConsume`, default off). This document
+is the original design/plan; the per-stage "shipped" notes below record what actually landed.
 
 ## Why (the real motivation)
 
