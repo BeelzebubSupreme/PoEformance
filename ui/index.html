@@ -4573,10 +4573,17 @@
     .cfg-section details > summary > .cfg-header { border-bottom: none }
     .cfg-section details[open] > summary > .cfg-header { border-bottom: none; padding-bottom: 5px }
 
-    /* The band itself — a solid darker fill on the whole heading row, present in
-       BOTH states so a collapsed box keeps its dark header. The icon, title and
-       diamond all sit centred within this solid band. */
-    .cfg-section details > summary { background: rgba(0,0,0,0.20) }
+    /* ══ CANONICAL CATEGORY-BOX HEADER BAND ═══════════════════════════════════
+       The standard look for EVERY collapsible category box in the UI — Config
+       chapters (.cfg-section details), the Stash Mover boxes (.sm-sub/.sm-top),
+       and the Entities junk boxes + their sub-categories (.ent-junkbox /
+       .junk-cat). New category boxes should reuse one of these summary patterns.
+       The band is a solid darker fill on the whole heading row, present in BOTH
+       states so a collapsed box keeps its dark header; the icon, title and
+       diamond all sit centred within the solid band. */
+    .cfg-section details > summary,
+    .ent-junkbox > summary,
+    .junk-cat > summary { background: rgba(0,0,0,0.20) }
     /* Open state: fade the band into the content with a strip drawn just BELOW
        the summary (not inside it), so the fade never touches the centred icon /
        title / diamond — the header row stays fully in the solid dark. The strip
@@ -4584,8 +4591,12 @@
        fade; it is absolutely positioned (out of flow) so nothing shifts down,
        and z-index:-1 keeps it BEHIND the content text (the box isolates a
        stacking context so the negative layer still paints above the box bg). */
-    .cfg-section details[open] { isolation: isolate }
-    .cfg-section details[open] > summary::before {
+    .cfg-section details[open],
+    .ent-junkbox[open],
+    .junk-cat[open] { isolation: isolate }
+    .cfg-section details[open] > summary::before,
+    .ent-junkbox[open] > summary::before,
+    .junk-cat[open] > summary::before {
       content: "";
       position: absolute;
       left: 0; right: 0; top: 100%;
@@ -4613,6 +4624,14 @@
        its border, so only round the band's corners (top-only open, all collapsed). */
     .cfg-section .sm-sub[open] > summary { border-radius: 2px 2px 0 0 }
     .cfg-section .sm-sub:not([open]) > summary { border-radius: 2px }
+    /* Entities junk boxes: same as the Stash Mover boxes — the summary already
+       spans the box flush to its 2px-radius border, so only round the band. */
+    .ent-junkbox[open] > summary { border-radius: 2px 2px 0 0 }
+    .ent-junkbox:not([open]) > summary { border-radius: 2px }
+    /* Junk sub-categories: no box border of their own (a top separator instead),
+       so bleed the band up to that separator; the padding is restored so the
+       icon/name/desc don't move. */
+    .junk-cat > summary { margin-top: -7px; padding-top: 7px }
     /* Box body lines up under the text (icon width + gap ≈ 26px), not the icon. */
     .cfg-section > details[open] > :not(summary) { padding-left: 26px }
 
