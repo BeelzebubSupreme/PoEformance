@@ -1848,10 +1848,13 @@
       padding: 16px 18px;
     }
 
-    /* Slim text-only variant — a single row: a leading diamond + the label text.
-       Drops the base two-corner fleurons for ONE leading diamond, and animates on
-       show: the tip eases in, the diamond flourishes in once, and a soft gold
-       light travels around the frame. */
+    /* Slim text-only variant — a leading diamond + the label text. Short labels
+       (e.g. nav titles) sit on one line; longer tips still wrap under max-width,
+       with the diamond leading the first line (no white-space:nowrap, so multi-
+       sentence hints aren't forced onto one very wide line). Drops the base
+       two-corner fleurons for ONE leading diamond, and animates on show: the tip
+       eases in, the diamond flourishes in once, and a soft gold light travels
+       around the frame. */
     .codex-tooltip-text {
       max-width: 340px;
       padding: 8px 15px;
