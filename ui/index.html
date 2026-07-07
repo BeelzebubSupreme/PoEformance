@@ -1848,20 +1848,21 @@
       padding: 16px 18px;
     }
 
-    /* Slim text-only variant — a single row: a leading PULSING diamond + the
-       label text. Drops the base two-corner fleurons (overridden below) in
-       favour of one animated diamond in front of the text. */
+    /* Slim text-only variant — a single row: a leading diamond + the label text.
+       Drops the base two-corner fleurons for ONE leading diamond, and animates on
+       show: the tip eases in, the diamond flourishes in once, and a soft gold
+       light travels around the frame. */
     .codex-tooltip-text {
       max-width: 340px;
       padding: 8px 15px;
       font-size: 12px;
       line-height: 1.5;
       color: var(--codex-text);
+      animation: codexTipIn 190ms ease-out both;
     }
-    /* Repurpose the base ::before (top-left corner fleuron) as the leading,
-       pulsing diamond in front of the text; hide the base bottom-right ::after.
-       inline-block (not flex) so it survives the JS setting style.display='block'
-       on show; vertical-align centres it on the (first) text line. */
+    /* Leading diamond (repurposed base ::before). inline-block so it survives the
+       JS forcing style.display='block' on show; vertical-align centres it on the
+       (first) text line; flourishes in once per hover (rotate + scale). */
     .codex-tooltip-text::before {
       position: static;
       top: auto; left: auto;
@@ -1870,15 +1871,51 @@
       width: 9px; height: 9px;
       margin-right: 9px;
       opacity: 1;
-      animation: codexTipDiamondPulse 1.5s ease-in-out infinite;
+      animation: codexTipDiamondIn 440ms cubic-bezier(0.2, 0.9, 0.3, 1.5) both;
     }
-    .codex-tooltip-text::after { display: none; }
-    /* The mono profiler table keeps a plain block (no leading diamond, so its
-       columns aren't shifted). */
-    .codex-tooltip-mono::before { display: none; }
-    @keyframes codexTipDiamondPulse {
-      0%, 100% { opacity: 1;    transform: scale(1);    }
-      50%      { opacity: 0.4;  transform: scale(0.68); }
+    /* Traveling frame light (repurposed base ::after): a rotating conic-gradient
+       arc masked to the 1px border ring, so a soft gold streak runs around the
+       tooltip frame. */
+    .codex-tooltip-text::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      display: block;
+      width: auto; height: auto;
+      background: conic-gradient(from var(--tipAngle, 0deg),
+                  transparent 0deg 300deg,
+                  rgba(255, 241, 199, 0.95) 338deg,
+                  rgba(240, 214, 138, 0.5) 350deg,
+                  transparent 360deg);
+      padding: 1px;
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+              mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor;
+              mask-composite: exclude;
+      opacity: 1;
+      pointer-events: none;
+      animation: codexTipFrameSweep 2.8s linear infinite;
+    }
+    /* The mono profiler table keeps a plain block (no leading diamond / frame
+       sweep, so its columns aren't shifted or distracted). */
+    .codex-tooltip-mono::before,
+    .codex-tooltip-mono::after { display: none; }
+    /* Registered so the conic-gradient angle can be smoothly animated. */
+    @property --tipAngle {
+      syntax: '<angle>';
+      initial-value: 0deg;
+      inherits: false;
+    }
+    @keyframes codexTipIn {
+      from { opacity: 0; transform: translateY(5px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes codexTipDiamondIn {
+      from { opacity: 0; transform: rotate(-140deg) scale(0.15); }
+      to   { opacity: 1; transform: rotate(0deg) scale(1); }
+    }
+    @keyframes codexTipFrameSweep {
+      to { --tipAngle: 360deg; }
     }
     /* Multi-line tips (the Shift+F3 profiler table on the status pill) keep their
        column alignment: monospace, preserved whitespace, no width clamp. */
