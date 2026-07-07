@@ -45,6 +45,9 @@
       --err:   #e05a5a;               /* error / mismatch / panel-open (warm red) */
       --info:  #7ec8e3;               /* neutral info / pointers / links */
       --muted: var(--codex-text-dim); /* de-emphasized / none / unset */
+      --ok-dim:  #4aad4a;             /* muted state green: true/ready dots, connected pill */
+      --err-dim: #aa4444;             /* muted state red: false/blocked dots */
+      --unid:    #e0533b;             /* PoE-style "Unidentified" crimson (badge + tooltip) */
 
       /* ── Codex palette (used by Inventory tab + Header/AutoPilot cockpit) ──
          Promoted from #panel-inventory to :root so the header, category
@@ -1106,7 +1109,7 @@
     }
 
     .tsv-gen-status.done {
-      color: #4aad4a
+      color: var(--ok-dim)
     }
 
     .tsv-gen-status.error {
@@ -1134,7 +1137,7 @@
     }
 
     .tsv-gen-log .log-ok {
-      color: #4aad4a
+      color: var(--ok-dim)
     }
 
     .tsv-gen-log .log-err {
@@ -1730,7 +1733,7 @@
       font-family: var(--codex-mono-serif);
       font-size: 12px;
       font-weight: 700;
-      color: #e0533b;
+      color: var(--unid);
       text-shadow: 0 0 2px rgba(0,0,0,0.95), 1px 1px 0 rgba(0,0,0,0.9);
       pointer-events: none;
       line-height: 1;
@@ -2249,12 +2252,12 @@
     }
 
     .skill-usable {
-      color: #4aad4a;
+      color: var(--ok-dim);
       font-weight: 600
     }
 
     .skill-blocked {
-      color: #aa4444;
+      color: var(--err-dim);
       font-weight: 600
     }
 
@@ -2515,7 +2518,7 @@
     .life-bar-fill {
       height: 100%;
       border-radius: 3px;
-      background: linear-gradient(90deg, #2d7a2d, #4aad4a)
+      background: linear-gradient(90deg, #2d7a2d, var(--ok-dim))
     }
 
     .life-bar-fill.low {
@@ -2968,13 +2971,13 @@
 
     .prop-val.v-true::before {
       content: '● ';
-      color: #4aad4a;
+      color: var(--ok-dim);
       font-size: 8px
     }
 
     .prop-val.v-false::before {
       content: '● ';
-      color: #aa4444;
+      color: var(--err-dim);
       font-size: 8px
     }
 
@@ -3110,7 +3113,7 @@
     }
 
     .dbg-overlay-val.allowed {
-      color: #4aad4a
+      color: var(--ok-dim)
     }
 
     .dbg-overlay-val.blocked {
@@ -3492,7 +3495,7 @@
       line-height: 1;
       padding: 0 3px
     }
-    .ent-chip-x:hover { color: #e0533b }
+    .ent-chip-x:hover { color: var(--codex-blood-hi) }
     .ent-chip-empty { font-size: 11px; color: var(--codex-text-dim); font-style: italic }
     /* Dim the body when the master switch is off (controls still usable). */
     .ent-junkbox.junk-disabled .ent-junkbox-body { opacity: 0.5 }
@@ -4244,7 +4247,7 @@
     }
 
     .uib-child-vis.visible {
-      background: #4aad4a
+      background: var(--ok-dim)
     }
 
     .uib-child-vis.hidden {
@@ -4279,7 +4282,7 @@
     }
 
     .uib-prop-val.bool-true {
-      color: #4aad4a
+      color: var(--ok-dim)
     }
 
     .uib-prop-val.bool-false {
@@ -5166,7 +5169,7 @@
         #panel-loot .lt-tbl th,#panel-loot .lt-tbl td{text-align:left;padding:3px 8px;border-bottom:1px solid rgba(255,255,255,.07)}
         #panel-loot .lt-tbl th{color:var(--muted);font-weight:600}
         #panel-loot .lt-green{color:#7fd97f}
-        #panel-loot .lt-red{color:#e58a8a}
+        #panel-loot .lt-red{color:var(--err)}
         #panel-loot .lt-dim{color:#9a9a9a}
         #panel-loot .lt-row{font-size:14px}
         #panel-loot .lt-loot td{color:#bdbdbd;font-size:11px;border-bottom:1px dashed rgba(255,255,255,.05)}
@@ -10786,7 +10789,7 @@
       const ttIcon = (p.a) ? `<div style="text-align:center;margin-bottom:4px">${_iconHtml(p.a, 40)}</div>` : '';
       let html = ttIcon + `<div class="inv-tt-name inv-item ${rarityCls}" style="border:none;background:none;padding:0;display:block;text-align:left">${escHtml(p.n || p.b || '?')}</div>`;
       if (p.b && p.b !== p.n) html += `<div class="inv-tt-base">${escHtml(p.b)}</div>`;
-      if (p.idf === 0) html += `<div class="inv-tt-base" style="color:#e0533b">Unidentified</div>`;
+      if (p.idf === 0) html += `<div class="inv-tt-base" style="color:var(--unid)">Unidentified</div>`;
       // "/ max" only when the count actually fits the shown max — the +0x28
       // descriptor field is the NORMAL-inventory cap (e.g. 40), which a currency
       // stash tab legitimately exceeds (e.g. 1231), so "1231 / 40" would be
@@ -12455,12 +12458,12 @@
       try { data = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr; }
       catch (e) {
         document.getElementById('uib-children-list').innerHTML =
-          `<div class="uib-empty" style="color:#cc6666">JSON parse error: ${escHtml(String(e))}</div>`;
+          `<div class="uib-empty" style="color:var(--err)">JSON parse error: ${escHtml(String(e))}</div>`;
         return;
       }
       if (data.error) {
         document.getElementById('uib-children-list').innerHTML =
-          `<div class="uib-empty" style="color:#cc6666">${escHtml(data.error)}</div>`;
+          `<div class="uib-empty" style="color:var(--err)">${escHtml(data.error)}</div>`;
         return;
       }
       if (data.loading) {
@@ -12525,7 +12528,7 @@
       document.getElementById('uib-props-content').innerHTML = `
     <div class="uib-prop-row"><span class="uib-prop-key">StringId</span><span class="uib-prop-val" style="color:var(--ok)">"${escHtml(p.stringId || '')}"</span></div>
     <div class="uib-prop-row"><span class="uib-prop-key">Address</span>${hv(p.address || '')}</div>
-    <div class="uib-prop-row"><span class="uib-prop-key">UI Path</span><span class="uib-prop-val" style="color:#e8c674">${escHtml(idxPathStr)}</span></div>
+    <div class="uib-prop-row"><span class="uib-prop-key">UI Path</span><span class="uib-prop-val" style="color:var(--codex-gold-hi)">${escHtml(idxPathStr)}</span></div>
     <div class="uib-prop-row"><span class="uib-prop-key">Parent</span>${hv(p.parentPtr || '')}</div>
     <div class="uib-prop-row"><span class="uib-prop-key">Visible (local)</span>${p.isVisible ? '<span class="uib-prop-val bool-true">TRUE</span>' : '<span class="uib-prop-val bool-false">FALSE</span>'}</div>
     <div class="uib-prop-row"><span class="uib-prop-key">Visible (effective)</span>${p.effectiveVisible ? '<span class="uib-prop-val bool-true">TRUE</span>' : '<span class="uib-prop-val bool-false">FALSE</span>'}</div>
@@ -12852,7 +12855,7 @@
           + '<span style="color:#7a8aa0">' + esc(f.folder) + '\\</span>' + esc(f.name) + '</span>'
           + '<span style="color:var(--subtext);font-size:10px;white-space:nowrap;width:54px;text-align:right">' + _diagFmtSize(f.size) + '</span>'
           + '<span style="color:var(--subtext);font-size:10px;white-space:nowrap;width:78px">' + esc((f.mtime || '').slice(5, 16)) + '</span>'
-          + '<span class="diag-del" data-idx="' + i + '" data-tip="Delete" style="cursor:pointer;color:#c06a6a;width:14px;text-align:center">🗑</span>'
+          + '<span class="diag-del" data-idx="' + i + '" data-tip="Delete" style="cursor:pointer;color:var(--codex-blood-hi);width:14px;text-align:center">🗑</span>'
           + '</div>';
       });
       host.innerHTML = html + (idxs.length ? rowsHtml : '<div class="no-data-msg">' + (_diagFilesArr.length ? 'No files match.' : 'No files found.') + '</div>');
