@@ -10837,8 +10837,46 @@
     // ═══════════════════════════════════════════════════════════════════
     //  HEADER UPDATE
     // ═══════════════════════════════════════════════════════════════════
+    // The header is re-pushed from AHK every ~2 s (and on every change). Each
+    // push re-applies settings (setting input/select values, rebuilding chip
+    // lists, etc.), which would steal focus from a field the user is editing,
+    // close an open <select> dropdown, or interrupt a slider drag. So while
+    // the user is actively interacting with a control we SKIP the whole header
+    // apply; the next push (≤2 s, or the immediate one the change triggers)
+    // catches up once they're done. Live overlays (loot/anim/etc.) use their
+    // own push channels and are unaffected.
+    let _hdrSliderDrag = false;
+    function _hdrInteracting() {
+      if (_hdrSliderDrag) return true;
+      const ae = document.activeElement;
+      if (!ae || ae === document.body) return false;
+      const t = ae.tagName;
+      if (t === 'TEXTAREA' || ae.isContentEditable) return true;
+      if (t === 'SELECT') return true;              // an open dropdown must not be rebuilt
+      if (t === 'INPUT') {
+        const ty = (ae.getAttribute('type') || 'text').toLowerCase();
+        if (ty === 'range') return _hdrSliderDrag;  // a range keeps focus after release → gate on the drag, not focus
+        if (ty === 'checkbox' || ty === 'radio' || ty === 'button') return false;
+        return true;                                // text / number / search: busy while focused
+      }
+      return false;
+    }
+    // A range input keeps focus after mouseup, so track the actual drag via
+    // pointer events rather than focus (else updates would stay frozen after
+    // release until the user clicks elsewhere).
+    document.addEventListener('pointerdown', e => {
+      const t = e.target;
+      if (t && t.matches && t.matches('input[type="range"]')) _hdrSliderDrag = true;
+    }, true);
+    const _hdrEndDrag = () => { _hdrSliderDrag = false; };
+    window.addEventListener('pointerup', _hdrEndDrag, true);
+    window.addEventListener('pointercancel', _hdrEndDrag, true);
+    window.addEventListener('blur', _hdrEndDrag, true);
+
     function updateHeader(json) {
       let d; try { d = typeof json === 'string' ? JSON.parse(json) : json; } catch (e) { return; }
+      // Don't disrupt a control the user is currently interacting with.
+      if (_hdrInteracting()) return;
       // Each feature sync runs isolated (_hdrTry): one block throwing on bad
       // data must never starve the ones after it, and the error gets logged.
       if (d.groups !== undefined) _hdrTry('groups', () => applyGroupsFromHeader(d.groups));
