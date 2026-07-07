@@ -25,13 +25,17 @@ base, ours, theirs = sys.argv[1], sys.argv[2], sys.argv[3]
 marker = sys.argv[4] if len(sys.argv) > 4 and sys.argv[4].isdigit() else "7"
 
 # Standard 3-way merge to stdout (does not touch `ours` yet).
+# Force UTF-8 decoding of the merge output: the version-carrying files hold
+# UTF-8 content (emoji, em-dashes) whose bytes are undefined in the Windows
+# default (cp1252), which otherwise crashes the stdout reader with a
+# UnicodeDecodeError and leaves proc.stdout as None.
 proc = subprocess.run(
     ["git", "merge-file", "-p",
      "-L", "ours", "-L", "base", "-L", "theirs",
      "--marker-size", marker, ours, base, theirs],
-    capture_output=True, text=True,
+    capture_output=True, text=True, encoding="utf-8",
 )
-merged = proc.stdout
+merged = proc.stdout or ""
 
 # Clean merge → write it through, done.
 if proc.returncode == 0:

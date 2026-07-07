@@ -173,14 +173,14 @@
         letter-spacing: 0.10em;
         gap: 6px;
       }
-      #cat-bar .cat svg { width: 13px; height: 13px; }
+      #cat-bar .cat > .snode { width: 15px; height: 15px; margin-right: 5px; }
       .subtab-row .tab {
         padding: 6px 9px;
         font-size: 10px;
         letter-spacing: 0.08em;
         gap: 5px;
       }
-      .subtab-row .tab svg { width: 12px; height: 12px; }
+      .subtab-row .tab > .snode { width: 14px; height: 14px; margin-right: 4px; }
       .subtab-group-label {
         padding: 0 6px 0 10px;
         font-size: 8px;
@@ -220,27 +220,40 @@
       }
     }
 
-    /* ── Compact stage 2b: ≤ 850px — iconify the SUB-TAB bars ──────────
-       Same idea as the pills above, one step further down: drop the text
-       label, keep only the SVG glyph. Config's sub-tabs have no icon, so
-       the :has(svg) guard leaves their (smaller) text intact instead of
-       collapsing them to empty buttons. The cat-bar iconifies later (2d). */
-    @media (max-width: 850px) {
-      .subtab-row .tab:has(svg) > .nav-label { display: none; }
-      .subtab-row .tab { padding: 6px 9px; }
-      /* Group headers (Live / Tools) collapse; the divider still separates
-         the two groups so the grouping still reads without labels. */
+    /* ── Compact stage 2b: ≤ 1080px — iconify the SUB-TAB bars ─────────
+       In lockstep with the pills (also icon-only at 1080px). Every sub-tab
+       now carries a .snode skill-node icon (snodeInit removed the old inline
+       SVGs), so drop the .nav-label text + the Live/Tools group captions and
+       keep only the icon — the widest row (Game, 7 tabs) would otherwise
+       overflow the bar around ~990px. The label is VISUALLY hidden (not
+       display:none) so it stays in the accessibility tree — the .snode icon
+       carries no accessible name, so screen readers still announce each tab. */
+    @media (max-width: 1080px) {
+      .subtab-row .tab > .nav-label {
+        position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+        overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+      }
+      .subtab-row .tab { padding: 6px 10px; gap: 0; }
+      .subtab-row .tab > .snode { width: 16px; height: 16px; margin-right: 0; }
+      /* Group captions collapse; the slim divider still separates the two
+         icon groups so the Live | Tools split still reads. */
       .subtab-group-label { display: none; }
     }
 
-    /* ── Compact stage 2d: ≤ 640px — iconify the category bar LAST ──────
-       The cat-bar carries only 5 short labels (Game / RE / Data / Hotkeys /
-       Config), so it keeps its text far longer than the pill + sub-tab bars
-       (icon-only at 1080 / 850px). It only collapses to icons down here,
-       where the labels would otherwise start to crowd the row. */
-    @media (max-width: 640px) {
-      #cat-bar .cat > .nav-label { display: none; }
-      #cat-bar .cat { padding: 7px 11px; }
+    /* ── Compact stage 2d: ≤ 950px — iconify the CATEGORY bar ──────────
+       The cat-bar carries only 6 short labels, so it keeps its text one stage
+       longer than the sub-tabs (icon-only at 1080px). Its compact text would
+       start to crowd the bar around ~880px, so it collapses to its .snode
+       icons a little above that. */
+    @media (max-width: 950px) {
+      /* Visually hidden, not display:none — keeps the label for screen readers
+         (the .snode icon has no accessible name), same as the sub-tab rule. */
+      #cat-bar .cat > .nav-label {
+        position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+        overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+      }
+      #cat-bar .cat { padding: 7px 12px; gap: 0; }
+      #cat-bar .cat > .snode { width: 17px; height: 17px; margin-right: 0; }
     }
 
     /* ── Compact stage 2c: ≤ 700px — shrink the pills harder ───────────
@@ -7080,6 +7093,7 @@
     window.addEventListener('resize', updateAllBarMarkers);
     window.addEventListener('load', () => {
       snodeInit();   // inject skill-node icons before measuring (they change tab widths)
+      navTitlesInit();   // themed hover tooltip (label text) on every cat / sub-tab
       hkBuildAnimDatalist();   // populate the enemy-animation name typeahead
       // Fonts can still be loading when 'load' fires; once they settle
       // the active-tab width changes, so re-measure.
@@ -7088,6 +7102,20 @@
       }
       updateAllBarMarkers();
     });
+
+    // Give every category / sub-tab a themed hover tooltip showing its label
+    // (the [data-tip] auto-bind renders it). Essential once the bars iconify at
+    // narrow widths — the .nav-label is visually hidden then — and harmless when
+    // the label is visible. Reads the live label text so it stays correct for
+    // any current or future tab. Skips items that already carry a data-tip.
+    function navTitlesInit() {
+      document.querySelectorAll('#cat-bar .cat, .subtab-row .tab').forEach(el => {
+        if (el.hasAttribute('data-tip')) return;
+        const label = el.querySelector('.nav-label');
+        const txt = label ? label.textContent.trim() : '';
+        if (txt) el.setAttribute('data-tip', txt);
+      });
+    }
 
     // ═══ Skill-node icons — replace the old emoji / nav-SVG icons with PoE2
     // passive-tree node icons (img/skillnodes/). Each slot's icon is named in
