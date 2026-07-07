@@ -3587,7 +3587,10 @@
       display: flex;
       gap: 6px;
       flex-wrap: wrap;
-      padding: 2px 0 4px 2px
+      /* Left inset aligns the pills under the category NAME (the summary's own
+         8px inset + 18px icon + 8px gap = 34px), so they read as the heading's
+         content instead of starting flush at the rail. */
+      padding: 2px 0 4px 34px
     }
     .junk-pat {
       font-family: var(--codex-mono-serif);
