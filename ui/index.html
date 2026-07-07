@@ -4576,7 +4576,7 @@
     /* The band itself — a solid darker fill on the whole heading row, present in
        BOTH states so a collapsed box keeps its dark header. The icon, title and
        diamond all sit centred within this solid band. */
-    .cfg-section details > summary { background: rgba(0,0,0,0.30) }
+    .cfg-section details > summary { background: rgba(0,0,0,0.20) }
     /* Open state: fade the band into the content with a short strip drawn just
        BELOW the summary (not inside it), so the fade never touches the centred
        icon / title / diamond — the header row stays fully in the solid dark. */
@@ -4585,7 +4585,7 @@
       position: absolute;
       left: 0; right: 0; top: 100%;
       height: 8px;
-      background: linear-gradient(180deg, rgba(0,0,0,0.30), rgba(0,0,0,0));
+      background: linear-gradient(180deg, rgba(0,0,0,0.20), rgba(0,0,0,0));
       pointer-events: none;
     }
     /* Top-level chapters (and the AutoPilot/Radar category boxes): the .cfg-section
