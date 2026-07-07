@@ -4573,27 +4573,40 @@
     .cfg-section details > summary > .cfg-header { border-bottom: none }
     .cfg-section details[open] > summary > .cfg-header { border-bottom: none; padding-bottom: 5px }
 
-    /* The band itself — on every open box header. Solid for the top two thirds,
-       then fades to transparent over the bottom third so the heading melts into
-       the content area instead of ending on a hard edge. */
-    .cfg-section details[open] > summary {
-      background: linear-gradient(180deg,
-        rgba(0,0,0,0.30) 0%,
-        rgba(0,0,0,0.30) 66%,
-        rgba(0,0,0,0) 100%);
+    /* The band itself — a solid darker fill on the whole heading row, present in
+       BOTH states so a collapsed box keeps its dark header. The icon, title and
+       diamond all sit centred within this solid band. */
+    .cfg-section details > summary { background: rgba(0,0,0,0.30) }
+    /* Open state: fade the band into the content with a short strip drawn just
+       BELOW the summary (not inside it), so the fade never touches the centred
+       icon / title / diamond — the header row stays fully in the solid dark. */
+    .cfg-section details[open] > summary::before {
+      content: "";
+      position: absolute;
+      left: 0; right: 0; top: 100%;
+      height: 8px;
+      background: linear-gradient(180deg, rgba(0,0,0,0.30), rgba(0,0,0,0));
+      pointer-events: none;
     }
     /* Top-level chapters (and the AutoPilot/Radar category boxes): the .cfg-section
-       carries 4px top / 12px side padding, so bleed the band out to the box's inner
-       edges and round its top to the 2px box radius. Negative margin + equal padding
-       keeps the icon/title/diamond exactly where they were. */
+       carries top + 12px side padding, so bleed the band out to the box's inner
+       edges. Negative margin + equal padding keeps the icon/title/diamond exactly
+       where they were. Open bleeds top+sides (content is below); collapsed bleeds
+       all round since the summary IS the whole collapsed box. */
     .cfg-section > details[open] > summary {
       margin: -4px -12px 0;
       padding: 4px 12px 0;
       border-radius: 2px 2px 0 0;
     }
+    .cfg-section > details:not([open]) > summary {
+      margin: -7px -12px;
+      padding: 7px 12px;
+      border-radius: 2px;
+    }
     /* Bordered sub-boxes (Stash Mover): the summary already spans the box flush to
-       its border, so only round the band's top corners. */
+       its border, so only round the band's corners (top-only open, all collapsed). */
     .cfg-section .sm-sub[open] > summary { border-radius: 2px 2px 0 0 }
+    .cfg-section .sm-sub:not([open]) > summary { border-radius: 2px }
     /* Box body lines up under the text (icon width + gap ≈ 26px), not the icon. */
     .cfg-section > details[open] > :not(summary) { padding-left: 26px }
 
