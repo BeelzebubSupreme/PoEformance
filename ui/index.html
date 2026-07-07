@@ -1840,13 +1840,15 @@
     .codex-tooltip::before { top: 5px;    left: 5px }
     .codex-tooltip::after  { bottom: 5px; right: 5px }
 
-    /* Inventory item tooltip — adds the size box used for full item
-       cards on top of the shared codex base. Shares the slim text tip's tasteful
-       animations: eases in on show, and a soft gold light travels around the
-       frame. The frame light is a two-layer background (parchment on padding-box
-       + a rotating conic-gradient on border-box, with a transparent border) so it
-       needs NO extra pseudo/child — the two corner fleurons stay intact. Reuses
-       @property --tipAngle + the codexTipIn / codexTipFrameSweep keyframes. */
+    /* Inventory item tooltip — adds the size box used for full item cards on top
+       of the shared codex base. Shares the slim text tip's tasteful animations:
+       eases in on show, and a light travels around the frame. The frame light is
+       a two-layer background (parchment on padding-box + a rotating conic-gradient
+       on border-box, with a transparent border) so it needs NO extra pseudo/child.
+       For the multi-line card the corner fleurons read as clutter, so they're
+       dropped here (see below); the traveling streak is RED (not gold) — a warm
+       accent on the multi-field card. Reuses @property --tipAngle + the
+       codexTipIn / codexTipFrameSweep keyframes. */
     .inv-tooltip {
       max-width: 380px;
       min-width: 220px;
@@ -1856,7 +1858,7 @@
         linear-gradient(180deg, var(--codex-parchment) 0%, var(--codex-vellum) 100%) padding-box,
         conic-gradient(from var(--tipAngle, 0deg),
           var(--codex-gold) 0deg 315deg,
-          rgba(255, 241, 199, 0.98) 340deg,
+          rgba(224, 83, 59, 0.98) 340deg,
           var(--codex-gold) 360deg) border-box;
       /* Keep the base opacity backstop: the `background` shorthand above resets
          background-color to transparent, so restore #1a100a behind the layers in
@@ -1865,6 +1867,10 @@
       animation: codexTipIn 190ms ease-out both,
                  codexTipFrameSweep 2.8s linear infinite;
     }
+    /* Drop the two corner-fleuron diamonds on the multi-line item card — they
+       suit the slim single-line tip, not the taller card. */
+    .inv-tooltip::before,
+    .inv-tooltip::after { display: none; }
 
     /* Slim text-only variant — a leading diamond + the label text. Short labels
        (e.g. nav titles) sit on one line; longer tips still wrap under max-width,
