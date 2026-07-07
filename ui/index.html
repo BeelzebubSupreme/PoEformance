@@ -1841,11 +1841,25 @@
     .codex-tooltip::after  { bottom: 5px; right: 5px }
 
     /* Inventory item tooltip — adds the size box used for full item
-       cards on top of the shared codex base. */
+       cards on top of the shared codex base. Shares the slim text tip's tasteful
+       animations: eases in on show, and a soft gold light travels around the
+       frame. The frame light is a two-layer background (parchment on padding-box
+       + a rotating conic-gradient on border-box, with a transparent border) so it
+       needs NO extra pseudo/child — the two corner fleurons stay intact. Reuses
+       @property --tipAngle + the codexTipIn / codexTipFrameSweep keyframes. */
     .inv-tooltip {
       max-width: 380px;
       min-width: 220px;
       padding: 16px 18px;
+      border-color: transparent;
+      background:
+        linear-gradient(180deg, var(--codex-parchment) 0%, var(--codex-vellum) 100%) padding-box,
+        conic-gradient(from var(--tipAngle, 0deg),
+          var(--codex-gold) 0deg 315deg,
+          rgba(255, 241, 199, 0.98) 340deg,
+          var(--codex-gold) 360deg) border-box;
+      animation: codexTipIn 190ms ease-out both,
+                 codexTipFrameSweep 2.8s linear infinite;
     }
 
     /* Slim text-only variant — a leading diamond + the label text. Short labels
