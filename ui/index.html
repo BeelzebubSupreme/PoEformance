@@ -6978,11 +6978,14 @@
         background:conic-gradient(from var(--tipAngle,0deg),transparent 0deg 300deg,#fff1c7 338deg,var(--codex-gold) 350deg,transparent 360deg);
         -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
         mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;opacity:0;transition:opacity .25s}
-      /* hover — ALL */
-      :is(.btn,.btn-plain,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn,.cat-btn):hover{
+      /* hover — ALL (never on :disabled controls) */
+      :is(.btn,.btn-plain,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn,.cat-btn):hover:not(:disabled){
         color:#fff;border-color:var(--codex-gold);box-shadow:inset 0 1px 0 rgba(240,214,138,.20),0 0 15px -5px rgba(200,168,90,.6)}
-      :is(.btn,.btn-plain,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn,.cat-btn):hover::after{
+      :is(.btn,.btn-plain,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn,.cat-btn):hover:not(:disabled)::after{
         opacity:1;animation:codexTipFrameSweep 1.3s linear infinite}
+      /* disabled — dim, no pointer, no hover glow (the :hover rules above are :not(:disabled)) */
+      :is(.btn,.btn-plain,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn,.cat-btn):disabled{
+        opacity:.45;cursor:not-allowed}
       /* ── FULL tier: sizing + ornate ornaments ── */
       :is(.btn,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary),#panel-hotkeys .hk-btn{padding:5px 16px;font-size:11px}
       :is(.btn,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary)::before{
@@ -6991,7 +6994,7 @@
           var(--btnBrkBR) bottom right/13px no-repeat,var(--btnBrkBL) bottom left/13px no-repeat,
           var(--btnEdge) center top/7px 11px no-repeat,var(--btnEdge) center bottom/7px 11px no-repeat;
         transition:filter .2s;filter:saturate(.85) brightness(.82)}
-      :is(.btn,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary):hover::before{
+      :is(.btn,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary):hover:not(:disabled)::before{
         filter:drop-shadow(0 0 2.5px rgba(240,214,138,.6))}
       /* ── PLAIN tier: compact, no ornaments ── */
       :is(.btn-plain,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn,.cat-btn){padding:5px 11px;font-size:10px;letter-spacing:.08em}
@@ -7003,11 +7006,11 @@
       /* ── DANGER (blood) ── */
       .btn-danger{color:var(--codex-blood-hi);border-color:#5a2626}
       .btn-danger::after{background:conic-gradient(from var(--tipAngle,0deg),transparent 0 300deg,#ff9a9a 338deg,var(--codex-blood-hi) 350deg,transparent 360deg)}
-      .btn-danger:hover{border-color:var(--codex-blood-hi);color:#ffd7d7;box-shadow:0 0 15px -5px rgba(197,72,72,.6)}
+      .btn-danger:hover:not(:disabled){border-color:var(--codex-blood-hi);color:#ffd7d7;box-shadow:0 0 15px -5px rgba(197,72,72,.6)}
       /* ── WIDE (menu-style) ── */
       .btn-wide{width:100%;padding:12px 20px;font-size:12px;letter-spacing:.14em}
       @media (prefers-reduced-motion:reduce){
-        :is(.btn,.btn-plain,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn,.cat-btn):hover::after{animation:none;opacity:1}
+        :is(.btn,.btn-plain,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn,.cat-btn):hover:not(:disabled)::after{animation:none;opacity:1}
       }
       </style>
       <div class="hk-toolbar">
