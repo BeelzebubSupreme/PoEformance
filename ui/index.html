@@ -37,6 +37,14 @@
       --accent: var(--codex-gold);   /* unified with codex palette (was blue #7eb0e0) */
       --text: #e8dcb8;
       --subtext: #9c8a64;
+      /* Semantic status colors — the ONLY sanctioned status hues. Every ok/err/
+         warn/info/muted readout (RE tools, panel detection, offset diff, UI
+         browser) references these tokens; never introduce a new raw status hex. */
+      --ok:    #7be07b;               /* success / positive / in-sync */
+      --warn:  #e8c44a;               /* warning / heuristic / label */
+      --err:   #e05a5a;               /* error / mismatch / panel-open (warm red) */
+      --info:  #7ec8e3;               /* neutral info / pointers / links */
+      --muted: var(--codex-text-dim); /* de-emphasized / none / unset */
 
       /* ── Codex palette (used by Inventory tab + Header/AutoPilot cockpit) ──
          Promoted from #panel-inventory to :root so the header, category
@@ -1094,7 +1102,7 @@
     }
 
     .tsv-gen-status.running {
-      color: #e8c44a
+      color: var(--warn)
     }
 
     .tsv-gen-status.done {
@@ -1134,7 +1142,7 @@
     }
 
     .tsv-gen-log .log-step {
-      color: #e8c44a
+      color: var(--warn)
     }
 
     .tsv-table tr.tsv-hidden {
@@ -2040,7 +2048,7 @@
     .re-hex-tag  { color: var(--subtext); width: 50px; flex: 0 0 50px; text-align: right }
     .re-hex-val  { flex: 1 }
     .re-hex-val.before { color: #d97777 }
-    .re-hex-val.after  { color: #7ec8e3 }
+    .re-hex-val.after  { color: var(--info) }
     .re-decode   { margin-top: 4px; font-size: 10px; color: var(--subtext); display: grid; grid-template-columns: max-content 1fr; gap: 0 8px; row-gap: 1px }
     .re-decode > .k { color: var(--subtext) }
     .re-decode > .v { color: var(--text); font-family: Consolas, monospace }
@@ -2062,7 +2070,7 @@
     .dis-ptr  { width: 140px }
     .dis-f64  { color: #b0d0b0; width: 90px }
     .dis-asc  { color: #888ea8; width: 80px }
-    .dis-ptr-link { color: #7ec8e3; cursor: pointer; text-decoration: underline dotted }
+    .dis-ptr-link { color: var(--info); cursor: pointer; text-decoration: underline dotted }
     .dis-ptr-link:hover { color: #b0e0f5 }
     .dis-status { font-family: var(--codex-serif); font-size: 11px; color: var(--codex-text-dim); margin-left: 8px }
     /* Mod categories — saturated, period-correct inks chosen for legibility
@@ -2251,7 +2259,7 @@
     }
 
     .skill-idle {
-      color: #888;
+      color: var(--muted);
       font-weight: 600
     }
 
@@ -2473,7 +2481,7 @@
     .etype-Terrain,
     .etype-Object {
       background: #252525;
-      color: #888
+      color: var(--muted)
     }
 
     .entity-icon {
@@ -3080,7 +3088,7 @@
     }
 
     .dbg-discovery-table tr.tracked td {
-      color: #e8c44a
+      color: var(--warn)
     }
 
     .dbg-overlay-row {
@@ -4275,7 +4283,7 @@
     }
 
     .uib-prop-val.bool-false {
-      color: #888
+      color: var(--muted)
     }
 
     .uib-prop-section {
@@ -5156,7 +5164,7 @@
       <style>
         #panel-loot .lt-tbl{width:100%;border-collapse:collapse;font-size:12px;margin-top:6px}
         #panel-loot .lt-tbl th,#panel-loot .lt-tbl td{text-align:left;padding:3px 8px;border-bottom:1px solid rgba(255,255,255,.07)}
-        #panel-loot .lt-tbl th{color:#888;font-weight:600}
+        #panel-loot .lt-tbl th{color:var(--muted);font-weight:600}
         #panel-loot .lt-green{color:#7fd97f}
         #panel-loot .lt-red{color:#e58a8a}
         #panel-loot .lt-dim{color:#9a9a9a}
@@ -5279,7 +5287,7 @@
     <div class="tab-panel" id="panel-ui">
       <div id="uib-toolbar">
         <div id="uib-breadcrumb"></div>
-        <div id="uib-idx-path" style="display:none;font-family:Consolas,monospace;font-size:11px;color:#9adff7;padding:2px 6px;"></div>
+        <div id="uib-idx-path" style="display:none;font-family:Consolas,monospace;font-size:11px;color:var(--info);padding:2px 6px;"></div>
         <div id="uib-nav-btns">
           <button class="uib-btn" onclick="ahkCall('UiBrowseParent')" data-tip="Parent">↑ Parent</button>
           <button class="uib-btn" onclick="ahkCall('UiBrowseBack')" data-tip="Back">← Back</button>
@@ -5541,7 +5549,7 @@
                     </span>
                   </div>
                   <div class="cfg-row"><span class="cfg-label">Detected destination</span>
-                    <span id="sm-context" class="cfg-status" style="color:#7ec8e3;font-weight:600">—</span>
+                    <span id="sm-context" class="cfg-status" style="color:var(--info);font-weight:600">—</span>
                   </div>
                   <div class="cfg-row" style="gap:8px;flex-wrap:wrap">
                     <button class="hk-btn" onclick="ahkCall('StashMoveDump')">▼ Dump now (test)</button>
@@ -5624,7 +5632,7 @@
                   class="cfg-status idle">idle</span><span id="cfg-combat-reason"
                   class="cfg-status idle" style="opacity:.8">—</span></div>
               <div class="cfg-row ap-live-row ap-live-rule"><span class="cfg-label">Explore</span><span id="cfg-explore-pct" class="cfg-status"
-                  style="color:#7ec8e3;font-weight:600">0%</span><span id="cfg-explore-reason"
+                  style="color:var(--info);font-weight:600">0%</span><span id="cfg-explore-reason"
                   class="cfg-status idle" style="opacity:.8">idle</span></div>
               <div class="cfg-row ap-live-row"><span class="cfg-label">Loot</span><span id="cfg-loot-status"
                   class="cfg-status idle">idle</span><span style="color:var(--subtext);font-size:11px">
@@ -7476,15 +7484,15 @@
       }
       var diffs = r.offsetDiffs || [];
       if (!diffs.length) {
-        el.innerHTML = '<div class="no-data-msg" style="color:#4ade80">✓ No offset differences — AHK is in sync with C#.</div>';
+        el.innerHTML = '<div class="no-data-msg" style="color:var(--ok)">✓ No offset differences — AHK is in sync with C#.</div>';
       } else {
         var html = '<table class="tsv-table" style="width:100%"><thead><tr>'
           + '<th>Map / Field</th><th>Struct [file]</th><th>Local</th><th>Upstream</th><th>Type</th><th>Notes</th></tr></thead><tbody>';
         diffs.forEach(function (d) {
           html += '<tr><td>' + escHtml(d.ahk_map + '/' + d.field) + '</td>'
             + '<td style="color:var(--subtext);font-size:10px">' + escHtml(d.cs_struct + ' [' + d.cs_file + ']') + '</td>'
-            + '<td style="font-family:monospace;color:#ef4444">' + escHtml(d.ahk_val) + '</td>'
-            + '<td style="font-family:monospace;color:#4ade80">' + escHtml(d.cs_val) + '</td>'
+            + '<td style="font-family:monospace;color:var(--err)">' + escHtml(d.ahk_val) + '</td>'
+            + '<td style="font-family:monospace;color:var(--ok)">' + escHtml(d.cs_val) + '</td>'
             + '<td>' + _ocClsSelect(d.key) + '</td>'
             + '<td><input data-ocnotes="' + escAttr(d.key) + '" style="width:140px;font-size:10px" /></td></tr>';
         });
@@ -7498,8 +7506,8 @@
             + '<table class="tsv-table" style="width:100%"><thead><tr><th>Name</th><th>Local</th><th>Upstream</th><th>Type</th><th>Notes</th></tr></thead><tbody>';
           pats.forEach(function (p) {
             ph += '<tr><td>' + escHtml(p.name) + '</td>'
-              + '<td style="font-family:monospace;color:#ef4444;font-size:9px;word-break:break-all">' + escHtml(p.ahk) + '</td>'
-              + '<td style="font-family:monospace;color:#4ade80;font-size:9px;word-break:break-all">' + escHtml(p.cs) + '</td>'
+              + '<td style="font-family:monospace;color:var(--err);font-size:9px;word-break:break-all">' + escHtml(p.ahk) + '</td>'
+              + '<td style="font-family:monospace;color:var(--ok);font-size:9px;word-break:break-all">' + escHtml(p.cs) + '</td>'
               + '<td>' + _ocClsSelect('pattern:' + p.name) + '</td>'
               + '<td><input data-ocnotes="' + escAttr('pattern:' + p.name) + '" style="width:120px;font-size:10px" /></td></tr>';
           });
@@ -7532,7 +7540,7 @@
       var html = '<div style="font-weight:600;color:var(--accent);margin:4px 0">History (' + evs.length + ')</div>'
         + '<table class="tsv-table" style="width:100%"><thead><tr><th>Date</th><th>Type</th><th>Key</th><th>Local→Upstream</th><th>Ver</th><th>Notes</th></tr></thead><tbody>';
       evs.forEach(function (e) {
-        var col = e.type === 'fix' ? '#e8c44a' : '#60a5fa';
+        var col = e.type === 'fix' ? 'var(--warn)' : 'var(--info)';
         html += '<tr><td>' + escHtml(e.date) + '</td>'
           + '<td style="color:' + col + '">' + escHtml(e.type) + '</td>'
           + '<td>' + escHtml((e.kind === 'pattern' ? '⬡ ' : '') + e.key) + '</td>'
@@ -8315,7 +8323,7 @@
       if (ctxEl) {
         const m = { stash: 'Stash', vendor: 'Vendor (will SELL)', trade: 'Trade', unknown: '— (open a stash/vendor)' };
         ctxEl.textContent = m[s.context] || '—';
-        ctxEl.style.color = (s.context === 'vendor') ? '#e3a07e' : '#7ec8e3';
+        ctxEl.style.color = (s.context === 'vendor') ? '#e3a07e' : 'var(--info)';
       }
       _smIgnore.stash = Array.isArray(s.stashIgnore) ? s.stashIgnore : [];
       _smIgnore.sell = Array.isArray(s.sellIgnore) ? s.sellIgnore : [];
@@ -12466,8 +12474,8 @@
       } else {
         ipEl.style.display = 'block';
         ipEl.innerHTML = '<span style="color:#777">Path [idx]:</span> '
-          + ip.map(i => `<span style="color:#9adff7">[${i}]</span>`).join(' <span style="color:#666">›</span> ')
-          + ' <span style="color:#666">›</span> <span style="color:#9adff7">*</span>';
+          + ip.map(i => `<span style="color:var(--info)">[${i}]</span>`).join(' <span style="color:var(--muted)">›</span> ')
+          + ' <span style="color:var(--muted)">›</span> <span style="color:var(--info)">*</span>';
       }
       // Children
       const ch = data.children || [];
@@ -12493,17 +12501,17 @@
       window._uibLastProps = p;
       window._uibLastIdxPath = ip;
       const bv = v => v ? `<span class="uib-prop-val bool-true">SET</span>`
-        : `<span class="uib-prop-val bool-false" style="color:#888">UNSET</span>`;
+        : `<span class="uib-prop-val bool-false" style="color:var(--muted)">UNSET</span>`;
       const hv = v => `<span class="uib-prop-val hex">${escHtml(v)}</span>`;
       const nv = v => `<span class="uib-prop-val">${escHtml(String(v))}</span>`;
       const colorVal = v => {
         const isTransparent = !v || v === '0x00000000';
-        return `<span class="uib-prop-val hex" style="color:${isTransparent ? '#666' : '#fff'}">${escHtml(v || '0x00000000')}${isTransparent ? ' <span style="color:#666;font-style:italic">(transparent)</span>' : ''}</span>`;
+        return `<span class="uib-prop-val hex" style="color:${isTransparent ? 'var(--muted)' : '#fff'}">${escHtml(v || '0x00000000')}${isTransparent ? ' <span style="color:var(--muted);font-style:italic">(transparent)</span>' : ''}</span>`;
       };
       const fxNum = (v, d) => Number(v || 0).toFixed(d);
       const idxPathStr = ip.length ? ip.map(i => `[${i}]`).join(' -> ') : '(root)';
       document.getElementById('uib-props-content').innerHTML = `
-    <div class="uib-prop-row"><span class="uib-prop-key">StringId</span><span class="uib-prop-val" style="color:#7be07b">"${escHtml(p.stringId || '')}"</span></div>
+    <div class="uib-prop-row"><span class="uib-prop-key">StringId</span><span class="uib-prop-val" style="color:var(--ok)">"${escHtml(p.stringId || '')}"</span></div>
     <div class="uib-prop-row"><span class="uib-prop-key">Address</span>${hv(p.address || '')}</div>
     <div class="uib-prop-row"><span class="uib-prop-key">UI Path</span><span class="uib-prop-val" style="color:#e8c674">${escHtml(idxPathStr)}</span></div>
     <div class="uib-prop-row"><span class="uib-prop-key">Parent</span>${hv(p.parentPtr || '')}</div>
@@ -12511,32 +12519,32 @@
     <div class="uib-prop-row"><span class="uib-prop-key">Visible (effective)</span>${p.effectiveVisible ? '<span class="uib-prop-val bool-true">TRUE</span>' : '<span class="uib-prop-val bool-false">FALSE</span>'}</div>
     <div class="uib-prop-row"><span class="uib-prop-key">Children</span>${nv(p.childCount || 0)}</div>
 
-    <div class="uib-prop-section" style="color:#7be07b">--- Position ---</div>
+    <div class="uib-prop-section" style="color:var(--ok)">--- Position ---</div>
     <div class="uib-prop-row"><span class="uib-prop-key">Screen Pos</span>${nv(fxNum(p.screenPosX, 1) + ', ' + fxNum(p.screenPosY, 1))}</div>
     <div class="uib-prop-row"><span class="uib-prop-key">Unscaled Pos</span>${nv(fxNum(p.unscaledPosX, 1) + ', ' + fxNum(p.unscaledPosY, 1))}</div>
     <div class="uib-prop-row"><span class="uib-prop-key">Relative Pos</span>${nv(fxNum(p.relX, 1) + ', ' + fxNum(p.relY, 1))}</div>
     <div class="uib-prop-row"><span class="uib-prop-key">Pos Modifier</span>${nv(fxNum(p.posModX, 1) + ', ' + fxNum(p.posModY, 1))}</div>
 
-    <div class="uib-prop-section" style="color:#7be07b">--- Size ---</div>
+    <div class="uib-prop-section" style="color:var(--ok)">--- Size ---</div>
     <div class="uib-prop-row"><span class="uib-prop-key">Screen Size</span>${nv(fxNum(p.screenSizeW, 1) + ' x ' + fxNum(p.screenSizeH, 1))}</div>
     <div class="uib-prop-row"><span class="uib-prop-key">Unscaled Size</span>${nv(fxNum(p.sizeW, 1) + ' x ' + fxNum(p.sizeH, 1))}</div>
 
-    <div class="uib-prop-section" style="color:#7be07b">--- Scale ---</div>
+    <div class="uib-prop-section" style="color:var(--ok)">--- Scale ---</div>
     <div class="uib-prop-row"><span class="uib-prop-key">Scale Index</span>${nv((p.scaleIndex ?? 0) + ' (' + (p.scaleLabel || '?') + ')')}</div>
     <div class="uib-prop-row"><span class="uib-prop-key">Scale Multiplier</span>${nv(fxNum(p.localMult, 4))}</div>
     <div class="uib-prop-row"><span class="uib-prop-key">Computed Scale</span>${nv('W: ' + fxNum(p.computedScaleW, 4) + '  H: ' + fxNum(p.computedScaleH, 4))}</div>
 
-    <div class="uib-prop-section" style="color:#7be07b">--- Flags ---</div>
+    <div class="uib-prop-section" style="color:var(--ok)">--- Flags ---</div>
     <div class="uib-prop-row"><span class="uib-prop-key">Flags (raw)</span>${hv(p.flags || '')}</div>
     <div class="uib-prop-row"><span class="uib-prop-key">IsVisible bit</span>${bv(p.isVisible)}</div>
     <div class="uib-prop-row"><span class="uib-prop-key">ShouldModifyPos bit</span>${bv(p.shouldModifyPos)}</div>
     <div class="uib-prop-row"><span class="uib-prop-key">Background Color</span>${colorVal(p.bgColor)}</div>
 
-    <div class="uib-prop-section" style="color:#7be07b">--- Extra ---</div>
-    <div class="uib-prop-row"><span class="uib-prop-key">Displayed Text</span><span class="uib-prop-val" style="color:#7be07b">${p.text ? '"' + escHtml(p.text) + '"' : '<span style="color:#666">(none)</span>'}</span></div>
-    <div class="uib-prop-row"><span class="uib-prop-key">Font Name</span><span class="uib-prop-val" style="color:#7be07b">${p.fontName ? '"' + escHtml(p.fontName) + '"' : '<span style="color:#666">(none)</span>'}</span></div>
-    <div class="uib-prop-row"><span class="uib-prop-key">Text Style</span><span class="uib-prop-val" style="color:#7be07b">${p.textStyle ? '"' + escHtml(p.textStyle) + '"' : '<span style="color:#666">(none)</span>'}</span></div>
-    <div class="uib-prop-row"><span class="uib-prop-key">Item (+0x4F8)</span><span class="uib-prop-val" style="color:#f0d68a">${p.itemInfo ? escHtml(p.itemInfo) : '<span style="color:#666">(none)</span>'}</span></div>
+    <div class="uib-prop-section" style="color:var(--ok)">--- Extra ---</div>
+    <div class="uib-prop-row"><span class="uib-prop-key">Displayed Text</span><span class="uib-prop-val" style="color:var(--ok)">${p.text ? '"' + escHtml(p.text) + '"' : '<span style="color:var(--muted)">(none)</span>'}</span></div>
+    <div class="uib-prop-row"><span class="uib-prop-key">Font Name</span><span class="uib-prop-val" style="color:var(--ok)">${p.fontName ? '"' + escHtml(p.fontName) + '"' : '<span style="color:var(--muted)">(none)</span>'}</span></div>
+    <div class="uib-prop-row"><span class="uib-prop-key">Text Style</span><span class="uib-prop-val" style="color:var(--ok)">${p.textStyle ? '"' + escHtml(p.textStyle) + '"' : '<span style="color:var(--muted)">(none)</span>'}</span></div>
+    <div class="uib-prop-row"><span class="uib-prop-key">Item (+0x4F8)</span><span class="uib-prop-val" style="color:#f0d68a">${p.itemInfo ? escHtml(p.itemInfo) : '<span style="color:var(--muted)">(none)</span>'}</span></div>
     <div class="uib-prop-row"><span class="uib-prop-key">Vtable</span>${hv(p.vtable || '')}</div>`;
     }
 
@@ -12746,7 +12754,7 @@
         return;
       }
       stateEl.textContent = `read=${data.readMs ?? 0}ms · render=${data.renderMs ?? 0}ms · updated ${new Date().toLocaleTimeString()}`;
-      stateEl.style.color = '#7be07b';
+      stateEl.style.color = 'var(--ok)';
       const lines = (data.lines || []).map(l => l.text).filter(Boolean);
       contentEl.textContent = lines.length ? lines.join('\n') : '(no debug lines yet)';
     }
@@ -12971,31 +12979,31 @@
         const effHidden = knownLocal.filter(n => !knownEff.includes(n));
 
         let liveHtml = `<div style="display:flex;gap:16px;align-items:center;margin-bottom:8px">`;
-        liveHtml += `<div style="font-size:20px;font-weight:700;color:${anyOpen ? '#ef4444' : '#4ade80'}">${anyOpen ? '🔴 PANEL OPEN' : '🟢 ALL CLEAR'}</div>`;
+        liveHtml += `<div style="font-size:20px;font-weight:700;color:${anyOpen ? 'var(--err)' : 'var(--ok)'}">${anyOpen ? '🔴 PANEL OPEN' : '🟢 ALL CLEAR'}</div>`;
         liveHtml += `<div style="font-size:11px;color:var(--subtext)">`;
 
         if (mode === 'known_offsets') {
-          liveHtml += `<span style="color:#4ade80">📋 Known offsets (${checkedCount})</span>`;
+          liveHtml += `<span style="color:var(--ok)">📋 Known offsets (${checkedCount})</span>`;
           if (openPanels.length > 0) {
-            liveHtml += ` · <span style="color:#ef4444">${openPanels.map(n => escHtml(n)).join(', ')}</span>`;
+            liveHtml += ` · <span style="color:var(--err)">${openPanels.map(n => escHtml(n)).join(', ')}</span>`;
           }
         } else if (vis.hasPanelElements) {
-          liveHtml += `<span style="color:#60a5fa">📏 Size-based</span> · Panels: <span style="color:${panelVis > 0 ? '#ef4444' : '#4ade80'}">+${panelVis}</span>`;
+          liveHtml += `<span style="color:var(--info)">📏 Size-based</span> · Panels: <span style="color:${panelVis > 0 ? 'var(--err)' : 'var(--ok)'}">+${panelVis}</span>`;
         } else {
-          liveHtml += `<span style="color:#e8c44a">⚠ Heuristic mode</span> · Flags: +${newlyVis}/-${newlyHid}`;
+          liveHtml += `<span style="color:var(--warn)">⚠ Heuristic mode</span> · Flags: +${newlyVis}/-${newlyHid}`;
         }
         // Saved panels: open per local bit, and whether they're actually shown
         // (effective). Deterministic — only the few saved offsets, no noise.
         if (knownLocal.length > 0) {
-          liveHtml += ` · 📋 open: <span style="color:#ef4444">${knownLocal.map(escHtml).join(', ')}</span>`;
-          if (effHidden.length > 0) liveHtml += ` <span style="color:#e8c44a" data-tip="Locally flagged open but a hidden ancestor keeps it off-screen — not actually on screen">⚠ eff-hidden: ${effHidden.map(escHtml).join(', ')}</span>`;
+          liveHtml += ` · 📋 open: <span style="color:var(--err)">${knownLocal.map(escHtml).join(', ')}</span>`;
+          if (effHidden.length > 0) liveHtml += ` <span style="color:var(--warn)" data-tip="Locally flagged open but a hidden ancestor keeps it off-screen — not actually on screen">⚠ eff-hidden: ${effHidden.map(escHtml).join(', ')}</span>`;
         } else {
-          liveHtml += ` · 📋 <span style="color:#4ade80">no saved panel open</span>`;
+          liveHtml += ` · 📋 <span style="color:var(--ok)">no saved panel open</span>`;
         }
         liveHtml += `</div></div>`;
 
         if (changed && changed.length > 0) {
-          liveHtml += `<div style="font-size:10px;color:#e8c44a;margin-top:4px">Changed: ${changed.map(o => `<span style="font-family:monospace;color:${o.startsWith('+') ? '#4ade80' : '#ef4444'}">${escHtml(o)}</span>`).join(', ')}</div>`;
+          liveHtml += `<div style="font-size:10px;color:var(--warn);margin-top:4px">Changed: ${changed.map(o => `<span style="font-family:monospace;color:${o.startsWith('+') ? 'var(--ok)' : 'var(--err)'}">${escHtml(o)}</span>`).join(', ')}</div>`;
         }
         liveEl.innerHTML = liveHtml;
       }
@@ -13006,7 +13014,7 @@
         _lastPanelDiscovery = dKey;
         const discEl = document.getElementById('debug-panels-discovery');
         if (discEl) {
-          let html = `<div style="padding:6px 0;font-size:11px;color:var(--subtext)">Scanned: ${discovery._totalChildren} · Heap ptrs: ${discovery._heapPtrCount || 0} · UiElements: ${discovery._uiElemCount || 0} · <span style="color:#60a5fa">📋 Panels: ${discovery._panelCount || 0}</span> · Visible at baseline: <span style="color:#4ade80">${discovery._visibleCount || 0}</span> · Hidden: <span style="color:#888">${discovery._invisibleCount || 0}</span></div>`;
+          let html = `<div style="padding:6px 0;font-size:11px;color:var(--subtext)">Scanned: ${discovery._totalChildren} · Heap ptrs: ${discovery._heapPtrCount || 0} · UiElements: ${discovery._uiElemCount || 0} · <span style="color:var(--info)">📋 Panels: ${discovery._panelCount || 0}</span> · Visible at baseline: <span style="color:var(--ok)">${discovery._visibleCount || 0}</span> · Hidden: <span style="color:var(--muted)">${discovery._invisibleCount || 0}</span></div>`;
 
           // Visibility baseline table (all elements with flags + vis state)
           const diag = discovery._diagSamples || [];
@@ -13017,13 +13025,13 @@
               const isVis = (s.childInfo || '').includes('VISIBLE');
               const label = s.stringId || '';
               const visIcon = isVis ? '👁' : '·';
-              const color = isVis ? '#4ade80' : '#666';
+              const color = isVis ? 'var(--ok)' : 'var(--muted)';
               html += `<div style="font-family:monospace;font-size:10px;color:${color};padding:1px 4px;display:flex;gap:8px">`;
               html += `<span style="min-width:50px">${s.idx}</span>`;
               html += `<span style="min-width:20px">${visIcon}</span>`;
-              html += `<span style="min-width:90px;color:#888">${s.rawHex}</span>`;
+              html += `<span style="min-width:90px;color:var(--muted)">${s.rawHex}</span>`;
               html += `<span style="color:var(--subtext);font-size:9px">${s.ptr}</span>`;
-              if (label) html += `<span style="color:#e8c44a;margin-left:4px">${escHtml(label)}</span>`;
+              if (label) html += `<span style="color:var(--warn);margin-left:4px">${escHtml(label)}</span>`;
               html += `</div>`;
             });
             html += `</div></div>`;
@@ -13076,28 +13084,28 @@
       const ec = data.elemChanges || [];
 
       // Struct byte changes
-      html += `<div style="color:var(--accent);font-size:11px;font-weight:600;margin:6px 0 4px">RAW STRUCT BYTE CHANGES (0x400-0xC00): ${sc.length === 0 ? '<span style="color:#888">none</span>' : `<span style="color:#ef4444">${sc.length} bytes</span>`}</div>`;
+      html += `<div style="color:var(--accent);font-size:11px;font-weight:600;margin:6px 0 4px">RAW STRUCT BYTE CHANGES (0x400-0xC00): ${sc.length === 0 ? '<span style="color:var(--muted)">none</span>' : `<span style="color:var(--err)">${sc.length} bytes</span>`}</div>`;
       if (sc.length > 0) {
         html += `<div style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;padding:4px;margin-bottom:8px">`;
         sc.forEach(c => {
-          html += `<div style="font-family:monospace;font-size:10px;color:#e8c44a;padding:1px 4px">`;
+          html += `<div style="font-family:monospace;font-size:10px;color:var(--warn);padding:1px 4px">`;
           html += `<span style="color:var(--subtext)">${escHtml(c.off)}</span>: `;
-          html += `<span style="color:#ef4444">${escHtml(c.old)}</span> → <span style="color:#4ade80">${escHtml(c['new'])}</span>`;
+          html += `<span style="color:var(--err)">${escHtml(c.old)}</span> → <span style="color:var(--ok)">${escHtml(c['new'])}</span>`;
           html += `</div>`;
         });
         html += `</div>`;
       }
 
       // Element field changes — with "Save as panel" button for each changed element
-      html += `<div style="color:var(--accent);font-size:11px;font-weight:600;margin:6px 0 4px">ELEMENT FIELD CHANGES (Flags/Size/Children): ${ec.length === 0 ? '<span style="color:#888">none</span>' : `<span style="color:#ef4444">${ec.length} elements</span>`}</div>`;
+      html += `<div style="color:var(--accent);font-size:11px;font-weight:600;margin:6px 0 4px">ELEMENT FIELD CHANGES (Flags/Size/Children): ${ec.length === 0 ? '<span style="color:var(--muted)">none</span>' : `<span style="color:var(--err)">${ec.length} elements</span>`}</div>`;
       if (ec.length > 0) {
         html += `<div style="max-height:300px;overflow-y:auto;border:1px solid var(--border);border-radius:4px;padding:4px">`;
         ec.forEach(e => {
-          const label = e.label ? ` <span style="color:#e8c44a">${escHtml(e.label)}</span>` : '';
+          const label = e.label ? ` <span style="color:var(--warn)">${escHtml(e.label)}</span>` : '';
           html += `<div style="font-family:monospace;font-size:10px;padding:2px 4px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start">`;
-          html += `<div><span style="color:var(--subtext)">${escHtml(e.off)}</span>${label} <span style="font-size:9px;color:#666">${escHtml(e.ptr)}</span>`;
+          html += `<div><span style="color:var(--subtext)">${escHtml(e.off)}</span>${label} <span style="font-size:9px;color:var(--muted)">${escHtml(e.ptr)}</span>`;
           (e.changes || []).forEach(ch => {
-            html += `<div style="padding-left:16px;color:#ef4444;font-size:10px">${escHtml(ch)}</div>`;
+            html += `<div style="padding-left:16px;color:var(--err);font-size:10px">${escHtml(ch)}</div>`;
           });
           html += `</div>`;
           html += `<button onclick="promptSavePanelOffset('${escHtml(e.off)}')" style="font-size:9px;padding:2px 6px;cursor:pointer;background:var(--surface);border:1px solid var(--border);border-radius:3px;color:var(--accent);white-space:nowrap;margin-left:8px" data-tip="Save this offset as a known panel">💾 Save</button>`;
@@ -13107,7 +13115,7 @@
       }
 
       if (sc.length === 0 && ec.length === 0) {
-        html += `<div style="color:#888;font-size:11px;padding:8px 0">⚠ No changes detected — the mechanism may be outside the scanned range.</div>`;
+        html += `<div style="color:var(--muted);font-size:11px;padding:8px 0">⚠ No changes detected — the mechanism may be outside the scanned range.</div>`;
       }
 
       el.innerHTML = html;
@@ -13151,16 +13159,16 @@
       if (!el) return;
       if (typeof data === 'string') { try { data = JSON.parse(data); } catch (e) { return; } }
       if (!data || data.length === 0) {
-        el.innerHTML = '<div style="font-size:10px;color:#888;padding:2px 0">No saved panel offsets — use Struct Diff to discover and save them.</div>';
+        el.innerHTML = '<div style="font-size:10px;color:var(--muted);padding:2px 0">No saved panel offsets — use Struct Diff to discover and save them.</div>';
         return;
       }
       let html = `<div style="font-size:10px;color:var(--accent);font-weight:600;margin-bottom:4px">📋 SAVED PANEL OFFSETS (${data.length}) — used for fast runtime detection:</div>`;
       html += `<div style="display:flex;flex-wrap:wrap;gap:4px">`;
       data.forEach(p => {
         html += `<div style="display:inline-flex;align-items:center;gap:4px;padding:2px 6px;background:var(--surface);border:1px solid var(--border);border-radius:4px;font-family:monospace;font-size:10px">`;
-        html += `<span style="color:#4ade80">${escHtml(p.name)}</span>`;
-        html += `<span style="color:#888">${escHtml(p.offset)}</span>`;
-        html += `<button onclick="ahkCall('RemovePanelOffset','${escHtml(p.name)}')" style="font-size:9px;cursor:pointer;background:none;border:none;color:#ef4444;padding:0 2px" data-tip="Remove">✕</button>`;
+        html += `<span style="color:var(--ok)">${escHtml(p.name)}</span>`;
+        html += `<span style="color:var(--muted)">${escHtml(p.offset)}</span>`;
+        html += `<button onclick="ahkCall('RemovePanelOffset','${escHtml(p.name)}')" style="font-size:9px;cursor:pointer;background:none;border:none;color:var(--err);padding:0 2px" data-tip="Remove">✕</button>`;
         html += `</div>`;
       });
       html += `</div>`;
