@@ -10548,7 +10548,12 @@
       return { x, y };
     }
     // A tab is the currency tab if enough of its items map into the layout.
+    // STASH TABS ONLY: the backpack (id 1) routinely carries ≥5 mapped
+    // currencies too (e.g. right after farming / while stash-moving), which
+    // used to hijack it into the currency-tab renderer and scatter the
+    // backpack items into the curated slots.
     function _isCurrencyTab(inv) {
+      if (!_isStashTabId(inv.id)) return false;
       const items = Array.isArray(inv.items) ? inv.items : [];
       let hits = 0;
       for (const it of items) if (it && it.mp && CURRENCY_TAB_LAYOUT.slots[it.mp]) { if (++hits >= 5) return true; }
