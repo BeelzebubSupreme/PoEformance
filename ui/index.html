@@ -11900,6 +11900,11 @@
           window._eiState.refreshInFlight.delete(key);
         }
       }
+      // Don't rebuild the filter fields / close an open filter dropdown / churn
+      // the list while the user is interacting with a control (same guard as the
+      // header push). st.items is already updated above, so the next non-busy
+      // snapshot renders fresh; filtering itself still runs live via eiFilterChange.
+      if (_hdrInteracting()) return;
       eiRender();
       // Keep expanded lazy components (e.g. Actor animationId) live: silently
       // re-decode them each snapshot instead of freezing on the first read.
@@ -11980,6 +11985,15 @@
       const cards = filtered.map(eiCard).join('');
       const body = cards || '<div class="ei-empty">No entities match the current filters.</div>';
 
+      // Preserve focus + caret of a filter text field across the innerHTML
+      // rebuild, so typing in Id/Path isn't interrupted (eiFilterChange
+      // re-renders on every keystroke, which would otherwise blur the field).
+      const _eiAe = document.activeElement;
+      let _eiRefocus = null;
+      if (_eiAe && _eiAe.tagName === 'INPUT' && _eiAe.id && _eiAe.id.indexOf('ei-f-') === 0) {
+        _eiRefocus = { id: _eiAe.id, s: _eiAe.selectionStart, e: _eiAe.selectionEnd };
+      }
+
       el.innerHTML = `
         <div class="ei-root">
           <div class="ei-toolbar">
@@ -12019,6 +12033,15 @@
           <div class="ei-list">${body}</div>
         </div>
       `;
+
+      // Restore focus + caret to the filter field that had it before the rebuild.
+      if (_eiRefocus) {
+        const nf = document.getElementById(_eiRefocus.id);
+        if (nf) {
+          nf.focus();
+          try { nf.setSelectionRange(_eiRefocus.s, _eiRefocus.e); } catch (e) {}
+        }
+      }
     }
 
     // Click handler for an entity list-head column. First click on a column
