@@ -1016,6 +1016,13 @@ _DispatchBridgeCall(method, args)
         case "CameraZoomProbeRun":
             ; RE aid (read-only): dump the CameraStructure floats to locate the zoom/FoV field.
             SetTimer(() => CameraZoomProbeRun(), -1)
+        case "SetCameraZoom":
+            ; Experimental reversible camera zoom (the tool's only memory write).
+            ; args[1]=key ("enabled"|"offset"|"factor"), args[2]=value. _CamZoomApplySetting
+            ; restores the field on disable/offset change and persists.
+            if (args.Length >= 2)
+                _CamZoomApplySetting(args[1], args[2])
+            SetTimer(PushHeaderToWebView, -50)
         case "ActorVectorProbeRun":
             ; TEMP diagnostic: verify/re-base the Actor ActiveSkills/Cooldowns/Deployed vectors.
             SetTimer(() => ActorVectorProbeRun(), -1)

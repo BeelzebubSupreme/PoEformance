@@ -6473,6 +6473,29 @@
                 <label class="toggle"><input type="checkbox" id="startup-trace" onchange="ahkCall('SetStartupTrace', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label>
               </div>
               <div class="cfg-help">Times every startup step (QueryPerformanceCounter) into <code>logs\InGameStateMonitor.startup_trace.log</code>. Most starts are fast — leave this <b>ON across several restarts</b> to catch the occasional slow one, then turn it off. Read the result in <b>Config → Data &amp; Logs</b> (open <code>startup_trace.log</code>).</div>
+
+              <!-- ── Camera Zoom (EXPERIMENTAL — the tool's only memory WRITE) ── -->
+              <div class="cfg-row"><span class="cfg-label">🎥 Camera zoom (experimental)</span>
+                <label class="toggle"><input type="checkbox" id="tog-camera-zoom"
+                    onchange="ahkCall('SetCameraZoom','enabled', this.checked?1:0)"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help"><b>Writes game memory</b> (everything else in the tool only reads). Scales a float in the
+                CameraStructure to widen the view. The exact field isn't confirmed, so pick the offset and try it live —
+                it's fully reversible (original restored on disable/exit). Candidates from 🎥 Probe Camera:
+                <b>0x80</b> (FoV, likely) · <b>0x98</b> (distance) · <b>0xB0</b> (FoV radians). Use at your own risk.</div>
+              <div class="cfg-row"><span class="cfg-label">Field offset (hex, e.g. 0x80)</span>
+                <input type="text" id="inp-camera-zoom-offset" placeholder="0x80" spellcheck="false"
+                  style="width:100px;font-size:12px;font-family:var(--codex-serif)"
+                  onchange="ahkCall('SetCameraZoom','offset', this.value.trim())"
+                  data-tip="Offset inside CameraStructure (0x000–0x1FC). Accepts 0x80 or decimal. Changing it restores the previous field first.">
+              </div>
+              <div class="cfg-slider-row"><span class="cfg-label">Zoom factor (×)</span>
+                <div class="slider-wrap">
+                  <span class="slider-val" id="camera-zoom-factor-bub">1.30</span>
+                  <input type="range" id="inp-camera-zoom-factor" min="0.5" max="3.0" step="0.05" value="1.30"
+                    oninput="_sb(this,'camera-zoom-factor-bub',parseFloat(this.value).toFixed(2)); ahkCall('SetCameraZoom','factor', parseFloat(this.value))">
+                </div>
+              </div>
               <div class="cfg-row"><span class="cfg-label">🔌 Reader process (split stage 2)</span>
                 <label class="toggle"><input type="checkbox" id="reader-process" onchange="ahkCall('SetReaderProcess', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label>
               </div>
@@ -8424,6 +8447,20 @@
       chk('tog-chest-open', s.openChests);
       chk('tog-chest-strongbox', s.openStrongboxes);
       chk('tog-chest-rareonly', s.rareOnly);
+    }
+
+    function cameraZoomSyncFromHeader(s) {
+      if (!s) return;
+      const tog = document.getElementById('tog-camera-zoom');
+      if (tog) tog.checked = s.enabled === true;
+      const off = document.getElementById('inp-camera-zoom-offset');
+      if (off && off !== document.activeElement && s.offset !== undefined)
+        off.value = '0x' + Number(s.offset).toString(16).toUpperCase();
+      const fac = document.getElementById('inp-camera-zoom-factor');
+      if (fac && fac !== document.activeElement && s.factor !== undefined) {
+        fac.value = s.factor;
+        _sbSync(fac, 'camera-zoom-factor-bub', parseFloat(s.factor).toFixed(2));
+      }
     }
 
     function customLandmarksSyncFromHeader(s) {
@@ -11217,6 +11254,7 @@
       if (d.uiHoverPrice !== undefined) _hdrTry('uiHoverPrice', () => uiHoverPriceSyncFromHeader(d.uiHoverPrice));
       if (d.ritualValueBadges !== undefined) _hdrTry('ritualValueBadges', () => ritualValueBadgesSyncFromHeader(d.ritualValueBadges));
       if (d.chestOpen !== undefined) _hdrTry('chestOpen', () => chestOpenSyncFromHeader(d.chestOpen));
+      if (d.cameraZoom !== undefined) _hdrTry('cameraZoom', () => cameraZoomSyncFromHeader(d.cameraZoom));
       if (d.customLandmarks !== undefined) _hdrTry('customLandmarks', () => customLandmarksSyncFromHeader(d.customLandmarks));
       if (d.lootLabelClear !== undefined) _hdrTry('lootLabelClear', () => lootLabelClearSyncFromHeader(d.lootLabelClear));
       if (d.lootTradePricing !== undefined) _hdrTry('lootTradePricing', () => lootTradePricingSyncFromHeader(d.lootTradePricing));
