@@ -871,8 +871,13 @@ _DispatchBridgeCall(method, args)
             global g_memDissectSize
             dSz := (args.Length >= 1) ? args[1] : 0x200
             g_memDissectSize := Max(0x40, Min(0x2000, Integer(dSz)))
-            try LogError("DissectSetSize sz=" g_memDissectSize)
             SetTimer(() => _SafeDissect(() => MemDissectReread(), "DissectSetSize/reread"), -1)
+        ; Row stride in bytes (4 or 8). Re-renders from the SAME buffer (no read).
+        case "DissectSetStride":
+            global g_memDissectStride
+            dStr := (args.Length >= 1) ? Integer(args[1]) : 8
+            g_memDissectStride := (dStr = 4) ? 4 : 8
+            SetTimer(() => PushMemDissectToWebView(), -1)
 
         case "UiBrowseRoot":
             SetTimer(() => UiBrowseRoot(), -1)

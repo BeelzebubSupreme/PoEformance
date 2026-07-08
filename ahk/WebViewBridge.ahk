@@ -1058,17 +1058,21 @@ _BuildMemDissectJson()
 {
     global g_reader, g_memDissectAddress, g_memDissectSize, g_memDissectBuf
     global g_memDissectHistory, g_memDissectFwd, g_memDissectStatus, g_memDissectStructName
+    global g_memDissectStride
 
     baseAddr := g_memDissectAddress
     buf := g_memDissectBuf
     canRead := (IsObject(g_reader) && IsObject(g_reader.Mem) && g_reader.Mem.Handle)
+    stride := (g_memDissectStride = 4) ? 4 : 8
 
-    ; Known-field annotations for the applied struct template (offset → names).
-    ann := _MemDissectFieldAnnotations(g_memDissectStructName)
+    ; Known-field annotations for the applied struct template (offset → names),
+    ; aligned to the current row stride so 4-byte fields land on their own row.
+    ann := _MemDissectFieldAnnotations(g_memDissectStructName, stride)
 
     json := "{"
         . '"addr":' _JsStr(baseAddr ? Format("0x{:X}", baseAddr) : "") ","
         . '"size":' g_memDissectSize ","
+        . '"stride":' stride ","
         . '"status":' _JsStr(g_memDissectStatus) ","
         . '"struct":' _JsStr(g_memDissectStructName) ","
         . '"chain":' _JsStr(_MemDissectChainString()) ","
@@ -1076,11 +1080,10 @@ _BuildMemDissectJson()
         . '"canFwd":' (g_memDissectFwd.Length > 0 ? "true" : "false") ","
         . '"rows":['
 
-    if (buf && Type(buf) = "Buffer" && baseAddr && buf.Size >= 8)
+    if (buf && Type(buf) = "Buffer" && baseAddr && buf.Size >= 4)
     {
         bufPtr := buf.Ptr      ; snapshot Ptr+Size up front so concurrent reassignments
         bufSize := buf.Size     ;  to g_memDissectBuf can't make us read off the end.
-        stride := 8
         maxRows := bufSize // stride
         first := true
         r := 0
@@ -1095,7 +1098,7 @@ _BuildMemDissectJson()
             rowOk := true
             try
             {
-                ; Raw bytes hex string (8 bytes)
+                ; Raw bytes hex string (stride bytes)
                 rawHex := ""
                 jj := 0
                 while (jj < stride)
@@ -1105,15 +1108,17 @@ _BuildMemDissectJson()
                 }
                 rawHex := RTrim(rawHex)
 
-                ; Numeric decodes
+                ; Numeric decodes. The 8-byte views (i64/ptr/f64) need 8 bytes;
+                ; with a 4-byte stride the final rows may lack them — guard.
+                have8 := (off + 8 <= bufSize)
                 u8v := NumGet(bufPtr, off, "UChar")
                 u16v := NumGet(bufPtr, off, "UShort")
                 i32v := NumGet(bufPtr, off, "Int")
                 u32v := NumGet(bufPtr, off, "UInt")
                 f32v := Round(NumGet(bufPtr, off, "Float"), 4)
-                i64v := NumGet(bufPtr, off, "Int64")
+                i64v := have8 ? NumGet(bufPtr, off, "Int64") : 0
                 ptrHex := Format("0x{:X}", i64v & 0xFFFFFFFFFFFFFFFF)
-                f64v := Round(NumGet(bufPtr, off, "Double"), 6)
+                f64v := have8 ? Round(NumGet(bufPtr, off, "Double"), 6) : 0
 
                 ascii := ""
                 kk := 0

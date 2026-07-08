@@ -56,7 +56,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.290"
+POEFORMANCE_VERSION := "0.45.13.291"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -236,6 +236,7 @@ g_memDiffStatus := "idle"
 ; through pointer chains. See MemoryDissect.ahk.
 g_memDissectAddress := 0                ; current base address being viewed
 g_memDissectSize := 0x200            ; bytes to read per page (64 rows at 8-byte stride)
+g_memDissectStride := 8              ; row stride in bytes (4 or 8) — 4 aligns to 4-byte fields
 g_memDissectBuf := 0               ; last read Buffer, or 0
 g_memDissectHistory := []              ; back-navigation stack (Array of Int64 addresses)
 g_memDissectFwd := []              ; forward-navigation stack

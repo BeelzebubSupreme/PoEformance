@@ -28,17 +28,19 @@ MemDissectGoto(addr)
         return g_memDissectStatus
     }
 
-    ; Push old address to history before the jump (skip if same address — refresh)
-    if (g_memDissectAddress && g_memDissectAddress != addr)
+    ; Read FIRST — only mutate the navigation stacks if we actually landed on a
+    ; new address. A failed pointer read used to push a dead history entry
+    ; (old == current), which made the Back button appear to do nothing.
+    oldAddr := g_memDissectAddress
+    st := _MemDissectReadAt(addr)          ; sets g_memDissectAddress on success only
+    if (g_memDissectAddress = addr && oldAddr && oldAddr != addr)
     {
-        g_memDissectHistory.Push(g_memDissectAddress)
-        ; Cap history at 64 entries
+        g_memDissectHistory.Push(oldAddr)
         while (g_memDissectHistory.Length > 64)
             g_memDissectHistory.RemoveAt(1)
-        g_memDissectFwd := []   ; new jump clears forward stack
+        g_memDissectFwd := []              ; a successful new jump clears the forward stack
     }
-
-    return _MemDissectReadAt(addr)
+    return st
 }
 
 ; Resolve a named symbol (same set as MemDiff) and jump to it.
@@ -101,7 +103,51 @@ MemDissectSetStruct(name)
         return g_memDissectStatus
     }
     g_memDissectStructName := name
+
+    ; Auto-size the read window to cover the struct's largest field, snapped up
+    ; to a standard page size — so the user never has to guess the size. Re-reads
+    ; at the new size so all named fields are immediately visible. Capped at 4 KB
+    ; for auto (a struct that needs more can be enlarged manually) so applying a
+    ; big struct template never itself triggers the largest read.
+    need := _MemDissectStructMaxOffset(name) + 8
+    newSz := Min(0x1000, _MemDissectSnapSize(need))
+    if (newSz != g_memDissectSize)
+    {
+        g_memDissectSize := newSz
+        if g_memDissectAddress
+            return _MemDissectReadAt(g_memDissectAddress)
+    }
     return g_memDissectStatus
+}
+
+; Largest field byte-offset in a struct template (0 if unknown/empty).
+_MemDissectStructMaxOffset(structName)
+{
+    maxOff := 0
+    try
+    {
+        v := PoE2Offsets.%structName%
+        if (Type(v) = "Map")
+        {
+            for _, foff in v
+                if (IsInteger(foff) && foff > maxOff)
+                    maxOff := foff
+        }
+    }
+    catch
+    {
+    }
+    return maxOff
+}
+
+; Snap a required byte count up to the smallest standard read window (matches
+; the UI dropdown options), capped at 8 KB.
+_MemDissectSnapSize(need)
+{
+    for _, sz in [0x40, 0x80, 0x100, 0x200, 0x400, 0x800, 0x1000, 0x2000]
+        if (need <= sz)
+            return sz
+    return 0x2000
 }
 
 ; Enumerate every PoE2Offsets struct template (static Map property) by name.
@@ -125,13 +171,15 @@ MemDissectStructNames()
 }
 
 ; Build a row-offset → "Field(+0xNN) …" annotation Map for a struct template.
-; Each 8-byte row aggregates every struct field whose offset falls inside it.
-; Returns an empty Map when structName is unset/unknown.
-_MemDissectFieldAnnotations(structName)
+; Each row (of `stride` bytes) aggregates every struct field whose offset falls
+; inside it. Returns an empty Map when structName is unset/unknown.
+_MemDissectFieldAnnotations(structName, stride := 8)
 {
     ann := Map()
     if (structName = "")
         return ann
+    if (stride != 4 && stride != 8)
+        stride := 8
     fields := 0
     try
     {
@@ -149,7 +197,7 @@ _MemDissectFieldAnnotations(structName)
     {
         if !IsInteger(foff)
             continue
-        rowOff := (foff // 8) * 8
+        rowOff := (foff // stride) * stride
         label  := fname "(+0x" Format("{:X}", foff) ")"
         ann[rowOff] := ann.Has(rowOff) ? (ann[rowOff] " " label) : label
     }
@@ -172,14 +220,20 @@ MemDissectGotoCustom(addr)
 
 ; Follow a pointer found at byte `off` within the current view to `addr`,
 ; recording the hop so the offset-chain breadcrumb grows (root +0x.. +0x..).
+; Following a pointer leaves the current struct, so its field template is
+; cleared — the annotations only made sense for the struct we came from.
 MemDissectFollowPointer(off, addr)
 {
-    global g_memDissectChain, g_memDissectRootAddr, g_memDissectAddress
+    global g_memDissectChain, g_memDissectRootAddr, g_memDissectAddress, g_memDissectStructName
     ; If we somehow have no root yet, seed it from the current base address.
     if (!g_memDissectRootAddr)
         g_memDissectRootAddr := g_memDissectAddress
-    g_memDissectChain.Push(Map("off", off, "addr", addr))
-    return MemDissectGoto(addr)
+    g_memDissectStructName := ""           ; the old template no longer applies here
+    st := MemDissectGoto(addr)
+    ; Record the hop only if we actually landed on the target (read succeeded).
+    if (g_memDissectAddress = addr)
+        g_memDissectChain.Push(Map("off", off, "addr", addr))
+    return st
 }
 
 ; After a Back/Forward the shown address may no longer match the followed path,

@@ -6751,6 +6751,10 @@
             <option value="4096">4 KB (512 rows)</option>
             <option value="8192">8 KB (1024 rows)</option>
           </select>
+          <select id="dis-stride" onchange="ahkCall('DissectSetStride',parseInt(this.value))" style="font-size:11px" data-tip="Row stride — 4 bytes aligns to 4-byte struct fields (e.g. +0xC4), 8 bytes is the pointer view">
+            <option value="8" selected>8-byte rows</option>
+            <option value="4">4-byte rows</option>
+          </select>
           <label class="dis-live-lbl" data-tip="Auto-refresh: re-read the current address and flash rows whose bytes changed. Act in-game to spot which offset holds a live-changing value."><input type="checkbox" id="dis-live" onchange="dissectToggleLive()"> Live</label>
           <select id="dis-live-rate" onchange="dissectLiveRateChanged()" style="font-size:11px" data-tip="Refresh rate">
             <option value="250">4/s</option>
@@ -6796,12 +6800,12 @@
                 <th class="dis-off">Offset</th>
                 <th class="dis-fld">Field</th>
                 <th class="dis-adr">Address</th>
-                <th class="dis-hex">Hex (8B)</th>
+                <th class="dis-hex" id="dis-hex-th">Hex (8B)</th>
                 <th class="dis-i32">i32</th>
                 <th class="dis-u32">u32</th>
                 <th class="dis-f32">f32</th>
-                <th class="dis-ptr">Pointer</th>
                 <th class="dis-f64">f64</th>
+                <th class="dis-ptr">Pointer</th>
                 <th class="dis-asc">ASCII</th>
               </tr>
             </thead>
@@ -10314,6 +10318,16 @@
       if (addrEl && addrEl !== document.activeElement && d.addr)
         addrEl.value = d.addr;
 
+      // Size + stride dropdowns (auto-size on Type-as changes the size server-side)
+      const sizeEl = document.getElementById('dis-size');
+      if (sizeEl && sizeEl !== document.activeElement && d.size)
+        sizeEl.value = String(d.size);
+      const strideEl = document.getElementById('dis-stride');
+      if (strideEl && strideEl !== document.activeElement && d.stride)
+        strideEl.value = String(d.stride);
+      const hexTh = document.getElementById('dis-hex-th');
+      if (hexTh && d.stride) hexTh.textContent = 'Hex (' + d.stride + 'B)';
+
       // Applied struct template dropdown
       const structEl = document.getElementById('dis-struct');
       if (structEl && structEl !== document.activeElement)
@@ -10391,8 +10405,8 @@
           + '<td class="dis-i32">'  + escHtml(String(row.i32))+ '</td>'
           + '<td class="dis-u32">'  + escHtml(String(row.u32))+ '</td>'
           + '<td class="dis-f32">'  + escHtml(String(row.f32))+ '</td>'
-          + '<td class="dis-ptr">'  + ptrCell                 + '</td>'
           + '<td class="dis-f64">'  + escHtml(String(row.f64))+ '</td>'
+          + '<td class="dis-ptr">'  + ptrCell                 + '</td>'
           + '<td class="dis-asc">'  + escHtml(row.ascii)      + '</td>'
           + '</tr>';
       }

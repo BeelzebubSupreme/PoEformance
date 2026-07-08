@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.290`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.291`.
 
 ## Language
 
@@ -2357,6 +2357,28 @@ rail + clear. Static: full `/validate` exit 0; UI `node --check` clean.
 - **Next candidate (Stage 5, deferred):** inline pointer-target decode (StdWString→text, StdVector→count,
   entity→Metadata path) as an ON-DEMAND per-row expand (the `_DecodeComponentOnDemand` safe pattern),
   NOT on the live-refresh path — the RPM-heavy piece, left out deliberately until the above is proven.
+
+### Usability pass from first in-game test (0.45.13.291)
+
+Owner drove the guided walkthrough and reported real issues; fixed:
+- **4-byte row stride** (`g_memDissectStride`, bridge `DissectSetStride`, UI "8-byte/4-byte rows"): many
+  `PoE2Offsets` fields sit on 4-byte boundaries (e.g. `CurrentAreaLevel` +0xC4). `_BuildMemDissectJson`
+  strides by 4 or 8; the 8-byte views (i64/ptr/f64) guard on `off+8<=bufSize`; `_MemDissectFieldAnnotations`
+  aligns names to the stride so a 4-byte field lands on its own row. Header shows "Hex (4B/8B)".
+- **Auto-size on "Type as"** (`MemDissectSetStruct` → `_MemDissectStructMaxOffset`/`_MemDissectSnapSize`):
+  applying a struct sets the read window to cover its largest field, snapped to a dropdown size and
+  **capped at 4 KB for auto** (so a big struct like ServerData@0x21E0 never itself triggers the 8 KB read).
+  Size + stride dropdowns now sync from the payload (`d.size`/`d.stride`). Solves "I don't know the size".
+- **Field template clears when following a pointer** (`MemDissectFollowPointer` sets `g_memDissectStructName:=""`):
+  the old struct's names no longer stick to a deeper pointer target.
+- **Back button** (`MemDissectGoto` now reads first, pushes history ONLY on a successful address change):
+  a failed pointer read used to push a dead history entry so Back appeared to do nothing.
+- **f64 column moved next to f32** (was after Pointer).
+- **OPEN — 8 KB size crashed the tool** (owner report, error text pending): the manual 8 KB read path is
+  under investigation; auto-size is capped so it can't be reached automatically. Scan is confirmed
+  **current-buffer only** (a process-wide scan would be a separate feature). Deferred to a follow-up:
+  resizable/hideable columns (reuse the TSV viewer's `.tsv-colsz`/`_tsvColWidths`), and a value-vs-pointer
+  type hint in the Field column (ties into Stage 5's inline decode).
 
 ## Reference
 
