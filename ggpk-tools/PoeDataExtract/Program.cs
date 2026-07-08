@@ -65,6 +65,7 @@ internal static class Program
                 "extract-all" => RunExtractAll(rest),
                 "inspect"     => RunInspect(rest),
                 "ls"          => RunLs(rest),
+                "manifest"    => RunManifest(rest),
                 "cat"         => RunCat(rest),
                 _ => Fail($"Unknown verb: {verb}", 1), // unreachable (IsKnownVerb)
             };
@@ -284,6 +285,61 @@ internal static class Program
     }
 
     /// <summary>
+    /// Dumps a deterministic manifest of every bundle file as
+    /// <c>&lt;path&gt;\t&lt;size&gt;</c>, sorted by path. Diffing two manifests
+    /// (a clean bundle vs. one a patch has been applied to) surfaces exactly
+    /// which file(s) the patch changed — the patched file keeps its path but its
+    /// content size (and bundle placement) changes. This is how we locate the
+    /// target of an opaque third-party <c>.ggpx</c> zoom patch so it can be
+    /// reimplemented as a native GGPK patch. Optional <c>--match</c> narrows the
+    /// list to a path substring.
+    /// Usage: poe-data-extract manifest --ggpk &lt;path&gt; [--match &lt;substr&gt;] [--output list.txt]
+    /// </summary>
+    private static int RunManifest(ReadOnlySpan<string> args)
+    {
+        string? ggpkPath = null, match = null, outputPath = null;
+        for (int i = 0; i < args.Length; i++)
+        {
+            switch (args[i])
+            {
+                case "--ggpk":   if (++i < args.Length) ggpkPath   = args[i]; break;
+                case "--match":  if (++i < args.Length) match      = args[i]; break;
+                case "--output": if (++i < args.Length) outputPath = args[i]; break;
+            }
+        }
+        if (ggpkPath is null)
+        {
+            Console.Error.WriteLine("usage: poe-data-extract manifest --ggpk <path> [--match <substr>] [--output list.txt]");
+            return 1;
+        }
+        if (!File.Exists(ggpkPath)) { Console.Error.WriteLine($"GGPK not found: {ggpkPath}"); return 2; }
+
+        using var ggpk = GgpkOpener.Open(ggpkPath);
+        var rows = new List<string>();
+        foreach (var kv in ggpk.Index.Files)
+        {
+            var p = kv.Value.Path;
+            if (p is null) continue;
+            if (match is not null && !p.Contains(match, StringComparison.OrdinalIgnoreCase)) continue;
+            rows.Add($"{p}\t{kv.Value.Size}");
+        }
+        rows.Sort(StringComparer.Ordinal);   // deterministic order → a clean line-diff between two dumps
+
+        var writer = outputPath is null ? Console.Out : new StreamWriter(outputPath);
+        try
+        {
+            foreach (var r in rows) writer.WriteLine(r);
+            writer.Flush();
+        }
+        finally
+        {
+            if (outputPath is not null) writer.Dispose();
+        }
+        Console.Out.WriteLine($"manifest: {rows.Count} files");
+        return 0;
+    }
+
+    /// <summary>
     /// Dumps the raw bytes of a single file inside the GGPK/bundles to
     /// stdout or to <c>--output</c>. Used for reverse-engineering shaders
     /// or any other text/binary blob we need to inspect locally.
@@ -362,7 +418,7 @@ internal static class Program
     // The verbs the dispatcher recognises. Anything else that looks like a
     // path is treated as the bare-path extract-all convenience form.
     private static bool IsKnownVerb(string verb) => verb is
-        "extract" or "extract-all" or "inspect" or "ls" or "cat";
+        "extract" or "extract-all" or "inspect" or "ls" or "manifest" or "cat";
 
     // True when the token looks like a ggpk/index path rather than a verb —
     // it exists on disk, or carries the expected extension.
@@ -397,6 +453,7 @@ internal static class Program
         Console.Error.WriteLine("                                [--mod-domain <N>] [--stat-desc-map <path>]");
         Console.Error.WriteLine("       poe-data-extract inspect --ggpk <path> --table <Name> [--output <dump.txt>]");
         Console.Error.WriteLine("       poe-data-extract ls      --ggpk <path> --match <substr> [--output <list.txt>]");
+        Console.Error.WriteLine("       poe-data-extract manifest --ggpk <path> [--match <substr>] [--output <list.txt>]");
         Console.Error.WriteLine("       poe-data-extract cat     --ggpk <path> --path <internal/path> [--output <file>]");
         Console.Error.WriteLine("       extract-all writes: base_item_sizes, monster_name_map, stat_name_map,");
         Console.Error.WriteLine("                           mod_name_map, unique_item_name_map, map_mod_list (.tsv)");
