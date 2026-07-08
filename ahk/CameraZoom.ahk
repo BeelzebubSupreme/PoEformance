@@ -202,22 +202,33 @@ CameraZoomDiagnose()
     test := (Abs(before) > 0.001) ? before * fac : 100.0   ; if the field reads 0, write a recognizable probe value
     ok := false
     try ok := g_reader.Mem.WriteFloat(addr, test)
+    errCode := (g_reader.Mem.HasOwnProp("LastWriteError")) ? g_reader.Mem.LastWriteError : -1
+    protChanged := (g_reader.Mem.HasOwnProp("LastWriteProtect")) ? g_reader.Mem.LastWriteProtect : -1
     Sleep(40)
     after := 0.0
     try after := g_reader.Mem.ReadFloat(addr)
     try g_reader.Mem.WriteFloat(addr, before)   ; restore
     landed := (Abs(after - test) <= Abs(test) * 0.001 + 0.001)
+    ; Interpret the Win32 error when the write failed.
+    errName := (errCode = 5) ? "ACCESS_DENIED (handle lacks VM_WRITE, or protection)"
+        : (errCode = 998) ? "NOACCESS (page not writable)"
+        : (errCode = 299) ? "PARTIAL_COPY"
+        : (errCode = 0) ? "none" : ("code " errCode)
     verdict := ok
-        ? (landed ? "Write LANDS. If the view didn't change, this offset is not the zoom field — try another (e.g. the negative distance ones: 0x60, 0x6C, 0x70, 0x78)."
-                  : "Write did NOT stick — the game overwrites this field every frame (or the write was blocked). This field can't drive zoom by a plain write.")
-        : "WriteFloat FAILED — the process handle lacks write access (relaunch after pulling this build; it must open PoE2 with VM_WRITE)."
+        ? (landed ? "Write LANDS. If the view didn't change, this offset is not the zoom field — try another (e.g. 0x60/0x6C/0x70/0x78)."
+                  : "Write did NOT stick — the game overwrites this field every frame. This field can't drive zoom by a plain write.")
+        : (errCode = 5
+            ? "ACCESS_DENIED even after VirtualProtectEx — the game process is likely refusing write access to this tool (anti-tamper / handle stripped). Confirm the tool runs as Administrator; if it already does, PoE2 is blocking memory writes."
+            : "WriteFloat FAILED (" errName ").")
     MsgBox("Camera Zoom — write test`n"
-        . "offset   : 0x" Format("{:X}", g_camZoomOffset) "`n"
-        . "before   : " before "`n"
-        . "wrote    : " test "`n"
-        . "readback : " after "`n"
-        . "WriteFloat ok : " (ok ? "yes" : "NO") "`n"
-        . "value stuck   : " (landed ? "yes" : "no") "`n`n" verdict, "Camera Zoom Diagnose")
+        . "offset       : 0x" Format("{:X}", g_camZoomOffset) "`n"
+        . "before       : " before "`n"
+        . "wrote        : " test "`n"
+        . "readback     : " after "`n"
+        . "WriteFloat ok: " (ok ? "yes" : "NO") "`n"
+        . "value stuck  : " (landed ? "yes" : "no") "`n"
+        . "VirtualProtect changed page: " (protChanged = 1 ? "yes" : (protChanged = 0 ? "no" : "?")) "`n"
+        . "last error   : " errName "`n`n" verdict, "Camera Zoom Diagnose")
 }
 
 ; Writes the captured original back and clears the applied state. Safe to call

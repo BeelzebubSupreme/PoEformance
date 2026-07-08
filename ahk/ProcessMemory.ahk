@@ -384,10 +384,23 @@ class ProcessMemory
     ; (used by the opt-in Camera Zoom); everything else is read-only.
     WriteBytes(address, buf, size)
     {
+        this.LastWriteError := 0
+        this.LastWriteProtect := 0
         if (!this.Handle || !address || size <= 0)
             return false
+        ; Flip the target page to writable first. Live game-data pages are usually
+        ; already RW, but some are protected — WriteProcessMemory respects page
+        ; protection, so a straight write returns ACCESS_DENIED (5) on those. This
+        ; is the standard memory-editor pattern: VirtualProtectEx → write → restore.
+        oldProtect := 0
+        changedProt := DllCall("VirtualProtectEx", "Ptr", this.Handle, "Ptr", address, "UPtr", size
+            , "UInt", 0x40, "UInt*", &oldProtect, "Int")   ; 0x40 = PAGE_EXECUTE_READWRITE
+        this.LastWriteProtect := changedProt ? 1 : 0
         wrote := 0
         ok := DllCall("WriteProcessMemory", "Ptr", this.Handle, "Ptr", address, "Ptr", buf.Ptr, "UPtr", size, "UPtr*", &wrote, "Int")
+        this.LastWriteError := A_LastError
+        if (changedProt)
+            DllCall("VirtualProtectEx", "Ptr", this.Handle, "Ptr", address, "UPtr", size, "UInt", oldProtect, "UInt*", &oldProtect, "Int")
         return (ok && wrote = size)
     }
 
