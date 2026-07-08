@@ -1201,6 +1201,68 @@ class RadarOverlay extends GdiOverlayBase
                 }
             }
 
+            ; De-dupe raw NAV filename labels the same way. A portal / waypoint
+            ; STRUCTURE spans several tile instances of the SAME file, and each one
+            ; drew its own identical "file.tdt (Nm)" label → an unreadable stack.
+            ; Per file: sort instances by distance and greedily keep only those at
+            ; least ~1200 world units from every already-kept one — one structure
+            ; labels once (nearest tile), but two genuinely distinct same-named
+            ; exits far apart still both label. Dots are untouched (they trace the
+            ; structure); only the LABEL draw is gated on navLblKeep.
+            navLblKeep := Map()   ; _navTargets idx -> true (allowed to draw its filename)
+            if (navOn)
+            {
+                navLblGroups := Map()   ; tile path -> Array of Map(idx,dsq,gx,gy), sorted by dsq
+                for idx, target in this._navTargets
+                {
+                    tT := target["type"]
+                    if (tT != "AreaTransition" && tT != "Waypoint")
+                        continue
+                    ndGX := target["gridX"] - playerGX
+                    ndGY := target["gridY"] - playerGY
+                    entry := Map("idx", idx, "dsq", ndGX * ndGX + ndGY * ndGY
+                               , "gx", target["gridX"], "gy", target["gridY"])
+                    key := target["path"]
+                    if (!navLblGroups.Has(key))
+                        navLblGroups[key] := []
+                    arr := navLblGroups[key]
+                    pos := arr.Length + 1
+                    Loop arr.Length
+                    {
+                        if (entry["dsq"] < arr[A_Index]["dsq"])
+                        {
+                            pos := A_Index
+                            break
+                        }
+                    }
+                    arr.InsertAt(pos, entry)
+                }
+                navLblClusterSq := (1200.0 / RadarOverlay.WORLD_TO_GRID_RATIO) ** 2
+                for key, arr in navLblGroups
+                {
+                    kept := []
+                    for e in arr
+                    {
+                        tooClose := false
+                        for k in kept
+                        {
+                            kdx := e["gx"] - k["gx"]
+                            kdy := e["gy"] - k["gy"]
+                            if (kdx * kdx + kdy * kdy < navLblClusterSq)
+                            {
+                                tooClose := true
+                                break
+                            }
+                        }
+                        if (!tooClose)
+                        {
+                            kept.Push(e)
+                            navLblKeep[e["idx"]] := true
+                        }
+                    }
+                }
+            }
+
             ; Snap curated TRANSITION landmarks onto the real portal. Sikaka pins a
             ; transition label (e.g. "The Bone Pits") to the terrain GATE STRUCTURE,
             ; whose sub-cell can sit ~1000m+ from the clickable portal ENTITY the nav
@@ -1403,10 +1465,12 @@ class RadarOverlay extends GdiOverlayBase
                         this._DrawTextOutlined(tSX + tRadius + 3, tSY - 6, lmLabelText, lmLabelColor, 0, 1)
                     lmDrawn.Push(Map("gx", srcGX, "gy", srcGY, "exit", navPortal.Has(idx), "color", lmRouteColor))
                 }
-                else if (navOn && (tType = "AreaTransition" || tType = "Waypoint") && !navClaimed.Has(idx))
+                else if (navOn && (tType = "AreaTransition" || tType = "Waypoint")
+                    && !navClaimed.Has(idx) && navLblKeep.Has(idx))
                 {
-                    ; Skipped when a curated landmark snapped onto this portal — its
-                    ; human-readable name replaces this raw filename.
+                    ; Skipped when a curated landmark snapped onto this portal (its
+                    ; human-readable name replaces this raw filename) or when it is a
+                    ; same-file duplicate of a nearer instance (navLblKeep cluster).
                     shortName := target["path"]
                     lastSlash := InStr(shortName, "/",, -1)
                     if (lastSlash > 0)
