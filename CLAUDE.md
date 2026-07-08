@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.289`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.290`.
 
 ## Language
 
@@ -2253,7 +2253,7 @@ new memory RE.
   "WorldItem"; confirm names persist while standing still and reset on zone change, and that far
   drops (labels not on screen) still resolve.
 
-## Entity Inspector actions + user-extensible Junk Filter (shipped 0.45.13.289)
+## Entity Inspector actions + user-extensible Junk Filter (shipped 0.45.13.290)
 
 Four Entity-Inspector conveniences, the biggest of which makes the Junk Filter
 user-extensible (custom patterns per category + user-created categories).
@@ -2306,6 +2306,57 @@ The 6 built-in categories had FIXED patterns and custom terms were a single GLOB
   to a junk category (auto = its meta-category, e.g. a new "MiscellaneousObjects" category), see the
   new pill under that category in the Junk Filter box, confirm the matching entities vanish from the
   radar/list, and that the 🔬 buttons jump to the right address in the Dissector.
+
+## AutoPilot pathing overhaul (WIP) — stuck / rotation / loot-ordering
+
+Owner reports three linked AutoPilot problems: (1) it "gets stuck all the time", (2) the combat
+rotation "isn't the best", (3) it kills everything then "runs back around to pick up loot" instead
+of collecting as it goes. Work lives on branch `PoEfdev/autopilot-pathing`, done in three testable
+stages (commit + in-game verify between each).
+
+### Stage 1 — stop getting stuck (shipped 0.45.13.290)
+
+- **Combat walk/approach stuck-watchdog (`ahk/CombatAutomation.ahk`, the big one):** the existing
+  no-path give-up only covers enemies with NO A* route. A REACHABLE enemy the character still can't
+  walk to (invisible collision, a circling mob, a doorway it can't squeeze through) left combat
+  issuing move-clicks forever with the character pinned — the primary "stuck all the time" source.
+  New `_CombatMoveStuckGiveUp(now, radarSnap, combatInfo, aimTag)` tracks the player's grid position
+  while combat is walking/approaching; after `MOVE_STUCK_MS`=3500 ms of CONTINUOUS no-movement
+  (< `MOVE_CELLS`=3 cells) it blacklists the pack (reuses `_CombatBlacklistPackNear`, 700u/30 s) and
+  disengages (`g_combatState := "idle"`, returns false → yields the tick), reason `move-stuck(...)`.
+  A gap-reset (last call > 600 ms ago → rebaseline) means it only measures continuous walking, never
+  standing time from an earlier direct-fire phase. Called at the top of the walk-engage branch AND
+  the out-of-range "approaching" branch (both share the watchdog — consecutive move attempts at the
+  same enemy). This ALSO fixes the `combat-pause`-freezes-exploration deadlock at its source (a stuck
+  combat now goes idle so exploration resumes) — deliberately no separate explore-side combat-pause
+  timeout, which would risk yanking the bot out of a legit fight.
+- **Mode-handoff timer rebaseline (`ahk/ExplorationModule.ahk`):** the stuck (3 s) and per-target
+  watchdog (6 s) timers measure wall-clock, but combat/loot claim whole ticks during which
+  exploration never runs. Returning to explore after such a gap could instantly trip a FALSE
+  stuck / `no-progress` give-up on a still-valid target. New `_lastNavTick` static: on a > 600 ms
+  gap since the last explore tick, rebaseline `_stuckCheckTick` / `_stuckPGX/Y` / `_wdBestTick` /
+  `_wdBestDist` / `_lastClickTick` to now.
+- **DField flood budget 12 → 20 ms (`ahk/ExplorationModule.ahk`):** the field re-floods from scratch
+  on every target switch; a thin slice left the bot standing still (`routing`) for many ticks before
+  it could move toward a far target. Only costs extra while the field is still building.
+- **Deferred (Stage 1 scope):** plan-rebuild greedy-TSP re-ordering oscillation (pick A, stall,
+  rebuild picks B, walk back) — riskier to touch; revisit if stuck persists after the above.
+- **Static verification:** full `/validate` exit 0; braces balanced (CombatAutomation 154/154,
+  ExplorationModule 129/129).
+- **Pending in-game verification:** with AutoPilot on, confirm the bot no longer freezes clicking at
+  an unreachable-but-close enemy (should log `move-stuck(... bl=N)` then move on), no longer stalls
+  returning from a fight, and starts moving toward a new far target sooner (less `routing`). Tunables
+  if needed: `MOVE_STUCK_MS` / `MOVE_CELLS` (combat), the 600 ms gap, the 20 ms flood budget.
+
+### Stage 2 — loot as you go (planned)
+Replace `LootPickup._RunLootPickup`'s blanket hostile gate (any hostile within `g_combatRange`
+suppresses ALL pickup) with a loot-relative one: grab a drop when it's very close and no hostile is
+closer than it; optionally let the coordinator cede a tick for a drop at the player's feet.
+
+### Stage 3 — better combat rotation (planned)
+`CombatAutomation._SelectNextSkill` is priority spam (always the lowest-priority ready slot), so one
+skill dominates. Add real sequencing / round-robin, a sane non-zero cooldown default, proper `buff`
+semantics, and target stickiness.
 
 ## Reference
 

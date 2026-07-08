@@ -369,6 +369,9 @@ _RunExploration(radarSnap, gameHwnd, measureOnly := false)
     static _wdTgtCX := -1, _wdTgtCY := -1
     static _wdBestDist := 999999
     static _wdBestTick := 0
+    ; Last tick exploration actually navigated — used to rebaseline the stuck /
+    ; watchdog timers after combat or loot claimed a run of ticks (see below).
+    static _lastNavTick := 0
 
     ; Precomputed exploration plan — built once per area from the (already
     ; fully-known) walkable terrain grid. ~50-80 sample waypoints in a
@@ -395,6 +398,7 @@ _RunExploration(radarSnap, gameHwnd, measureOnly := false)
         _wdTgtCY := -1
         _wdBestDist := 999999
         _wdBestTick := 0
+        _lastNavTick := 0
         _plan := []
         _planIdx := 1
         _planBuilt := false
@@ -556,6 +560,24 @@ _RunExploration(radarSnap, gameHwnd, measureOnly := false)
             }
         }
     }
+
+    ; ── Mode-handoff timer rebaseline ────────────────────────────────
+    ; The stuck (below) and per-target watchdog timers measure wall-clock,
+    ; but combat and loot claim whole ticks during which exploration never
+    ; runs. Returning to exploration after such a gap, those timers would
+    ; have kept counting and could instantly trip a FALSE "stuck" / "no-
+    ; progress" give-up on a still-valid target. Detect the gap (no explore
+    ; tick for >600 ms) and rebaseline the timers + stuck baseline to now.
+    if (_lastNavTick != 0 && (now - _lastNavTick) > 600)
+    {
+        _stuckCheckTick := now
+        _stuckPGX := pGX
+        _stuckPGY := pGY
+        _wdBestTick := now
+        _wdBestDist := 999999
+        _lastClickTick := 0
+    }
+    _lastNavTick := now
 
     ; Stuck detection: if player hasn't moved in 3 s, the current waypoint
     ; is probably unreachable from here — rebuild the plan from the new
@@ -771,7 +793,11 @@ _RunExploration(radarSnap, gameHwnd, measureOnly := false)
     if (_targetCX < 0)
         return
 
-    fieldSt := _pf.DFieldExpand(12, pGX, pGY)
+    ; Flood budget per tick. Raised 12→20 ms: the field re-floods from scratch
+    ; on every target switch, and a thin slice left the bot standing still
+    ; ("routing") for many ticks before it could move toward a far target.
+    ; Only costs extra while the field is still building (cheap once covered).
+    fieldSt := _pf.DFieldExpand(20, pGX, pGY)
     _lastFieldSt := fieldSt
     if (fieldSt = "unreach" || fieldSt = "cap")
     {

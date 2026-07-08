@@ -383,6 +383,9 @@ TryCombatAutomation(radarSnap, gameHwnd)
         {
             static _walkClickTick := 0
             now := A_TickCount
+            ; Give up on a reachable-but-unwalkable enemy instead of clicking forever.
+            if (_CombatMoveStuckGiveUp(now, radarSnap, combatInfo, aimTag))
+                return false
             if ((now - _walkClickTick) > 250)
             {
                 DllCall("mouse_event", "uint", 0x0002, "int", 0, "int", 0, "uint", 0, "uptr", 0) ; LDOWN
@@ -485,6 +488,9 @@ TryCombatAutomation(radarSnap, gameHwnd)
         }
         else if (selResult["outOfRange"])
         {
+            ; Give up if we've been approaching an unreachable enemy without moving.
+            if (_CombatMoveStuckGiveUp(now, radarSnap, combatInfo, "approach"))
+                return false
             ; Direct LoS but every ready skill is out of range. Previously
             ; this branch only set a status ("approaching") without ever
             ; moving — the bot parked the cursor on the enemy and stood
@@ -772,6 +778,61 @@ _CombatBlacklistPackNear(radarSnap, cx, cy, radius, ms)
         n += 1
     }
     return n
+}
+
+; ── Move-progress watchdog (walk-engage / approach) ────────────────────────
+; The no-path give-up only covers enemies with NO A* route at all. A REACHABLE
+; enemy the character still can't walk to (invisible collision, a mob circling
+; just out of reach, a doorway it can't squeeze through) leaves combat issuing
+; move-clicks forever with the character pinned in place — the single biggest
+; "gets stuck all the time" source. This watchdog tracks the player's grid
+; position while combat is walking/approaching; if it hasn't moved for
+; MOVE_STUCK_MS of CONTINUOUS walking, it blacklists the pack (like the no-path
+; give-up) and disengages so loot/explore can run.
+; Params: now (A_TickCount), radarSnap, combatInfo, aimTag (status label).
+; Returns true if it gave up (the caller must then return false), else false.
+_CombatMoveStuckGiveUp(now, radarSnap, combatInfo, aimTag)
+{
+    global g_combatState, g_combatLastReason, g_combatNoPathBlacklist
+    static MOVE_STUCK_MS := 3500     ; continuous no-move-while-walking before give-up
+    static MOVE_CELLS    := 3        ; grid cells that count as "actually moved"
+    static _mpGX := -999999, _mpGY := -999999, _mpBaseTick := 0, _mpLastCall := 0
+    WGRID := 250.0 / 0x17
+    pgx := Round(combatInfo["playerWorldX"] / WGRID)
+    pgy := Round(combatInfo["playerWorldY"] / WGRID)
+
+    ; Re-baseline whenever we RE-ENTER a move state after a gap (last tick was
+    ; direct-fire / idle / another mode). The timer must only measure time spent
+    ; CONTINUOUSLY trying to walk without progress, never carry over standing
+    ; time from an unrelated combat phase.
+    if (_mpLastCall = 0 || (now - _mpLastCall) > 600)
+    {
+        _mpGX := pgx, _mpGY := pgy, _mpBaseTick := now, _mpLastCall := now
+        return false
+    }
+    _mpLastCall := now
+
+    ; Meaningful movement resets the watchdog — a reachable enemy keeps the
+    ; player moving toward it, so this only fires on a genuine pin.
+    if (Abs(pgx - _mpGX) >= MOVE_CELLS || Abs(pgy - _mpGY) >= MOVE_CELLS)
+    {
+        _mpGX := pgx, _mpGY := pgy, _mpBaseTick := now
+        return false
+    }
+    if ((now - _mpBaseTick) <= MOVE_STUCK_MS)
+        return false
+
+    ; Stuck: the enemy is effectively unreachable. Blacklist its pack and
+    ; disengage so the rest of the AutoPilot chain can proceed.
+    blN := _CombatBlacklistPackNear(radarSnap
+        , combatInfo["nearestWorldX"], combatInfo["nearestWorldY"], 700, 30000)
+    blAddr := combatInfo.Has("nearestEntityAddr") ? combatInfo["nearestEntityAddr"] : 0
+    if (blAddr && IsSet(g_combatNoPathBlacklist))
+        g_combatNoPathBlacklist[blAddr] := A_TickCount + 30000
+    g_combatState := "idle"
+    _mpGX := -999999, _mpGY := -999999, _mpBaseTick := 0, _mpLastCall := 0
+    g_combatLastReason := "move-stuck(" aimTag " bl=" blN ")"
+    return true
 }
 
 ; ── Skill Selection ───────────────────────────────────────────────────────
