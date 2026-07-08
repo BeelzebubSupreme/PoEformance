@@ -7081,8 +7081,11 @@
            transition and the gem hanging inward as a pendant. (The previous
            inset ornament ran parallel to the border → read as a blurry double
            line, especially unhovered.) */
-        --btnEdgeT:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 52 8'><path d='M2.5 1 L49.5 1' fill='none' stroke='%23c8a85a' stroke-width='1' stroke-linecap='round'/><path d='M26 1 L28.2 3.8 L26 6.6 L23.8 3.8 Z' fill='%23f0d68a'/><circle cx='2.5' cy='1' r='.8' fill='%23c8a85a'/><circle cx='49.5' cy='1' r='.8' fill='%23c8a85a'/></svg>");
-        --btnEdgeB:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 52 8'><path d='M2.5 7 L49.5 7' fill='none' stroke='%23c8a85a' stroke-width='1' stroke-linecap='round'/><path d='M26 7 L28.2 4.2 L26 1.4 L23.8 4.2 Z' fill='%23f0d68a'/><circle cx='2.5' cy='7' r='.8' fill='%23c8a85a'/><circle cx='49.5' cy='7' r='.8' fill='%23c8a85a'/></svg>");
+        /* The stroke fades to TRANSPARENT toward its ends, so it melts into
+           whatever the outline colour is at that spot (rule-brown normally,
+           gold on hover) — the real border shows through underneath. */
+        --btnEdgeT:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 52 8'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='0'><stop offset='0' stop-color='%23c8a85a' stop-opacity='0'/><stop offset='.32' stop-color='%23c8a85a' stop-opacity='1'/><stop offset='.68' stop-color='%23c8a85a' stop-opacity='1'/><stop offset='1' stop-color='%23c8a85a' stop-opacity='0'/></linearGradient></defs><path d='M1 1 L51 1' fill='none' stroke='url(%23g)' stroke-width='1'/><path d='M26 1 L28.2 3.8 L26 6.6 L23.8 3.8 Z' fill='%23f0d68a'/></svg>");
+        --btnEdgeB:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 52 8'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='0'><stop offset='0' stop-color='%23c8a85a' stop-opacity='0'/><stop offset='.32' stop-color='%23c8a85a' stop-opacity='1'/><stop offset='.68' stop-color='%23c8a85a' stop-opacity='1'/><stop offset='1' stop-color='%23c8a85a' stop-opacity='0'/></linearGradient></defs><path d='M1 7 L51 7' fill='none' stroke='url(%23g)' stroke-width='1'/><path d='M26 7 L28.2 4.2 L26 1.4 L23.8 4.2 Z' fill='%23f0d68a'/></svg>");
       }
       /* ONE canonical class list per tier, referenced via :is() so the
          behavioural rules below can't drift out of sync (add a class in one
