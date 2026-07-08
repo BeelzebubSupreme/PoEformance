@@ -744,7 +744,17 @@ _RunExploration(radarSnap, gameHwnd, measureOnly := false)
         MAX_FLOOR_DELTA := 200
         if (hzOk && Abs(tgtHD) > MAX_FLOOR_DELTA)
         {
-            _visitedWalkable += _ExploreMarkCoarseVisited(_visited, _targetCX, _targetCY
+            ; Mark the off-floor frontier in the visited buffer so it is not
+            ; re-picked, but DO NOT count it toward _visitedWalkable — it is
+            ; UNREACHABLE (a different storey), not explored. Counting it inflated
+            ; the coverage % to a false done(99%) when the player was cornered with
+            ; only off-floor frontiers left (owner: "stood in a corner and watched
+            ; it climb to 100%"). The mark's return is intentionally discarded now,
+            ; so the % tracks the reachable area actually reached and the run ends
+            ; as an honest no-frontier-done at the true coverage instead of a fake
+            ; completion. (Reaching other storeys via stairs/transitions is a
+            ; separate, larger nav feature — this only stops the false done.)
+            _ExploreMarkCoarseVisited(_visited, _targetCX, _targetCY
                 , _coarseW, _coarseH, _STEP, buf, dsz, _bpr, gridW, _rows)
             if (_planIdx <= _plan.Length)
                 _planIdx++
