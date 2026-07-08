@@ -93,12 +93,19 @@ AvoidZoneHitKind(sx, sy, rects)
 ; eats the click silently.
 _AppendHudRects(rects, cX, cY, cW, cH)
 {
-    ; Bottom skill bar + center flask bar (middle 50% horizontal, bottom 14%)
-    rects.Push([cX + cW * 0.25, cY + cH * 0.86, cW * 0.50, cH * 0.14, "hud"])
-    ; Bottom-left life globe + left flask bar
-    rects.Push([cX,             cY + cH * 0.78, cW * 0.13, cH * 0.22, "hud"])
-    ; Bottom-right mana globe + right flask bar
-    rects.Push([cX + cW * 0.87, cY + cH * 0.78, cW * 0.13, cH * 0.22, "hud"])
+    ; Bottom HUD band — ONE CONTINUOUS strip across the whole bottom edge. The
+    ; flask / charm band that sits between the life globe and the centre skill
+    ; bar used to fall in an uncovered gap (roughly X 0.13–0.25): combat aimed a
+    ; mouse-button skill (LButton/RButton/MButton) at an enemy that projected
+    ; there, parked the cursor on the flasks/potions and fired into them. The
+    ; three rects below now abut (globe 0–0.15, centre 0.15–0.85, globe 0.85–1.0)
+    ; so the bottom 15% has no horizontal gap for the cursor to land in.
+    ; Center skill bar + flask bar (bottom 15%, X 0.15–0.85)
+    rects.Push([cX + cW * 0.15, cY + cH * 0.85, cW * 0.70, cH * 0.15, "hud"])
+    ; Bottom-left life globe + left flask / charm bar (X 0–0.15)
+    rects.Push([cX,             cY + cH * 0.78, cW * 0.15, cH * 0.22, "hud"])
+    ; Bottom-right mana / ES globe + right flask bar (X 0.85–1.0)
+    rects.Push([cX + cW * 0.85, cY + cH * 0.78, cW * 0.15, cH * 0.22, "hud"])
     ; Top-right quest tracker / area info
     rects.Push([cX + cW * 0.78, cY,             cW * 0.22, cH * 0.12, "hud"])
     ; Top-left area-name banner (the minimap sits just below)

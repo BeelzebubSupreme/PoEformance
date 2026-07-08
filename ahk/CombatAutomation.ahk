@@ -146,6 +146,42 @@ TryCombatAutomation(radarSnap, gameHwnd)
             g_radarOverlay._combatTargetGY := Round(combatInfo["nearestWorldY"] / TerrainPathfinder.WORLD_TO_GRID_RATIO)
         }
 
+        ; ── Continuous-engagement watchdog (fixes the multi-tens-of-seconds hang) ──
+        ; The per-target no-path give-up resets whenever a DIFFERENT packmate
+        ; becomes the nearest enemy, so a mixed pack with off-floor / unreachable
+        ; members (hd~90) could hold the combat tick for 30 s+ while exploration
+        ; stayed frozen (observed: 34 s at one explore waypoint). This global cap
+        ; starts a timer when combat is first entered and RESETS it on real
+        ; progress (any drop in hostileCount = a kill / a mob leaving range). If
+        ; combat holds the tick for MAX_ENGAGE_MS with NO progress AND it is a
+        ; pack (>= 3 hostiles — solo rares/bosses are legitimately slow and must
+        ; NOT be abandoned), blacklist the whole hostile cluster and yield to
+        ; exploration. The lone-straggler case is already covered by the
+        ; per-target no-path give-up above.
+        static MAX_ENGAGE_MS := 28000
+        static _engageStart := 0
+        static _engageMinHostiles := 999999
+        if (prevState = "idle")            ; just transitioned idle → combat this tick
+        {
+            _engageStart := A_TickCount
+            _engageMinHostiles := hostileCount
+        }
+        if (hostileCount < _engageMinHostiles)   ; progress — a hostile died / left range
+        {
+            _engageMinHostiles := hostileCount
+            _engageStart := A_TickCount
+        }
+        if (_engageStart && hostileCount >= 3 && (A_TickCount - _engageStart) > MAX_ENGAGE_MS)
+        {
+            blN := _CombatBlacklistPackNear(radarSnap
+                , combatInfo["nearestWorldX"], combatInfo["nearestWorldY"], 1600, 25000)
+            g_combatState := "idle"
+            _engageStart := 0
+            _engageMinHostiles := 999999
+            g_combatLastReason := "engage-timeout(" MAX_ENGAGE_MS "ms n=" hostileCount " bl=" blN ")"
+            return false
+        }
+
         ; ── Camera anchor (shared projection sanity gate, see ClickNav) ───
         ; The player's own projection anchors the w-sign convention AND must
         ; land near the screen centre. Without it a far waypoint/enemy that
