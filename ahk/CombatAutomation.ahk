@@ -38,6 +38,7 @@ TryCombatAutomation(radarSnap, gameHwnd)
         global g_combatSkillCooldowns
         global g_radarOverlay
         global g_combatNoPathBlacklist
+        global g_combatAutoDodge, g_combatDodgeKey, g_combatDodgeHpPct, g_combatDodgeCooldownMs
 
         ; Default: no combat path on the overlay. Each tick clears the carrier
         ; first; the LoS-blocked branch later in the function overrides it back
@@ -136,6 +137,28 @@ TryCombatAutomation(radarSnap, gameHwnd)
             distStr := (hostileCount > 0) ? Round(terrainDist) : "-"
             g_combatLastReason := "idle(n=" hostileCount " d=" distStr ")"
             return false
+        }
+
+        ; ── Auto-dodge (panic) ────────────────────────────────────────────
+        ; When enabled and player life drops to/below the threshold, fire the
+        ; configured dodge-roll key to escape (throttled by g_combatDodgeCooldownMs).
+        ; A keypress needs no aim/projection, so this runs BEFORE the camera gate —
+        ; it still works when the W2S matrix is bad. Dodges in the current facing /
+        ; cursor direction (a later refinement could aim away from the nearest enemy
+        ; first). Opt-in (default off) + needs a configured key, so it can't affect
+        ; anyone who hasn't set it up.
+        if (g_combatAutoDodge && g_combatDodgeKey != "")
+        {
+            static _dodgeLastTick := 0
+            hpPct := _CombatPlayerHpPct(radarSnap)
+            if (hpPct >= 0 && hpPct <= g_combatDodgeHpPct
+                && (A_TickCount - _dodgeLastTick) > g_combatDodgeCooldownMs)
+            {
+                _SendSkillKey(g_combatDodgeKey, gameHwnd)
+                _dodgeLastTick := A_TickCount
+                g_combatLastReason := "auto-dodge(hp=" Round(hpPct) "%)"
+                return true
+            }
         }
 
         ; Publish the engaged enemy as the combat target marker on the radar
@@ -482,7 +505,13 @@ TryCombatAutomation(radarSnap, gameHwnd)
             if (_aimStartTick = 0)
                 _aimStartTick := A_TickCount
             aimElapsed := A_TickCount - _aimStartTick
-            if (aimElapsed < 1500)
+            ; Grace before firing anyway when the game hasn't confirmed the cursor
+            ; is on the enemy. Was 1500 ms — far too long: the bot stood frozen up
+            ; to 1.5 s per target (status log showed aiming(1406ms)). 500 ms fires
+            ; much sooner so it keeps attacking while repositioning ("attack while
+            ; moving" in spirit) — the cursor is already on the enemy, so a slightly
+            ; early fire still lands.
+            if (aimElapsed < 500)
             {
                 g_combatLastReason := "aiming(" aimElapsed "ms)"
                 return true   ; still in combat — block exploration
@@ -638,6 +667,21 @@ UpdateCombatPresence(radarSnap)
         if (n > 0 && d <= g_combatRange)
             g_combatState := "combat"
     }
+}
+
+; Player life % from the radar snapshot's playerVitals (0..100), or -1 when
+; unreadable. Used by the combat auto-dodge trigger.
+_CombatPlayerHpPct(radarSnap)
+{
+    pv := radarSnap.Has("playerVitals") ? radarSnap["playerVitals"] : 0
+    if !(pv && IsObject(pv) && pv.Has("stats"))
+        return -1
+    st := pv["stats"]
+    cur := st.Has("lifeCurrent") ? st["lifeCurrent"] : 0
+    max := st.Has("lifeMax") ? st["lifeMax"] : 0
+    if (max <= 0)
+        return -1
+    return (cur * 100.0) / max
 }
 
 _DetectCombat(radarSnap)
@@ -1286,6 +1330,7 @@ LoadCombatAutoConfig()
     global g_combatAutoEnabled, g_combatRange, g_combatDisengageRange
     global g_combatGlobalCooldownMs, g_combatSkillSlots, g_combatToggleHotkey
     global g_combatW2SScale, g_combatNoPathBlacklist
+    global g_combatAutoDodge, g_combatDodgeKey, g_combatDodgeHpPct, g_combatDodgeCooldownMs
 
     cfgPath := A_ScriptDir "\poeformance_config.ini"
 
@@ -1295,6 +1340,11 @@ LoadCombatAutoConfig()
     g_combatGlobalCooldownMs := 120
     g_combatToggleHotkey := "F10"
     g_combatW2SScale := 0.20
+    ; Auto-dodge (panic dodge-roll on low life). Opt-in; needs a dodge key set.
+    g_combatAutoDodge := false
+    g_combatDodgeKey := ""
+    g_combatDodgeHpPct := 50
+    g_combatDodgeCooldownMs := 1200
     ; entityAddr → expiry tick for enemies the no-path give-up disengaged
     ; from (seeded here unconditionally — module-init gotcha, see CLAUDE.md)
     g_combatNoPathBlacklist := Map()
@@ -1305,6 +1355,10 @@ LoadCombatAutoConfig()
     try g_combatGlobalCooldownMs := Integer(IniRead(cfgPath, "CombatAutomation", "globalCooldownMs", "120"))
     try g_combatToggleHotkey := IniRead(cfgPath, "CombatAutomation", "toggleHotkey", "F10")
     try g_combatW2SScale := Float(IniRead(cfgPath, "CombatAutomation", "worldToScreenScale", "0.20"))
+    try g_combatAutoDodge := IniRead(cfgPath, "CombatAutomation", "autoDodge", "0") = "1"
+    try g_combatDodgeKey := IniRead(cfgPath, "CombatAutomation", "dodgeKey", "")
+    try g_combatDodgeHpPct := Integer(IniRead(cfgPath, "CombatAutomation", "dodgeHpPct", "50"))
+    try g_combatDodgeCooldownMs := Integer(IniRead(cfgPath, "CombatAutomation", "dodgeCooldownMs", "1200"))
 
     ; Load up to 8 skill slots
     g_combatSkillSlots := Map()
@@ -1350,6 +1404,7 @@ SaveCombatAutoConfig()
     global g_combatAutoEnabled, g_combatRange, g_combatDisengageRange
     global g_combatGlobalCooldownMs, g_combatSkillSlots, g_combatToggleHotkey
     global g_combatW2SScale
+    global g_combatAutoDodge, g_combatDodgeKey, g_combatDodgeHpPct, g_combatDodgeCooldownMs
 
     cfgPath := A_ScriptDir "\poeformance_config.ini"
 
@@ -1359,6 +1414,10 @@ SaveCombatAutoConfig()
     try IniWrite(String(g_combatGlobalCooldownMs), cfgPath, "CombatAutomation", "globalCooldownMs")
     try IniWrite(g_combatToggleHotkey, cfgPath, "CombatAutomation", "toggleHotkey")
     try IniWrite(Format("{:.2f}", g_combatW2SScale), cfgPath, "CombatAutomation", "worldToScreenScale")
+    try IniWrite(g_combatAutoDodge ? "1" : "0", cfgPath, "CombatAutomation", "autoDodge")
+    try IniWrite(g_combatDodgeKey, cfgPath, "CombatAutomation", "dodgeKey")
+    try IniWrite(String(g_combatDodgeHpPct), cfgPath, "CombatAutomation", "dodgeHpPct")
+    try IniWrite(String(g_combatDodgeCooldownMs), cfgPath, "CombatAutomation", "dodgeCooldownMs")
 
     Loop 8
     {

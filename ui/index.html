@@ -5770,6 +5770,27 @@
                     </div>
                   </div>
 
+                  <!-- Auto-dodge: panic dodge-roll on low life -->
+                  <div class="cfg-row" style="margin-top:10px"><span class="cfg-label">🤸 Auto-dodge on low life</span>
+                    <label class="toggle"><input type="checkbox" id="tog-combat-dodge"
+                        onchange="ahkCall('SetCombatAutoDodge', this.checked?1:0)"><span class="toggle-slider"></span></label>
+                  </div>
+                  <div class="cfg-help">During combat, presses your dodge-roll key to escape when life drops to/below the
+                    threshold (throttled ~1.2&nbsp;s). Needs the dodge key set below; dodges in your current facing direction.</div>
+                  <div class="cfg-row"><span class="cfg-label">Dodge key</span>
+                    <input type="text" id="inp-combat-dodge-key" placeholder="e.g. Space" spellcheck="false"
+                      style="width:120px;font-size:12px;font-family:var(--codex-serif)"
+                      onchange="ahkCall('SetCombatDodgeKey', this.value.trim())"
+                      data-tip="The in-game dodge / roll key — an AHK key name (Space, q, e, LButton, …).">
+                  </div>
+                  <div class="cfg-slider-row"><span class="cfg-label">Dodge at life ≤ (%)</span>
+                    <div class="slider-wrap">
+                      <span class="slider-val" id="combat-dodge-hp-bub">50</span>
+                      <input type="range" id="inp-combat-dodge-hp" min="5" max="95" step="5" value="50"
+                        oninput="_sb(this,'combat-dodge-hp-bub',this.value); ahkCall('SetCombatDodgeHp', parseInt(this.value))">
+                    </div>
+                  </div>
+
                   <div style="margin-top:12px;font-size:11px;color:var(--accent);font-weight:600">Skill Slots</div>
                   <div class="cfg-row" style="margin-top:4px;gap:8px;align-items:center;flex-wrap:wrap">
                     <button class="hk-btn" onclick="combatAutoConfig()"
@@ -11578,6 +11599,12 @@
       if (d.combatW2S !== undefined) {
         const el = document.getElementById('inp-combat-w2s');
         if (el && el !== document.activeElement) { el.value = d.combatW2S; _sbSync(el, 'combat-w2s-bub', parseFloat(d.combatW2S).toFixed(2)); }
+      }
+      if (d.combatAutoDodge !== undefined) { const el = document.getElementById('tog-combat-dodge'); if (el) el.checked = d.combatAutoDodge === true; }
+      if (d.combatDodgeKey !== undefined) { const el = document.getElementById('inp-combat-dodge-key'); if (el && el !== document.activeElement) el.value = d.combatDodgeKey || ''; }
+      if (d.combatDodgeHp !== undefined) {
+        const el = document.getElementById('inp-combat-dodge-hp');
+        if (el && el !== document.activeElement) { el.value = d.combatDodgeHp; _sbSync(el, 'combat-dodge-hp-bub', d.combatDodgeHp); }
       }
       if (d.combatSlots !== undefined) _renderCombatSlots(d.combatSlots);
 

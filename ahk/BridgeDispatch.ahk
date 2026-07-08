@@ -754,6 +754,22 @@ _DispatchBridgeCall(method, args)
             val := (args.Length >= 1) ? args[1] : 0.20
             g_combatW2SScale := Max(0.05, Min(1.0, Float(val)))
             SetTimer(() => SaveCombatAutoConfig(), -100)
+        case "SetCombatAutoDodge":
+            global g_combatAutoDodge
+            g_combatAutoDodge := (args.Length >= 1 && (args[1] = 1 || args[1] = "1" || args[1] = true))
+            SetTimer(() => SaveCombatAutoConfig(), -100)
+            SetTimer(PushHeaderToWebView, -50)
+        case "SetCombatDodgeKey":
+            ; args: [ahkKeyString] — the in-game dodge-roll key ("" clears / disables the press).
+            global g_combatDodgeKey
+            g_combatDodgeKey := (args.Length >= 1) ? Trim(String(args[1])) : ""
+            SetTimer(() => SaveCombatAutoConfig(), -100)
+            SetTimer(PushHeaderToWebView, -50)
+        case "SetCombatDodgeHp":
+            global g_combatDodgeHpPct
+            val := (args.Length >= 1) ? args[1] : 50
+            g_combatDodgeHpPct := Max(5, Min(95, Integer(val)))
+            SetTimer(() => SaveCombatAutoConfig(), -100)
         case "SetCombatSlot":
             ; args: [slotNum, key, priority, skillName, type, cooldownMs, enabled, skillRange]
             _ApplyCombatSlotConfig(args)
