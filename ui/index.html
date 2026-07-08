@@ -7122,7 +7122,10 @@
         content:"";position:absolute;inset:-1px;border-radius:inherit;pointer-events:none;
         background:var(--btnBrkTL) top left/13px no-repeat,var(--btnBrkTR) top right/13px no-repeat,
           var(--btnBrkBR) bottom right/13px no-repeat,var(--btnBrkBL) bottom left/13px no-repeat,
-          var(--btnEdgeT) center top/52px 8px no-repeat,var(--btnEdgeB) center bottom/52px 8px no-repeat;
+          /* Edge ornaments scale with the button: full 52px on regular widths,
+             proportionally smaller on short buttons (e.g. key-capture "F10")
+             so they never crowd the corner volutes. */
+          var(--btnEdgeT) center top/min(52px,50%) auto no-repeat,var(--btnEdgeB) center bottom/min(52px,50%) auto no-repeat;
         transition:filter .2s;filter:saturate(.85) brightness(.82)}
       :is(.btn,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary):hover:not(:disabled)::before{
         filter:drop-shadow(0 0 2.5px rgba(240,214,138,.6))}
