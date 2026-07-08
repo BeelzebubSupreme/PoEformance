@@ -6551,6 +6551,7 @@
                   <button class="tree-tbtn" onclick="ahkCall('UiMapProbeRun')" data-tip="Post-patch diagnostic: walk InGameState->UiRoot->GameUi->MapParent->LargeMap to find why LargeMap detection fails. RUN WITH THE LARGE MAP OPEN. Writes logs\InGameStateMonitor.uimap_probe.log">🗺️ Probe UI/Map</button>
                   <button class="tree-tbtn" onclick="ahkCall('SkillProbeRun')" data-tip="Post-patch diagnostic: trace the player's skill-name DAT chain (Actor->ActiveSkills->GrantedEffectsPerLevel->GrantedEffects->name) to find why skill names fall back to Skill_<hex>. Writes logs\InGameStateMonitor.skill_probe.log">✨ Probe Skills</button>
                   <button class="tree-tbtn" onclick="ahkCall('ActorProbeRun')" data-tip="Diagnostic: locate the drifted Actor animationId offset. Resolves the local player's Actor component and TIME-SAMPLES a 4KB int32 window over ~5s while you act, then reports which offset changed (the animationId is the low-int one that cycles 0=Idle/4=Run/skill ids). Click OK, then RUN AROUND and CAST several skills for ~5s. Writes logs\InGameStateMonitor.actor_probe.log">🎭 Probe Actor</button>
+                  <button class="tree-tbtn" onclick="ahkCall('EnemyBuffProbeRun')" data-tip="RE aid: dump the NEAREST hostile monster's active buffs/curses/debuffs via the verified pointer-array read, to confirm enemy-buff reads work before trusting the enemyBuff macro condition. Stand near a cursed/enraged/on-fire enemy, then click. Writes logs\InGameStateMonitor.enemy_buff_probe.log">🩸 Probe Enemy Buffs</button>
                   <button class="tree-tbtn" onclick="ahkCall('ActorVectorProbeRun')" data-tip="Diagnostic: verify/re-base the Actor ActiveSkills / Cooldowns / DeployedEntities vectors. Reads each vector at the current offset AND at current+0x10, DECODES the first entries (castType / cooldown details), and scans the region for vector-shaped pointer pairs — so the correct offset is picked by content (valid detail pointers + sane castTypes), not by a count that just looks plausible. Be in-game, then click. Writes logs\InGameStateMonitor.actor_vector_probe.log">🧬 Probe Actor Vectors</button>
                   <button class="tree-tbtn" onclick="ahkCall('PathfindingProbeRun')" data-tip="Diagnostic: enumerate awake monsters, resolve their Pathfinding component and dump the candidate Flying (0xE5) / BaseSpeed (0xEC) fields plus raw hex, to verify the hypothesis offsets cross-referenced from Sikaka/POE2Radar. Stand in a populated area. Writes logs\InGameStateMonitor.pathfinding_probe.log">🏃 Probe Pathfinding</button></div>
                 <div class="cfg-help">Post-patch triage: each probe re-locates one drifted offset family in the live game (AreaInstance, components, UI/map chain, skills, Actor fields, pathfinding) and writes a log readable under <b>Data &amp; Logs</b>.</div>
@@ -9161,6 +9162,7 @@
       charges: 'Condition: Charges',
       monsterCount: 'Condition: Monster count',
       enemyAnim: 'Condition: Enemy animation',
+      enemyBuff: 'Condition: Enemy buff/curse',
       aim: 'Mouse move (auto-aim)',
       // Legacy types — kept so pre-merge exports still read correctly.
       press: 'Key press / hold / loop',
@@ -9569,6 +9571,7 @@
         case 'charges':      return { type, chargeType: 'power', op: '>=', value: 1 };
         case 'monsterCount': return { type, rarity: 'any', radiusMode: 'player', radius: 120, op: '>=', value: 1 };
         case 'enemyAnim':    return { type, animIds: '', radiusMode: 'world', worldRadius: 1200, radius: 120, debug: 0, circleColor: '#FF6A6A' };
+        case 'enemyBuff':    return { type, buffName: '', mode: 'present', radiusMode: 'world', worldRadius: 1200, radius: 120 };
         case 'aim':          return { type, targetType: 'monster', rarity: 'any', radius: 150, worldRadius: 1000, radiusMode: 'cursor', chestType: '', chestTypeCustom: 0, name: '', metadataPath: '', press: 1, holdMs: 0, scanAll: 0 };
         default:             return { type: 'key', mode: 'press' };
       }
@@ -9591,7 +9594,7 @@
     //   { kind:'group', mode:'all'|'any', cid, children:[ <node>... ] }
     //   leaf = a condition action ({type:'vitals'|'buff'|'charges'|'monsterCount', ...})
     // cid is a UI-only stable handle for addressing a node in onchange handlers.
-    const HK_COND_TYPES = ['vitals', 'buff', 'charges', 'monsterCount', 'monsterCountCursor', 'enemyAnim'];
+    const HK_COND_TYPES = ['vitals', 'buff', 'charges', 'monsterCount', 'monsterCountCursor', 'enemyAnim', 'enemyBuff'];
     function hkIsCondType(t) { return HK_COND_TYPES.includes(t); }
     let hkCidSeq = 1;
     function hkNewCid() { return hkCidSeq++; }
@@ -9911,6 +9914,7 @@
             <option value="vitals">Vitals</option><option value="buff">Buff</option>
             <option value="charges">Charges</option><option value="monsterCount">Monster count</option>
             <option value="enemyAnim">Enemy animation</option>
+            <option value="enemyBuff">Enemy buff/curse</option>
           </select>
           <button class="hk-btn" data-tip="Add the selected condition to this group" onclick="hkAddCond(${gi},${hi},${cid})">+ Condition</button>
           <button class="hk-btn" data-tip="Add a nested group — a bracket — with its own ALL/ANY" onclick="hkAddCondGroup(${gi},${hi},${cid})">+ Group ( )</button>` : '';
@@ -9965,6 +9969,17 @@
                + eaRadiusField
                + `${hkCSel(a, 'radiusMode', [['world', 'around player (range)'], ['player', 'around player (px)'], ['cursor', 'around cursor (px)']], gi, hi, 'World-unit range around the player, or a pixel radius around the player / cursor')}`
                + eaStrip;
+          break;
+        }
+        case 'enemyBuff': {
+          const ebWorld = (a.radiusMode || 'world') !== 'player' && (a.radiusMode || 'world') !== 'cursor';
+          const ebRadiusField = ebWorld
+            ? `Range ${hkCNum(a, 'worldRadius', 1200, gi, hi, 'Radius in world units (zoom-independent — matches the actual game distance)')} `
+            : `Radius(px) ${hkCNum(a, 'radius', 120, gi, hi, 'Radius in screen pixels')} `;
+          body = `Enemy ${hkCSel(a, 'mode', [['present', 'has'], ['absent', 'missing']], gi, hi, 'has = an enemy in range carries the buff/curse; missing = an enemy in range LACKS it (the recast-a-curse case)')} `
+               + `buff ${hkCBuffField(a, gi, hi)} `
+               + ebRadiusField
+               + `${hkCSel(a, 'radiusMode', [['world', 'around player (range)'], ['player', 'around player (px)'], ['cursor', 'around cursor (px)']], gi, hi, 'World-unit range around the player, or a pixel radius around the player / cursor')}`;
           break;
         }
         default: body = `<span style="color:var(--subtext)">unknown condition</span>`;

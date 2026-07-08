@@ -988,6 +988,9 @@ _DispatchBridgeCall(method, args)
         case "ActorProbeRun":
             ; TEMP diagnostic: time-sample the Actor struct to locate the drifted animationId.
             SetTimer(() => ActorProbeRun(), -1)
+        case "EnemyBuffProbeRun":
+            ; RE aid: dump the nearest hostile's buffs via the verified pointer-array read.
+            SetTimer(() => EnemyBuffProbeRun(), -1)
         case "ActorVectorProbeRun":
             ; TEMP diagnostic: verify/re-base the Actor ActiveSkills/Cooldowns/Deployed vectors.
             SetTimer(() => ActorVectorProbeRun(), -1)

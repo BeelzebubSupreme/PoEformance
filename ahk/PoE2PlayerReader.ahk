@@ -800,6 +800,50 @@ class PoE2PlayerReader extends PoE2PlayerComponentsReader
     ; Finds and reads the Buffs component for the local player entity.
     ; Deduplicates effects by (buffDefPtr, sourceEntityId) and builds flask slot state.
     ; Returns: Map with effects, effectsSummary, flaskActive, flaskSlots; or 0
+    ; Reads the active buff / curse / debuff effects on ANY entity (player OR
+    ; enemy) using the SAME proven read as ReadPlayerBuffsComponent: resolve the
+    ; "Buffs" component by name → walk the status-effect vector as a POINTER ARRAY
+    ; → decode each entry via ReadBuffEffectEntryBasic. Deliberately does NOT use
+    ; the generic 0x50-inline DecodeBuffsComponentBasic, whose stride conflicts
+    ; with this verified pointer-array walk. Returns an Array of effect Maps
+    ; (name / charges / timeLeft / totalTime / sourceEntityId / …), possibly empty.
+    ; Used by enemy curse/debuff checks (macro engine) + the EnemyBuff probe.
+    ReadEntityBuffEffects(entityPtr)
+    {
+        out := []
+        if !this.IsProbablyValidPointer(entityPtr)
+            return out
+        buffsComp := this.FindEntityComponentAddress(entityPtr, "Buffs")
+        if !this.IsProbablyValidPointer(buffsComp)
+            return out
+        vFirst := this.Mem.ReadInt64(buffsComp + PoE2Offsets.Buffs["StatusEffectPtr"])
+        vLast  := this.Mem.ReadInt64(buffsComp + PoE2Offsets.Buffs["StatusEffectPtrLast"])
+        if (vFirst <= 0 || vLast < vFirst)
+            return out
+        cnt := Floor((vLast - vFirst) / A_PtrSize)
+        if (cnt <= 0 || cnt > 512)
+            return out
+        seen := Map()
+        maxRead := Min(cnt, 160)
+        i := 0
+        while (i < maxRead)
+        {
+            sp := this.Mem.ReadPtr(vFirst + (i * A_PtrSize))
+            i += 1
+            if !this.IsProbablyValidPointer(sp)
+                continue
+            eff := this.ReadBuffEffectEntryBasic(sp)
+            if !eff
+                continue
+            k := Format("{:X}-{}", eff["buffDefPtr"], eff["sourceEntityId"])
+            if seen.Has(k)
+                continue
+            seen[k] := true
+            out.Push(eff)
+        }
+        return out
+    }
+
     ReadPlayerBuffsComponent(localPlayerPtr)
     {
         if !this.IsProbablyValidPointer(localPlayerPtr)

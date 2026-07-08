@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.296`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.297`.
 
 ## Language
 
@@ -2253,7 +2253,7 @@ new memory RE.
   "WorldItem"; confirm names persist while standing still and reset on zone change, and that far
   drops (labels not on screen) still resolve.
 
-## Entity Inspector actions + user-extensible Junk Filter (shipped 0.45.13.296)
+## Entity Inspector actions + user-extensible Junk Filter (shipped 0.45.13.297)
 
 Four Entity-Inspector conveniences, the biggest of which makes the Junk Filter
 user-extensible (custom patterns per category + user-created categories).
@@ -2314,7 +2314,7 @@ rotation "isn't the best", (3) it kills everything then "runs back around to pic
 of collecting as it goes. Work lives on branch `PoEfdev/autopilot-pathing`, done in three testable
 stages (commit + in-game verify between each).
 
-### Stage 1 — stop getting stuck (shipped 0.45.13.296)
+### Stage 1 — stop getting stuck (shipped 0.45.13.297)
 
 - **Combat walk/approach stuck-watchdog (`ahk/CombatAutomation.ahk`, the big one):** the existing
   no-path give-up only covers enemies with NO A* route. A REACHABLE enemy the character still can't
@@ -2348,7 +2348,7 @@ stages (commit + in-game verify between each).
   returning from a fight, and starts moving toward a new far target sooner (less `routing`). Tunables
   if needed: `MOVE_STUCK_MS` / `MOVE_CELLS` (combat), the 600 ms gap, the 20 ms flood budget.
 
-### Stage 2 — loot as you go (shipped 0.45.13.296)
+### Stage 2 — loot as you go (shipped 0.45.13.297)
 
 `LootPickup._RunLootPickup` used a BLANKET hostile gate — any hostile within `g_combatRange`
 (Euclidean) suppressed ALL pickup and returned early — so loot was purely post-combat (the "kill
@@ -2369,7 +2369,7 @@ everything, then run back around" behaviour). Replaced with a LOOT-RELATIVE gate
   through rather than all at the end; confirm it doesn't break off toward far/behind-mob loot mid-
   fight. Tune `SAFE_GRAB_DIST` if it grabs too eagerly / not eagerly enough.
 
-### Stage 3 — better combat rotation (shipped 0.45.13.296)
+### Stage 3 — better combat rotation (shipped 0.45.13.297)
 
 `CombatAutomation._SelectNextSkill` was priority SPAM: every tick it returned the single
 lowest-`priority` ready slot, so one skill monopolised casting and the other configured skills
@@ -2395,7 +2395,7 @@ rarely fired ("rotation isn't the best"). Replaced the final selection with a RO
   through them instead of spamming one; set per-slot `cooldownMs` to pace fillers/buffs; report if
   the cycle feels wrong for a specific build (the cursor logic is easily tuned / revertible).
 
-### Loot rarity misclassification fix (shipped 0.45.13.296)
+### Loot rarity misclassification fix (shipped 0.45.13.297)
 
 Owner report: with only "Rare" ticked, Auto Loot still picked up Magic AND Normal items. Root cause
 in `PoE2InventoryReader.ReadItemRarity` (used by loot pickup, the value radar, hover-price, ritual
@@ -2451,7 +2451,7 @@ live-readable (`ReadPlayerBuffsComponent`, name/stacks/duration). Gaps needing R
 skill→granted-buff linkage, structured skill tags, and a `data/buff_name_map.tsv` (referenced by
 `GetBuffNameMap` but MISSING — buffs show raw internal names). Combat slots are currently manual.
 
-### Phase 1 — buff/curse picker: free-text + typeahead (shipped 0.45.13.296)
+### Phase 1 — buff/curse picker: free-text + typeahead (shipped 0.45.13.297)
 
 Owner report: "some buffs I use aren't in the macro engine, so it has nothing to check to re-activate
 the buff/curse." Root cause was NOT the check — `_HotkeysCheckBuff`/`_HotkeysFindBuff`
@@ -2478,7 +2478,7 @@ a buff currently down (the recast-when-absent case) was unselectable.
   recast when the buff drops. Note: names are the INTERNAL ids (e.g. `arcane_surge`); a future
   `buff_name_map.tsv` + a "current buffs, click to add" helper would make discovery easier.
 
-### Phase 2 — combat rotation auto-config from equipped skills (shipped 0.45.13.296)
+### Phase 2 — combat rotation auto-config from equipped skills (shipped 0.45.13.297)
 
 A one-click "🎯 Auto-configure from equipped skills" button that reads the player's LIVE skill bar and
 fills the 8 combat slots to match whatever build is equipped — so the rotation reflects the real
@@ -2511,7 +2511,7 @@ working per-build rotation.
   Then set AoE/buff types + disable any movement/aura slot. If a skill's key is wrong, it also
   resolves live via `_CombatResolveSlotKey`.
 
-### Phase 3 — build importer (Path of Building code) (shipped 0.45.13.296)
+### Phase 3 — build importer (Path of Building code) (shipped 0.45.13.297)
 
 Imports a build's recommended rotation from a Path of Building export code: paste the code, it decodes
 locally, extracts the ACTIVE skills in order, and fills the combat slots by matching them to your live
@@ -2539,6 +2539,39 @@ reliability (structured data, no anti-bot).
   whether real codes use `<Gem nameSpec=… skillId=…>` (the documented PoB format this assumes) and
   whether the payload is zlib (`'deflate'`) vs raw (`'deflate-raw'`). If a real code fails to decode,
   switch the stream to `'deflate-raw'`; if names mismatch, adjust the nameSpec→in-game-name mapping.
+
+### Phase 4 — enemy buffs/curses: read + probe + macro condition (shipped 0.45.13.297)
+
+Adds enemy-side buff/curse/debuff visibility, so a macro can gate on "an enemy in range is/ isn't
+cursed/enraged/etc." Built on the tool's PROVEN buff read, not the suspect enemy decoder.
+
+- **`PoE2PlayerReader.ReadEntityBuffEffects(entityPtr)` (new):** reads any entity's active buffs using
+  the SAME verified path as `ReadPlayerBuffsComponent` — `FindEntityComponentAddress(ptr,"Buffs")`
+  (generic) → walk the status vector as a POINTER ARRAY → `ReadBuffEffectEntryBasic` each (name /
+  charges / timeLeft / totalTime / sourceEntityId), deduped. Deliberately NOT the generic 0x50-inline
+  `DecodeBuffsComponentBasic`, whose stride conflicts with this proven walk (the audit's suspected
+  enemy-buff bug). Reuses verified primitives — this is the defensible read, not a guess.
+- **`ahk/EnemyBuffProbe.ahk` (new, RE aid):** `EnemyBuffProbeRun` dumps the nearest hostile monster's
+  buffs via `ReadEntityBuffEffects` (from `g_radarLastSnap`) to a MsgBox + `logs\…enemy_buff_probe.log`.
+  Confirms the enemy read works before trusting the condition. Bridge `EnemyBuffProbeRun`; UI
+  "🩸 Probe Enemy Buffs" in the RE-tools row.
+- **`enemyBuff` macro condition (`CustomHotkeys.ahk`):** `_HotkeysCheckEnemyBuff(a, snap)` mirrors the
+  `enemyAnim` monster gate (path `metadata/monsters/`, targetable, not friendly, radius world/px) and,
+  per in-range enemy, reads its buffs via `ReadEntityBuffEffects` and substring-matches `buffName`.
+  `mode present` = an enemy carries it; `mode absent` = an in-range enemy LACKS it (recast-a-curse).
+  Bounded to ≤6 uncached reads/tick. Registered in `_HotkeysIsCondType` + `_HotkeysEvalLeaf`.
+- **UI:** `enemyBuff` added to `HK_COND_TYPES`, `HK_ACT_LABELS`, `hkActionDefault`s, the add-condition
+  `<option>` list, and a `hkRenderCondLeaf` case (mode has/missing + the Phase-1 `hkCBuffField` buff
+  picker + radius + radiusMode). Reuses the free-text buff typeahead, so any curse/debuff name works.
+- **Verified in the browser preview:** the condition registers + renders (mode, buff datalist, radius),
+  the probe button is present, no console errors; full `/validate` exit 0; inline `node --check` clean.
+- **PENDING in-game verification (the read is the one unproven bit):** run "🩸 Probe Enemy Buffs"
+  next to a cursed/enraged/on-fire enemy — it should list that enemy's buffs. If it reads them, the
+  `enemyBuff` condition works immediately; if a clearly-buffed enemy reads 0, the Buffs offsets /
+  component resolution for enemies need a look (the probe is the aid).
+- **Deferred (pure RE, not guessed):** `buff_name_map.tsv` (readable buff names) needs the PoE2 buff
+  dat SCHEMA (poe_tools.py works off GGPK CSVs — columns unknown to me, so not written); skill→granted-
+  buff linkage + structured AoE/buff/curse skill tags need a live RE pass. These stay as the honest gap.
 
 ## Reference
 
