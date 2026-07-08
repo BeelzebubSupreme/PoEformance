@@ -166,8 +166,10 @@ CameraZoomTick()
             try g_reader.Mem.WriteFloat(g_camZoomAppliedAddr, g_camZoomOrig)
         orig := 0.0
         try orig := g_reader.Mem.ReadFloat(addr)
-        ; Only accept a sane, positive original — never scale garbage.
-        if !(orig > 0.001 && orig < 1000000.0)
+        ; Accept any sane-magnitude original, POSITIVE OR NEGATIVE — the camera
+        ; distance/height candidates read negative (e.g. -1200 / -8000), and the
+        ; old positive-only guard silently refused to ever write them.
+        if !(Abs(orig) > 0.001 && Abs(orig) < 10000000.0)
         {
             g_camZoomAppliedAddr := 0
             return
@@ -178,6 +180,44 @@ CameraZoomTick()
 
     ; Re-apply the scaled value (idempotent; overrides the game if it rewrites).
     try g_reader.Mem.WriteFloat(addr, g_camZoomOrig * g_camZoomFactor)
+}
+
+; Write-test diagnostic: writes a scaled value to the CURRENT offset, reads it
+; back, restores the original, and reports. Disambiguates the two failure modes
+; when "zoom didn't work": (a) the write LANDS but the view is unchanged → wrong
+; field, try another offset; (b) the value does NOT stick → the game rewrites it
+; every frame or the write is blocked. Non-destructive (restores before/after).
+CameraZoomDiagnose()
+{
+    global g_reader, g_camZoomOffset, g_camZoomFactor
+    addr := _CamZoomFieldAddr()
+    if !addr
+    {
+        MsgBox("Camera zoom: not in-game / can't resolve CameraStructure. Get in-game first.", "Camera Zoom")
+        return
+    }
+    before := 0.0
+    try before := g_reader.Mem.ReadFloat(addr)
+    fac := (g_camZoomFactor > 0.01) ? g_camZoomFactor : 1.5
+    test := (Abs(before) > 0.001) ? before * fac : 100.0   ; if the field reads 0, write a recognizable probe value
+    ok := false
+    try ok := g_reader.Mem.WriteFloat(addr, test)
+    Sleep(40)
+    after := 0.0
+    try after := g_reader.Mem.ReadFloat(addr)
+    try g_reader.Mem.WriteFloat(addr, before)   ; restore
+    landed := (Abs(after - test) <= Abs(test) * 0.001 + 0.001)
+    verdict := ok
+        ? (landed ? "Write LANDS. If the view didn't change, this offset is not the zoom field — try another (e.g. the negative distance ones: 0x60, 0x6C, 0x70, 0x78)."
+                  : "Write did NOT stick — the game overwrites this field every frame (or the write was blocked). This field can't drive zoom by a plain write.")
+        : "WriteFloat FAILED — the process handle lacks write access (relaunch after pulling this build; it must open PoE2 with VM_WRITE)."
+    MsgBox("Camera Zoom — write test`n"
+        . "offset   : 0x" Format("{:X}", g_camZoomOffset) "`n"
+        . "before   : " before "`n"
+        . "wrote    : " test "`n"
+        . "readback : " after "`n"
+        . "WriteFloat ok : " (ok ? "yes" : "NO") "`n"
+        . "value stuck   : " (landed ? "yes" : "no") "`n`n" verdict, "Camera Zoom Diagnose")
 }
 
 ; Writes the captured original back and clears the applied state. Safe to call

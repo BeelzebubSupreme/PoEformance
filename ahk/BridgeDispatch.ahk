@@ -1023,6 +1023,9 @@ _DispatchBridgeCall(method, args)
             if (args.Length >= 2)
                 _CamZoomApplySetting(args[1], args[2])
             SetTimer(PushHeaderToWebView, -50)
+        case "CameraZoomDiag":
+            ; Write-test the current offset (lands? / reverted? / blocked?) — non-destructive.
+            SetTimer(() => CameraZoomDiagnose(), -1)
         case "ActorVectorProbeRun":
             ; TEMP diagnostic: verify/re-base the Actor ActiveSkills/Cooldowns/Deployed vectors.
             SetTimer(() => ActorVectorProbeRun(), -1)
