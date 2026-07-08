@@ -991,6 +991,9 @@ _DispatchBridgeCall(method, args)
         case "EnemyBuffProbeRun":
             ; RE aid: dump the nearest hostile's buffs via the verified pointer-array read.
             SetTimer(() => EnemyBuffProbeRun(), -1)
+        case "CameraZoomProbeRun":
+            ; RE aid (read-only): dump the CameraStructure floats to locate the zoom/FoV field.
+            SetTimer(() => CameraZoomProbeRun(), -1)
         case "ActorVectorProbeRun":
             ; TEMP diagnostic: verify/re-base the Actor ActiveSkills/Cooldowns/Deployed vectors.
             SetTimer(() => ActorVectorProbeRun(), -1)

@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.297`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.298`.
 
 ## Language
 
@@ -2253,7 +2253,7 @@ new memory RE.
   "WorldItem"; confirm names persist while standing still and reset on zone change, and that far
   drops (labels not on screen) still resolve.
 
-## Entity Inspector actions + user-extensible Junk Filter (shipped 0.45.13.297)
+## Entity Inspector actions + user-extensible Junk Filter (shipped 0.45.13.298)
 
 Four Entity-Inspector conveniences, the biggest of which makes the Junk Filter
 user-extensible (custom patterns per category + user-created categories).
@@ -2314,7 +2314,7 @@ rotation "isn't the best", (3) it kills everything then "runs back around to pic
 of collecting as it goes. Work lives on branch `PoEfdev/autopilot-pathing`, done in three testable
 stages (commit + in-game verify between each).
 
-### Stage 1 — stop getting stuck (shipped 0.45.13.297)
+### Stage 1 — stop getting stuck (shipped 0.45.13.298)
 
 - **Combat walk/approach stuck-watchdog (`ahk/CombatAutomation.ahk`, the big one):** the existing
   no-path give-up only covers enemies with NO A* route. A REACHABLE enemy the character still can't
@@ -2348,7 +2348,7 @@ stages (commit + in-game verify between each).
   returning from a fight, and starts moving toward a new far target sooner (less `routing`). Tunables
   if needed: `MOVE_STUCK_MS` / `MOVE_CELLS` (combat), the 600 ms gap, the 20 ms flood budget.
 
-### Stage 2 — loot as you go (shipped 0.45.13.297)
+### Stage 2 — loot as you go (shipped 0.45.13.298)
 
 `LootPickup._RunLootPickup` used a BLANKET hostile gate — any hostile within `g_combatRange`
 (Euclidean) suppressed ALL pickup and returned early — so loot was purely post-combat (the "kill
@@ -2369,7 +2369,7 @@ everything, then run back around" behaviour). Replaced with a LOOT-RELATIVE gate
   through rather than all at the end; confirm it doesn't break off toward far/behind-mob loot mid-
   fight. Tune `SAFE_GRAB_DIST` if it grabs too eagerly / not eagerly enough.
 
-### Stage 3 — better combat rotation (shipped 0.45.13.297)
+### Stage 3 — better combat rotation (shipped 0.45.13.298)
 
 `CombatAutomation._SelectNextSkill` was priority SPAM: every tick it returned the single
 lowest-`priority` ready slot, so one skill monopolised casting and the other configured skills
@@ -2395,7 +2395,7 @@ rarely fired ("rotation isn't the best"). Replaced the final selection with a RO
   through them instead of spamming one; set per-slot `cooldownMs` to pace fillers/buffs; report if
   the cycle feels wrong for a specific build (the cursor logic is easily tuned / revertible).
 
-### Loot rarity misclassification fix (shipped 0.45.13.297)
+### Loot rarity misclassification fix (shipped 0.45.13.298)
 
 Owner report: with only "Rare" ticked, Auto Loot still picked up Magic AND Normal items. Root cause
 in `PoE2InventoryReader.ReadItemRarity` (used by loot pickup, the value radar, hover-price, ritual
@@ -2451,7 +2451,7 @@ live-readable (`ReadPlayerBuffsComponent`, name/stacks/duration). Gaps needing R
 skill→granted-buff linkage, structured skill tags, and a `data/buff_name_map.tsv` (referenced by
 `GetBuffNameMap` but MISSING — buffs show raw internal names). Combat slots are currently manual.
 
-### Phase 1 — buff/curse picker: free-text + typeahead (shipped 0.45.13.297)
+### Phase 1 — buff/curse picker: free-text + typeahead (shipped 0.45.13.298)
 
 Owner report: "some buffs I use aren't in the macro engine, so it has nothing to check to re-activate
 the buff/curse." Root cause was NOT the check — `_HotkeysCheckBuff`/`_HotkeysFindBuff`
@@ -2478,7 +2478,7 @@ a buff currently down (the recast-when-absent case) was unselectable.
   recast when the buff drops. Note: names are the INTERNAL ids (e.g. `arcane_surge`); a future
   `buff_name_map.tsv` + a "current buffs, click to add" helper would make discovery easier.
 
-### Phase 2 — combat rotation auto-config from equipped skills (shipped 0.45.13.297)
+### Phase 2 — combat rotation auto-config from equipped skills (shipped 0.45.13.298)
 
 A one-click "🎯 Auto-configure from equipped skills" button that reads the player's LIVE skill bar and
 fills the 8 combat slots to match whatever build is equipped — so the rotation reflects the real
@@ -2511,7 +2511,7 @@ working per-build rotation.
   Then set AoE/buff types + disable any movement/aura slot. If a skill's key is wrong, it also
   resolves live via `_CombatResolveSlotKey`.
 
-### Phase 3 — build importer (Path of Building code) (shipped 0.45.13.297)
+### Phase 3 — build importer (Path of Building code) (shipped 0.45.13.298)
 
 Imports a build's recommended rotation from a Path of Building export code: paste the code, it decodes
 locally, extracts the ACTIVE skills in order, and fills the combat slots by matching them to your live
@@ -2540,7 +2540,7 @@ reliability (structured data, no anti-bot).
   whether the payload is zlib (`'deflate'`) vs raw (`'deflate-raw'`). If a real code fails to decode,
   switch the stream to `'deflate-raw'`; if names mismatch, adjust the nameSpec→in-game-name mapping.
 
-### Phase 4 — enemy buffs/curses: read + probe + macro condition (shipped 0.45.13.297)
+### Phase 4 — enemy buffs/curses: read + probe + macro condition (shipped 0.45.13.298)
 
 Adds enemy-side buff/curse/debuff visibility, so a macro can gate on "an enemy in range is/ isn't
 cursed/enraged/etc." Built on the tool's PROVEN buff read, not the suspect enemy decoder.
@@ -2572,6 +2572,31 @@ cursed/enraged/etc." Built on the tool's PROVEN buff read, not the suspect enemy
 - **Deferred (pure RE, not guessed):** `buff_name_map.tsv` (readable buff names) needs the PoE2 buff
   dat SCHEMA (poe_tools.py works off GGPK CSVs — columns unknown to me, so not written); skill→granted-
   buff linkage + structured AoE/buff/curse skill tags need a live RE pass. These stay as the honest gap.
+
+### Phase 5 — in-game camera zoom: read-only camera probe (shipped 0.45.13.298)
+
+Owner wants an in-game camera zoom (see more/less of the play area). The tool is currently READ-ONLY
+on game memory (the process handle is opened `PROCESS_VM_READ | PROCESS_QUERY_INFORMATION` in
+`ProcessMemory.__New`, no `VM_WRITE`/`VM_OPERATION`), so zoom needs a memory WRITE — a deliberate
+escalation (detection-footprint + ToS + crash-if-wrong). This phase ships ONLY the safe first step:
+
+- **`ahk/CameraZoomProbe.ahk` (new, READ-ONLY, writes NOTHING):** `CameraZoomProbeRun` resolves the
+  CameraStructure (`_radarInGameStateCache` → `InGameState.WorldData` → `WorldData.CameraStructure`
+  0xA0 — same chain the W2S matrix uses) and dumps every float in `CameraStructure+0x00..0x1FC` (offset
+  / float / int), marking the 0x40-byte W2S-matrix region (`+0x100`) and flagging plausible
+  zoom/FoV/distance candidates (`0.05 < f < 10000`). MsgBox summary + `logs\…camera_probe.log`. Bridge
+  `CameraZoomProbeRun`; UI "🎥 Probe Camera" in the RE-tools row.
+- **Deliberately NOT built (needs the in-game probe first — no guessed offset):** the memory-WRITE
+  capability (`WriteProcessMemory` + reopening the handle with `VM_WRITE|VM_OPERATION`) and the actual
+  zoom control (hotkey/UI that writes the field, likely per-frame). A wrong write crashes the game and
+  adding write access changes the tool's process footprint, so both are made as an INFORMED step once
+  the probe pins the offset with the owner present — not blind.
+- **Verified:** `/validate` exit 0; inline `node --check` clean.
+- **Pending in-game (the RE session):** get in-game, click "🎥 Probe Camera", read the log. If PoE2
+  exposes any zoom, change it and re-run to see which float moved; otherwise identify the FoV /
+  camera-distance value from the candidates. Then we add the write path + zoom control against the
+  confirmed offset. (Note: PoE ARPGs historically lock the camera, so a writable zoom field may not
+  exist — the probe tells us.)
 
 ## Reference
 
