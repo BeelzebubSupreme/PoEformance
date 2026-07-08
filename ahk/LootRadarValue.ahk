@@ -152,6 +152,66 @@ _LrvUniqueName(innerPtr)
     return nm
 }
 
+; Resolves the game-style loot LABEL (item display name) + item rarity for a
+; ground WorldItem wrapper entity — used by the Entities list to replace the
+; generic "WorldItem" name with the actual drop's name (e.g. "Cannonade
+; Crossbow"), colored by rarity like the game. Mirrors the inventory tooltip's
+; name composition: base name (+ first prefix/suffix affix for magic/rare) or
+; the unique name via ItemVisualIdentity. Ground loot names never change while
+; the item exists, so results are cached per wrapper address and dropped on an
+; area change (recycled addresses in a new area can't return a stale name).
+;   wrapperAddr — the WorldItem wrapper entity address
+;   areaHash    — current area hash (cache is cleared when it changes)
+;   rarityId    — ByRef: resolved inner-item rarity id (0..6), -1 if unknown
+; Returns the display name string, or "" when the inner item can't be resolved.
+LrvWorldItemLabel(wrapperAddr, areaHash, &rarityId)
+{
+    global g_reader, g_lrvNameCache, g_lrvNameCacheHash
+    rarityId := -1
+    if !(IsObject(g_reader) && wrapperAddr)
+        return ""
+
+    ; Per-area cache (init-gotcha safe; reset when the area hash changes).
+    if !(IsSet(g_lrvNameCache) && IsObject(g_lrvNameCache))
+    {
+        g_lrvNameCache := Map()
+        g_lrvNameCacheHash := 0
+    }
+    if (areaHash != g_lrvNameCacheHash)
+    {
+        g_lrvNameCache := Map()
+        g_lrvNameCacheHash := areaHash
+    }
+    if g_lrvNameCache.Has(wrapperAddr)
+    {
+        c := g_lrvNameCache[wrapperAddr]
+        rarityId := c["rid"]
+        return c["name"]
+    }
+
+    innerPtr := 0, innerPath := "", off := -1, compAddr := 0, compNames := ""
+    if !_LrvResolveInnerItem(wrapperAddr, &innerPtr, &innerPath, &off, &compAddr, &compNames)
+        return ""   ; transient (e.g. a just-dropped item) — don't cache, retry next refresh
+
+    modsInfo := 0
+    try modsInfo := g_reader.ReadItemModsAndMagicProperties(innerPtr)
+    rid := (modsInfo && IsObject(modsInfo) && modsInfo.Has("rarityId")) ? modsInfo["rarityId"] : -1
+    ; Currency carries no real rarity (mods read returns -1) — classify it by
+    ; path like the rest of the loot layer so it colors as Currency, not Normal.
+    if (rid < 0 && InStr(innerPath, "/Currency/"))
+        rid := 5
+    baseType := ""
+    try baseType := g_reader.ExtractFlaskBaseType(innerPath)
+    name := ""
+    try name := g_reader.ComposeItemDisplayName(innerPath, baseType, modsInfo, rid, innerPtr)
+    if (name = "")
+        return ""
+
+    g_lrvNameCache[wrapperAddr] := Map("name", name, "rid", rid)
+    rarityId := rid
+    return name
+}
+
 ; ── Config + live annotation engine ───────────────────────────────────────────
 
 ; Seeds all LootRadarValue globals (defaults first), then overlays the persisted
@@ -181,6 +241,8 @@ LoadLootRadarValue()
     global g_lrvAlerted := Map()            ; wrapper addr -> 1 once alerted (per area)
     global g_lrvAreaHash := 0               ; last area hash (per-area reset)
     global g_lrvLastTick := 0               ; throttle stamp
+    global g_lrvNameCache := Map()          ; Entities list: wrapper addr -> Map(name,rid) loot-label cache
+    global g_lrvNameCacheHash := 0          ; area hash the name cache belongs to
 
     f := g_lrvConfigFile
     try {

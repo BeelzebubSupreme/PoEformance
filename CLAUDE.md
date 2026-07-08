@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.287`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.288`.
 
 ## Language
 
@@ -2214,6 +2214,44 @@ and the `"w"` bit in the scroll-cache `layerKey`. The wall-border maphack + unex
 are untouched (they share the same generation scan and scroll cache). Static: RadarOverlay braces
 223/223, `CreateBitmap` 3→2 (walk mask gone), UI `node --check` clean; browser preview confirms the
 row is gone and a legacy `walkGrid` header key no longer throws.
+
+## Entities list: ground-item loot labels (shipped 0.45.13.288)
+
+The Entities tab showed the generic "WorldItem" for every ground drop
+(`Metadata/MiscellaneousObjects/WorldItem`). Now the Name column shows the drop's
+actual, game-style loot label (e.g. "Cannonade Crossbow"), colored by rarity like the
+in-game label. Reuses the already-proven inner-item resolution + name composition — no
+new memory RE.
+
+- **`ahk/LootRadarValue.ahk` — `LrvWorldItemLabel(wrapperAddr, areaHash, &rarityId)` (new):**
+  resolves the wrapper's inner item (`_LrvResolveInnerItem`), reads its mods
+  (`g_reader.ReadItemModsAndMagicProperties`), and composes the display name via the SAME
+  `ComposeItemDisplayName` the inventory tooltip uses (base name + first prefix/suffix affix
+  for magic/rare; unique name via `ReadUniqueIviId`/`GetUniqueNameByIvi`). Currency carries no
+  real rarity (mods read → -1) so it is classified as rarity 5 by the `/Currency/` path, like
+  the rest of the loot layer. Cached per wrapper address in `g_lrvNameCache`, reset when
+  `g_lrvNameCacheHash` (the area hash) changes — ground loot names never change while the item
+  exists, so the repeated Entities-tab refresh doesn't re-read memory for the same drop. Misses
+  (a just-dropped item whose inner hasn't decoded yet) are NOT cached, so they retry next
+  refresh. Independent of `g_lrvEnabled` — the value-radar feature need not be on. Globals
+  seeded in `LoadLootRadarValue()` (init gotcha).
+- **`ahk/SnapshotSerializers.ahk` (`_BuildEntitiesJson`):** captures `namesAreaHash` from
+  `area["currentAreaHash"]`; for `entityType = "WorldItem"` it overrides `displayName` with
+  `LrvWorldItemLabel(...)` and, when the inner rarity resolved, overrides `rarId` + the rarity
+  string via a new `itemRarityNames` map (item ids, where 5 = Currency — the entity map uses
+  5 = "Boss"). Emits `"loot":true/false` per row. The Path/Type columns are unchanged (still
+  `…/WorldItem`) — only the Name + its color change.
+- **`ui/index.html`:** `.ei-c-name-txt.loot-<0..6>` color classes (normal/magic/rare/unique/
+  currency/gem, matched to the in-game label colors); `eiCard` adds `loot-${e.rarityId}` to the
+  name span only when `e.loot`. Non-loot rows keep the default color.
+- **Note:** the composed name follows the inventory tooltip's logic, which currently drops the
+  tier adjective (see `ComposeItemDisplayName`'s comment) — so a magic/rare name can differ
+  slightly from the exact in-game string, but base + affix words + rarity color match. Static:
+  full AHK stack `/validate` exit 0; UI `node --check` clean.
+- **Pending in-game verification:** on a map with ground loot, open Entities → the WorldItem
+  rows should show the item names in rarity colors (white/blue/yellow/orange/tan) instead of
+  "WorldItem"; confirm names persist while standing still and reset on zone change, and that far
+  drops (labels not on screen) still resolve.
 
 ## Reference
 

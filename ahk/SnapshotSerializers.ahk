@@ -194,6 +194,10 @@ _BuildEntitiesJson(snap)
         if snap.Has("sleepingEntities") && !IsObject(sleepEnt)
             sleepEnt := snap["sleepingEntities"]
 
+        ; Current area hash — keys the per-area WorldItem loot-label cache so
+        ; the resolved names reset when the player changes zone.
+        namesAreaHash := (IsSet(area) && IsObject(area) && area.Has("currentAreaHash")) ? area["currentAreaHash"] : 0
+
         ; Total entities present in the network bubble BEFORE the junk filter and
         ; sampling — the std::map sizes. Emitted as "present" so the UI can show
         ; "<shown> of <present>" (how many the filters/junk removed).
@@ -245,6 +249,9 @@ _BuildEntitiesJson(snap)
             return '{"total":0,"present":' presentCount ',"items":[]}'
 
         rarityNames := Map(0,"Normal",1,"Magic",2,"Rare",3,"Unique",4,"Unique",5,"Boss")
+        ; Item (not entity) rarity ids — used for ground WorldItem loot labels,
+        ; where 5 means Currency (the entity map above maps 5 -> "Boss").
+        itemRarityNames := Map(0,"Normal",1,"Magic",2,"Rare",3,"Unique",4,"Unique",5,"Currency",6,"Gem")
         rows  := "["
         first := true
         emitted := 0
@@ -294,6 +301,29 @@ _BuildEntitiesJson(snap)
 
             rarity := rarityNames.Has(rarId) ? rarityNames[rarId] : "Normal"
 
+            ; Ground WorldItems: replace the generic "WorldItem" name with the
+            ; drop's game-style loot label (base + affixes / unique name) and use
+            ; the inner item's real rarity, so the UI colors it like the game.
+            ; Cached per wrapper address (per area) so this doesn't re-read memory
+            ; on every Entities-tab refresh.
+            isLoot := false
+            if (entityType = "WorldItem")
+            {
+                waddr := entity.Has("address") ? entity["address"] : 0
+                lootRid := -1
+                lootName := LrvWorldItemLabel(waddr, namesAreaHash, &lootRid)
+                if (lootName != "")
+                {
+                    displayName := lootName
+                    if (lootRid >= 0)
+                    {
+                        rarId  := lootRid
+                        rarity := itemRarityNames.Has(rarId) ? itemRarityNames[rarId] : "Normal"
+                    }
+                    isLoot := true
+                }
+            }
+
             life    := (decoded && decoded.Has("life")) ? decoded["life"] : 0
             isAlive := true
             lifePct := -1
@@ -333,7 +363,7 @@ _BuildEntitiesJson(snap)
                 . ',"path":"' ep '","name":"' en '","rarity":"' er '","rarityId":' rarId
                 . ',"type":"' et '","metaGroup":"' mg '","metaCategory":"' mc '","group":"' gr '","state":"' stateStr '"'
                 . ',"life":' lifePct ',"dist":' dist ',"alive":' (isAlive ? "true" : "false")
-                . ',"sleep":' sl
+                . ',"sleep":' sl ',"loot":' (isLoot ? "true" : "false")
                 . ',"componentCount":' compCount
                 . ',"namedComponentCount":' namedCount
                 . ',"components":' _SerializeComponents(comps, decoded)
