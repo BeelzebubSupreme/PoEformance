@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.292`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.293`.
 
 ## Language
 
@@ -2253,7 +2253,7 @@ new memory RE.
   "WorldItem"; confirm names persist while standing still and reset on zone change, and that far
   drops (labels not on screen) still resolve.
 
-## Entity Inspector actions + user-extensible Junk Filter (shipped 0.45.13.292)
+## Entity Inspector actions + user-extensible Junk Filter (shipped 0.45.13.293)
 
 Four Entity-Inspector conveniences, the biggest of which makes the Junk Filter
 user-extensible (custom patterns per category + user-created categories).
@@ -2314,7 +2314,7 @@ rotation "isn't the best", (3) it kills everything then "runs back around to pic
 of collecting as it goes. Work lives on branch `PoEfdev/autopilot-pathing`, done in three testable
 stages (commit + in-game verify between each).
 
-### Stage 1 — stop getting stuck (shipped 0.45.13.292)
+### Stage 1 — stop getting stuck (shipped 0.45.13.293)
 
 - **Combat walk/approach stuck-watchdog (`ahk/CombatAutomation.ahk`, the big one):** the existing
   no-path give-up only covers enemies with NO A* route. A REACHABLE enemy the character still can't
@@ -2348,7 +2348,7 @@ stages (commit + in-game verify between each).
   returning from a fight, and starts moving toward a new far target sooner (less `routing`). Tunables
   if needed: `MOVE_STUCK_MS` / `MOVE_CELLS` (combat), the 600 ms gap, the 20 ms flood budget.
 
-### Stage 2 — loot as you go (shipped 0.45.13.292)
+### Stage 2 — loot as you go (shipped 0.45.13.293)
 
 `LootPickup._RunLootPickup` used a BLANKET hostile gate — any hostile within `g_combatRange`
 (Euclidean) suppressed ALL pickup and returned early — so loot was purely post-combat (the "kill
@@ -2369,7 +2369,7 @@ everything, then run back around" behaviour). Replaced with a LOOT-RELATIVE gate
   through rather than all at the end; confirm it doesn't break off toward far/behind-mob loot mid-
   fight. Tune `SAFE_GRAB_DIST` if it grabs too eagerly / not eagerly enough.
 
-### Stage 3 — better combat rotation (shipped 0.45.13.292)
+### Stage 3 — better combat rotation (shipped 0.45.13.293)
 
 `CombatAutomation._SelectNextSkill` was priority SPAM: every tick it returned the single
 lowest-`priority` ready slot, so one skill monopolised casting and the other configured skills
@@ -2394,6 +2394,34 @@ rarely fired ("rotation isn't the best"). Replaced the final selection with a RO
 - **Pending in-game verification:** with several combat slots enabled, confirm the bot now cycles
   through them instead of spamming one; set per-slot `cooldownMs` to pace fillers/buffs; report if
   the cycle feels wrong for a specific build (the cursor logic is easily tuned / revertible).
+
+### Loot rarity misclassification fix (shipped 0.45.13.293)
+
+Owner report: with only "Rare" ticked, Auto Loot still picked up Magic AND Normal items. Root cause
+in `PoE2InventoryReader.ReadItemRarity` (used by loot pickup, the value radar, hover-price, ritual
+badges): it went through `ReadItemModsAndMagicProperties`, which **blind-scans every owned component**
+and reads BOTH the `Mods` (0x94) and `ObjectMagicProperties` (0x144) Rarity offsets on each, trusting
+any value in 0-5 and keeping the highest `rarity*10 + modCount` score. Reading the OMP offset on a
+Mods component — or either offset on an unrelated component (Render/Sockets/…) — fabricated spurious
+candidates, and because the score is biased toward higher rarity the noise skewed UP, so Magic/Normal
+items were misread as Rare and slipped through a Rare-only filter.
+
+- **Confirmed against the C# reference (GameHelper2 `ModsAndObjectMagicProperties.cs` + `Mods.cs`):**
+  the offset struct is shared (Rarity at inner 0x94; Mods→0x94, OMP→0x144 — matching our offsets
+  EXACTLY, so this was never an offset drift), and the **Mods component is the AUTHORITATIVE rarity
+  source** ("ObjectMagicProperties is only used for processing mod data, not rarity determination").
+- **Fix:** `ReadItemRarity` now resolves the rarity component BY NAME via
+  `ReadEntityComponentLookupBasic` and reads ONLY that component's own offset — `Mods.Rarity` (0x94)
+  first (authoritative), `ObjectMagicProperties.Rarity` (0x144) as a fallback for items with no Mods
+  component. No blind scan, no cross-offset contamination, no rarity-biased scoring. Returns -1 when
+  there is no rarity component (plain white gear → Normal; currency is matched by path upstream).
+  Lighter than the old path too (component lookup + 1 int read vs. a full mods-details scan), and
+  `_LootResolveItemInfo` still caches the result per drop.
+- **Not touched:** `ReadItemModsAndMagicProperties` (still used for reading actual MOD DETAILS in the
+  inspector) — its `rarityId` for mod display could get the same false-candidate treatment; a
+  possible later follow-up, but it doesn't affect loot filtering now.
+- **Pending in-game verification:** tick only "Rare" → Magic/Normal gear should NO LONGER be picked
+  up; tick Magic → magic collected, rares/normals ignored; currency still collected (path-matched).
 
 ## Reference
 
