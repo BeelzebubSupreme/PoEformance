@@ -1294,6 +1294,91 @@ SaveCombatAutoConfig()
     }
 }
 
+; ── Auto-configure combat slots from the equipped skill bar ────────────────
+; Reads the player's LIVE skill bar (which skill sits on which key, via
+; SkillBarReader) plus each skill's castType, and rewrites the 8 combat slots to
+; match whatever build is currently equipped — real skill names bound to their
+; real keys. Priority follows skill-bar order; range is inferred from castType
+; (melee 300 / spell 1200); type defaults to "single" and cooldown pacing is left
+; to the live game canUse gate (the name match reads the real cooldown each tick).
+; Persists the result and returns a short status string ("ok:N" | reason).
+AutoConfigureCombatSlots()
+{
+    global g_reader, g_combatSkillSlots
+    if !IsObject(g_reader)
+        return "no-reader"
+    slots := 0
+    try slots := ReadSkillBarSkills(g_reader)
+    if !(slots && slots is Array && slots.Length)
+        return "no-skillbar"     ; not in-game / skill bar not visible on the HUD
+
+    ; internalName -> live skill map (for castType).
+    skByInt := Map()
+    lp := _SkillBarLocalPlayerPtr()
+    if lp
+    {
+        sd := 0
+        try sd := g_reader.ReadPlayerSkills(lp)
+        if (sd && sd is Map && sd.Has("skills"))
+        {
+            for sk in sd["skills"]
+            {
+                if (sk is Map && sk.Has("name") && sk["name"] != "")
+                    skByInt[StrLower(sk["name"])] := sk
+            }
+        }
+    }
+
+    newSlots := Map()
+    n := 0
+    for e in slots
+    {
+        if (n >= 8)
+            break
+        if !(e is Map)
+            continue
+        disp  := e.Has("skillName") ? e["skillName"] : ""
+        intnm := e.Has("skillInternal") ? e["skillInternal"] : ""
+        key   := e.Has("sendKey") ? e["sendKey"] : ""
+        if (disp = "" && intnm = "")
+            continue                            ; empty skill-bar slot
+        low := StrLower(intnm)
+        if (low = "move")                       ; the basic move action is never a rotation skill
+            continue
+
+        castType := -1
+        if (intnm != "" && skByInt.Has(low))
+        {
+            sk := skByInt[low]
+            castType := sk.Has("castType") ? sk["castType"] : -1
+        }
+        rng := 0
+        if (castType = 0)
+            rng := 300                          ; melee / attack
+        else if (castType = 1)
+            rng := 1200                         ; spell
+
+        n += 1
+        nm := (disp != "") ? disp : intnm
+        newSlots[n] := Map(
+            "enabled",     true,
+            "key",         key,
+            "priority",    n,
+            "skillName",   nm,
+            "name",        nm,
+            "type",        "single",
+            "cooldownMs",  0,
+            "lastUseTick", 0,
+            "skillRange",  rng
+        )
+    }
+    if (n = 0)
+        return "no-skills-resolved"
+    g_combatSkillSlots := newSlots
+    SaveCombatAutoConfig()
+    return "ok:" n
+}
+
 ; ── Hotkey registration ───────────────────────────────────────────────────
 ; Registers (or re-registers) the combat toggle hotkey.
 ; Call once after LoadCombatAutoConfig().

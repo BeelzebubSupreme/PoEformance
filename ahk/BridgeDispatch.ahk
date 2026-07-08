@@ -759,6 +759,12 @@ _DispatchBridgeCall(method, args)
             SaveCombatAutoConfig()
             RegisterCombatHotkey()
             SetTimer(PushHeaderToWebView, -50)
+        case "AutoConfigCombat":
+            ; Fill the combat slots from the equipped skill bar, report the result,
+            ; then re-push the header so the slot rows re-render populated.
+            acRes := AutoConfigureCombatSlots()
+            try WebViewExec("window.combatAutoConfigResult && window.combatAutoConfigResult(" _JsStr(acRes) ")")
+            SetTimer(PushHeaderToWebView, -60)
 
             ; ── Loot Pickup rarity filter (no toggle — empty filter = off) ─
         case "SetLootRarity":

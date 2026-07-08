@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.294`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.295`.
 
 ## Language
 
@@ -2253,7 +2253,7 @@ new memory RE.
   "WorldItem"; confirm names persist while standing still and reset on zone change, and that far
   drops (labels not on screen) still resolve.
 
-## Entity Inspector actions + user-extensible Junk Filter (shipped 0.45.13.294)
+## Entity Inspector actions + user-extensible Junk Filter (shipped 0.45.13.295)
 
 Four Entity-Inspector conveniences, the biggest of which makes the Junk Filter
 user-extensible (custom patterns per category + user-created categories).
@@ -2314,7 +2314,7 @@ rotation "isn't the best", (3) it kills everything then "runs back around to pic
 of collecting as it goes. Work lives on branch `PoEfdev/autopilot-pathing`, done in three testable
 stages (commit + in-game verify between each).
 
-### Stage 1 — stop getting stuck (shipped 0.45.13.294)
+### Stage 1 — stop getting stuck (shipped 0.45.13.295)
 
 - **Combat walk/approach stuck-watchdog (`ahk/CombatAutomation.ahk`, the big one):** the existing
   no-path give-up only covers enemies with NO A* route. A REACHABLE enemy the character still can't
@@ -2348,7 +2348,7 @@ stages (commit + in-game verify between each).
   returning from a fight, and starts moving toward a new far target sooner (less `routing`). Tunables
   if needed: `MOVE_STUCK_MS` / `MOVE_CELLS` (combat), the 600 ms gap, the 20 ms flood budget.
 
-### Stage 2 — loot as you go (shipped 0.45.13.294)
+### Stage 2 — loot as you go (shipped 0.45.13.295)
 
 `LootPickup._RunLootPickup` used a BLANKET hostile gate — any hostile within `g_combatRange`
 (Euclidean) suppressed ALL pickup and returned early — so loot was purely post-combat (the "kill
@@ -2369,7 +2369,7 @@ everything, then run back around" behaviour). Replaced with a LOOT-RELATIVE gate
   through rather than all at the end; confirm it doesn't break off toward far/behind-mob loot mid-
   fight. Tune `SAFE_GRAB_DIST` if it grabs too eagerly / not eagerly enough.
 
-### Stage 3 — better combat rotation (shipped 0.45.13.294)
+### Stage 3 — better combat rotation (shipped 0.45.13.295)
 
 `CombatAutomation._SelectNextSkill` was priority SPAM: every tick it returned the single
 lowest-`priority` ready slot, so one skill monopolised casting and the other configured skills
@@ -2395,7 +2395,7 @@ rarely fired ("rotation isn't the best"). Replaced the final selection with a RO
   through them instead of spamming one; set per-slot `cooldownMs` to pace fillers/buffs; report if
   the cycle feels wrong for a specific build (the cursor logic is easily tuned / revertible).
 
-### Loot rarity misclassification fix (shipped 0.45.13.294)
+### Loot rarity misclassification fix (shipped 0.45.13.295)
 
 Owner report: with only "Rare" ticked, Auto Loot still picked up Magic AND Normal items. Root cause
 in `PoE2InventoryReader.ReadItemRarity` (used by loot pickup, the value radar, hover-price, ritual
@@ -2451,7 +2451,7 @@ live-readable (`ReadPlayerBuffsComponent`, name/stacks/duration). Gaps needing R
 skill→granted-buff linkage, structured skill tags, and a `data/buff_name_map.tsv` (referenced by
 `GetBuffNameMap` but MISSING — buffs show raw internal names). Combat slots are currently manual.
 
-### Phase 1 — buff/curse picker: free-text + typeahead (shipped 0.45.13.294)
+### Phase 1 — buff/curse picker: free-text + typeahead (shipped 0.45.13.295)
 
 Owner report: "some buffs I use aren't in the macro engine, so it has nothing to check to re-activate
 the buff/curse." Root cause was NOT the check — `_HotkeysCheckBuff`/`_HotkeysFindBuff`
@@ -2477,6 +2477,39 @@ a buff currently down (the recast-when-absent case) was unselectable.
   you use that isn't currently active (e.g. an aura/curse internal name), bind a recast key → it should
   recast when the buff drops. Note: names are the INTERNAL ids (e.g. `arcane_surge`); a future
   `buff_name_map.tsv` + a "current buffs, click to add" helper would make discovery easier.
+
+### Phase 2 — combat rotation auto-config from equipped skills (shipped 0.45.13.295)
+
+A one-click "🎯 Auto-configure from equipped skills" button that reads the player's LIVE skill bar and
+fills the 8 combat slots to match whatever build is equipped — so the rotation reflects the real
+skills on their real keys with no manual entry. Combined with the Stage-3 round-robin, that's a
+working per-build rotation.
+
+- **`CombatAutomation.AutoConfigureCombatSlots()` (new):** calls `ReadSkillBarSkills(g_reader)` (the
+  live HUD skill bar → per-slot `sendKey` + `skillName`/`skillInternal`) and cross-references
+  `ReadPlayerSkills` by internal name for each skill's `castType`. For each bound, non-empty slot
+  (skipping the basic `move` action), it writes a combat slot: `skillName` = display name, `key` =
+  the slot's live keybind, `priority` = skill-bar order, `skillRange` from castType (melee 0→300 /
+  spell 1→1200, else 0=live autofill), `type` = "single", `cooldownMs` = 0 (cooldown pacing is left
+  to the live `canUse` gate in `_SelectNextSkill`, which reads the real cooldown each tick). Rewrites
+  `g_combatSkillSlots`, `SaveCombatAutoConfig()`, returns `"ok:N"` | `no-skillbar` | `no-reader` |
+  `no-skills-resolved`.
+- **Wiring:** `BridgeDispatch` case `AutoConfigCombat` runs it, reports the result via
+  `WebViewExec(window.combatAutoConfigResult(...))`, and re-pushes the header so the slot rows
+  repaint. `ui/index.html`: the button + a status span above `#combat-slots-cfg` (Automation →
+  AutoPilot → Combat → Skill Slots), and `combatAutoConfig()` / `combatAutoConfigResult(status)`.
+- **Deliberately left to the user (honest scope):** slot TYPE stays "single" (AoE/buff/movement
+  classification needs the skill→tags linkage from Phase 4; a toggle-aura on "single" would be
+  re-cast each rotation lap, so the button's tip + result message tell the user to set AoE/buff types
+  and DISABLE any movement or toggle-aura slot). The core value — right skills, right keys, sensible
+  priority/range, live cooldown gating — is delivered.
+- **Verified in the browser preview:** the button renders in the Combat section, the ok path shows
+  "✓ configured N slot(s) …", the error path shows the reason, no console errors; full `/validate`
+  exit 0; inline script `node --check` clean.
+- **Pending in-game verification:** in-game with a build equipped, click the button → the 8 slots
+  should fill with your bar skills on their real keys; enable AutoPilot and confirm it cycles them.
+  Then set AoE/buff types + disable any movement/aura slot. If a skill's key is wrong, it also
+  resolves live via `_CombatResolveSlotKey`.
 
 ## Reference
 

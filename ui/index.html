@@ -5750,6 +5750,11 @@
                   </div>
 
                   <div style="margin-top:12px;font-size:11px;color:var(--accent);font-weight:600">Skill Slots</div>
+                  <div class="cfg-row" style="margin-top:4px;gap:8px;align-items:center;flex-wrap:wrap">
+                    <button class="hk-btn" onclick="combatAutoConfig()"
+                      data-tip="Reads your equipped skill bar and fills the slots below — each skill on its real key, range from cast type. Afterwards: set AoE/buff types and DISABLE any movement or toggle-aura slot so it isn't spammed.">🎯 Auto-configure from equipped skills</button>
+                    <span id="combat-autoconfig-msg" style="font-size:11px;color:var(--codex-text)"></span>
+                  </div>
                   <div id="combat-slots-cfg" style="margin-top:4px"></div>
             </div>
           </details>
@@ -11650,6 +11655,31 @@
     function _toggleInternalSkills() {
       _showInternalSkills = !_showInternalSkills;
       if (_lastSkillsRaw) updateSkills(_lastSkillsRaw);
+    }
+
+    // Auto-configure the combat slots from the player's equipped skill bar: AHK
+    // reads the live skill→key mapping and rewrites the slots, then re-pushes the
+    // header so _renderCombatSlots repaints them. The outcome comes back via
+    // combatAutoConfigResult (called from AHK by name on window).
+    function combatAutoConfig() {
+      const m = document.getElementById('combat-autoconfig-msg');
+      if (m) { m.textContent = 'reading skill bar…'; m.style.color = 'var(--codex-text)'; }
+      try { ahkCall('AutoConfigCombat'); } catch (e) {}
+    }
+    function combatAutoConfigResult(status) {
+      const m = document.getElementById('combat-autoconfig-msg'); if (!m) return;
+      const s = String(status == null ? '' : status);
+      if (s.slice(0, 3) === 'ok:') {
+        m.textContent = '✓ configured ' + s.slice(3) + ' slot(s) — review AoE/buff types & disable any movement or toggle-aura slot';
+        m.style.color = 'var(--accent)';
+      } else {
+        const why = s === 'no-skillbar' ? 'skill bar not visible — get in-game first'
+                  : s === 'no-reader' ? 'game not connected'
+                  : s === 'no-skills-resolved' ? 'no skills resolved from the bar'
+                  : (s || 'failed');
+        m.textContent = '⚠ ' + why;
+        m.style.color = 'var(--danger, #d88)';
+      }
     }
 
     function _renderCombatSlots(slots) {
