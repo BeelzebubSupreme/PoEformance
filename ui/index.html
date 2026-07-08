@@ -7091,11 +7091,11 @@
          behavioural rules below can't drift out of sync (add a class in one
          :is() and every rule that uses that tier picks it up):
            ALL   = .btn .btn-plain .cfg-btn .hk-btn .hk-key-btn .uib-btn .ei-btn
-                   .tsv-gen-btn .cp-btn .cp-btn-primary .tree-tbtn .hk-icon-btn
-                   .tsv-pg-btn .cat-btn
+                   .tsv-gen-btn .cp-btn .cp-btn-primary .tree-tbtn .hk-icon-btn .tsv-pg-btn
+                   (NOT .cat-btn — the header pin is a deliberate non-button utility: transparent, tilted when inactive)
            FULL  = ornate tier · PLAIN = compact tier (subsets of ALL). */
       /* shared base — ALL */
-      :is(.btn,.btn-plain,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn,.cat-btn){
+      :is(.btn,.btn-plain,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn){
         position:relative;isolation:isolate;font-family:var(--codex-display);font-weight:600;
         letter-spacing:.1em;text-transform:uppercase;color:var(--codex-gold-hi);cursor:pointer;text-align:center;
         background:linear-gradient(180deg,#43301c 0%,#2f1f12 46%,#241709 55%,#3a2615 100%);
@@ -7103,18 +7103,18 @@
         box-shadow:inset 0 1px 0 rgba(240,214,138,.10),0 1px 2px rgba(0,0,0,.55);
         transition:color .18s,border-color .18s,box-shadow .18s}
       /* rune-trace filament (Variante C) — ALL, animates on hover */
-      :is(.btn,.btn-plain,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn,.cat-btn)::after{
+      :is(.btn,.btn-plain,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn)::after{
         content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;
         background:conic-gradient(from var(--tipAngle,0deg),transparent 0deg 300deg,#fff1c7 338deg,var(--codex-gold) 350deg,transparent 360deg);
         -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
         mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);mask-composite:exclude;opacity:0;transition:opacity .25s}
       /* hover — ALL (never on :disabled controls) */
-      :is(.btn,.btn-plain,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn,.cat-btn):hover:not(:disabled){
+      :is(.btn,.btn-plain,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn):hover:not(:disabled){
         color:#fff;border-color:var(--codex-gold);box-shadow:inset 0 1px 0 rgba(240,214,138,.20),0 0 15px -5px rgba(200,168,90,.6)}
-      :is(.btn,.btn-plain,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn,.cat-btn):hover:not(:disabled)::after{
+      :is(.btn,.btn-plain,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn):hover:not(:disabled)::after{
         opacity:1;animation:codexTipFrameSweep 1.3s linear infinite}
       /* disabled — dim, no pointer, no hover glow (the :hover rules above are :not(:disabled)) */
-      :is(.btn,.btn-plain,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn,.cat-btn):disabled{
+      :is(.btn,.btn-plain,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn):disabled{
         opacity:.45;cursor:not-allowed}
       /* ── FULL tier: sizing + ornate ornaments ── */
       :is(.btn,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary),#panel-hotkeys .hk-btn{padding:5px 16px;font-size:11px}
@@ -7133,8 +7133,8 @@
       :is(.btn,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary):hover:not(:disabled)::before{
         filter:drop-shadow(0 0 2.5px rgba(240,214,138,.6))}
       /* ── PLAIN tier: compact, no ornaments ── */
-      :is(.btn-plain,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn,.cat-btn){padding:5px 11px;font-size:10px;letter-spacing:.08em}
-      :is(.hk-icon-btn,.tsv-pg-btn,.cat-btn){padding:5px 8px}
+      :is(.btn-plain,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn){padding:5px 11px;font-size:10px;letter-spacing:.08em}
+      :is(.hk-icon-btn,.tsv-pg-btn){padding:5px 8px}
       /* ── ICON tier: ornament-free minis ── The corner volutes + edge bars are
          designed for ≥~90px buttons and turn to mush at icon scale, burying the
          glyph. Icon buttons and the tiny per-row ✕/⤓ minis (.hk-sm) keep the
@@ -7155,7 +7155,7 @@
       /* ── WIDE (menu-style) ── */
       .btn-wide{width:100%;padding:12px 20px;font-size:12px;letter-spacing:.14em}
       @media (prefers-reduced-motion:reduce){
-        :is(.btn,.btn-plain,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn,.cat-btn):hover:not(:disabled)::after{animation:none;opacity:1}
+        :is(.btn,.btn-plain,.cfg-btn,.hk-btn,.hk-key-btn,.uib-btn,.ei-btn,.tsv-gen-btn,.cp-btn,.cp-btn-primary,.tree-tbtn,.hk-icon-btn,.tsv-pg-btn):hover:not(:disabled)::after{animation:none;opacity:1}
       }
       </style>
       <div class="hk-toolbar">
