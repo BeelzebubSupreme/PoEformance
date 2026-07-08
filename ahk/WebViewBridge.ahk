@@ -1064,6 +1064,20 @@ _DissectScanAndPush(val, typ)
     try PushMemDissectToWebView()
 }
 
+; Arbitrary memory bytes interpreted as a float can be NaN or ±Infinity, which
+; serialize to non-JSON tokens (nan / inf / -1.#IND…) and break the ENTIRE
+; payload — JSON.parse then fails in the WebView and the table renders nothing.
+; (This is why a large read like AreaInstance @4 KB "loaded nothing": one of its
+; 500+ rows held such a float.) Clamp any non-finite value to 0 before Round.
+_DisSafeFloat(raw, digits)
+{
+    if (raw != raw)                          ; NaN never equals itself
+        return 0
+    if (raw > 1.0e308 || raw < -1.0e308)     ; ±Infinity (beyond double range)
+        return 0
+    return Round(raw, digits)
+}
+
 ; Internal: build the full dissector JSON payload. May throw — the caller is
 ; responsible for catching and falling back to a status-only payload.
 _BuildMemDissectJson()
@@ -1127,10 +1141,10 @@ _BuildMemDissectJson()
                 u16v := NumGet(bufPtr, off, "UShort")
                 i32v := NumGet(bufPtr, off, "Int")
                 u32v := NumGet(bufPtr, off, "UInt")
-                f32v := Round(NumGet(bufPtr, off, "Float"), 4)
+                f32v := _DisSafeFloat(NumGet(bufPtr, off, "Float"), 4)
                 i64v := have8 ? NumGet(bufPtr, off, "Int64") : 0
                 ptrHex := Format("0x{:X}", i64v & 0xFFFFFFFFFFFFFFFF)
-                f64v := have8 ? Round(NumGet(bufPtr, off, "Double"), 6) : 0
+                f64v := have8 ? _DisSafeFloat(NumGet(bufPtr, off, "Double"), 6) : 0
 
                 ascii := ""
                 kk := 0

@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.296`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.297`.
 
 ## Language
 
@@ -2457,6 +2457,18 @@ Owner drove the full walkthrough; three fixes:
 - **Live controls moved to the Scan row:** the raw `Live` checkbox + rate + status left the crowded toolbar
   row 1 and now sit right-aligned (`margin-left:auto`) on the Scan sub-bar, with Live as the themed pill
   toggle (`.toggle`/`.toggle-slider`) instead of a bare checkbox.
+
+### Non-finite float broke big reads → "loads nothing" (0.45.13.297)
+
+Right after auto-size started working, "Go Symbol AreaInstance loaded nothing" (only AreaInstance — it's the
+only symbol that auto-sizes to the 4 KB max; the others stay small). Root cause: arbitrary memory bytes
+interpreted as a **float can be NaN or ±Infinity**, and AHK serialized those into the row JSON as bare
+`nan`/`inf` tokens → the WHOLE payload is invalid JSON → `updateMemDissect`'s `JSON.parse` throws → it bails
+and the table renders nothing (the old view stays). Big reads (500+ rows) almost always contain one such
+float; the small structs happened not to. Fix: `_DisSafeFloat(raw, digits)` in `WebViewBridge` clamps any
+non-finite value to 0 BEFORE `Round` (NaN via `raw != raw`, Inf via the ±1e308 bound), used for both `f32`
+and `f64`. Confirmed the failure mode in the browser preview (a `"f32":nan` payload makes `JSON.parse` throw
+and the view stays unchanged). This is a general robustness fix, not AreaInstance-specific.
 
 ## Reference
 
