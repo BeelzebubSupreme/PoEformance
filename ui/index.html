@@ -5755,6 +5755,18 @@
                       data-tip="Reads your equipped skill bar and fills the slots below — each skill on its real key, range from cast type. Afterwards: set AoE/buff types and DISABLE any movement or toggle-aura slot so it isn't spammed.">🎯 Auto-configure from equipped skills</button>
                     <span id="combat-autoconfig-msg" style="font-size:11px;color:var(--codex-text)"></span>
                   </div>
+                  <details style="margin-top:6px">
+                    <summary style="font-size:11px;cursor:pointer;color:var(--subtext)">📋 Import build (Path of Building code)</summary>
+                    <div style="padding:6px 0">
+                      <textarea id="pob-code-input" rows="3" spellcheck="false" placeholder="Paste a Path of Building export code here…"
+                        style="width:100%;box-sizing:border-box;font-size:11px;font-family:monospace;resize:vertical"></textarea>
+                      <div class="cfg-row" style="margin-top:4px;gap:8px;align-items:center;flex-wrap:wrap">
+                        <button class="hk-btn" onclick="importPobCode()"
+                          data-tip="Decodes the PoB code locally, extracts the active skills in order, and fills the slots by matching them to your live keys. Skills not currently socketed/bound are added disabled. Applies the build's rotation ORDER as priority.">Import rotation</button>
+                        <span id="pob-import-msg" style="font-size:11px;color:var(--codex-text)"></span>
+                      </div>
+                    </div>
+                  </details>
                   <div id="combat-slots-cfg" style="margin-top:4px"></div>
             </div>
           </details>
@@ -11677,6 +11689,69 @@
                   : s === 'no-reader' ? 'game not connected'
                   : s === 'no-skills-resolved' ? 'no skills resolved from the bar'
                   : (s || 'failed');
+        m.textContent = '⚠ ' + why;
+        m.style.color = 'var(--danger, #d88)';
+      }
+    }
+
+    // ── Path of Building import ────────────────────────────────────────────────
+    // Decodes a PoB export code entirely in the browser (base64url → zlib inflate
+    // via the native DecompressionStream → XML) and extracts the ACTIVE skill gem
+    // names in order. The ordered names go to AHK (ImportBuildRotation), which maps
+    // them to the player's live skills + keys and fills the combat slots, applying
+    // the build's recommended rotation ORDER as slot priority.
+    async function pobDecodeToXml(code) {
+      let b64 = String(code || '').trim().replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+      while (b64.length % 4) b64 += '=';
+      const bin = atob(b64);
+      const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+      // PoB uses zlib (deflate WITH header) → DecompressionStream('deflate').
+      const ds = new DecompressionStream('deflate');
+      const buf = await new Response(new Blob([bytes]).stream().pipeThrough(ds)).arrayBuffer();
+      return new TextDecoder().decode(buf);
+    }
+    function pobActiveSkills(xml) {
+      const doc = new DOMParser().parseFromString(xml, 'text/xml');
+      if (doc.querySelector('parsererror')) throw new Error('not valid PoB XML');
+      const out = [], seen = new Set();
+      // Socketed gems are <Gem> elements. Support gems have a skillId starting with
+      // "Support" (and/or "Support" in the nameSpec) — skip those; keep active skills.
+      for (const g of doc.querySelectorAll('Gem')) {
+        const nameSpec = g.getAttribute('nameSpec');
+        const skillId  = g.getAttribute('skillId') || '';
+        if (!nameSpec) continue;
+        if (/^support/i.test(skillId) || /\bsupport\b/i.test(nameSpec)) continue;
+        const key = nameSpec.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(nameSpec);
+      }
+      return out;
+    }
+    async function importPobCode() {
+      const m = document.getElementById('pob-import-msg');
+      const setMsg = (t, ok) => { if (m) { m.textContent = t; m.style.color = ok ? 'var(--accent)' : 'var(--danger, #d88)'; } };
+      const code = (document.getElementById('pob-code-input') || {}).value || '';
+      if (!code.trim()) { setMsg('paste a PoB code first', false); return; }
+      setMsg('decoding…', true);
+      try {
+        const xml = await pobDecodeToXml(code);
+        const skills = pobActiveSkills(xml);
+        if (!skills.length) { setMsg('⚠ no active skills found in that code', false); return; }
+        setMsg('mapping ' + skills.length + ' skill(s) to your keys…', true);
+        ahkCall('ImportBuildRotation', skills.join('\n'));
+      } catch (e) {
+        setMsg('⚠ decode failed: ' + (e && e.message ? e.message : e), false);
+      }
+    }
+    function buildImportResult(status) {
+      const m = document.getElementById('pob-import-msg'); if (!m) return;
+      const s = String(status == null ? '' : status);
+      if (s.slice(0, 3) === 'ok:') {
+        m.textContent = '✓ imported ' + s.slice(3) + ' skill(s) — bound ones enabled; review types & keys';
+        m.style.color = 'var(--accent)';
+      } else {
+        const why = s === 'no-reader' ? 'game not connected' : s === 'no-skills' ? 'no skills to import' : s;
         m.textContent = '⚠ ' + why;
         m.style.color = 'var(--danger, #d88)';
       }

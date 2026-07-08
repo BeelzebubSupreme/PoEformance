@@ -765,6 +765,12 @@ _DispatchBridgeCall(method, args)
             acRes := AutoConfigureCombatSlots()
             try WebViewExec("window.combatAutoConfigResult && window.combatAutoConfigResult(" _JsStr(acRes) ")")
             SetTimer(PushHeaderToWebView, -60)
+        case "ImportBuildRotation":
+            ; args: [newline-joined ordered active-skill names, decoded from a PoB
+            ; code client-side]. Map to live skills/keys → fill slots → report.
+            ibRes := ImportBuildRotation((args.Length >= 1) ? String(args[1]) : "")
+            try WebViewExec("window.buildImportResult && window.buildImportResult(" _JsStr(ibRes) ")")
+            SetTimer(PushHeaderToWebView, -60)
 
             ; ── Loot Pickup rarity filter (no toggle — empty filter = off) ─
         case "SetLootRarity":

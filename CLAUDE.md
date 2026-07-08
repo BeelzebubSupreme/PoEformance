@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.295`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.296`.
 
 ## Language
 
@@ -2253,7 +2253,7 @@ new memory RE.
   "WorldItem"; confirm names persist while standing still and reset on zone change, and that far
   drops (labels not on screen) still resolve.
 
-## Entity Inspector actions + user-extensible Junk Filter (shipped 0.45.13.295)
+## Entity Inspector actions + user-extensible Junk Filter (shipped 0.45.13.296)
 
 Four Entity-Inspector conveniences, the biggest of which makes the Junk Filter
 user-extensible (custom patterns per category + user-created categories).
@@ -2314,7 +2314,7 @@ rotation "isn't the best", (3) it kills everything then "runs back around to pic
 of collecting as it goes. Work lives on branch `PoEfdev/autopilot-pathing`, done in three testable
 stages (commit + in-game verify between each).
 
-### Stage 1 — stop getting stuck (shipped 0.45.13.295)
+### Stage 1 — stop getting stuck (shipped 0.45.13.296)
 
 - **Combat walk/approach stuck-watchdog (`ahk/CombatAutomation.ahk`, the big one):** the existing
   no-path give-up only covers enemies with NO A* route. A REACHABLE enemy the character still can't
@@ -2348,7 +2348,7 @@ stages (commit + in-game verify between each).
   returning from a fight, and starts moving toward a new far target sooner (less `routing`). Tunables
   if needed: `MOVE_STUCK_MS` / `MOVE_CELLS` (combat), the 600 ms gap, the 20 ms flood budget.
 
-### Stage 2 — loot as you go (shipped 0.45.13.295)
+### Stage 2 — loot as you go (shipped 0.45.13.296)
 
 `LootPickup._RunLootPickup` used a BLANKET hostile gate — any hostile within `g_combatRange`
 (Euclidean) suppressed ALL pickup and returned early — so loot was purely post-combat (the "kill
@@ -2369,7 +2369,7 @@ everything, then run back around" behaviour). Replaced with a LOOT-RELATIVE gate
   through rather than all at the end; confirm it doesn't break off toward far/behind-mob loot mid-
   fight. Tune `SAFE_GRAB_DIST` if it grabs too eagerly / not eagerly enough.
 
-### Stage 3 — better combat rotation (shipped 0.45.13.295)
+### Stage 3 — better combat rotation (shipped 0.45.13.296)
 
 `CombatAutomation._SelectNextSkill` was priority SPAM: every tick it returned the single
 lowest-`priority` ready slot, so one skill monopolised casting and the other configured skills
@@ -2395,7 +2395,7 @@ rarely fired ("rotation isn't the best"). Replaced the final selection with a RO
   through them instead of spamming one; set per-slot `cooldownMs` to pace fillers/buffs; report if
   the cycle feels wrong for a specific build (the cursor logic is easily tuned / revertible).
 
-### Loot rarity misclassification fix (shipped 0.45.13.295)
+### Loot rarity misclassification fix (shipped 0.45.13.296)
 
 Owner report: with only "Rare" ticked, Auto Loot still picked up Magic AND Normal items. Root cause
 in `PoE2InventoryReader.ReadItemRarity` (used by loot pickup, the value radar, hover-price, ritual
@@ -2451,7 +2451,7 @@ live-readable (`ReadPlayerBuffsComponent`, name/stacks/duration). Gaps needing R
 skill→granted-buff linkage, structured skill tags, and a `data/buff_name_map.tsv` (referenced by
 `GetBuffNameMap` but MISSING — buffs show raw internal names). Combat slots are currently manual.
 
-### Phase 1 — buff/curse picker: free-text + typeahead (shipped 0.45.13.295)
+### Phase 1 — buff/curse picker: free-text + typeahead (shipped 0.45.13.296)
 
 Owner report: "some buffs I use aren't in the macro engine, so it has nothing to check to re-activate
 the buff/curse." Root cause was NOT the check — `_HotkeysCheckBuff`/`_HotkeysFindBuff`
@@ -2478,7 +2478,7 @@ a buff currently down (the recast-when-absent case) was unselectable.
   recast when the buff drops. Note: names are the INTERNAL ids (e.g. `arcane_surge`); a future
   `buff_name_map.tsv` + a "current buffs, click to add" helper would make discovery easier.
 
-### Phase 2 — combat rotation auto-config from equipped skills (shipped 0.45.13.295)
+### Phase 2 — combat rotation auto-config from equipped skills (shipped 0.45.13.296)
 
 A one-click "🎯 Auto-configure from equipped skills" button that reads the player's LIVE skill bar and
 fills the 8 combat slots to match whatever build is equipped — so the rotation reflects the real
@@ -2510,6 +2510,35 @@ working per-build rotation.
   should fill with your bar skills on their real keys; enable AutoPilot and confirm it cycles them.
   Then set AoE/buff types + disable any movement/aura slot. If a skill's key is wrong, it also
   resolves live via `_CombatResolveSlotKey`.
+
+### Phase 3 — build importer (Path of Building code) (shipped 0.45.13.296)
+
+Imports a build's recommended rotation from a Path of Building export code: paste the code, it decodes
+locally, extracts the ACTIVE skills in order, and fills the combat slots by matching them to your live
+skills + keys (the build's order → slot priority). Chosen PoB codes over Mobalytics scraping for
+reliability (structured data, no anti-bot).
+
+- **Decode is pure browser JS (no PowerShell child, no external lib):** `pobDecodeToXml(code)` does
+  base64url → **native `DecompressionStream('deflate')`** (zlib inflate) → XML; `pobActiveSkills(xml)`
+  DOM-parses it, collects every `<Gem nameSpec>` in order, and SKIPS support gems (skillId starting
+  with `Support` / `support` in nameSpec), deduped. `importPobCode()` sends the ordered names to AHK.
+- **`CombatAutomation.ImportBuildRotation(namesText)`:** newline-split ordered names → matched against
+  the live `ReadPlayerSkills` (by display OR internal name) → key from `g_skillKeyBySkillName` →
+  fills up to 8 slots (priority = build order, range from castType, type "single"). Skills the build
+  lists but that aren't currently BOUND to a key are added DISABLED (visible intended rotation; can't
+  fire until socketed + on the bar). Returns `ok:N/total`.
+- **Wiring:** `BridgeDispatch` case `ImportBuildRotation` → runs it, reports via
+  `WebViewExec(window.buildImportResult(...))`, re-pushes the header. UI: a collapsible "📋 Import build
+  (Path of Building code)" box (textarea + Import button + status) under the auto-config button;
+  `pobDecodeToXml`/`pobActiveSkills`/`importPobCode`/`buildImportResult` JS.
+- **Verified in the browser preview (round-trip):** a synthetic PoB XML zlib-compressed via
+  `CompressionStream` then decoded through `pobDecodeToXml` returned the exact XML, and
+  `pobActiveSkills` extracted only the active skills (Spark/Arc/Frost Bomb), skipping supports; both
+  result paths render; no console errors. `/validate` exit 0; inline `node --check` clean.
+- **NEEDS a real PoB code to confirm (the one unverifiable bit):** the exact PoE2 PoB XML shape —
+  whether real codes use `<Gem nameSpec=… skillId=…>` (the documented PoB format this assumes) and
+  whether the payload is zlib (`'deflate'`) vs raw (`'deflate-raw'`). If a real code fails to decode,
+  switch the stream to `'deflate-raw'`; if names mismatch, adjust the nameSpec→in-game-name mapping.
 
 ## Reference
 

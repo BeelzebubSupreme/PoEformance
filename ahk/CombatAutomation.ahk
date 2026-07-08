@@ -1379,6 +1379,95 @@ AutoConfigureCombatSlots()
     return "ok:" n
 }
 
+; ── Import a build's rotation (ordered skill names) into the combat slots ──
+; The UI decodes a Path of Building code (client-side) into an ORDERED list of
+; active-skill names and passes them here (newline-joined). Each name is matched
+; against the player's live skills (by display OR internal name); the slot's key
+; comes from the live skill bar (g_skillKeyBySkillName). Priority follows the
+; build's order. Skills the build lists but that aren't currently bound to a key
+; are added DISABLED (visible intended rotation, but they can't fire until the
+; gem is socketed + on the bar). Persists + returns "ok:N/total" | reason.
+ImportBuildRotation(namesText)
+{
+    global g_reader, g_combatSkillSlots, g_skillKeyBySkillName
+    if !IsObject(g_reader)
+        return "no-reader"
+    names := StrSplit(Trim(namesText, " `t`r`n"), "`n")
+    if (names.Length = 0)
+        return "no-skills"
+
+    ; live skills keyed by lowercased display AND internal name.
+    skByName := Map()
+    lp := _SkillBarLocalPlayerPtr()
+    if lp
+    {
+        sd := 0
+        try sd := g_reader.ReadPlayerSkills(lp)
+        if (sd && sd is Map && sd.Has("skills"))
+        {
+            for sk in sd["skills"]
+            {
+                if !(sk is Map)
+                    continue
+                dn  := sk.Has("displayName") ? sk["displayName"] : ""
+                inm := sk.Has("name") ? sk["name"] : ""
+                if (dn != "")
+                    skByName[StrLower(dn)] := sk
+                if (inm != "")
+                    skByName[StrLower(inm)] := sk
+            }
+        }
+    }
+    haveKeys := (IsSet(g_skillKeyBySkillName) && g_skillKeyBySkillName is Map)
+
+    newSlots := Map()
+    n := 0, total := 0
+    for _, raw in names
+    {
+        nm := Trim(raw)
+        if (nm = "")
+            continue
+        total += 1
+        if (n >= 8)
+            continue
+        low := StrLower(nm)
+        sk := skByName.Has(low) ? skByName[low] : 0
+
+        key := ""
+        if (haveKeys)
+        {
+            if (g_skillKeyBySkillName.Has(low))
+                key := g_skillKeyBySkillName[low]
+            else if (sk && sk.Has("name") && g_skillKeyBySkillName.Has(StrLower(sk["name"])))
+                key := g_skillKeyBySkillName[StrLower(sk["name"])]
+        }
+        castType := (sk && sk.Has("castType")) ? sk["castType"] : -1
+        rng := 0
+        if (castType = 0)
+            rng := 300
+        else if (castType = 1)
+            rng := 1200
+
+        n += 1
+        newSlots[n] := Map(
+            "enabled",     (key != ""),      ; only bound skills can actually fire
+            "key",         key,
+            "priority",    n,
+            "skillName",   nm,
+            "name",        nm,
+            "type",        "single",
+            "cooldownMs",  0,
+            "lastUseTick", 0,
+            "skillRange",  rng
+        )
+    }
+    if (n = 0)
+        return "no-skills"
+    g_combatSkillSlots := newSlots
+    SaveCombatAutoConfig()
+    return "ok:" n "/" total
+}
+
 ; ── Hotkey registration ───────────────────────────────────────────────────
 ; Registers (or re-registers) the combat toggle hotkey.
 ; Call once after LoadCombatAutoConfig().
