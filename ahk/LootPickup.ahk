@@ -78,20 +78,14 @@ _RunLootPickup(radarSnap, gameHwnd)
         return false
     }
 
-    ; Hostile-proximity gate: even though AutoPilot already runs combat
-    ; before us, a stray non-engaged hostile (e.g. one juuust outside
-    ; engage range that's still wandering near a fresh drop) should still
-    ; postpone pickup. We use the same combat range threshold for symmetry.
+    ; Nearest hostile distance (Euclidean). We NO LONGER block ALL pickup
+    ; whenever any hostile is within combat range — that was the "kill
+    ; everything, then run back around for loot" behaviour. Instead a drop is
+    ; grabbed mid-clear only when it is very close AND closer than any mob (the
+    ; loot-relative safety gate applied after target selection, below). The
+    ; cache is still refreshed unconditionally further down, so drops noticed
+    ; during a fight are never forgotten.
     nearestHostileDist := _NearestHostileDistance(radarSnap)
-    if (nearestHostileDist < g_combatRange)
-    {
-        g_lootLastReason := "hostile-nearby(d=" Round(nearestHostileDist) ")"
-        ; Even though we won't click, we DO want to keep updating the cache
-        ; so items dropped during a fight aren't forgotten. Fall through to
-        ; the refresh, but don't issue any action.
-        _RefreshLootCache(radarSnap)
-        return false
-    }
 
     ; Refresh the cache (also expires stale entries) — does this before
     ; the picked-up check so lastSeenTick reflects the just-arrived snapshot.
@@ -166,6 +160,22 @@ _RunLootPickup(radarSnap, gameHwnd)
     if !target
     {
         g_lootLastReason := "no-target"
+        return false
+    }
+
+    ; ── Loot-relative safety gate ───────────────────────────────────────
+    ; When a hostile is within combat range, only grab the drop if it is
+    ; genuinely "on the way": within SAFE_GRAB_DIST of the player AND closer
+    ; than the nearest hostile (never walk toward loot that sits past a mob).
+    ; This collects loot as the bot moves through a lull instead of only after
+    ; the whole area is clear. Far / behind-mob drops stay cached for the
+    ; normal post-combat sweep. SAFE_GRAB_DIST is the tuning knob.
+    static SAFE_GRAB_DIST := 600
+    if (nearestHostileDist < g_combatRange
+        && !(target["dist"] <= SAFE_GRAB_DIST && nearestHostileDist > target["dist"]))
+    {
+        g_lootLastReason := "hostile-nearby(d=" Round(nearestHostileDist)
+            . " drop=" Round(target["dist"]) ")"
         return false
     }
 

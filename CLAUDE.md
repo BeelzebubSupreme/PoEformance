@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.290`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.291`.
 
 ## Language
 
@@ -2253,7 +2253,7 @@ new memory RE.
   "WorldItem"; confirm names persist while standing still and reset on zone change, and that far
   drops (labels not on screen) still resolve.
 
-## Entity Inspector actions + user-extensible Junk Filter (shipped 0.45.13.290)
+## Entity Inspector actions + user-extensible Junk Filter (shipped 0.45.13.291)
 
 Four Entity-Inspector conveniences, the biggest of which makes the Junk Filter
 user-extensible (custom patterns per category + user-created categories).
@@ -2314,7 +2314,7 @@ rotation "isn't the best", (3) it kills everything then "runs back around to pic
 of collecting as it goes. Work lives on branch `PoEfdev/autopilot-pathing`, done in three testable
 stages (commit + in-game verify between each).
 
-### Stage 1 — stop getting stuck (shipped 0.45.13.290)
+### Stage 1 — stop getting stuck (shipped 0.45.13.291)
 
 - **Combat walk/approach stuck-watchdog (`ahk/CombatAutomation.ahk`, the big one):** the existing
   no-path give-up only covers enemies with NO A* route. A REACHABLE enemy the character still can't
@@ -2348,10 +2348,26 @@ stages (commit + in-game verify between each).
   returning from a fight, and starts moving toward a new far target sooner (less `routing`). Tunables
   if needed: `MOVE_STUCK_MS` / `MOVE_CELLS` (combat), the 600 ms gap, the 20 ms flood budget.
 
-### Stage 2 — loot as you go (planned)
-Replace `LootPickup._RunLootPickup`'s blanket hostile gate (any hostile within `g_combatRange`
-suppresses ALL pickup) with a loot-relative one: grab a drop when it's very close and no hostile is
-closer than it; optionally let the coordinator cede a tick for a drop at the player's feet.
+### Stage 2 — loot as you go (shipped 0.45.13.291)
+
+`LootPickup._RunLootPickup` used a BLANKET hostile gate — any hostile within `g_combatRange`
+(Euclidean) suppressed ALL pickup and returned early — so loot was purely post-combat (the "kill
+everything, then run back around" behaviour). Replaced with a LOOT-RELATIVE gate:
+
+- The early blanket gate (was ~line 85) is gone; it now only computes `nearestHostileDist` without
+  returning. Cache refresh + picked-up detection therefore run every loot tick (picked-up detection
+  used to be skipped whenever a hostile was near — a latent bug now fixed).
+- After target selection, a new gate: when `nearestHostileDist < g_combatRange`, the drop is grabbed
+  ONLY if `target["dist"] <= SAFE_GRAB_DIST` (600 world units, the tuning knob) AND
+  `nearestHostileDist > target["dist"]` (never walk toward loot that sits past a mob). Otherwise it
+  yields (`hostile-nearby(d=… drop=…)`) and the drop stays cached for the normal post-combat sweep.
+- Net effect: a drop right on the bot's path is snagged during a lull (e.g. a hostile that's
+  Euclidean-near but terrain-far behind a wall, or just after disengage) instead of only once the
+  whole area is clear. Combat still has strict priority in the coordinator, so this only acts on
+  ticks combat already yielded. Static `/validate` exit 0.
+- **Pending in-game verification:** during a clear, close drops should be collected as the bot moves
+  through rather than all at the end; confirm it doesn't break off toward far/behind-mob loot mid-
+  fight. Tune `SAFE_GRAB_DIST` if it grabs too eagerly / not eagerly enough.
 
 ### Stage 3 — better combat rotation (planned)
 `CombatAutomation._SelectNextSkill` is priority spam (always the lowest-priority ready slot), so one
