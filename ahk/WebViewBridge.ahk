@@ -1002,21 +1002,76 @@ PushMemDissectToWebView()
     try WebViewExec("updateMemDissect(" _JsStr(json) ")")
 }
 
+; Pushes the list of every PoE2Offsets struct template name to the WebView so
+; the dissector's "Type as" dropdown can be populated. Sent once when the tab is
+; opened (DissectRequestStructs), not on the live-refresh path.
+PushMemDissectStructsToWebView()
+{
+    global g_webViewReady
+    if !g_webViewReady
+        return
+    try
+    {
+        names := MemDissectStructNames()
+        json  := "["
+        first := true
+        for n in names
+        {
+            if !first
+                json .= ","
+            first := false
+            json .= _JsStr(n)
+        }
+        json .= "]"
+        WebViewExec("updateMemDissectStructs(" _JsStr(json) ")")
+    }
+    catch as ex
+    {
+        try LogError("PushMemDissectStructsToWebView exception: " (ex.HasOwnProp("Message") ? ex.Message : "?"))
+    }
+}
+
+; Runs a value scan over the current buffer, pushes the match set to the UI,
+; then re-pushes the dissector state so the status + row highlights update.
+_DissectScanAndPush(val, typ)
+{
+    global g_webViewReady
+    json := "[]"
+    try
+    {
+        json := MemDissectScan(val, typ)
+    }
+    catch as ex
+    {
+        try LogError("DissectScan exception: " (ex.HasOwnProp("Message") ? ex.Message : "?"))
+    }
+    if g_webViewReady
+    {
+        try WebViewExec("updateMemDissectScan(" _JsStr(json) ")")
+    }
+    try PushMemDissectToWebView()
+}
+
 ; Internal: build the full dissector JSON payload. May throw — the caller is
 ; responsible for catching and falling back to a status-only payload.
 _BuildMemDissectJson()
 {
     global g_reader, g_memDissectAddress, g_memDissectSize, g_memDissectBuf
-    global g_memDissectHistory, g_memDissectFwd, g_memDissectStatus
+    global g_memDissectHistory, g_memDissectFwd, g_memDissectStatus, g_memDissectStructName
 
     baseAddr := g_memDissectAddress
     buf := g_memDissectBuf
     canRead := (IsObject(g_reader) && IsObject(g_reader.Mem) && g_reader.Mem.Handle)
 
+    ; Known-field annotations for the applied struct template (offset → names).
+    ann := _MemDissectFieldAnnotations(g_memDissectStructName)
+
     json := "{"
         . '"addr":' _JsStr(baseAddr ? Format("0x{:X}", baseAddr) : "") ","
         . '"size":' g_memDissectSize ","
         . '"status":' _JsStr(g_memDissectStatus) ","
+        . '"struct":' _JsStr(g_memDissectStructName) ","
+        . '"chain":' _JsStr(_MemDissectChainString()) ","
         . '"canBack":' (g_memDissectHistory.Length > 0 ? "true" : "false") ","
         . '"canFwd":' (g_memDissectFwd.Length > 0 ? "true" : "false") ","
         . '"rows":['
@@ -1104,6 +1159,7 @@ _BuildMemDissectJson()
 
             json .= "{"
                 . '"off":' off ","
+                . '"name":' _JsStr(ann.Has(off) ? ann[off] : "") ","
                 . '"addr":' _JsStr(absAddr) ","
                 . '"hex":' _JsStr(rawHex) ","
                 . '"u8":' u8v ","

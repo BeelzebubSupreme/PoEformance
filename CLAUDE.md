@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.289`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.290`.
 
 ## Language
 
@@ -2306,6 +2306,57 @@ The 6 built-in categories had FIXED patterns and custom terms were a single GLOB
   to a junk category (auto = its meta-category, e.g. a new "MiscellaneousObjects" category), see the
   new pill under that category in the Junk Filter box, confirm the matching entities vanish from the
   radar/list, and that the 🔬 buttons jump to the right address in the Dissector.
+
+## Memory Dissector — power features (shipped 0.45.13.290)
+
+The CE-style Dissector (`ahk/MemoryDissect.ahk` + RE → Dissector tab) grew from a static
+8-byte-stride byte viewer into a real RE workbench. Goal: one tool that replaces the one-off
+probe scripts (`ActorProbe`, `StackMaxProbe`, `AutoPilotMatrixScan`, …) AND emits a ready-to-paste
+`PoE2Offsets` chain. Four capabilities, all opt-in per interaction, none on the render hot path:
+
+- **Live-watch + change highlight (UI-only):** a "Live" toggle + rate select (4/2/1/0.5 Hz) in the
+  toolbar drives `setInterval(() => ahkCall('DissectReread'))`. `updateMemDissect` keeps
+  `_disPrevHex` (per absolute addr) + `_disChgTick`; a row whose 8 bytes changed since the previous
+  refresh gets an inline amber background, alpha faded by age (`DIS_FADE_MS`=1500). Reset when the
+  base address changes (navigation), so following a pointer never all-flashes. Live is stopped on
+  leaving the tab (`_runTabSideEffects`). This is how you find a drifting/changing offset: enable
+  Live, act in-game, watch which row flickers. The per-Reread `LogError` debug spam was removed
+  (it fired at up to 4 Hz).
+- **Known field names from `PoE2Offsets` ("Type as"):** a struct-template dropdown (populated once
+  via `DissectRequestStructs` → `MemDissectStructNames()`, which enumerates every static Map on the
+  `PoE2Offsets` class) overlays field names onto the view. `_MemDissectFieldAnnotations(struct)`
+  builds a row-offset → "Field(+0xNN) …" map (multiple fields aggregate into their 8-byte row); the
+  new **Field** table column shows it (amber). A symbol jump auto-applies a matching template
+  (`_MemDissectStructForSymbol`: InGameState/AreaInstance/ServerDataStructure). Pure data, NO RPM.
+- **Offset-chain workflow:** the followed pointer path is a breadcrumb. Clicking a pointer cell now
+  routes through `DissectFollow off addr` → `MemDissectFollowPointer` (records `{off,addr}` in
+  `g_memDissectChain`); a typed address ("Go") is a NEW custom root (`MemDissectGotoCustom`, resets
+  chain). `_MemDissectChainString()` renders "AreaInstance → +0x598 → +0x20" (root = symbol or raw
+  address), copyable via 📋. The reverse, `MemDissectResolveChain(str)`, parses a typed chain
+  ("AreaInstance+0x30+0x18", arrows/spaces tolerated), follows each hop (`ReadInt64` at cur+off),
+  jumps to the end and rebuilds the breadcrumb. Back/Forward re-root the breadcrumb to the shown
+  address (`_MemDissectRebaseRoot`) — honest rather than a stale path.
+- **Value scan (in the current buffer):** `MemDissectScan(value, type)` scans `g_memDissectBuf` at
+  EVERY byte offset for i32/u32/f32/i64/hex-bytes/ASCII (`_MemDissectParseHexBytes`/`_MemDissectStrBytes`,
+  f32 within 1e-4), returns JSON matches `[{off,at,addr}]` deduped by 8-byte row. `_DissectScanAndPush`
+  pushes `updateMemDissectScan` (clickable `+0xNN` chips that scroll+flash the row via `dis-row-<off>`
+  ids) then re-pushes the state; matched rows get a left-rail `dis-match` class re-applied on each
+  render (`_disScanSet`). Operates on the already-read buffer only — no new reads, low risk.
+
+Wiring: globals `g_memDissectStructName`/`g_memDissectRootSym`/`g_memDissectRootAddr`/`g_memDissectChain`
+(InGameStateMonitor). `_BuildMemDissectJson` emits `struct` + `chain` (payload) and `name` (per row).
+Bridge cases `DissectFollow` / `DissectSetStruct` / `DissectRequestStructs` / `DissectResolveChain` /
+`DissectScan` (existing `DissectGoto` now → `MemDissectGotoCustom`). Verified in the browser preview:
+struct dropdown populate + sync, field-name annotation, chain breadcrumb + typed-chain shape, pointer
+row carries its offset, live change-flash + navigation reset + timer stop-on-leave, scan chips + row
+rail + clear. Static: full `/validate` exit 0; UI `node --check` clean.
+- **Pending in-game verification:** with the tool connected, RE → Dissector: Go Symbol (fields should
+  name themselves), enable Live and act in-game (changing offsets flash), follow pointers (chain grows,
+  📋 copies it), Resolve a typed chain, and Scan a known value (e.g. current area level) to confirm the
+  match lands on the right offset.
+- **Next candidate (Stage 5, deferred):** inline pointer-target decode (StdWString→text, StdVector→count,
+  entity→Metadata path) as an ON-DEMAND per-row expand (the `_DecodeComponentOnDemand` safe pattern),
+  NOT on the live-refresh path — the RPM-heavy piece, left out deliberately until the above is proven.
 
 ## Reference
 

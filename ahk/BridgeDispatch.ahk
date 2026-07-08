@@ -818,33 +818,51 @@ _DispatchBridgeCall(method, args)
 
             ; ── UI Browser ────────────────────────────────────────────────────
         ; ── Memory Dissector ──────────────────────────────────────────────────
-        ; Jump to an absolute hex address (args[1] = "0x..." string).
+        ; Jump to an absolute hex address (args[1] = "0x..." string). This is a
+        ; NEW custom root, so the followed-pointer chain resets.
         case "DissectGoto":
             hex := (args.Length >= 1) ? String(args[1]) : ""
-            try LogError("DissectGoto hex=" hex)
             if (hex != "")
             {
                 addr := _ParseHexAddr(hex)
-                try LogError("DissectGoto parsed addr=0x" Format("{:X}", addr))
                 if (addr)
-                    SetTimer(() => _SafeDissect(() => MemDissectGoto(addr), "MemDissectGoto"), -1)
+                    SetTimer(() => _SafeDissect(() => MemDissectGotoCustom(addr), "MemDissectGotoCustom"), -1)
             }
+        ; Follow a pointer found at byte offset args[1] within the current view to
+        ; args[2] (records the hop for the offset-chain breadcrumb).
+        case "DissectFollow":
+            fOff  := (args.Length >= 1) ? _ParseHexAddr(String(args[1])) : 0
+            fAddr := (args.Length >= 2) ? _ParseHexAddr(String(args[2])) : 0
+            if (fAddr)
+                SetTimer(() => _SafeDissect(() => MemDissectFollowPointer(fOff, fAddr), "MemDissectFollow"), -1)
         ; Jump to a named symbol (args[1] = symbol name, args[2] = optional custom hex addr).
         case "DissectSymbol":
             sym2   := (args.Length >= 1) ? String(args[1]) : "ServerDataStructure"
             cHex   := (args.Length >= 2) ? String(args[2]) : "0"
             cAddr2 := _ParseHexAddr(cHex)
-            try LogError("DissectSymbol sym=" sym2 " cAddr=0x" Format("{:X}", cAddr2))
             SetTimer(() => _SafeDissect(() => MemDissectGotoSymbol(sym2, cAddr2), "MemDissectGotoSymbol"), -1)
+        ; Apply/clear a PoE2Offsets struct template (args[1] = struct name or "").
+        case "DissectSetStruct":
+            dStruct := (args.Length >= 1) ? String(args[1]) : ""
+            SetTimer(() => _SafeDissect(() => MemDissectSetStruct(dStruct), "MemDissectSetStruct"), -1)
+        ; Push the list of all struct-template names to the UI dropdown (once).
+        case "DissectRequestStructs":
+            SetTimer(() => PushMemDissectStructsToWebView(), -1)
+        ; Resolve a typed pointer chain, e.g. "AreaInstance+0x30+0x18".
+        case "DissectResolveChain":
+            dChain := (args.Length >= 1) ? String(args[1]) : ""
+            SetTimer(() => _SafeDissect(() => MemDissectResolveChain(dChain), "MemDissectResolveChain"), -1)
+        ; Scan the current buffer for a value (args[1]=value, args[2]=type).
+        case "DissectScan":
+            sVal := (args.Length >= 1) ? String(args[1]) : ""
+            sTyp := (args.Length >= 2) ? String(args[2]) : "i32"
+            SetTimer(() => _DissectScanAndPush(sVal, sTyp), -1)
         ; Navigation: go back / forward / re-read.
         case "DissectBack":
-            try LogError("DissectBack")
             SetTimer(() => _SafeDissect(() => MemDissectBack(), "MemDissectBack"), -1)
         case "DissectForward":
-            try LogError("DissectForward")
             SetTimer(() => _SafeDissect(() => MemDissectForward(), "MemDissectForward"), -1)
         case "DissectReread":
-            try LogError("DissectReread")
             SetTimer(() => _SafeDissect(() => MemDissectReread(), "MemDissectReread"), -1)
         ; Change the read window size (bytes). args[1] = integer.
         ; Also re-reads the current address so the table immediately reflects

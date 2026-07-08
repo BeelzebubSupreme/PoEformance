@@ -56,7 +56,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.289"
+POEFORMANCE_VERSION := "0.45.13.290"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -240,6 +240,10 @@ g_memDissectBuf := 0               ; last read Buffer, or 0
 g_memDissectHistory := []              ; back-navigation stack (Array of Int64 addresses)
 g_memDissectFwd := []              ; forward-navigation stack
 g_memDissectStatus := "idle"
+g_memDissectStructName := ""           ; applied PoE2Offsets struct template (annotates rows), "" = none
+g_memDissectRootSym := ""              ; root symbol of the current pointer path (for the offset chain)
+g_memDissectRootAddr := 0              ; root address of the current pointer path
+g_memDissectChain := []                ; Array of followed steps {off, addr} for the offset-chain breadcrumb
 
 ; Radar Entity-Filter
 g_radarShowEnemyNormal := true

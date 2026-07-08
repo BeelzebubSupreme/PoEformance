@@ -2065,6 +2065,7 @@
     .dis-tbl td { padding: 2px 6px; border-bottom: 1px solid rgba(37,42,69,.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
     .dis-tbl tr:hover td { background: rgba(106,143,191,.08) }
     .dis-off  { color: var(--accent); width: 60px }
+    .dis-fld  { color: #d6a65a; width: 200px; font-size: 10px }
     .dis-adr  { color: var(--subtext); width: 130px }
     .dis-hex  { color: #a0a8c0; width: 180px }
     .dis-i32  { color: #c0c8e0; width: 80px }
@@ -2076,6 +2077,23 @@
     .dis-ptr-link { color: var(--info); cursor: pointer; text-decoration: underline dotted }
     .dis-ptr-link:hover { color: #b0e0f5 }
     .dis-status { font-family: var(--codex-serif); font-size: 11px; color: var(--codex-text-dim); margin-left: 8px }
+    .dis-live-lbl { display: inline-flex; align-items: center; gap: 4px; font-family: var(--codex-serif); font-size: 12px; color: var(--codex-text); cursor: pointer; user-select: none }
+    .dis-live-lbl input { cursor: pointer }
+    /* Live-watch: a row whose 8 bytes changed since the previous refresh gets an
+       inline amber background (alpha faded by age in JS). tr bg shows through the
+       transparent cells. */
+    .dis-tbl tr.dis-chg td { transition: none }
+    /* Scan matches: a left rail on the row + a subtle tint. */
+    .dis-tbl tr.dis-match td { box-shadow: inset 3px 0 0 var(--info) }
+    .dis-tbl tr.dis-match td.dis-off { color: var(--info) }
+    /* Sub-bars (struct/chain + scan) */
+    .dis-subbar { padding: 4px 10px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex-shrink: 0 }
+    .dis-subbar-lbl { font-family: var(--codex-serif); font-size: 11px; color: var(--codex-text-dim); text-transform: uppercase; letter-spacing: .04em }
+    .dis-chain-sep { color: var(--border) }
+    .dis-chain { font-family: Consolas, monospace; font-size: 11px; color: #d6a65a; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 2px 7px; min-width: 120px; max-width: 420px; overflow-x: auto; white-space: nowrap }
+    .dis-scan-results { font-family: var(--codex-serif); font-size: 11px; color: var(--codex-text-dim); display: flex; align-items: center; gap: 4px; flex-wrap: wrap }
+    .dis-scan-chip { font-family: Consolas, monospace; font-size: 10px; color: var(--info); background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px; cursor: pointer }
+    .dis-scan-chip:hover { background: rgba(106,143,191,.12) }
     /* Mod categories — saturated, period-correct inks chosen for legibility
        against the warm parchment background. Avoid washed-out pastels:
        deep amethyst for implicits, illuminated gold for enchants, and a
@@ -6733,13 +6751,50 @@
             <option value="4096">4 KB (512 rows)</option>
             <option value="8192">8 KB (1024 rows)</option>
           </select>
+          <label class="dis-live-lbl" data-tip="Auto-refresh: re-read the current address and flash rows whose bytes changed. Act in-game to spot which offset holds a live-changing value."><input type="checkbox" id="dis-live" onchange="dissectToggleLive()"> Live</label>
+          <select id="dis-live-rate" onchange="dissectLiveRateChanged()" style="font-size:11px" data-tip="Refresh rate">
+            <option value="250">4/s</option>
+            <option value="500" selected>2/s</option>
+            <option value="1000">1/s</option>
+            <option value="2000">0.5/s</option>
+          </select>
           <span id="dis-status" class="dis-status">idle</span>
+        </div>
+        <!-- Struct template + offset-chain breadcrumb -->
+        <div class="dis-subbar">
+          <span class="dis-subbar-lbl">Type as</span>
+          <select id="dis-struct" onchange="dissectSetStruct()" style="font-size:11px" data-tip="Overlay known field names from PoE2Offsets onto this view">
+            <option value="">(none)</option>
+          </select>
+          <span class="dis-chain-sep">│</span>
+          <span class="dis-subbar-lbl">Chain</span>
+          <code id="dis-chain" class="dis-chain" data-tip="The pointer path you followed from the root">—</code>
+          <button class="tree-tbtn" onclick="dissectCopyChain()" data-tip="Copy the offset chain to the clipboard">📋</button>
+          <input id="dis-chain-in" class="dis-addr-input" style="width:240px" type="text" placeholder="Resolve chain e.g. AreaInstance+0x30+0x18" onkeydown="if(event.key==='Enter')dissectResolveChain()">
+          <button class="tree-tbtn" onclick="dissectResolveChain()">Resolve</button>
+        </div>
+        <!-- Value scan within the current view -->
+        <div class="dis-subbar">
+          <span class="dis-subbar-lbl">Scan</span>
+          <input id="dis-scan-val" class="dis-addr-input" style="width:160px" type="text" placeholder="value…" onkeydown="if(event.key==='Enter')dissectScan()">
+          <select id="dis-scan-type" style="font-size:11px">
+            <option value="i32">i32</option>
+            <option value="u32">u32</option>
+            <option value="f32">f32</option>
+            <option value="i64">i64</option>
+            <option value="hex">hex bytes</option>
+            <option value="str">ASCII</option>
+          </select>
+          <button class="tree-tbtn" onclick="dissectScan()">Scan</button>
+          <button class="tree-tbtn" onclick="dissectScanClear()" data-tip="Clear scan highlights">✕</button>
+          <span id="dis-scan-results" class="dis-scan-results"></span>
         </div>
         <div class="dis-table-wrap">
           <table class="dis-tbl" id="dis-tbl">
             <thead>
               <tr>
                 <th class="dis-off">Offset</th>
+                <th class="dis-fld">Field</th>
                 <th class="dis-adr">Address</th>
                 <th class="dis-hex">Hex (8B)</th>
                 <th class="dis-i32">i32</th>
@@ -6751,7 +6806,7 @@
               </tr>
             </thead>
             <tbody id="dis-body">
-              <tr><td colspan="9" class="no-data-msg">Enter an address or click a symbol to begin.</td></tr>
+              <tr><td colspan="10" class="no-data-msg">Enter an address or click a symbol to begin.</td></tr>
             </tbody>
           </table>
         </div>
@@ -8162,6 +8217,15 @@
     function _runTabSideEffects(key, prev) {
       if (prev === 'ui' && key !== 'ui')
         ahkCall('UiBrowserClearHighlight');
+      // Stop the dissector's live auto-refresh when leaving its tab.
+      if (prev === 'dissect' && key !== 'dissect') {
+        dissectStopLive();
+        const lc = document.getElementById('dis-live');
+        if (lc) lc.checked = false;
+      }
+      // Populate the "Type as" struct dropdown once, on first entering the tab.
+      if (key === 'dissect' && !_disStructsBuilt)
+        ahkCall('DissectRequestStructs');
       if (treeTabs.has(key))
         ahkCall('SwitchTab', key.charAt(0).toUpperCase() + key.slice(1));
       if (key === 'ui')
@@ -10179,15 +10243,36 @@
       const v = (document.getElementById('dis-addr').value || '').trim();
       if (v) ahkCall('DissectGoto', v);
     }
+    // ── Live watch: auto re-read the current address so changed bytes flash ──
+    let _disLiveTimer = null;
+    function dissectStopLive() {
+      if (_disLiveTimer) { clearInterval(_disLiveTimer); _disLiveTimer = null; }
+    }
+    function dissectToggleLive() {
+      dissectStopLive();
+      const on = document.getElementById('dis-live').checked;
+      if (on) {
+        const rate = parseInt(document.getElementById('dis-live-rate').value) || 500;
+        _disLiveTimer = setInterval(() => ahkCall('DissectReread'), rate);
+      }
+    }
+    function dissectLiveRateChanged() {
+      if (document.getElementById('dis-live') && document.getElementById('dis-live').checked)
+        dissectToggleLive();   // restart with the new rate
+    }
     function dissectSymbolGo() {
       const sym = document.getElementById('dis-symbol').value;
       ahkCall('DissectSymbol', sym, '0x0');
     }
     // Called when the user clicks a pointer value in the dissector table.
-    function dissectClickPtr(hexStr) {
+    // Passes the source byte offset so AHK can grow the offset-chain breadcrumb.
+    function dissectClickPtr(hexStr, offVal) {
       if (!hexStr) return;
       document.getElementById('dis-addr').value = hexStr;
-      ahkCall('DissectGoto', hexStr);
+      if (offVal !== undefined && offVal !== null && offVal !== '')
+        ahkCall('DissectFollow', String(offVal), hexStr);
+      else
+        ahkCall('DissectGoto', hexStr);
     }
     // Event delegation: one listener on the tbody, fires when any
     // .dis-ptr-link inside it (or its child) gets clicked. This avoids the
@@ -10199,14 +10284,26 @@
       if (!tbody) { setTimeout(attachDissectClick, 50); return; }
       tbody.addEventListener('click', (ev) => {
         const link = ev.target.closest('.dis-ptr-link');
-        if (link && link.dataset && link.dataset.ptr) dissectClickPtr(link.dataset.ptr);
+        if (link && link.dataset && link.dataset.ptr) dissectClickPtr(link.dataset.ptr, link.dataset.off);
       });
     })();
+
+    // Live-watch change tracking: previous hex per absolute address, and the
+    // timestamp each address last changed (drives the fade). Reset when the base
+    // address changes (a navigation), so a fresh page never all-flashes.
+    let _disBaseAddr = null;
+    let _disPrevHex = Object.create(null);
+    let _disChgTick = Object.create(null);
+    const DIS_FADE_MS = 1500;
+    let _disLastJson = null;              // last payload, for scan re-render
+    let _disScanSet = new Set();          // row offsets currently matched by a scan
+    let _disStructsBuilt = false;         // "Type as" dropdown populated once
 
     // AHK pushes this after every Goto / Back / Forward / Reread.
     function updateMemDissect(jsonStr) {
       let d;
       try { d = JSON.parse(jsonStr); } catch (e) { return; }
+      _disLastJson = jsonStr;   // cache so a scan can re-render without a round-trip
 
       // Status
       const statusEl = document.getElementById('dis-status');
@@ -10216,6 +10313,15 @@
       const addrEl = document.getElementById('dis-addr');
       if (addrEl && addrEl !== document.activeElement && d.addr)
         addrEl.value = d.addr;
+
+      // Applied struct template dropdown
+      const structEl = document.getElementById('dis-struct');
+      if (structEl && structEl !== document.activeElement)
+        structEl.value = d.struct || '';
+
+      // Offset-chain breadcrumb
+      const chainEl = document.getElementById('dis-chain');
+      if (chainEl) chainEl.textContent = d.chain || '—';
 
       // Back / Forward buttons
       const bb = document.getElementById('dis-back-btn');
@@ -10228,24 +10334,58 @@
       if (!tbody) return;
       const rows = d.rows;
       if (!Array.isArray(rows) || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="no-data-msg">'
+        tbody.innerHTML = '<tr><td colspan="10" class="no-data-msg">'
           + escHtml(d.status || 'No data') + '</td></tr>';
         return;
       }
 
+      // Reset change tracking when the viewed base address changes (navigation),
+      // so following a pointer doesn't flash the whole new page.
+      if (d.addr !== _disBaseAddr) {
+        _disBaseAddr = d.addr;
+        _disPrevHex = Object.create(null);
+        _disChgTick = Object.create(null);
+      }
+      const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
       let html = '';
       for (const row of rows) {
         const offHex = '+0x' + row.off.toString(16).toUpperCase().padStart(3, '0');
+
+        // Change highlight: compare this row's 8 bytes to the previous refresh.
+        const prev = _disPrevHex[row.addr];
+        if (prev !== undefined && prev !== row.hex) _disChgTick[row.addr] = now;
+        _disPrevHex[row.addr] = row.hex;
+        // Row classes: change-flash (inline amber) + scan-match rail.
+        const cls = [];
+        let bgStyle = '';
+        const chgAt = _disChgTick[row.addr];
+        if (chgAt !== undefined) {
+          const age = now - chgAt;
+          if (age < DIS_FADE_MS) {
+            const a = (0.42 * (1 - age / DIS_FADE_MS)).toFixed(3);
+            cls.push('dis-chg');
+            bgStyle = ' style="background:rgba(214,166,90,' + a + ')"';
+          } else {
+            delete _disChgTick[row.addr];   // fade complete — forget it
+          }
+        }
+        if (_disScanSet.has(row.off)) cls.push('dis-match');
+        let trOpen = '<tr id="dis-row-' + row.off + '"'
+          + (cls.length ? ' class="' + cls.join(' ') + '"' : '')
+          + bgStyle + '>';
+
         let ptrCell;
         if (row.isPtr) {
           // Use data attribute + event delegation rather than inline onclick —
           // avoids quote-escaping issues and survives innerHTML rebuilds.
-          ptrCell = '<span class="dis-ptr-link" data-ptr="' + escAttr(row.ptr) + '" data-tip="Click to follow pointer">' + escHtml(row.ptr) + '</span>';
+          ptrCell = '<span class="dis-ptr-link" data-ptr="' + escAttr(row.ptr) + '" data-off="' + row.off + '" data-tip="Click to follow pointer">' + escHtml(row.ptr) + '</span>';
         } else {
           ptrCell = '<span style="color:var(--subtext)">' + escHtml(row.ptr) + '</span>';
         }
-        html += '<tr>'
+        html += trOpen
           + '<td class="dis-off">'  + escHtml(offHex)         + '</td>'
+          + '<td class="dis-fld" data-tip="' + escAttr(row.name || '') + '">' + escHtml(row.name || '') + '</td>'
           + '<td class="dis-adr">'  + escHtml(row.addr)       + '</td>'
           + '<td class="dis-hex">'  + escHtml(row.hex)        + '</td>'
           + '<td class="dis-i32">'  + escHtml(String(row.i32))+ '</td>'
@@ -10257,6 +10397,85 @@
           + '</tr>';
       }
       tbody.innerHTML = html;
+    }
+
+    // ── Stage 2: "Type as" struct-template dropdown ──
+    // AHK pushes the full list of PoE2Offsets struct names once (tab open).
+    function updateMemDissectStructs(jsonStr) {
+      let names;
+      try { names = JSON.parse(jsonStr); } catch (e) { return; }
+      if (!Array.isArray(names)) return;
+      const sel = document.getElementById('dis-struct');
+      if (!sel) return;
+      const cur = sel.value;
+      let html = '<option value="">(none)</option>';
+      for (const n of names.slice().sort()) html += '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>';
+      sel.innerHTML = html;
+      sel.value = cur;            // preserve current selection across rebuilds
+      _disStructsBuilt = true;
+    }
+    function dissectSetStruct() {
+      const sel = document.getElementById('dis-struct');
+      ahkCall('DissectSetStruct', sel ? sel.value : '');
+    }
+
+    // ── Stage 3: offset-chain copy + typed-chain resolve ──
+    function dissectCopyChain() {
+      const el = document.getElementById('dis-chain');
+      const txt = el ? el.textContent : '';
+      if (!txt || txt === '—') return;
+      try { navigator.clipboard.writeText(txt); } catch (e) {}
+      // brief visual ack
+      if (el) { const o = el.style.color; el.style.color = 'var(--info)'; setTimeout(() => el.style.color = o, 350); }
+    }
+    function dissectResolveChain() {
+      const v = (document.getElementById('dis-chain-in').value || '').trim();
+      if (v) ahkCall('DissectResolveChain', v);
+    }
+
+    // ── Stage 4: value scan ──
+    function dissectScan() {
+      const v = (document.getElementById('dis-scan-val').value || '').trim();
+      const t = document.getElementById('dis-scan-type').value;
+      if (v) ahkCall('DissectScan', v, t);
+    }
+    function dissectScanClear() {
+      _disScanSet = new Set();
+      const res = document.getElementById('dis-scan-results');
+      if (res) res.innerHTML = '';
+      if (_disLastJson) updateMemDissect(_disLastJson);   // re-render without match rails
+    }
+    // AHK pushes the scan match list [{off, at, addr}]. We store the matched row
+    // offsets, render clickable chips, and re-render the table to add the rails.
+    function updateMemDissectScan(jsonStr) {
+      let matches;
+      try { matches = JSON.parse(jsonStr); } catch (e) { return; }
+      if (!Array.isArray(matches)) matches = [];
+      _disScanSet = new Set(matches.map(m => m.off));
+      const res = document.getElementById('dis-scan-results');
+      if (res) {
+        if (matches.length === 0) {
+          res.textContent = 'no matches';
+        } else {
+          let html = matches.length + ' match' + (matches.length === 1 ? '' : 'es') + ': ';
+          for (const m of matches.slice(0, 40)) {
+            const offHex = '+0x' + (m.off >>> 0).toString(16).toUpperCase();
+            html += '<span class="dis-scan-chip" onclick="dissectJumpToRow(' + m.off + ')">' + offHex + '</span>';
+          }
+          if (matches.length > 40) html += ' +' + (matches.length - 40) + ' more';
+          res.innerHTML = html;
+        }
+      }
+      if (_disLastJson) updateMemDissect(_disLastJson);   // re-render with match rails
+    }
+    // Scroll a matched row into view and flash it.
+    function dissectJumpToRow(off) {
+      const tr = document.getElementById('dis-row-' + off);
+      if (!tr) return;
+      tr.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      const o = tr.style.background;
+      tr.style.background = 'rgba(106,143,191,.35)';
+      setTimeout(() => { tr.style.background = o; }, 700);
     }
 
     // ═══════════════════════════════════════════════════════════════════
