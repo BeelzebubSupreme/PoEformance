@@ -112,61 +112,134 @@ _RunExploration(radarSnap, gameHwnd, measureOnly := false)
     static _regionVisitedCnt := 0
     static _DIRX := [1, -1, 0, 0]
     static _DIRY := [0, 0, 1, -1]
+    ; Per-area coverage cache keyed by the instance hash so a town/hideout
+    ; round-trip (or any temporary detour) RESTORES the in-progress coverage
+    ; on return instead of resetting to zero. Keying by hash (not dataSize)
+    ; also stops two different runs of the same map layout from sharing stale
+    ; visited state. Capped + insertion-order evicted so a long session's map
+    ; history can't grow unbounded.
+    static _areaKey := ""          ; current tracked area identity
+    static _areaCache := Map()     ; areaKey → coverage-state Map
+    static _areaOrder := []        ; insertion order of keys (for eviction)
+    static _AREA_CACHE_CAP := 24
 
     tsz := terrain["dataSize"]
-    if (tsz != _terrainSz)
+
+    ; Area identity: prefer the instance hash (survives a town/hideout round
+    ; trip), fall back to the terrain size when the hash is unavailable.
+    areaHash := (area && IsObject(area) && area.Has("currentAreaHash")) ? area["currentAreaHash"] : 0
+    areaKey := areaHash ? ("h" areaHash) : ("sz" tsz)
+
+    if (areaKey != _areaKey)
     {
-        ; New area — reinitialize
-        _pf.SetTerrain(terrain)
-        _terrainSz := tsz
-        _bpr := terrain["bytesPerRow"]
-        _rows := terrain["totalRows"]
-        gridW := terrain["gridWidth"]
-        _coarseW := gridW // _STEP
-        _coarseH := _rows // _STEP
-
-        ; Allocate visited map
-        mapSize := _coarseW * _coarseH
-        _visited := Buffer(mapSize, 0)
-
-        ; Count total walkable coarse cells
-        buf := terrain["data"]
-        dsz := terrain["dataSize"]
-        count := 0
-        cy := 0
-        while (cy < _coarseH)
+        ; Leaving the previous area — bank its coverage under its key so a
+        ; later return restores it. Skip on the very first area (no prior key).
+        if (_areaKey != "" && _visited)
         {
-            cx := 0
-            while (cx < _coarseW)
+            _areaCache[_areaKey] := Map(
+                "visited", _visited, "totalWalkable", _totalWalkable,
+                "visitedWalkable", _visitedWalkable, "terrainSz", _terrainSz,
+                "bpr", _bpr, "rows", _rows, "coarseW", _coarseW, "coarseH", _coarseH,
+                "regionMap", _regionMap, "regionQ", _regionQ, "regionQHead", _regionQHead,
+                "regionDone", _regionDone, "regionWalkable", _regionWalkable,
+                "regionVisitedCnt", _regionVisitedCnt)
+            known := false
+            for _, k in _areaOrder
             {
-                gx := cx * _STEP
-                gy := cy * _STEP
-                if (gx < gridW && gy < _rows)
+                if (k = _areaKey)
                 {
-                    idx := gy * _bpr + (gx >> 1)
-                    if (idx < dsz)
-                    {
-                        byt := NumGet(buf.Ptr, idx, "UChar")
-                        if (((byt >> ((gx & 1) * 4)) & 0xF) != 0)
-                            count++
-                    }
+                    known := true
+                    break
                 }
-                cx++
             }
-            cy++
+            if !known
+            {
+                _areaOrder.Push(_areaKey)
+                while (_areaOrder.Length > _AREA_CACHE_CAP)
+                {
+                    evict := _areaOrder.RemoveAt(1)
+                    if (evict != areaKey && _areaCache.Has(evict))
+                        _areaCache.Delete(evict)
+                }
+            }
         }
-        _totalWalkable := count
-        _visitedWalkable := 0
 
-        ; Reset reachability-region state
-        _regionMap := 0
-        _regionQ := []
-        _regionQHead := 1
-        _regionDone := false
-        _regionWalkable := 0
-        _regionVisitedCnt := 0
+        _areaKey := areaKey
+        _pf.SetTerrain(terrain)   ; terrain buffer is always re-read on a change
 
-        ; Flag that navigation state needs reset
+        cached := _areaCache.Has(areaKey) ? _areaCache[areaKey] : 0
+        if (cached && cached["terrainSz"] = tsz)
+        {
+            ; Returning to a known area — restore its coverage + region state.
+            ; Navigation still re-plans (from the restored visited map).
+            _terrainSz       := tsz
+            _bpr             := cached["bpr"]
+            _rows            := cached["rows"]
+            _coarseW         := cached["coarseW"]
+            _coarseH         := cached["coarseH"]
+            _visited         := cached["visited"]
+            _totalWalkable   := cached["totalWalkable"]
+            _visitedWalkable := cached["visitedWalkable"]
+            _regionMap       := cached["regionMap"]
+            _regionQ         := cached["regionQ"]
+            _regionQHead     := cached["regionQHead"]
+            _regionDone      := cached["regionDone"]
+            _regionWalkable  := cached["regionWalkable"]
+            _regionVisitedCnt := cached["regionVisitedCnt"]
+        }
+        else
+        {
+            ; New (or dimension-mismatched) area — fresh init.
+            _terrainSz := tsz
+            _bpr := terrain["bytesPerRow"]
+            _rows := terrain["totalRows"]
+            gridW := terrain["gridWidth"]
+            _coarseW := gridW // _STEP
+            _coarseH := _rows // _STEP
+
+            ; Allocate visited map
+            mapSize := _coarseW * _coarseH
+            _visited := Buffer(mapSize, 0)
+
+            ; Count total walkable coarse cells
+            buf := terrain["data"]
+            dsz := terrain["dataSize"]
+            count := 0
+            cy := 0
+            while (cy < _coarseH)
+            {
+                cx := 0
+                while (cx < _coarseW)
+                {
+                    gx := cx * _STEP
+                    gy := cy * _STEP
+                    if (gx < gridW && gy < _rows)
+                    {
+                        idx := gy * _bpr + (gx >> 1)
+                        if (idx < dsz)
+                        {
+                            byt := NumGet(buf.Ptr, idx, "UChar")
+                            if (((byt >> ((gx & 1) * 4)) & 0xF) != 0)
+                                count++
+                        }
+                    }
+                    cx++
+                }
+                cy++
+            }
+            _totalWalkable := count
+            _visitedWalkable := 0
+
+            ; Reset reachability-region state
+            _regionMap := 0
+            _regionQ := []
+            _regionQHead := 1
+            _regionDone := false
+            _regionWalkable := 0
+            _regionVisitedCnt := 0
+        }
+
+        ; Flag that navigation state needs reset (both paths)
         _areaResetDone := 0
     }
 

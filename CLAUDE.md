@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.286`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.287`.
 
 ## Language
 
@@ -2183,6 +2183,21 @@ Two owner-requested tweaks.
 - **Pending in-game verification:** on a map (AutoPilot off), the on-map Loot bar's name should read
   e.g. `MapRiverhold (explored: 37%)` and climb as you explore, resetting per area; the dot-spacing
   slider should look/behave like the Combat sliders and its row hide when the wash toggle is off.
+- **Per-area coverage cache — survive a town round-trip (0.45.13.287):** the coverage tracker reset
+  on EVERY terrain change, so leaving an in-progress Atlas map for town (to sell) and returning
+  wiped the explored % back to 0. Fix in `ExplorationModule._RunExploration`: the per-area state
+  (visited buffer + `_totalWalkable`/`_visitedWalkable` + the full reachability-region flood state +
+  coarse dims) is now cached keyed by the AREA INSTANCE HASH (`area["currentAreaHash"]`, `"h"`-prefixed;
+  falls back to `"sz"<dataSize>` when the hash is unavailable). On a change: the OLD area's state is
+  banked under its key, then if the NEW key has a cached entry whose `terrainSz` matches, it is
+  RESTORED (navigation still re-plans from the restored visited map); otherwise fresh init (the
+  original allocate-+-count-walkable path, unchanged). So a town→map return continues from where you
+  left off. Keying by hash (not dataSize) also fixes a latent bug where two different runs of the same
+  map layout shared stale visited state. Cache is capped at 24 areas, insertion-order evicted
+  (`_areaCache`/`_areaOrder`/`_AREA_CACHE_CAP`), so a long session can't grow unbounded. Static: full
+  include stack parse-loads clean (`/validate` exit 0); braces balanced.
+- **Pending in-game verification:** start a map, explore partway (watch the on-map Loot bar %), go to
+  town and return via portal — the % should resume at its prior value and keep climbing, not reset to 0.
 
 ## Removed the "Walkable Grid (debug)" overlay (0.45.13.234)
 
