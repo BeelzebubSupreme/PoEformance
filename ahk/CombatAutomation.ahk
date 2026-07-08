@@ -394,10 +394,40 @@ TryCombatAutomation(radarSnap, gameHwnd)
         ; ends the combat tick badly. Skip the tick — next frame's
         ; projection geometry usually shifts the aim off the obstacle.
         avoidRects := GetAvoidZones(radarSnap, gameHwnd)
-        if IsPointInAvoidZone(targetScreenPos["x"], targetScreenPos["y"], avoidRects)
+        azKind := AvoidZoneHitKind(targetScreenPos["x"], targetScreenPos["y"], avoidRects)
+        if (azKind = "ent")
         {
-            g_combatLastReason := "avoid-zone(" targetScreenPos["x"] "," targetScreenPos["y"] " aim=" aimTag ")"
-            return true   ; engaged, just skipping the click this tick
+            ; Interactable under the aim (transition / portal / waypoint / NPC) —
+            ; never click near it (would change zone / open a dialog). Skip; the
+            ; next tick's geometry usually shifts the aim off it.
+            g_combatLastReason := "avoid-zone(" targetScreenPos["x"] "," targetScreenPos["y"] " aim=" aimTag "/ent)"
+            return true
+        }
+        if (azKind != "")
+        {
+            ; The DIRECT aim projects onto the HUD / minimap band — a "south" enemy
+            ; that projects low onto the flask/globe strip. IDLING here (the old
+            ; behavior) STALLED combat on such a mob every tick — worse since the
+            ; bottom HUD band was widened, so the enemy's aim kept landing in it and
+            ; the bot just sat there (observed at the end of the owner's status log).
+            ; Instead REPOSITION: rescue a clear point toward the enemy (NavValidateClick
+            ; pulls it up out of the HUD, the same rescue exploration uses) and issue a
+            ; throttled move-click so the character steps and the enemy re-projects off
+            ; the HUD. No skill fire — the cursor isn't on the enemy this tick.
+            static _hudRepoTick := 0
+            rescue := NavValidateClick(targetScreenPos, camAnchor["sp"], avoidRects)
+            nowH := A_TickCount
+            if (rescue["ok"] && (nowH - _hudRepoTick) > 250)
+            {
+                DllCall("SetCursorPos", "int", rescue["sp"]["x"], "int", rescue["sp"]["y"])
+                Sleep(15)
+                DllCall("mouse_event", "uint", 0x0002, "int", 0, "int", 0, "uint", 0, "uptr", 0) ; LDOWN
+                Sleep(15)
+                DllCall("mouse_event", "uint", 0x0004, "int", 0, "int", 0, "uint", 0, "uptr", 0) ; LUP
+                _hudRepoTick := nowH
+            }
+            g_combatLastReason := "hud-reposition(" targetScreenPos["x"] "," targetScreenPos["y"] " aim=" aimTag ")"
+            return true
         }
 
         _MoveMouseToTarget(targetScreenPos)
