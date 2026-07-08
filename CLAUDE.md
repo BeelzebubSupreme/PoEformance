@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.293`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.294`.
 
 ## Language
 
@@ -2411,7 +2411,27 @@ built AFTER the 8 KB SEH scare precisely because it does RPM).
 - **Pending in-game verification:** peek a pointer that leads to an entity (→ `Metadata/…` path), a name
   string, and a vector field (→ plausible count) to confirm the classifier against real memory.
 
-- **Deferred follow-up:** resizable/hideable columns (reuse the TSV viewer's `.tsv-colsz`/`_tsvColWidths`).
+### Follow-up: resizable + hideable columns (shipped 0.45.13.294, UI-only)
+
+The dissector table is now driven by a central column model so width + visibility are trivial. Pure
+`ui/index.html` change (no AHK).
+- **`DIS_COLS`** (key/label/cls/default-width) is the single source of truth; header, `<colgroup>`, and
+  every row cell are generated from `_disVisCols()`. `_disRenderHead(stride)` rebuilds the colgroup +
+  `<thead>` (Hex label reflects 4B/8B); `_disCellHtml(col,row,…)` builds one `<td>` per key. The table is
+  `table-layout:fixed` with colgroup widths (the old per-class `.dis-*{width}` rules are now redundant).
+- **Resize:** a `.dis-colsz` handle per `<th>` (reused from the TSV viewer), drag delegated on the stable
+  `.dis-table-wrap` (the thead regenerates each render, so per-th listeners wouldn't survive) → updates
+  `_disColW[key]` live on the `<col>` + table width.
+- **Hide:** "⌗ Columns" toolbar button opens a `.dis-cols-menu` checkbox popover (`_disBuildColsMenu` /
+  `dissectToggleCol`); hidden keys go in `_disColHidden` and are skipped everywhere (header, colgroup,
+  cells, colspans). Guard keeps ≥1 column. Closes on outside click. Header renders on tab entry (before
+  the first Go). **Session-only** (not persisted across restarts) — could be persisted later if wanted.
+- **Verified in the browser preview:** header renders pre-Go; hiding i32/u32 drops them from header +
+  colgroup + cells; resize sets the `<col>` width; re-show restores; popover opens with 10 checkboxes +
+  outside-click close; the ≥1-column guard holds. Static: UI `node --check` clean.
+
+This closes the deferred dissector follow-ups. Remaining optional idea only: persist column widths/visibility
+(and size/stride) across restarts via a `[Dissector]` INI section if the owner wants sticky prefs.
 
 ## Reference
 

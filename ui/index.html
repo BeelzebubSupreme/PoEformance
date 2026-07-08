@@ -2106,6 +2106,16 @@
     .dis-pk-hex { font-family: Consolas, monospace; font-size: 10px; color: #7f889c; margin-left: 10px }
     .dis-peek-close { cursor: pointer; color: var(--subtext); margin-left: 10px; font-size: 10px }
     .dis-peek-close:hover { color: var(--danger, #e06666) }
+    /* Drag-to-resize handle on each dissector column header */
+    .dis-colsz { position: absolute; top: 0; right: 0; width: 6px; height: 100%; cursor: col-resize; user-select: none }
+    .dis-colsz:hover { background: var(--codex-gold, #c8a85a); opacity: .55 }
+    /* Column show/hide popover */
+    .dis-cols-wrap { position: relative; display: inline-block }
+    .dis-cols-menu { display: none; position: absolute; top: 100%; left: 0; z-index: 50; margin-top: 3px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 5px 4px; box-shadow: 0 4px 14px rgba(0,0,0,.4); min-width: 130px }
+    .dis-cols-menu.open { display: block }
+    .dis-cols-menu label { display: flex; align-items: center; gap: 6px; font-family: var(--codex-serif); font-size: 12px; color: var(--codex-text); padding: 3px 7px; cursor: pointer; border-radius: 3px; white-space: nowrap }
+    .dis-cols-menu label:hover { background: rgba(200,168,90,.08) }
+    .dis-cols-menu input { cursor: pointer }
     /* Mod categories — saturated, period-correct inks chosen for legibility
        against the warm parchment background. Avoid washed-out pastels:
        deep amethyst for implicits, illuminated gold for enchants, and a
@@ -6766,6 +6776,10 @@
             <option value="8" selected>8-byte rows</option>
             <option value="4">4-byte rows</option>
           </select>
+          <span class="dis-cols-wrap">
+            <button class="tree-tbtn" onclick="dissectToggleColsMenu(event)" data-tip="Show/hide columns">⌗ Columns</button>
+            <div id="dis-cols-menu" class="dis-cols-menu"></div>
+          </span>
           <label class="dis-live-lbl" data-tip="Auto-refresh: re-read the current address and flash rows whose bytes changed. Act in-game to spot which offset holds a live-changing value."><input type="checkbox" id="dis-live" onchange="dissectToggleLive()"> Live</label>
           <select id="dis-live-rate" onchange="dissectLiveRateChanged()" style="font-size:11px" data-tip="Refresh rate">
             <option value="250">4/s</option>
@@ -6805,23 +6819,11 @@
           <span id="dis-scan-results" class="dis-scan-results"></span>
         </div>
         <div class="dis-table-wrap">
-          <table class="dis-tbl" id="dis-tbl">
-            <thead>
-              <tr>
-                <th class="dis-off">Offset</th>
-                <th class="dis-fld">Field</th>
-                <th class="dis-adr">Address</th>
-                <th class="dis-hex" id="dis-hex-th">Hex (8B)</th>
-                <th class="dis-i32">i32</th>
-                <th class="dis-u32">u32</th>
-                <th class="dis-f32">f32</th>
-                <th class="dis-f64">f64</th>
-                <th class="dis-ptr">Pointer</th>
-                <th class="dis-asc">ASCII</th>
-              </tr>
-            </thead>
+          <table class="dis-tbl" id="dis-tbl" style="table-layout:fixed">
+            <colgroup id="dis-colgroup"></colgroup>
+            <thead id="dis-thead"></thead>
             <tbody id="dis-body">
-              <tr><td colspan="10" class="no-data-msg">Enter an address or click a symbol to begin.</td></tr>
+              <tr><td class="no-data-msg">Enter an address or click a symbol to begin.</td></tr>
             </tbody>
           </table>
         </div>
@@ -8239,8 +8241,10 @@
         if (lc) lc.checked = false;
       }
       // Populate the "Type as" struct dropdown once, on first entering the tab.
-      if (key === 'dissect' && !_disStructsBuilt)
-        ahkCall('DissectRequestStructs');
+      if (key === 'dissect') {
+        if (!_disStructsBuilt) ahkCall('DissectRequestStructs');
+        _disRenderHead(parseInt((document.getElementById('dis-stride') || {}).value) || 8);
+      }
       if (treeTabs.has(key))
         ahkCall('SwitchTab', key.charAt(0).toUpperCase() + key.slice(1));
       if (key === 'ui')
@@ -10319,6 +10323,24 @@
     let _disStructsBuilt = false;         // "Type as" dropdown populated once
     let _disPeek = Object.create(null);   // row off → pointer-peek result {kind,text,hex}
     let _disPeekOff = null;               // row whose 🔍 was last clicked (target for the reply)
+    // Column model — header, colgroup and rows are all generated from this so
+    // resize (width) and hide (visible) are trivial. Session-only prefs.
+    const DIS_COLS = [
+      { key: 'off', label: 'Offset',  cls: 'dis-off', w: 62 },
+      { key: 'fld', label: 'Field',   cls: 'dis-fld', w: 190 },
+      { key: 'adr', label: 'Address', cls: 'dis-adr', w: 130 },
+      { key: 'hex', label: 'Hex',     cls: 'dis-hex', w: 180 },
+      { key: 'i32', label: 'i32',     cls: 'dis-i32', w: 84 },
+      { key: 'u32', label: 'u32',     cls: 'dis-u32', w: 84 },
+      { key: 'f32', label: 'f32',     cls: 'dis-f32', w: 84 },
+      { key: 'f64', label: 'f64',     cls: 'dis-f64', w: 92 },
+      { key: 'ptr', label: 'Pointer', cls: 'dis-ptr', w: 170 },
+      { key: 'asc', label: 'ASCII',   cls: 'dis-asc', w: 90 }
+    ];
+    let _disColW = Object.create(null);       // key → current width px (defaults from DIS_COLS)
+    let _disColHidden = new Set();            // keys currently hidden
+    DIS_COLS.forEach(c => { _disColW[c.key] = c.w; });
+    const _disVisCols = () => DIS_COLS.filter(c => !_disColHidden.has(c.key));
 
     // AHK pushes this after every Goto / Back / Forward / Reread.
     function updateMemDissect(jsonStr) {
@@ -10342,8 +10364,9 @@
       const strideEl = document.getElementById('dis-stride');
       if (strideEl && strideEl !== document.activeElement && d.stride)
         strideEl.value = String(d.stride);
-      const hexTh = document.getElementById('dis-hex-th');
-      if (hexTh && d.stride) hexTh.textContent = 'Hex (' + d.stride + 'B)';
+
+      // Header + colgroup (regenerated so column widths/visibility apply).
+      _disRenderHead(d.stride || 8);
 
       // Applied struct template dropdown
       const structEl = document.getElementById('dis-struct');
@@ -10364,8 +10387,9 @@
       const tbody = document.getElementById('dis-body');
       if (!tbody) return;
       const rows = d.rows;
+      const nCols = _disVisCols().length;
       if (!Array.isArray(rows) || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="10" class="no-data-msg">'
+        tbody.innerHTML = '<tr><td colspan="' + nCols + '" class="no-data-msg">'
           + escHtml(d.status || 'No data') + '</td></tr>';
         return;
       }
@@ -10417,18 +10441,10 @@
         } else {
           ptrCell = '<span style="color:var(--subtext)">' + escHtml(row.ptr) + '</span>';
         }
-        html += trOpen
-          + '<td class="dis-off">'  + escHtml(offHex)         + '</td>'
-          + '<td class="dis-fld" data-tip="' + escAttr(row.name || '') + '">' + escHtml(row.name || '') + '</td>'
-          + '<td class="dis-adr">'  + escHtml(row.addr)       + '</td>'
-          + '<td class="dis-hex">'  + escHtml(row.hex)        + '</td>'
-          + '<td class="dis-i32">'  + escHtml(String(row.i32))+ '</td>'
-          + '<td class="dis-u32">'  + escHtml(String(row.u32))+ '</td>'
-          + '<td class="dis-f32">'  + escHtml(String(row.f32))+ '</td>'
-          + '<td class="dis-f64">'  + escHtml(String(row.f64))+ '</td>'
-          + '<td class="dis-ptr">'  + ptrCell                 + '</td>'
-          + '<td class="dis-asc">'  + escHtml(row.ascii)      + '</td>'
-          + '</tr>';
+        html += trOpen;
+        for (const col of _disVisCols())
+          html += _disCellHtml(col, row, ptrCell, offHex);
+        html += '</tr>';
 
         // Stage 5: an expanded pointer-peek result under this row (persists
         // across refreshes because it's rebuilt from _disPeek every render).
@@ -10439,7 +10455,7 @@
           if (pk.text) body += '<span class="dis-pk-text ' + kindCls + '">' + escHtml(pk.text) + '</span>';
           if (pk.hex)  body += '<span class="dis-pk-hex">' + escHtml(pk.hex) + '</span>';
           if (!body)   body = '<span class="dis-pk-text">' + escHtml(pk.kind || '—') + '</span>';
-          html += '<tr class="dis-peek-row"><td colspan="10">'
+          html += '<tr class="dis-peek-row"><td colspan="' + nCols + '">'
             + '<span class="dis-pk-kind">' + escHtml(pk.kind || '') + '</span>'
             + body
             + '<span class="dis-peek-close" data-off="' + row.off + '" data-tip="Close">✕</span>'
@@ -10447,6 +10463,43 @@
         }
       }
       tbody.innerHTML = html;
+    }
+
+    // Builds one <td> for a column key from a row (used by updateMemDissect).
+    function _disCellHtml(col, row, ptrCell, offHex) {
+      switch (col.key) {
+        case 'off': return '<td class="dis-off">' + escHtml(offHex) + '</td>';
+        case 'fld': return '<td class="dis-fld" data-tip="' + escAttr(row.name || '') + '">' + escHtml(row.name || '') + '</td>';
+        case 'adr': return '<td class="dis-adr">' + escHtml(row.addr) + '</td>';
+        case 'hex': return '<td class="dis-hex">' + escHtml(row.hex) + '</td>';
+        case 'i32': return '<td class="dis-i32">' + escHtml(String(row.i32)) + '</td>';
+        case 'u32': return '<td class="dis-u32">' + escHtml(String(row.u32)) + '</td>';
+        case 'f32': return '<td class="dis-f32">' + escHtml(String(row.f32)) + '</td>';
+        case 'f64': return '<td class="dis-f64">' + escHtml(String(row.f64)) + '</td>';
+        case 'ptr': return '<td class="dis-ptr">' + ptrCell + '</td>';
+        case 'asc': return '<td class="dis-asc">' + escHtml(row.ascii) + '</td>';
+      }
+      return '';
+    }
+
+    // Regenerates the colgroup + header row from the visible columns, applying
+    // per-column widths (resizable) and the current stride's Hex label.
+    function _disRenderHead(stride) {
+      const cg = document.getElementById('dis-colgroup');
+      const th = document.getElementById('dis-thead');
+      const tbl = document.getElementById('dis-tbl');
+      if (!cg || !th) return;
+      const vis = _disVisCols();
+      cg.innerHTML = vis.map(c => '<col style="width:' + (_disColW[c.key] || c.w) + 'px">').join('');
+      let hr = '<tr>';
+      for (const c of vis) {
+        const label = (c.key === 'hex') ? ('Hex (' + stride + 'B)') : c.label;
+        hr += '<th class="' + c.cls + '" style="position:relative">' + escHtml(label)
+          + '<span class="dis-colsz" data-ck="' + c.key + '"></span></th>';
+      }
+      hr += '</tr>';
+      th.innerHTML = hr;
+      if (tbl) tbl.style.width = vis.reduce((a, c) => a + (_disColW[c.key] || c.w), 0) + 'px';
     }
 
     // ── Stage 2: "Type as" struct-template dropdown ──
@@ -10550,6 +10603,69 @@
       if (_disPeekOff === null || _disPeekOff === undefined) return;
       _disPeek[_disPeekOff] = { kind: d.kind || 'data', text: d.text || '', hex: d.hex || '' };
       if (_disLastJson) updateMemDissect(_disLastJson);
+    }
+
+    // ── Follow-up batch: resizable + hideable columns ──
+    // Drag-to-resize, delegated on the stable table wrap (the thead is regenerated
+    // each render, so per-th listeners wouldn't survive).
+    (function attachDisColResize() {
+      const wrap = document.querySelector('#panel-dissect .dis-table-wrap');
+      if (!wrap) { setTimeout(attachDisColResize, 50); return; }
+      wrap.addEventListener('mousedown', (ev) => {
+        const h = ev.target.closest('.dis-colsz');
+        if (!h) return;
+        ev.preventDefault(); ev.stopPropagation();
+        const ck = h.getAttribute('data-ck');
+        const startX = ev.clientX, startW = _disColW[ck] || 100;
+        const tbl = document.getElementById('dis-tbl');
+        const cg = document.getElementById('dis-colgroup');
+        const vis = _disVisCols();
+        const idx = vis.findIndex(c => c.key === ck);
+        const onMove = (e) => {
+          const w = Math.max(36, startW + (e.clientX - startX));
+          _disColW[ck] = w;
+          if (cg && cg.children[idx]) cg.children[idx].style.width = w + 'px';
+          if (tbl) tbl.style.width = vis.reduce((a, c) => a + (_disColW[c.key] || c.w), 0) + 'px';
+        };
+        const onUp = () => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          window.removeEventListener('blur', onUp);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        window.addEventListener('blur', onUp);
+      });
+    })();
+    // Close the columns popover on an outside click.
+    document.addEventListener('click', (ev) => {
+      const menu = document.getElementById('dis-cols-menu');
+      if (menu && menu.classList.contains('open') && !ev.target.closest('.dis-cols-wrap'))
+        menu.classList.remove('open');
+    });
+    function _disBuildColsMenu() {
+      const menu = document.getElementById('dis-cols-menu');
+      if (!menu) return;
+      menu.innerHTML = DIS_COLS.map(c =>
+        '<label><input type="checkbox" data-ck="' + c.key + '"' + (_disColHidden.has(c.key) ? '' : ' checked')
+        + ' onchange="dissectToggleCol(\'' + c.key + '\', this.checked)"> ' + escHtml(c.label) + '</label>'
+      ).join('');
+    }
+    function dissectToggleColsMenu(ev) {
+      if (ev) ev.stopPropagation();
+      const menu = document.getElementById('dis-cols-menu');
+      if (!menu) return;
+      if (!menu.classList.contains('open')) _disBuildColsMenu();
+      menu.classList.toggle('open');
+    }
+    function dissectToggleCol(key, checked) {
+      if (checked) _disColHidden.delete(key);
+      else {
+        if (_disColHidden.size >= DIS_COLS.length - 1) { _disBuildColsMenu(); return; }  // keep ≥1 column
+        _disColHidden.add(key);
+      }
+      if (_disLastJson) updateMemDissect(_disLastJson);
+      else _disRenderHead(parseInt(document.getElementById('dis-stride').value) || 8);
     }
 
     // ═══════════════════════════════════════════════════════════════════
