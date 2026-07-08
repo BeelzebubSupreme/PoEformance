@@ -1381,6 +1381,8 @@ AutoConfigureCombatSlots()
         low := StrLower(intnm)
         if (low = "move")                       ; the basic move action is never a rotation skill
             continue
+        if (key = "")                           ; slot not bound to a usable key → can't be cast
+            continue
 
         castType := -1
         if (intnm != "" && skByInt.Has(low))
@@ -1417,12 +1419,17 @@ AutoConfigureCombatSlots()
 
 ; ── Import a build's rotation (ordered skill names) into the combat slots ──
 ; The UI decodes a Path of Building code (client-side) into an ORDERED list of
-; active-skill names and passes them here (newline-joined). Each name is matched
-; against the player's live skills (by display OR internal name); the slot's key
-; comes from the live skill bar (g_skillKeyBySkillName). Priority follows the
-; build's order. Skills the build lists but that aren't currently bound to a key
-; are added DISABLED (visible intended rotation, but they can't fire until the
-; gem is socketed + on the bar). Persists + returns "ok:N/total" | reason.
+; active-skill names and passes them here (newline-joined). A PoB build lists
+; EVERY active gem — auras / heralds / curses / triggered / auto-cast skills —
+; not just the manually-spammed damage skills. Only a skill that is actually
+; BOUND TO AN ACTION-BAR KEY can be manually cast, so build-listed skills that
+; don't resolve to a live bar key (reserved / auto-cast / triggered / not yet
+; socketed) are SKIPPED ENTIRELY — they no longer consume one of the 8 slots,
+; which previously let them crowd out the real castable rotation (they were
+; added disabled before). Each remaining name is matched against the player's
+; live skills (by display OR internal name); the key comes from the live skill
+; bar (g_skillKeyBySkillName). Priority follows the build's order. Persists +
+; returns "ok:N/total" (N bound + placed of total listed) | reason.
 ImportBuildRotation(namesText)
 {
     global g_reader, g_combatSkillSlots, g_skillKeyBySkillName
@@ -1464,8 +1471,6 @@ ImportBuildRotation(namesText)
         if (nm = "")
             continue
         total += 1
-        if (n >= 8)
-            continue
         low := StrLower(nm)
         sk := skByName.Has(low) ? skByName[low] : 0
 
@@ -1477,6 +1482,15 @@ ImportBuildRotation(namesText)
             else if (sk && sk.Has("name") && g_skillKeyBySkillName.Has(StrLower(sk["name"])))
                 key := g_skillKeyBySkillName[StrLower(sk["name"])]
         }
+        ; Only skills bound to an action-bar key can be manually cast. Auras /
+        ; heralds / triggered / auto-cast / not-yet-socketed gems aren't on the
+        ; bar, so they can never fire — skip them WITHOUT consuming a slot so the
+        ; real castable skills (in build order) fill the 8 slots instead.
+        if (key = "")
+            continue
+        if (n >= 8)
+            continue
+
         castType := (sk && sk.Has("castType")) ? sk["castType"] : -1
         rng := 0
         if (castType = 0)
@@ -1486,7 +1500,7 @@ ImportBuildRotation(namesText)
 
         n += 1
         newSlots[n] := Map(
-            "enabled",     (key != ""),      ; only bound skills can actually fire
+            "enabled",     true,             ; only bound skills reach here
             "key",         key,
             "priority",    n,
             "skillName",   nm,
@@ -1498,7 +1512,7 @@ ImportBuildRotation(namesText)
         )
     }
     if (n = 0)
-        return "no-skills"
+        return "no-bound-skills"   ; none of the build's skills are on your action bar
     g_combatSkillSlots := newSlots
     SaveCombatAutoConfig()
     return "ok:" n "/" total
