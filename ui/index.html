@@ -2847,6 +2847,54 @@
       font-style: italic;
     }
 
+    /* Inspector inline actions: copy-path / dissector / junk picker */
+    .ei-mini-btn, .ei-comp-dis {
+      margin-left: 6px;
+      padding: 0 5px;
+      font-size: 10px;
+      line-height: 16px;
+      background: rgba(28,18,10,0.85);
+      border: 1px solid var(--codex-rule);
+      color: var(--codex-text-dim);
+      border-radius: 2px;
+      cursor: pointer;
+      transition: border-color .12s, color .12s;
+    }
+    .ei-mini-btn:hover, .ei-comp-dis:hover { border-color: var(--codex-gold); color: var(--codex-gold-hi); }
+    .ei-comp-dis { margin-left: 8px; }
+    .ei-junk-add { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; }
+    .ei-junk-sel, .ei-junk-new {
+      font-family: var(--codex-serif);
+      font-size: 11px;
+      background: var(--bg);
+      border: 1px solid var(--codex-rule);
+      color: var(--codex-text);
+      border-radius: 2px;
+      padding: 1px 4px;
+      max-width: 180px;
+    }
+    .ei-junk-new { width: 120px; }
+
+    /* User-added junk pattern pill: toggle + label + ✕ remove */
+    .filter-pill.junk-custom-pill { gap: 4px; }
+    .junk-pat-del {
+      background: transparent;
+      border: none;
+      color: var(--codex-text-dim);
+      cursor: pointer;
+      font-size: 10px;
+      padding: 0 2px;
+      opacity: 0.7;
+    }
+    .junk-pat-del:hover { color: #d68a8a; opacity: 1; }
+    .filter-pill.junk-catdel {
+      color: #d68a8a;
+      border-color: rgba(150,70,70,0.5);
+      cursor: pointer;
+    }
+    .filter-pill.junk-catdel:hover { border-color: #d68a8a; color: #ffb0b0; }
+    .junk-cat-empty { font-size: 10px; color: var(--codex-text-dim); font-style: italic; align-self: center; }
+
     /* JSON VIEWER */
     .json-viewer {
       padding: 10px 12px
@@ -7915,12 +7963,15 @@
       junkRenderCustom(jf.custom || "");
       const cats = Array.isArray(jf.categories) ? jf.categories : [];
       junkRenderCats(cats);
+      // Expose the category list (key + label + user flag) so the Entity
+      // Inspector's "add to junk category" picker can list existing categories.
+      window._junkCatList = cats.map(c => ({ key: String(c.key || ""), label: String(c.label || c.key || ""), user: (c.user === true || c.user === "true") }));
       // Junk Filter meta: "<active>/<total>" over EVERY junk rule — all built-in
-      // categories (including the split-out hideout box) plus the custom terms —
-      // so the count reflects the whole filter. "off" when the master is off.
+      // categories (including the split-out hideout box), the per-category custom
+      // patterns, plus the global custom terms — so the count reflects the whole filter.
       let total = 0, active = 0;
       for (const c of cats) {
-        for (const p of (Array.isArray(c.patterns) ? c.patterns : [])) {
+        for (const p of (Array.isArray(c.patterns) ? c.patterns : []).concat(Array.isArray(c.custom) ? c.custom : [])) {
           total++;
           if (p.on === true || p.on === "true") active++;
         }
@@ -7975,7 +8026,8 @@
     // Open state is restored from _junkOpenCats so re-renders don't snap it shut.
     // c = header category, ck = key.
     function junkCatRow(c, ck) {
-      const ci = _junkCatInfo[ck] || { short: ck, desc: String(c.label || ck) };
+      const isUser = (c.user === true || c.user === "true");
+      const ci = _junkCatInfo[ck] || { short: (c.label || ck), desc: isUser ? "User category — your own junk patterns (added from the Entity Inspector)." : String(c.label || ck) };
       const allOn = (c.on === true || c.on === "true");
       const pills = (Array.isArray(c.patterns) ? c.patterns : []).map(p => {
         const pp = String(p.p || "");
@@ -7985,11 +8037,25 @@
              + `onchange="junkSet('pat:${escAttr(pp)}', this.checked ? 1 : 0)"> `
              + `<span class="junk-pat">${escHtml(pi.short)}</span></label>`;
       }).join("");
+      // User-added custom patterns: labeled by the pattern itself, toggled like a
+      // built-in but with a ✕ to remove the pattern (drops an emptied user category).
+      const customPills = (Array.isArray(c.custom) ? c.custom : []).map(p => {
+        const pp = String(p.p || "");
+        const pon = (p.on === true || p.on === "true");
+        return `<span class="filter-pill junk-custom-pill" data-tip="${escAttr("Custom pattern: " + pp)}">`
+             + `<input type="checkbox" ${pon ? "checked" : ""} onchange="junkSet('pat:${escAttr(pp)}', this.checked ? 1 : 0)"> `
+             + `<span class="junk-pat">${escHtml(pp)}</span>`
+             + `<button class="junk-pat-del" data-tip="Remove this pattern" onclick="junkDelCatPat('${escAttr(ck)}','${escAttr(pp)}')">✕</button></span>`;
+      }).join("");
+      const hasAny = (Array.isArray(c.patterns) && c.patterns.length) || (Array.isArray(c.custom) && c.custom.length);
       // Trailing bulk control — checked when all patterns are on, so a click
       // flips the whole category. Its label states the action it performs.
-      const allBtn = `<label class="filter-pill junk-all" data-tip="Enable or disable every pattern in this category">`
+      const allBtn = hasAny ? `<label class="filter-pill junk-all" data-tip="Enable or disable every pattern in this category">`
              + `<input type="checkbox" ${allOn ? "checked" : ""} onchange="junkSet('cat:${escAttr(ck)}', this.checked ? 1 : 0)"> `
-             + `<span class="junk-pat">${allOn ? "disable all" : "enable all"}</span></label>`;
+             + `<span class="junk-pat">${allOn ? "disable all" : "enable all"}</span></label>` : "";
+      // User categories are deletable as a whole (built-ins are permanent).
+      const delCatBtn = isUser ? `<button class="filter-pill junk-catdel" data-tip="Delete this whole category" onclick="junkDelCat('${escAttr(ck)}')">🗑 delete category</button>` : "";
+      const emptyNote = (!hasAny && isUser) ? `<span class="junk-cat-empty">No patterns yet — add one from an entity's Category row.</span>` : "";
       return `<details class="junk-cat"${_junkOpenCats.has(ck) ? " open" : ""} ontoggle="junkCatToggle('${ck}', this.open)">`
            + `<summary class="junk-cat-head">`
            + `<div class="junk-cat-text" data-snodekey="junk-${escAttr(ck)}">`
@@ -7997,8 +8063,16 @@
            + `<div class="junk-cat-desc">${escHtml(ci.desc)}</div>`
            + `</div>`
            + `</summary>`
-           + `<div class="junk-pat-row">${pills}${allBtn}</div></details>`;
+           + `<div class="junk-pat-row">${pills}${customPills}${emptyNote}${allBtn}${delCatBtn}</div></details>`;
     }
+    // Field delimiter for the multi-field SetJunk keys (catadd/catpatdel). "|" is
+    // safe (never in a path / category key / label) and avoids sending a control
+    // char through the WebView bridge. Must match _ApplyJunkSetting's SEP in AHK.
+    const _JUNK_SEP = "|";
+    // Remove one user-added pattern from a category (AHK drops an emptied user category).
+    function junkDelCatPat(ck, pat) { junkSet('catpatdel', ck + _JUNK_SEP + pat); }
+    // Delete a whole user category (+ its patterns). Built-ins are not deletable.
+    function junkDelCat(ck) { junkSet('catdel', ck); }
 
     // ═══════════════════════════════════════════════════════════════════
     //  ALERTS TAB — entity alert engine (header-driven)
@@ -12270,9 +12344,9 @@
       const props = [
         ['Address',  `<span class="ei-prop-val addr">${escHtml(e.addr || '')}</span>`],
         ['Id',       `<span class="ei-prop-val">${e.id ?? '—'}</span>`],
-        ['Path',     `<span class="ei-prop-val">${escHtml(e.path || '—')}</span>`],
+        ['Path',     `<span class="ei-prop-val">${escHtml(e.path || '—')}</span>${e.path ? ` <button class="ei-mini-btn" data-tip="Copy path to clipboard" onclick="eiCopyText(event, '${escAttr(e.path)}')">📋</button>` : ''}`],
         ['Type',     `<span class="ei-prop-val">${escHtml(e.type || '—')}</span>`],
-        ['Category', `<span class="ei-prop-val">${escHtml(e.metaCategory || '—')}${e.metaGroup ? ` <span class="muted">/ ${escHtml(e.metaGroup)}</span>` : ''}</span>`],
+        ['Category', `<span class="ei-prop-val">${escHtml(e.metaCategory || '—')}${e.metaGroup ? ` <span class="muted">/ ${escHtml(e.metaGroup)}</span>` : ''}</span>${eiJunkPickerHtml(e)}`],
         ['State',    `<span class="ei-prop-val">${escHtml(e.state || (e.sleep ? 'Sleeping' : 'Awake'))}</span>`],
         ['Rarity',   `<span class="ei-prop-val">${escHtml(e.rarity || 'Normal')}${e.rarityId !== undefined ? ` <span class="muted">(id=${e.rarityId})</span>` : ''}</span>`],
         ['Alive',    `<span class="ei-prop-val">${e.alive === false ? 'no' : 'yes'}</span>`],
@@ -12299,6 +12373,7 @@
         <div class="ei-actions">
           <button class="ei-btn${isTracked ? ' active' : ''}" onclick="eiToggleTrack(event, '${escAttr(e.path || '')}')">${isTracked ? '👁  Tracking' : '👁  Show in game'}</button>
           <button class="ei-btn" onclick="eiCopyJson(event, '${escAttr(e.addr)}')">📋 Copy JSON</button>
+          ${e.path ? `<button class="ei-btn" data-tip="Add the full metadata path to the Junk Filter's global Custom terms" onclick="eiAddPathCustom(event, '${escAttr(e.path)}')">🚫 Junk (full path)</button>` : ''}
         </div>
       `;
     }
@@ -12395,11 +12470,13 @@
         hint = '<span class="ei-comp-hint radar">📡 click to decode</span>';
       }
 
+      const disBtn = c.addr ? `<button class="ei-comp-dis" data-tip="Open this component's address in the Memory Dissector" onclick="eiOpenDissect(event, '${escAttr(c.addr)}')">🔬</button>` : '';
       return `
         <div class="${klass.join(' ')}"${onclick}>
           <span class="ei-comp-caret">▶</span>
           <span class="ei-comp-name">${escHtml(c.name)}</span>
           <span class="ei-comp-addr">${escHtml(c.addr || '')}</span>
+          ${disBtn}
           ${hint}
         </div>
         ${decodedHtml}
@@ -12514,6 +12591,107 @@
         btn.textContent = '✓ Copied';
         setTimeout(() => { btn.textContent = orig; }, 1200);
       }
+    }
+
+    // Copy an arbitrary string (the metadata path) to the clipboard, with a
+    // brief ✓ flash on the clicked button.
+    function eiCopyText(ev, text) {
+      ev.stopPropagation();
+      if (!text) return;
+      try { navigator.clipboard.writeText(text); } catch (e) {}
+      const btn = ev.currentTarget;
+      if (btn) {
+        const orig = btn.textContent;
+        btn.textContent = '✓';
+        setTimeout(() => { btn.textContent = orig; }, 1000);
+      }
+    }
+
+    // Open a component's memory address in the RE → Memory Dissector (switch tab,
+    // fill the address field, navigate there). Reuses the existing DissectGoto path.
+    function eiOpenDissect(ev, hex) {
+      ev.stopPropagation();
+      if (!hex) return;
+      try { switchTab('dissect'); } catch (e) {}
+      const inp = document.getElementById('dis-addr');
+      if (inp) inp.value = hex;
+      try { ahkCall('DissectGoto', hex); } catch (e) {}
+    }
+
+    // Feature 3: add the entity's FULL metadata path to the Junk Filter's global
+    // Custom terms (deduped, case-insensitive). Reuses the same channel as the
+    // Custom-terms Add box (junkCommitCustom).
+    function eiAddPathCustom(ev, path) {
+      ev.stopPropagation();
+      if (!path) return;
+      if (!Array.isArray(_junkCustomTerms)) _junkCustomTerms = [];
+      if (!_junkCustomTerms.some(t => t.toLowerCase() === path.toLowerCase())) {
+        _junkCustomTerms.push(path);
+        junkCommitCustom();
+      }
+      _eiBtnFlash(ev.currentTarget, '✓ Added');
+    }
+
+    // Feature 2: the "add to junk category" picker rendered next to the Category
+    // row. term = the meta-group (broad, "as a group"); auto target = the
+    // meta-category when the path is two-part, else the user picks / creates one.
+    function eiJunkPickerHtml(e) {
+      const metaCat = e.metaCategory || '';
+      const metaGrp = e.metaGroup || '';
+      // The pattern to add: the group segment (broad), else the category, else the leaf.
+      const term = metaGrp || metaCat || (e.path ? String(e.path).split('/').pop() : '');
+      if (!term) return '';
+      const autoLabel = metaGrp ? metaCat : '';        // two-part → auto-target = metaCategory
+      const autoKey = autoLabel ? autoLabel.toLowerCase() : '';
+      const cats = Array.isArray(window._junkCatList) ? window._junkCatList : [];
+      let opts = '';
+      if (autoKey) opts += `<option value="__auto__">→ ${escHtml(autoLabel)} (auto)</option>`;
+      for (const c of cats) opts += `<option value="cat:${escAttr(c.key)}">${escHtml(c.label || c.key)}</option>`;
+      opts += `<option value="__new__">＋ New category…</option>`;
+      const addr = e.addr;
+      return `<span class="ei-junk-add" onclick="event.stopPropagation()">`
+           + `<select class="ei-junk-sel" id="ei-junk-sel-${escAttr(addr)}" data-autokey="${escAttr(autoKey)}" data-autolabel="${escAttr(autoLabel)}" onchange="eiJunkSelChange(this,'${escAttr(addr)}')">${opts}</select>`
+           + `<input class="ei-junk-new" id="ei-junk-new-${escAttr(addr)}" placeholder="new category name" style="display:none">`
+           + `<button class="ei-mini-btn" data-tip="Add the group '${escAttr(term)}' as a junk pattern under the chosen category" onclick="eiJunkAdd(event,'${escAttr(addr)}','${escAttr(term)}')">🚫 Junk</button>`
+           + `</span>`;
+    }
+    // Reveal the new-category name box only when "＋ New category…" is chosen.
+    function eiJunkSelChange(sel, addr) {
+      const inp = document.getElementById('ei-junk-new-' + addr);
+      if (inp) inp.style.display = (sel.value === '__new__') ? '' : 'none';
+    }
+    // Resolve the chosen target category and add `term` under it via SetJunk catadd.
+    function eiJunkAdd(ev, addr, term) {
+      ev.stopPropagation();
+      if (!term) return;
+      const sel = document.getElementById('ei-junk-sel-' + addr);
+      if (!sel) return;
+      let key = '', label = '';
+      const v = sel.value;
+      if (v === '__auto__') {
+        key = sel.dataset.autokey || '';
+        label = sel.dataset.autolabel || key;
+      } else if (v === '__new__') {
+        const inp = document.getElementById('ei-junk-new-' + addr);
+        // Strip the delimiter from a user-typed name so it can't split the field.
+        label = ((inp && inp.value.trim()) || '').split('|').join('');
+        if (!label) { if (inp) inp.focus(); return; }
+        key = label.toLowerCase();
+      } else if (v.indexOf('cat:') === 0) {
+        key = v.slice(4);
+        const c = (window._junkCatList || []).find(x => x.key === key);
+        label = c ? (c.label || key) : key;
+      }
+      if (!key) return;
+      junkSet('catadd', key + _JUNK_SEP + label + _JUNK_SEP + term);
+      _eiBtnFlash(ev.currentTarget, '✓ Junked');
+    }
+    // Brief confirmation flash on an inspector button.
+    function _eiBtnFlash(btn, msg) {
+      if (!btn) return;
+      const orig = btn.textContent;
+      btn.textContent = msg;
+      setTimeout(() => { btn.textContent = orig; }, 1200);
     }
 
     function updateUIState(jsonStr) {

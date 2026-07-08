@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.288`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.289`.
 
 ## Language
 
@@ -2252,6 +2252,60 @@ new memory RE.
   rows should show the item names in rarity colors (white/blue/yellow/orange/tan) instead of
   "WorldItem"; confirm names persist while standing still and reset on zone change, and that far
   drops (labels not on screen) still resolve.
+
+## Entity Inspector actions + user-extensible Junk Filter (shipped 0.45.13.289)
+
+Four Entity-Inspector conveniences, the biggest of which makes the Junk Filter
+user-extensible (custom patterns per category + user-created categories).
+
+- **Copy path button (`ui/index.html`, `eiBody` Path row):** a small 📋 button after the
+  Path value copies the full metadata path to the clipboard (`eiCopyText`, `navigator.clipboard`).
+- **Open component in the Memory Dissector (`eiComponentRow`):** a 🔬 button after each
+  component's address opens it in **RE → Dissector** — `eiOpenDissect` does `switchTab('dissect')`,
+  fills `#dis-addr`, and `ahkCall('DissectGoto', addr)` (reuses the existing dissector nav).
+- **Add full path to global Custom terms (`eiBody` actions, next to Copy JSON):** a
+  "🚫 Junk (full path)" button appends the entity's full metadata path to the Junk Filter's
+  global custom terms (`eiAddPathCustom` → `junkCommitCustom`).
+- **Add a group to a junk CATEGORY from the Category row (the big one):** next to Category the
+  inspector shows a picker (`eiJunkPickerHtml`) + "🚫 Junk" button. The pattern added is the
+  entity's **meta-group** (broad, "as a group", e.g. `leagueincursionnew`). The target category:
+  when the path is two-part (metaCategory/metaGroup) the picker pre-selects **`→ <metaCategory>
+  (auto)`** (e.g. `MiscellaneousObjects`), auto-creating that user category; otherwise the user
+  picks an existing category or **＋ New category…** (reveals a name input). `eiJunkAdd` sends
+  `SetJunk('catadd', "<catKey>|<label>|<pattern>")`.
+
+### Junk Filter model extension (`ahk/EntityJunkFilter.ahk`)
+The 6 built-in categories had FIXED patterns and custom terms were a single GLOBAL list. Now:
+- **`g_junkCatCustom`** (catKey → [pattern,…]) holds user-added patterns per category (built-in
+  OR user), toggled via the same `g_junkPatDisabled` set and folded into `g_junkActive` by
+  `RebuildJunkActive`. **`g_junkUserCats`** (userKey → label) holds user-created categories.
+- **`_ApplyJunkSetting` new keys:** `catadd` (value `catKey|label|pattern`; auto-creates the user
+  category, case-insensitive dedup), `catpatdel` (`catKey|pattern`; drops an EMPTIED user
+  category), `newcat` (`catKey|label`), `catdel` (`catKey`; user categories only — built-ins are
+  permanent). `cat:<key>` (enable/disable-all) now also flips the category's custom patterns.
+  **Bridge delimiter is `|`** (never in a path / key / label) — no control char crosses the
+  WebView postMessage bridge; user-typed category names are `|`-stripped in JS.
+- **Header (`BuildJunkFilterHeaderJson` + `_JunkCatJson`):** each category now also emits
+  `custom:[{p,on}]` and `user:<bool>`; user categories are appended after the built-ins. The JS
+  `applyJunkFromHeader` exposes `window._junkCatList` (for the inspector picker) and counts
+  custom patterns in the `active/total` meta.
+- **UI (`junkCatRow`):** renders the custom pills (toggle + ✕ `junkDelCatPat`) after the built-in
+  pills; user categories show a "🗑 delete category" button (`junkDelCat`) and an empty-state note.
+- **Persistence:** new `[JunkFilter] catPatterns` INI key — one RS-separated record per category,
+  each `catKey US label US pat1 US pat2 …` (RS/US = Chr(30)/Chr(31), same proven scheme as
+  StashMover). Load rebuilds `g_junkUserCats` (non-built-in keys) + `g_junkCatCustom`.
+- **Verified (2026-07-08):** browser-preview drive-through — junk categories render custom pills +
+  user category + delete button (meta `7/7`); the inspector picker lists auto/existing/new options
+  with the right `catadd` payloads (`miscellaneousobjects|MiscellaneousObjects|leagueincursionnew`,
+  `|`-stripped new names), the full-path term appends to global custom, and the dissector button
+  emits `DissectGoto`. Offline AHK harness (scratchpad `junk_test.ahk`) — `catadd`/`catpatdel`/
+  `catdel` parse, `IsJunkEntity` matches the added group, header JSON valid with `user:true`, and
+  a Save→Load round-trip preserves the user category (+ label) and per-category custom patterns.
+  Full `/validate` exit 0; UI `node --check` clean.
+- **Pending in-game verification:** open an entity in the Entities tab → copy path, add its group
+  to a junk category (auto = its meta-category, e.g. a new "MiscellaneousObjects" category), see the
+  new pill under that category in the Junk Filter box, confirm the matching entities vanish from the
+  radar/list, and that the 🔬 buttons jump to the right address in the Dissector.
 
 ## Reference
 
