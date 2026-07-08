@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.291`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.292`.
 
 ## Language
 
@@ -2253,7 +2253,7 @@ new memory RE.
   "WorldItem"; confirm names persist while standing still and reset on zone change, and that far
   drops (labels not on screen) still resolve.
 
-## Entity Inspector actions + user-extensible Junk Filter (shipped 0.45.13.291)
+## Entity Inspector actions + user-extensible Junk Filter (shipped 0.45.13.292)
 
 Four Entity-Inspector conveniences, the biggest of which makes the Junk Filter
 user-extensible (custom patterns per category + user-created categories).
@@ -2314,7 +2314,7 @@ rotation "isn't the best", (3) it kills everything then "runs back around to pic
 of collecting as it goes. Work lives on branch `PoEfdev/autopilot-pathing`, done in three testable
 stages (commit + in-game verify between each).
 
-### Stage 1 — stop getting stuck (shipped 0.45.13.291)
+### Stage 1 — stop getting stuck (shipped 0.45.13.292)
 
 - **Combat walk/approach stuck-watchdog (`ahk/CombatAutomation.ahk`, the big one):** the existing
   no-path give-up only covers enemies with NO A* route. A REACHABLE enemy the character still can't
@@ -2348,7 +2348,7 @@ stages (commit + in-game verify between each).
   returning from a fight, and starts moving toward a new far target sooner (less `routing`). Tunables
   if needed: `MOVE_STUCK_MS` / `MOVE_CELLS` (combat), the 600 ms gap, the 20 ms flood budget.
 
-### Stage 2 — loot as you go (shipped 0.45.13.291)
+### Stage 2 — loot as you go (shipped 0.45.13.292)
 
 `LootPickup._RunLootPickup` used a BLANKET hostile gate — any hostile within `g_combatRange`
 (Euclidean) suppressed ALL pickup and returned early — so loot was purely post-combat (the "kill
@@ -2369,10 +2369,31 @@ everything, then run back around" behaviour). Replaced with a LOOT-RELATIVE gate
   through rather than all at the end; confirm it doesn't break off toward far/behind-mob loot mid-
   fight. Tune `SAFE_GRAB_DIST` if it grabs too eagerly / not eagerly enough.
 
-### Stage 3 — better combat rotation (planned)
-`CombatAutomation._SelectNextSkill` is priority spam (always the lowest-priority ready slot), so one
-skill dominates. Add real sequencing / round-robin, a sane non-zero cooldown default, proper `buff`
-semantics, and target stickiness.
+### Stage 3 — better combat rotation (shipped 0.45.13.292)
+
+`CombatAutomation._SelectNextSkill` was priority SPAM: every tick it returned the single
+lowest-`priority` ready slot, so one skill monopolised casting and the other configured skills
+rarely fired ("rotation isn't the best"). Replaced the final selection with a ROUND-ROBIN cursor:
+
+- All the existing gates are unchanged (enabled / non-empty key / per-slot `cooldownMs` / skill-name
+  `canUse` / `aoe` needs ≥2 hostiles / per-slot `skillRange`). Slots that pass are collected into a
+  `ready` list instead of tracked as a single best.
+- `ready` is insertion-sorted by (priority asc, slot asc), then a static `_rotCursor` (last-fired
+  slot NUMBER) advances one step through it per cast, wrapping — so every enabled+ready skill takes
+  its turn in priority order. A permanently-ready main skill fires once per lap; per-slot
+  `cooldownMs` still paces how often each re-enters `ready`; when the last-fired slot isn't ready the
+  cycle restarts from the highest-priority ready slot. The cursor only advances on ticks that reach
+  selection (past the 120 ms GCD gate), i.e. ~once per actual fire.
+- Verified with an offline harness (scratchpad `rot_test.ahk`, 5/5): full cycle 1,2,3,1,2,3;
+  2-slot alternation; single-slot stable; priority!=slot order honoured; and a mid-cycle ready-set
+  change (slot drops out then returns) resuming correctly. Full `/validate` exit 0.
+- **Deferred (not in this commit, riskier / separate concern):** target STICKINESS in `_DetectCombat`
+  (nearest-only currently thrashes between equidistant mobs), a sane non-zero default `cooldownMs`,
+  and true `buff`-presence detection (read the Buffs component; buff slots currently behave like
+  single-target, only paced by `cooldownMs`).
+- **Pending in-game verification:** with several combat slots enabled, confirm the bot now cycles
+  through them instead of spamming one; set per-slot `cooldownMs` to pace fillers/buffs; report if
+  the cycle feels wrong for a specific build (the cursor logic is easily tuned / revertible).
 
 ## Reference
 

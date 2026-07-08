@@ -855,9 +855,10 @@ _CombatResolveSlotKey(slotCfg)
 _SelectNextSkill(skills, combatInfo)
 {
     global g_combatSkillSlots, g_combatSkillCooldowns
+    static _rotCursor := 0   ; slotNum last fired — the round-robin advances past it
 
-    bestSlot := 0
-    bestPriority := 99999
+    ready := []              ; slot numbers that passed ALL gates this tick
+    readyPrio := Map()       ; slotNum → priority (for the sort below)
     anyOutOfRange := false
 
     for slotNum, slotCfg in g_combatSkillSlots
@@ -925,14 +926,55 @@ _SelectNextSkill(skills, combatInfo)
             continue
         }
 
-        if (priority < bestPriority)
-        {
-            bestPriority := priority
-            bestSlot := slotNum
-        }
+        ; Passed every gate — eligible to fire this tick.
+        ready.Push(slotNum)
+        readyPrio[slotNum] := priority
     }
 
-    return Map("slot", bestSlot, "outOfRange", anyOutOfRange)
+    if (ready.Length = 0)
+        return Map("slot", 0, "outOfRange", anyOutOfRange)
+
+    ; Order the ready slots by priority (asc), slot number (asc) as a stable
+    ; tiebreak. Insertion sort — the list is ≤ 8 entries.
+    i := 2
+    while (i <= ready.Length)
+    {
+        j := i
+        while (j > 1)
+        {
+            a := ready[j - 1], b := ready[j]
+            if (readyPrio[a] < readyPrio[b] || (readyPrio[a] = readyPrio[b] && a < b))
+                break
+            ready[j - 1] := b, ready[j] := a
+            j--
+        }
+        i++
+    }
+
+    ; ── Rotation cursor ──────────────────────────────────────────────────
+    ; The old selector always returned the SINGLE lowest-priority ready slot,
+    ; so one skill monopolised casting and the others rarely fired ("rotation
+    ; isn't the best"). Instead advance a round-robin cursor through the ready
+    ; slots in priority order: after firing a slot, the next cast picks the
+    ; next ready slot (wrapping), so every enabled+ready skill takes its turn.
+    ; Per-slot cooldownMs still paces how often each re-enters the ready set,
+    ; and priority still orders the cycle (a permanently-ready main skill fires
+    ; once per lap). The cursor tracks a slot NUMBER, so it survives the ready
+    ; set changing between ticks; when the last-fired slot isn't ready, the
+    ; cycle restarts from the highest-priority ready slot.
+    startIdx := 0
+    for idx, s in ready
+    {
+        if (s = _rotCursor)
+        {
+            startIdx := idx
+            break
+        }
+    }
+    nextIdx := Mod(startIdx, ready.Length) + 1
+    chosen := ready[nextIdx]
+    _rotCursor := chosen
+    return Map("slot", chosen, "outOfRange", anyOutOfRange)
 }
 
 ; ── Update cooldown state for UI display ──────────────────────────────────
