@@ -2077,8 +2077,9 @@
     .dis-ptr-link { color: var(--info); cursor: pointer; text-decoration: underline dotted }
     .dis-ptr-link:hover { color: #b0e0f5 }
     .dis-status { font-family: var(--codex-serif); font-size: 11px; color: var(--codex-text-dim); margin-left: 8px }
-    .dis-live-lbl { display: inline-flex; align-items: center; gap: 4px; font-family: var(--codex-serif); font-size: 12px; color: var(--codex-text); cursor: pointer; user-select: none }
-    .dis-live-lbl input { cursor: pointer }
+    /* Live-watch group — pinned to the right of the Scan row */
+    .dis-live-group { margin-left: auto; display: inline-flex; align-items: center; gap: 6px }
+    .dis-live-txt { font-family: var(--codex-serif); font-size: 12px; color: var(--codex-text) }
     /* Live-watch: a row whose 8 bytes changed since the previous refresh gets an
        inline amber background (alpha faded by age in JS). tr bg shows through the
        transparent cells. */
@@ -6780,14 +6781,6 @@
             <button class="tree-tbtn" onclick="dissectToggleColsMenu(event)" data-tip="Show/hide columns">⌗ Columns</button>
             <div id="dis-cols-menu" class="dis-cols-menu"></div>
           </span>
-          <label class="dis-live-lbl" data-tip="Auto-refresh: re-read the current address and flash rows whose bytes changed. Act in-game to spot which offset holds a live-changing value."><input type="checkbox" id="dis-live" onchange="dissectToggleLive()"> Live</label>
-          <select id="dis-live-rate" onchange="dissectLiveRateChanged()" style="font-size:11px" data-tip="Refresh rate">
-            <option value="250">4/s</option>
-            <option value="500" selected>2/s</option>
-            <option value="1000">1/s</option>
-            <option value="2000">0.5/s</option>
-          </select>
-          <span id="dis-status" class="dis-status">idle</span>
         </div>
         <!-- Struct template + offset-chain breadcrumb -->
         <div class="dis-subbar">
@@ -6817,6 +6810,17 @@
           <button class="tree-tbtn" onclick="dissectScan()">Scan</button>
           <button class="tree-tbtn" onclick="dissectScanClear()" data-tip="Clear scan highlights">✕</button>
           <span id="dis-scan-results" class="dis-scan-results"></span>
+          <span class="dis-live-group" data-tip="Auto-refresh: re-read the current address and flash rows whose bytes changed. Act in-game to spot which offset holds a live-changing value.">
+            <span class="dis-live-txt">Live</span>
+            <label class="toggle"><input type="checkbox" id="dis-live" onchange="dissectToggleLive()"><span class="toggle-slider"></span></label>
+            <select id="dis-live-rate" onchange="dissectLiveRateChanged()" style="font-size:11px" data-tip="Refresh rate">
+              <option value="250">4/s</option>
+              <option value="500" selected>2/s</option>
+              <option value="1000">1/s</option>
+              <option value="2000">0.5/s</option>
+            </select>
+            <span id="dis-status" class="dis-status">idle</span>
+          </span>
         </div>
         <div class="dis-table-wrap">
           <table class="dis-tbl" id="dis-tbl" style="table-layout:fixed">

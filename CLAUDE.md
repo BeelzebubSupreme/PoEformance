@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.295`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.296`.
 
 ## Language
 
@@ -2440,6 +2440,23 @@ symbol jump left the window at 512 B and hid fields like `PlayerInfo(+0x598)`. E
 `_MemDissectAutoSizeFor(structName)` (max field offset + 8 → snapped, capped 4 KB) and call it from BOTH
 `MemDissectGotoSymbol` (before the read) and `MemDissectSetStruct`. Now Go Symbol AreaInstance immediately
 shows the whole struct labeled.
+
+### In-game walkthrough fixes (0.45.13.296)
+
+Owner drove the full walkthrough; three fixes:
+- **Auto-size actually works now (the AHK v2 global gotcha):** `MemDissectGotoSymbol` and `MemDissectSetStruct`
+  ASSIGNED `g_memDissectSize` but did NOT list it in their `global` declaration, so the assignment created a
+  function-LOCAL and the real global never changed — auto-size silently no-op'd (and `MemDissectSetStruct`
+  even threw on the read-before-assign of the local, swallowed by `_SafeDissect`). `/validate` can't catch this
+  (valid syntax). Added `g_memDissectSize` (+ `g_memDissectAddress` in SetStruct) to both declarations. Lesson
+  reconfirmed: **in AHK v2, any global you ASSIGN inside a function must be in its `global` line** — assigning
+  an undeclared name makes it local for the whole function.
+- **Scan respects the row stride:** `_MemDissectPushMatch` floored matches to 8-byte rows (`at // 8 * 8`), so in
+  4-byte mode a hit at +0xC4 was reported at +0xC0 ("4 bytes too early"). Now it aligns to the current
+  `g_memDissectStride` so the chip lands on the exact visible row.
+- **Live controls moved to the Scan row:** the raw `Live` checkbox + rate + status left the crowded toolbar
+  row 1 and now sit right-aligned (`margin-left:auto`) on the Scan sub-bar, with Live as the themed pill
+  toggle (`.toggle`/`.toggle-slider`) instead of a bare checkbox.
 
 ## Reference
 

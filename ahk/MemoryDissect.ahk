@@ -49,7 +49,7 @@ MemDissectGoto(addr)
 ; fresh offset chain (this address is the chain root).
 MemDissectGotoSymbol(symbol, customAddr := 0)
 {
-    global g_memDissectStatus, g_memDissectStructName, g_memDissectRootSym, g_memDissectRootAddr, g_memDissectChain
+    global g_memDissectStatus, g_memDissectStructName, g_memDissectRootSym, g_memDissectRootAddr, g_memDissectChain, g_memDissectSize
     addr := MemDiffResolveSymbol(symbol, customAddr)
     if (!addr)
     {
@@ -85,7 +85,7 @@ _MemDissectStructForSymbol(symbol)
 ; current view. Validates the name refers to a real struct Map.
 MemDissectSetStruct(name)
 {
-    global g_memDissectStructName, g_memDissectStatus
+    global g_memDissectStructName, g_memDissectStatus, g_memDissectSize, g_memDissectAddress
     name := Trim(String(name))
     if (name = "" || name = "(none)")
     {
@@ -366,8 +366,9 @@ MemDissectResolveChain(str)
 ; status to the match count. Empty array on no data / parse failure.
 MemDissectScan(valueStr, typ)
 {
-    global g_memDissectBuf, g_memDissectAddress, g_memDissectStatus
+    global g_memDissectBuf, g_memDissectAddress, g_memDissectStatus, g_memDissectStride
 
+    stride := (g_memDissectStride = 4) ? 4 : 8   ; align matches to the visible rows
     valueStr := Trim(String(valueStr))
     typ := StrLower(Trim(String(typ)))
     if (valueStr = "")
@@ -414,7 +415,7 @@ MemDissectScan(valueStr, typ)
                 j += 1
             }
             if ok
-                _MemDissectPushMatch(matches, seen, i, base)
+                _MemDissectPushMatch(matches, seen, i, base, stride)
             i += 1
         }
     }
@@ -447,7 +448,7 @@ MemDissectScan(valueStr, typ)
             v := NumGet(p, i, ntype)
             hit := isFloat ? (Abs(v - ftarget) < 0.0001) : (v = target)
             if hit
-                _MemDissectPushMatch(matches, seen, i, base)
+                _MemDissectPushMatch(matches, seen, i, base, stride)
             i += 1
         }
     }
@@ -472,10 +473,12 @@ MemDissectScan(valueStr, typ)
     return json
 }
 
-; Records a match at byte offset `at`, deduped by its 8-byte row.
-_MemDissectPushMatch(matches, seen, at, base)
+; Records a match at byte offset `at`, deduped by the row it falls in. rowOff is
+; aligned to the current stride (4 or 8) so the chip lands on the exact table row
+; — in 4-byte mode a hit at +0xC4 stays +0xC4 (not floored to the 8-byte +0xC0).
+_MemDissectPushMatch(matches, seen, at, base, stride := 8)
 {
-    rowOff := (at // 8) * 8
+    rowOff := (at // stride) * stride
     if seen.Has(rowOff)
         return
     seen[rowOff] := 1
