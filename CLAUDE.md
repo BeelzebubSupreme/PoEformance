@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.293`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.294`.
 
 ## Language
 
@@ -2253,7 +2253,7 @@ new memory RE.
   "WorldItem"; confirm names persist while standing still and reset on zone change, and that far
   drops (labels not on screen) still resolve.
 
-## Entity Inspector actions + user-extensible Junk Filter (shipped 0.45.13.293)
+## Entity Inspector actions + user-extensible Junk Filter (shipped 0.45.13.294)
 
 Four Entity-Inspector conveniences, the biggest of which makes the Junk Filter
 user-extensible (custom patterns per category + user-created categories).
@@ -2314,7 +2314,7 @@ rotation "isn't the best", (3) it kills everything then "runs back around to pic
 of collecting as it goes. Work lives on branch `PoEfdev/autopilot-pathing`, done in three testable
 stages (commit + in-game verify between each).
 
-### Stage 1 — stop getting stuck (shipped 0.45.13.293)
+### Stage 1 — stop getting stuck (shipped 0.45.13.294)
 
 - **Combat walk/approach stuck-watchdog (`ahk/CombatAutomation.ahk`, the big one):** the existing
   no-path give-up only covers enemies with NO A* route. A REACHABLE enemy the character still can't
@@ -2348,7 +2348,7 @@ stages (commit + in-game verify between each).
   returning from a fight, and starts moving toward a new far target sooner (less `routing`). Tunables
   if needed: `MOVE_STUCK_MS` / `MOVE_CELLS` (combat), the 600 ms gap, the 20 ms flood budget.
 
-### Stage 2 — loot as you go (shipped 0.45.13.293)
+### Stage 2 — loot as you go (shipped 0.45.13.294)
 
 `LootPickup._RunLootPickup` used a BLANKET hostile gate — any hostile within `g_combatRange`
 (Euclidean) suppressed ALL pickup and returned early — so loot was purely post-combat (the "kill
@@ -2369,7 +2369,7 @@ everything, then run back around" behaviour). Replaced with a LOOT-RELATIVE gate
   through rather than all at the end; confirm it doesn't break off toward far/behind-mob loot mid-
   fight. Tune `SAFE_GRAB_DIST` if it grabs too eagerly / not eagerly enough.
 
-### Stage 3 — better combat rotation (shipped 0.45.13.293)
+### Stage 3 — better combat rotation (shipped 0.45.13.294)
 
 `CombatAutomation._SelectNextSkill` was priority SPAM: every tick it returned the single
 lowest-`priority` ready slot, so one skill monopolised casting and the other configured skills
@@ -2395,7 +2395,7 @@ rarely fired ("rotation isn't the best"). Replaced the final selection with a RO
   through them instead of spamming one; set per-slot `cooldownMs` to pace fillers/buffs; report if
   the cycle feels wrong for a specific build (the cursor logic is easily tuned / revertible).
 
-### Loot rarity misclassification fix (shipped 0.45.13.293)
+### Loot rarity misclassification fix (shipped 0.45.13.294)
 
 Owner report: with only "Rare" ticked, Auto Loot still picked up Magic AND Normal items. Root cause
 in `PoE2InventoryReader.ReadItemRarity` (used by loot pickup, the value radar, hover-price, ritual
@@ -2422,6 +2422,61 @@ items were misread as Rare and slipped through a Rare-only filter.
   possible later follow-up, but it doesn't affect loot filtering now.
 - **Pending in-game verification:** tick only "Rare" → Magic/Normal gear should NO LONGER be picked
   up; tick Magic → magic collected, rares/normals ignored; currency still collected (path-matched).
+
+## Skills / buffs / rotation overhaul (WIP, branch `PoEfdev/autopilot-pathing`)
+
+Owner wants: auto-configured combat rotations per build, a build importer, and COMPLETE
+skill/effect/timing coverage program-wide (combat rotation + macro engine + everywhere), plus an
+in-game camera-zoom feature. Planned phases (build, commit, in-game verify between each):
+
+1. **Buff/curse coverage in the macro engine** (below — shipped).
+2. **Combat rotation auto-config** from equipped skills (populate `g_combatSkillSlots` from the live
+   `ReadPlayerSkills` model + skill-bar keybinds + castType→type/range; reuses the Stage-3 round-robin).
+3. **Build importer** — a Path of Building code / URL to pre-seed intended skills + priorities, mapped
+   onto live keys (PoB codes ≫ Mobalytics scraping for reliability).
+4. **Deeper effects model (RE):** enemy buffs/curses/debuffs (fix the enemy Buffs decoder — the
+   generic `DecodeBuffsComponentBasic` uses a 0x50-inline stride that conflicts with the proven
+   pointer-array `ReadPlayerBuffsComponent`; wire per-frame → `enemyBuff` macro condition), plus
+   skill→granted-buff linkage and structured AoE/buff/curse tags.
+5. **In-game camera zoom (RE + WRITE):** the tool is currently READ-ONLY on game memory (no
+   `WriteProcessMemory` anywhere). Zoom needs either a memory write to a camera-zoom float in
+   `CameraStructure` (`WorldData+0xA0`; needs an in-game probe to find the offset + new write
+   capability) or a GGPK client patch (the old `InfiniteZoom` tweak was a dead placeholder, never
+   implemented). Carries real ToS/ban + crash risk — do a safe probe first.
+
+Audit facts (from a code audit): the player skill model (`DecodeActorSkills` via `ReadPlayerSkills`,
+`PoE2ComponentDecoders.ahk:834`) is rich + live (name, castType, base + live remaining cooldown,
+charges, canUse, icon); skill-bar key↔slot↔skill is live (`SkillBarReader`); player buffs are fully
+live-readable (`ReadPlayerBuffsComponent`, name/stacks/duration). Gaps needing RE: enemy buffs/curses,
+skill→granted-buff linkage, structured skill tags, and a `data/buff_name_map.tsv` (referenced by
+`GetBuffNameMap` but MISSING — buffs show raw internal names). Combat slots are currently manual.
+
+### Phase 1 — buff/curse picker: free-text + typeahead (shipped 0.45.13.294)
+
+Owner report: "some buffs I use aren't in the macro engine, so it has nothing to check to re-activate
+the buff/curse." Root cause was NOT the check — `_HotkeysCheckBuff`/`_HotkeysFindBuff`
+(`CustomHotkeys.ahk:1282,1329`) already read the live player Buffs component and substring-match ANY
+buff name (present/absent, minStacks, minTimeLeftMs all work). The gap was the UI PICKER: the buff
+dropdown (`hkBuffField` + the condition-tree `hkCBuffField`) was a bare `<select>` populated ONLY from
+`hkSeenBuffs` — buffs seen active on the player THIS session — with no free-text and no persistence, so
+a buff currently down (the recast-when-absent case) was unselectable.
+
+- **Fix (ui/index.html, JS only — no AHK change needed):** both pickers are now a free-text
+  `<input list="buff-names-list">` (mirrors the `enemyAnim` datalist typeahead). `hkBuildBuffDatalist()`
+  builds a shared `<datalist>` from `hkSeenBuffs` (`value`=internal name the engine matches,
+  `label`=pretty). You can type ANY buff/curse internal name (partial works — substring match) or pick a
+  suggested one. `hkBuffInputHtml(cur, onChangeAttr)` is the shared renderer; the leaf still stores
+  `buffName`, so the engine is unchanged.
+- **Persistence:** `hkSeenBuffs` is now saved to `localStorage` and restored on load, so the suggestion
+  catalog GROWS across sessions (a buff seen in any past session stays selectable). `updateBuffs` saves +
+  rebuilds the datalist when a new buff appears.
+- **Verified in the browser preview:** free-text renders for a never-seen buff, the datalist builds with
+  value=internal/label=pretty, both variants wire to `hkSetAct`/`hkSetCond`, no console errors; inline
+  script `node --check` clean.
+- **Pending in-game verification:** add a `buff` condition (mode=absent) to a macro, type a buff/curse
+  you use that isn't currently active (e.g. an aura/curse internal name), bind a recast key → it should
+  recast when the buff drops. Note: names are the INTERNAL ids (e.g. `arcane_surge`); a future
+  `buff_name_map.tsv` + a "current buffs, click to add" helper would make discovery easier.
 
 ## Reference
 

@@ -8759,6 +8759,9 @@
     // Buffs seen on the player this session (internal name → display name), accumulated from
     // the live updateBuffs feed so the buff-condition dropdown fills itself automatically.
     let hkSeenBuffs = {};
+    // Restore the accumulated buff catalog from previous sessions so the buff-condition
+    // typeahead is populated even for buffs not currently active (persisted in updateBuffs).
+    try { const _sb = localStorage.getItem('hkSeenBuffs'); if (_sb) hkSeenBuffs = JSON.parse(_sb) || {}; } catch (e) {}
     // Called by AHK with the resolved in-game key bindings + active skill names.
     function updateHotkeyBindings(jsonStr) {
       try { hkBindings = JSON.parse(jsonStr); } catch (e) { return; }
@@ -9174,19 +9177,36 @@
       hkChanged();
     }
 
-    // Buff-condition picker: a dropdown that fills itself from the buffs seen on the player
-    // (hkSeenBuffs, accumulated from the live Skills & Buffs feed) — no hand-maintained field.
-    // The option VALUE is the internal buff name the engine substring-matches; the label is
-    // the translated display name. A saved value stays selectable even when that buff isn't
-    // currently active.
+    // ── Buff-condition picker (free-text + typeahead) ──────────────────────────
+    // A free-text input backed by a shared <datalist> of buffs the player has had
+    // active (hkSeenBuffs, persisted across sessions). The stored value is the
+    // internal buff name the engine substring-matches — so ANY buff or curse can be
+    // targeted by typing it, even one that is NOT currently active (the fix for
+    // "the buff I use isn't in the list, so nothing recasts it"). Buffs seen live
+    // are suggested with their pretty label; a partial name works (substring match).
+    function hkBuildBuffDatalist() {
+      let dl = document.getElementById('buff-names-list');
+      if (!dl) { dl = document.createElement('datalist'); dl.id = 'buff-names-list'; document.body.appendChild(dl); }
+      const keys = Object.keys(hkSeenBuffs).sort((x, y) => hkSeenBuffs[x].localeCompare(hkSeenBuffs[y]));
+      if (dl.childElementCount === keys.length) return;   // hkSeenBuffs only grows; skip rebuild when unchanged
+      const frag = document.createDocumentFragment();
+      for (const iv of keys) {
+        const o = document.createElement('option');
+        o.value = iv; o.label = hkSeenBuffs[iv];
+        frag.appendChild(o);
+      }
+      dl.replaceChildren(frag);
+    }
+    function hkBuffInputHtml(cur, onChangeAttr) {
+      return `<input type="text" class="hk-buff-input" list="buff-names-list" spellcheck="false" `
+           + `value="${hkEsc(cur)}" placeholder="buff name…" `
+           + `data-tip="Type any buff/curse internal name (e.g. arcane_surge) or pick a suggested one. Matches by substring; buffs you've had active are suggested and remembered across sessions." `
+           + `${onChangeAttr}>`;
+    }
     function hkBuffField(a, gi, hi, ai) {
+      hkBuildBuffDatalist();
       const cur = a.buffName != null ? String(a.buffName) : '';
-      const entries = Object.keys(hkSeenBuffs).sort((x, y) => hkSeenBuffs[x].localeCompare(hkSeenBuffs[y]));
-      let opts = `<option value="" ${cur === '' ? 'selected' : ''}>— pick a buff —</option>`;
-      opts += entries.map(iv => `<option value="${hkEsc(iv)}" ${cur === iv ? 'selected' : ''}>${hkEsc(hkSeenBuffs[iv])}</option>`).join('');
-      if (cur !== '' && !(cur in hkSeenBuffs))
-        opts += `<option value="${hkEsc(cur)}" selected>${hkEsc(cur)} (not active)</option>`;
-      return `<select data-tip="Fills itself from the player's active buffs (Game › Skills & Buffs)" onchange="hkSetAct(${gi},${hi},${ai},'buffName',this.value)">${opts}</select>`;
+      return hkBuffInputHtml(cur, `onchange="hkSetAct(${gi},${hi},${ai},'buffName',this.value.trim())"`);
     }
 
     // Opens the shared color picker for a monsterCount action's range circle, writing the
@@ -9686,12 +9706,9 @@
       return `<input type="text" placeholder="${ph}" value="${hkEsc(a[k] || '')}" onchange="hkSetCond(${gi},${hi},${a.cid},'${k}',this.value)">`;
     }
     function hkCBuffField(a, gi, hi) {
+      hkBuildBuffDatalist();
       const cur = a.buffName != null ? String(a.buffName) : '';
-      const entries = Object.keys(hkSeenBuffs).sort((x, y) => hkSeenBuffs[x].localeCompare(hkSeenBuffs[y]));
-      let opts = `<option value="" ${cur === '' ? 'selected' : ''}>— pick a buff —</option>`;
-      opts += entries.map(iv => `<option value="${hkEsc(iv)}" ${cur === iv ? 'selected' : ''}>${hkEsc(hkSeenBuffs[iv])}</option>`).join('');
-      if (cur !== '' && !(cur in hkSeenBuffs)) opts += `<option value="${hkEsc(cur)}" selected>${hkEsc(cur)} (not active)</option>`;
-      return `<select data-tip="Fills itself from the player's active buffs (Game › Skills & Buffs)" onchange="hkSetCond(${gi},${hi},${a.cid},'buffName',this.value)">${opts}</select>`;
+      return hkBuffInputHtml(cur, `onchange="hkSetCond(${gi},${hi},${a.cid},'buffName',this.value.trim())"`);
     }
 
     // ── Enemy-animation picker (search by NAME, store IDs) ──────────────────────
@@ -12032,7 +12049,11 @@
           _buffGrew = true;
         }
       }
-      if (_buffGrew && typeof hkRender === 'function') hkRender();
+      if (_buffGrew) {
+        try { localStorage.setItem('hkSeenBuffs', JSON.stringify(hkSeenBuffs)); } catch (e) {}
+        if (typeof hkBuildBuffDatalist === 'function') hkBuildBuffDatalist();
+        if (typeof hkRender === 'function') hkRender();
+      }
       const filtered = data.filter(b => !_blacklist.has(b.n || b.name || ''));
       if (filtered.length === 0) { el.innerHTML = '<div class="buff-empty">All buffs blacklisted</div>'; return; }
       const toTitle = s => s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
