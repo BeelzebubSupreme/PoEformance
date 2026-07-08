@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.297`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.298`.
 
 ## Language
 
@@ -2469,6 +2469,15 @@ float; the small structs happened not to. Fix: `_DisSafeFloat(raw, digits)` in `
 non-finite value to 0 BEFORE `Round` (NaN via `raw != raw`, Inf via the ±1e308 bound), used for both `f32`
 and `f64`. Confirmed the failure mode in the browser preview (a `"f32":nan` payload makes `JSON.parse` throw
 and the view stays unchanged). This is a general robustness fix, not AreaInstance-specific.
+
+### Peek text filter tightened (0.45.13.298)
+
+First real peek run showed the entity case working (`ENTITY Metadata/Characters/Int/IntFourb` on the
+LocalPlayer pointer at PlayerInfo+0x20) but three sibling pointers rendered as `WSTR(RAW)` with CJK garbage
+(`回马翻`) — the raw-wchar text heuristic (`_MemDissectLooksText`) only rejected control chars, so random
+non-string bytes passed as "text". Tightened: length ≥ 3, no control chars, AND ≥ 80% ASCII-printable
+(engine paths/names/ids are ASCII). Garbage now falls through to `DATA` (hex) instead of fake text. Accepts a
+rare non-ASCII-string false-negative in exchange, which is fine for RE.
 
 ## Reference
 

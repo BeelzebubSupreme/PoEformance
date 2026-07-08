@@ -911,19 +911,26 @@ _MemDissectPeekHex(result, addr)
     }
 }
 
-; Heuristic: is `s` plausibly human-readable text (no control chars, length ≥ 2)?
-; Rejects the garbage a struct-shaped-but-not-a-string read can occasionally yield.
+; Heuristic: is `s` plausibly a real engine string? Engine paths/names/ids are
+; ASCII, so we require length ≥ 3, no control chars, AND ≥ 80% ASCII-printable —
+; this rejects the CJK/garbage that a non-string pointer's bytes can form when
+; mis-read as text (e.g. "回马翻"). Trade-off: a genuinely non-ASCII string is
+; missed, which is fine for RE (we'd rather show DATA than fake text).
 _MemDissectLooksText(s)
 {
-    if (StrLen(s) < 2)
+    n := StrLen(s)
+    if (n < 3)
         return false
+    printable := 0
     for _, ch in StrSplit(s)
     {
         c := Ord(ch)
         if (c < 32 || (c >= 127 && c <= 159))   ; C0 / C1 control ranges
             return false
+        if (c >= 32 && c <= 126)                ; ASCII printable
+            printable += 1
     }
-    return true
+    return (printable / n) >= 0.8
 }
 
 ; Serializes a peek result and pushes it to updateMemDissectPeek in the WebView.
