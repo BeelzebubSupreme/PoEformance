@@ -60,6 +60,11 @@ MemDissectGotoSymbol(symbol, customAddr := 0)
     g_memDissectRootSym    := symbol
     g_memDissectRootAddr   := addr
     g_memDissectChain      := []          ; new root — reset the followed-pointer path
+    ; Auto-size to the struct so all its named fields are visible immediately
+    ; (Go Symbol used to leave the size at 512 B, hiding e.g. PlayerInfo +0x598).
+    asz := _MemDissectAutoSizeFor(g_memDissectStructName)
+    if (asz)
+        g_memDissectSize := asz
     return MemDissectGoto(addr)
 }
 
@@ -104,20 +109,30 @@ MemDissectSetStruct(name)
     }
     g_memDissectStructName := name
 
-    ; Auto-size the read window to cover the struct's largest field, snapped up
-    ; to a standard page size — so the user never has to guess the size. Re-reads
-    ; at the new size so all named fields are immediately visible. Capped at 4 KB
-    ; for auto (a struct that needs more can be enlarged manually) so applying a
-    ; big struct template never itself triggers the largest read.
-    need := _MemDissectStructMaxOffset(name) + 8
-    newSz := Min(0x1000, _MemDissectSnapSize(need))
-    if (newSz != g_memDissectSize)
+    ; Auto-size the read window to cover the struct's largest field so the user
+    ; never has to guess the size, then re-read so all named fields are visible.
+    newSz := _MemDissectAutoSizeFor(name)
+    if (newSz && newSz != g_memDissectSize)
     {
         g_memDissectSize := newSz
         if g_memDissectAddress
             return _MemDissectReadAt(g_memDissectAddress)
     }
     return g_memDissectStatus
+}
+
+; The read window size that covers a struct's largest field, snapped to a
+; standard page size and capped at 4 KB for auto (a bigger struct can be enlarged
+; manually) so applying a template never itself triggers the largest read.
+; Returns 0 for an unknown/empty struct (leave the size as-is).
+_MemDissectAutoSizeFor(structName)
+{
+    if (structName = "")
+        return 0
+    need := _MemDissectStructMaxOffset(structName) + 8
+    if (need <= 0)
+        return 0
+    return Min(0x1000, _MemDissectSnapSize(need))
 }
 
 ; Largest field byte-offset in a struct template (0 if unknown/empty).

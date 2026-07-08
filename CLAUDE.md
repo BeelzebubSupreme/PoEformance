@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.294`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.295`.
 
 ## Language
 
@@ -2432,6 +2432,14 @@ The dissector table is now driven by a central column model so width + visibilit
 
 This closes the deferred dissector follow-ups. Remaining optional idea only: persist column widths/visibility
 (and size/stride) across restarts via a `[Dissector]` INI section if the owner wants sticky prefs.
+
+### Auto-size also on "Go Symbol" (0.45.13.295)
+
+`MemDissectGotoSymbol` set the struct template but NOT the size (only the "Type as" dropdown did), so a
+symbol jump left the window at 512 B and hid fields like `PlayerInfo(+0x598)`. Extracted the snap logic into
+`_MemDissectAutoSizeFor(structName)` (max field offset + 8 → snapped, capped 4 KB) and call it from BOTH
+`MemDissectGotoSymbol` (before the read) and `MemDissectSetStruct`. Now Go Symbol AreaInstance immediately
+shows the whole struct labeled.
 
 ## Reference
 
