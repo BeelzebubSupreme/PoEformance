@@ -194,6 +194,12 @@ _DispatchBridgeCall(method, args)
                 _RvbApplySetting(args[1], args[2])
             SaveRitualValueBadges()
             SetTimer(PushHeaderToWebView, -50)
+        case "SetChestOpen":
+            ; AutoPilot chest auto-open. args[1]=key ("openChests"|"openStrongboxes"),
+            ; args[2]=value. _ChestApplySetting persists internally.
+            if (args.Length >= 2)
+                _ChestApplySetting(args[1], args[2])
+            SetTimer(PushHeaderToWebView, -50)
         case "SetCustomLandmarks":
             ; Curated tile-path landmark labels on the radar (Sikaka port). args[1]=key, args[2]=value.
             if (args.Length >= 2)

@@ -5665,6 +5665,20 @@
               </div>
               <div class="cfg-help">Stops sending clicks / skills while a game UI panel is open (inventory, stash, passive tree), so inputs don't land on the panel instead of the world.</div>
 
+              <div class="cfg-row"><span class="cfg-label">📦 Auto-open chests</span>
+                <label class="toggle"><input type="checkbox" id="tog-chest-open"
+                    onchange="ahkCall('SetChestOpen','openChests', this.checked?1:0)" checked><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">While AutoPilot runs, walk to and open nearby chests once the area is clear —
+                and a chest you're standing on even mid-fight. Regular / reward chests only.</div>
+
+              <div class="cfg-row"><span class="cfg-label">💥 Also open strongboxes</span>
+                <label class="toggle"><input type="checkbox" id="tog-chest-strongbox"
+                    onchange="ahkCall('SetChestOpen','openStrongboxes', this.checked?1:0)"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Include strongboxes in auto-open. Each spawns a monster pack the instant it
+                opens (combat then handles the pack). Off by default.</div>
+
               <!-- Hidden legacy toggles — kept in DOM so the existing
                    setChk() helpers in updateHeader don't blow up. -->
               <input type="checkbox" id="tog-combat"  style="display:none">
@@ -8374,6 +8388,13 @@
       const val = (id, v) => { const e = document.getElementById(id); if (e && document.activeElement !== e) e.value = v; };
       chk('rvb-enabled', s.enabled);
       val('rvb-minEx', s.minEx);
+    }
+
+    function chestOpenSyncFromHeader(s) {
+      if (!s) return;
+      const chk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = v === true || v === 1 || v === '1' || v === 'true'; };
+      chk('tog-chest-open', s.openChests);
+      chk('tog-chest-strongbox', s.openStrongboxes);
     }
 
     function customLandmarksSyncFromHeader(s) {
@@ -11166,6 +11187,7 @@
       if (d.lootRadarValue !== undefined) _hdrTry('lootRadarValue', () => lootRadarValueSyncFromHeader(d.lootRadarValue));
       if (d.uiHoverPrice !== undefined) _hdrTry('uiHoverPrice', () => uiHoverPriceSyncFromHeader(d.uiHoverPrice));
       if (d.ritualValueBadges !== undefined) _hdrTry('ritualValueBadges', () => ritualValueBadgesSyncFromHeader(d.ritualValueBadges));
+      if (d.chestOpen !== undefined) _hdrTry('chestOpen', () => chestOpenSyncFromHeader(d.chestOpen));
       if (d.customLandmarks !== undefined) _hdrTry('customLandmarks', () => customLandmarksSyncFromHeader(d.customLandmarks));
       if (d.lootLabelClear !== undefined) _hdrTry('lootLabelClear', () => lootLabelClearSyncFromHeader(d.lootLabelClear));
       if (d.lootTradePricing !== undefined) _hdrTry('lootTradePricing', () => lootTradePricingSyncFromHeader(d.lootTradePricing));
