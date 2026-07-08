@@ -2094,6 +2094,18 @@
     .dis-scan-results { font-family: var(--codex-serif); font-size: 11px; color: var(--codex-text-dim); display: flex; align-items: center; gap: 4px; flex-wrap: wrap }
     .dis-scan-chip { font-family: Consolas, monospace; font-size: 10px; color: var(--info); background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px; cursor: pointer }
     .dis-scan-chip:hover { background: rgba(106,143,191,.12) }
+    /* Pointer peek (Stage 5): 🔍 button + inline resolved detail row */
+    .dis-peek-btn { cursor: pointer; margin-right: 5px; opacity: .55; font-size: 10px }
+    .dis-peek-btn:hover { opacity: 1 }
+    .dis-peek-row td { background: rgba(200,168,90,.05); border-bottom: 1px solid rgba(37,42,69,.5); padding: 3px 10px 3px 28px; white-space: normal }
+    .dis-pk-kind { display: inline-block; font-family: var(--codex-serif); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--codex-text-dim); border: 1px solid var(--border); border-radius: 3px; padding: 0 5px; margin-right: 8px }
+    .dis-pk-text { font-family: Consolas, monospace; font-size: 11px; color: #d6c08a; word-break: break-all }
+    .dis-pk-text.dis-pk-entity { color: #b0d0b0 }
+    .dis-pk-text.dis-pk-wstr, .dis-pk-text.dis-pk-wstrraw, .dis-pk-text.dis-pk-str { color: #a8c8ff }
+    .dis-pk-text.dis-pk-vector { color: #cda8ff }
+    .dis-pk-hex { font-family: Consolas, monospace; font-size: 10px; color: #7f889c; margin-left: 10px }
+    .dis-peek-close { cursor: pointer; color: var(--subtext); margin-left: 10px; font-size: 10px }
+    .dis-peek-close:hover { color: var(--danger, #e06666) }
     /* Mod categories — saturated, period-correct inks chosen for legibility
        against the warm parchment background. Avoid washed-out pastels:
        deep amethyst for implicits, illuminated gold for enchants, and a
@@ -10286,6 +10298,10 @@
       const tbody = document.getElementById('dis-body');
       if (!tbody) { setTimeout(attachDissectClick, 50); return; }
       tbody.addEventListener('click', (ev) => {
+        const peek = ev.target.closest('.dis-peek-btn');
+        if (peek && peek.dataset && peek.dataset.peek) { dissectPeek(peek.dataset.off, peek.dataset.peek); return; }
+        const close = ev.target.closest('.dis-peek-close');
+        if (close && close.dataset) { dissectPeekClose(close.dataset.off); return; }
         const link = ev.target.closest('.dis-ptr-link');
         if (link && link.dataset && link.dataset.ptr) dissectClickPtr(link.dataset.ptr, link.dataset.off);
       });
@@ -10301,6 +10317,8 @@
     let _disLastJson = null;              // last payload, for scan re-render
     let _disScanSet = new Set();          // row offsets currently matched by a scan
     let _disStructsBuilt = false;         // "Type as" dropdown populated once
+    let _disPeek = Object.create(null);   // row off → pointer-peek result {kind,text,hex}
+    let _disPeekOff = null;               // row whose 🔍 was last clicked (target for the reply)
 
     // AHK pushes this after every Goto / Back / Forward / Reread.
     function updateMemDissect(jsonStr) {
@@ -10358,6 +10376,7 @@
         _disBaseAddr = d.addr;
         _disPrevHex = Object.create(null);
         _disChgTick = Object.create(null);
+        _disPeek = Object.create(null);   // peeks are per-view (offsets relative to base)
       }
       const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
@@ -10392,7 +10411,9 @@
         if (row.isPtr) {
           // Use data attribute + event delegation rather than inline onclick —
           // avoids quote-escaping issues and survives innerHTML rebuilds.
-          ptrCell = '<span class="dis-ptr-link" data-ptr="' + escAttr(row.ptr) + '" data-off="' + row.off + '" data-tip="Click to follow pointer">' + escHtml(row.ptr) + '</span>';
+          // 🔍 peeks (resolves the target) without navigating; the address follows.
+          ptrCell = '<span class="dis-peek-btn" data-peek="' + escAttr(row.ptr) + '" data-off="' + row.off + '" data-tip="Resolve what this points to (entity / string / vector / data)">🔍</span>'
+            + '<span class="dis-ptr-link" data-ptr="' + escAttr(row.ptr) + '" data-off="' + row.off + '" data-tip="Click to follow pointer">' + escHtml(row.ptr) + '</span>';
         } else {
           ptrCell = '<span style="color:var(--subtext)">' + escHtml(row.ptr) + '</span>';
         }
@@ -10408,6 +10429,22 @@
           + '<td class="dis-ptr">'  + ptrCell                 + '</td>'
           + '<td class="dis-asc">'  + escHtml(row.ascii)      + '</td>'
           + '</tr>';
+
+        // Stage 5: an expanded pointer-peek result under this row (persists
+        // across refreshes because it's rebuilt from _disPeek every render).
+        const pk = _disPeek[row.off];
+        if (pk) {
+          const kindCls = 'dis-pk-' + (pk.kind || 'data').replace(/[^a-z]/gi, '');
+          let body = '';
+          if (pk.text) body += '<span class="dis-pk-text ' + kindCls + '">' + escHtml(pk.text) + '</span>';
+          if (pk.hex)  body += '<span class="dis-pk-hex">' + escHtml(pk.hex) + '</span>';
+          if (!body)   body = '<span class="dis-pk-text">' + escHtml(pk.kind || '—') + '</span>';
+          html += '<tr class="dis-peek-row"><td colspan="10">'
+            + '<span class="dis-pk-kind">' + escHtml(pk.kind || '') + '</span>'
+            + body
+            + '<span class="dis-peek-close" data-off="' + row.off + '" data-tip="Close">✕</span>'
+            + '</td></tr>';
+        }
       }
       tbody.innerHTML = html;
     }
@@ -10489,6 +10526,30 @@
       const o = tr.style.background;
       tr.style.background = 'rgba(106,143,191,.35)';
       setTimeout(() => { tr.style.background = o; }, 700);
+    }
+
+    // ── Stage 5: on-demand pointer-target peek ──
+    // 🔍 resolves what a pointer points to (one read, user-triggered). We remember
+    // which row was clicked so the async reply lands under the right row.
+    function dissectPeek(offVal, hexStr) {
+      if (!hexStr) return;
+      _disPeekOff = (offVal === undefined || offVal === null) ? null : parseInt(offVal);
+      _disPeek[_disPeekOff] = { kind: '…', text: 'resolving…', hex: '' };  // instant feedback
+      if (_disLastJson) updateMemDissect(_disLastJson);
+      ahkCall('DissectPeek', hexStr);
+    }
+    function dissectPeekClose(offVal) {
+      const off = parseInt(offVal);
+      delete _disPeek[off];
+      if (_disLastJson) updateMemDissect(_disLastJson);
+    }
+    // AHK reply for a peek — store under the row we last clicked and re-render.
+    function updateMemDissectPeek(jsonStr) {
+      let d;
+      try { d = JSON.parse(jsonStr); } catch (e) { return; }
+      if (_disPeekOff === null || _disPeekOff === undefined) return;
+      _disPeek[_disPeekOff] = { kind: d.kind || 'data', text: d.text || '', hex: d.hex || '' };
+      if (_disLastJson) updateMemDissect(_disLastJson);
     }
 
     // ═══════════════════════════════════════════════════════════════════

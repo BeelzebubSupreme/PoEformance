@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.292`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.293`.
 
 ## Language
 
@@ -2386,8 +2386,32 @@ Owner drove the guided walkthrough and reported real issues; fixed:
   `_MemDissectReadAt` logs `MemDissect read start size=… @ 0x…` for reads ≥ 2 KB (throttled ≤1/2 s), so a
   future SEH leaves the size+address as the last error-log line. If it ever recurs, the next step is wrapping
   the read+build in `Critical` so the radar loop can't interrupt it. Scan is confirmed **current-buffer only**.
-- **Deferred follow-up:** resizable/hideable columns (reuse the TSV viewer's `.tsv-colsz`/`_tsvColWidths`),
-  and a value-vs-pointer type hint in the Field column (ties into Stage 5's inline decode).
+### Stage 5: on-demand pointer-target decode ("peek", shipped 0.45.13.293)
+
+Resolves what a pointer points to — the piece that turns pointer soup into readable structure. Strictly
+**on-demand, one target per click**: a 🔍 button on each pointer row triggers exactly ONE small read (never
+in the build loop, never on the live-refresh path — the safe `_DecodeComponentOnDemand` pattern; deliberately
+built AFTER the 8 KB SEH scare precisely because it does RPM).
+
+- **`MemDissectPeek(addr)` (`ahk/MemoryDissect.ahk`):** classifies the target in priority order — **entity**
+  (`ReadEntityIdentityBasic` → path contains `Metadata/`), **wstr** (`ReadStdWStringAt`, SSO-safe), **wstr(raw)**
+  (`Mem.ReadUnicodeString` — a bare wchar buffer), **str** (`ReadStdStringAt`, UTF-8), **vector?** (begin/end
+  pointers at +0x00/+0x08 with a sane span → shows `span=N (÷8 ÷4 ÷0x38)`), else **data** (32-byte hex preview
+  + a first-qword-is-a-pointer hint). Code/vtable pointers (≥ 0x7FF000000000) are tagged `code`. Every read is
+  in its own try; `_MemDissectLooksText` rejects garbage (control chars) so a struct-shaped-but-not-a-string
+  read doesn't show noise. Pushes `updateMemDissectPeek` via `_MemDissectPushPeek`. Bridge `DissectPeek` →
+  `_DissectPeekSafe` (outer try/catch so nothing escapes the SetTimer thread).
+- **UI (`ui/index.html`):** 🔍 in the Pointer cell peeks (the address text still follows/navigates). The result
+  renders as an inline `.dis-peek-row` under the row, color-coded by kind (entity green / string blue / vector
+  purple), with a ✕ to close. Kept in `_disPeek` (row off → result) so it survives live refreshes; `_disPeekOff`
+  routes the async reply to the clicked row; cleared on base-address change. Instant "resolving…" feedback.
+- **Verified in the browser preview:** 🔍 present on pointer rows; entity/wstr/vector/data kinds render with the
+  right colors; peek persists across a refresh and clears on navigation; ✕ closes. Static: `/validate` exit 0;
+  UI `node --check` clean.
+- **Pending in-game verification:** peek a pointer that leads to an entity (→ `Metadata/…` path), a name
+  string, and a vector field (→ plausible count) to confirm the classifier against real memory.
+
+- **Deferred follow-up:** resizable/hideable columns (reuse the TSV viewer's `.tsv-colsz`/`_tsvColWidths`).
 
 ## Reference
 

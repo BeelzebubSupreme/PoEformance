@@ -1031,6 +1031,18 @@ PushMemDissectStructsToWebView()
     }
 }
 
+; Safe wrapper for the on-demand pointer peek — any exception is logged and
+; swallowed so it never escapes the SetTimer thread as a blocking error dialog.
+_DissectPeekSafe(addr)
+{
+    try
+        MemDissectPeek(addr)
+    catch as ex
+    {
+        try LogError("DissectPeek exception: " (ex.HasOwnProp("Message") ? ex.Message : "?"))
+    }
+}
+
 ; Runs a value scan over the current buffer, pushes the match set to the UI,
 ; then re-pushes the dissector state so the status + row highlights update.
 _DissectScanAndPush(val, typ)

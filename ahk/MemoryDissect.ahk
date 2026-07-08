@@ -741,3 +741,184 @@ _SafeDissect(opFn, label)
         try LogError(label " push exception: " (ex2.HasOwnProp("Message") ? ex2.Message : "?"))
     }
 }
+
+; ── Stage 5: on-demand pointer-target decode ("peek") ───────────────────────
+; Resolve what a SINGLE pointer points to, only when the user clicks its 🔍
+; button. Exactly ONE small read per invocation — never in the build loop, never
+; on the live-refresh path (the safe _DecodeComponentOnDemand pattern). Classifies
+; the target as entity / wstring / string / vector-guess / raw data and pushes the
+; result to updateMemDissectPeek in the WebView.
+MemDissectPeek(addr)
+{
+    global g_reader
+    result := Map("addr", Format("0x{:X}", addr), "kind", "", "text", "", "hex", "")
+
+    if !(IsObject(g_reader) && IsObject(g_reader.Mem) && g_reader.Mem.Handle)
+    {
+        result["kind"] := "not-connected"
+        _MemDissectPushPeek(result)
+        return
+    }
+    if (!addr || addr < 0x10000)
+    {
+        result["kind"] := "null"
+        _MemDissectPushPeek(result)
+        return
+    }
+
+    ; A canonical (module-range) address is code / a vtable, not data.
+    if (addr >= 0x00007FF000000000)
+    {
+        result["kind"] := "code"
+        result["text"] := "code / vtable pointer"
+        _MemDissectPeekHex(result, addr)
+        _MemDissectPushPeek(result)
+        return
+    }
+
+    ; 1) Entity? (the most valuable + specific — real paths start with "Metadata/")
+    try
+    {
+        idm := g_reader.ReadEntityIdentityBasic(addr)
+        if (IsObject(idm) && idm.Has("path") && idm["path"] != "" && InStr(idm["path"], "Metadata/"))
+        {
+            result["kind"] := "entity"
+            result["text"] := idm["path"]
+            _MemDissectPushPeek(result)
+            return
+        }
+    }
+    catch
+    {
+    }
+
+    ; 2) std::wstring struct (handles SSO)?
+    try
+    {
+        ws := g_reader.ReadStdWStringAt(addr, 200)
+        if (ws != "" && _MemDissectLooksText(ws))
+        {
+            result["kind"] := "wstr"
+            result["text"] := ws
+            _MemDissectPushPeek(result)
+            return
+        }
+    }
+    catch
+    {
+    }
+
+    ; 3) raw UTF-16 buffer at the target?
+    try
+    {
+        us := g_reader.Mem.ReadUnicodeString(addr, 160)
+        if (StrLen(us) >= 2 && _MemDissectLooksText(us))
+        {
+            result["kind"] := "wstr(raw)"
+            result["text"] := us
+            _MemDissectPushPeek(result)
+            return
+        }
+    }
+    catch
+    {
+    }
+
+    ; 4) std::string (UTF-8) struct?
+    try
+    {
+        ss := g_reader.ReadStdStringAt(addr, 200)
+        if (ss != "" && _MemDissectLooksText(ss))
+        {
+            result["kind"] := "str"
+            result["text"] := ss
+            _MemDissectPushPeek(result)
+            return
+        }
+    }
+    catch
+    {
+    }
+
+    ; 5) std::vector guess — begin/end pointers at +0x00/+0x08 with a sane span.
+    try
+    {
+        beginP := g_reader.Mem.ReadInt64(addr)
+        endP   := g_reader.Mem.ReadInt64(addr + 8)
+        if (g_reader.IsProbablyValidPointer(beginP) && g_reader.IsProbablyValidPointer(endP) && endP > beginP)
+        {
+            span := endP - beginP
+            if (span > 0 && span <= 0x4000000)
+            {
+                result["kind"] := "vector?"
+                result["text"] := "span=" span " B  (÷8=" (span // 8) "  ÷4=" (span // 4) "  ÷0x38=" (span // 0x38) ")"
+                _MemDissectPushPeek(result)
+                return
+            }
+        }
+    }
+    catch
+    {
+    }
+
+    ; 6) Fallback: raw hex preview of the first bytes.
+    result["kind"] := "data"
+    _MemDissectPeekHex(result, addr)
+    _MemDissectPushPeek(result)
+}
+
+; Reads 32 bytes at addr into result["hex"]; if the first qword is itself a
+; plausible pointer, notes it in result["text"] (a nested-pointer hint).
+_MemDissectPeekHex(result, addr)
+{
+    global g_reader
+    buf := g_reader.Mem.ReadBytes(addr, 32, true)
+    if (buf && Type(buf) = "Buffer" && buf.Size >= 1)
+    {
+        hex := ""
+        i := 0
+        n := Min(buf.Size, 32)
+        while (i < n)
+        {
+            hex .= Format("{:02X} ", NumGet(buf.Ptr, i, "UChar"))
+            i += 1
+        }
+        result["hex"] := RTrim(hex)
+        if (buf.Size >= 8)
+        {
+            q := NumGet(buf.Ptr, 0, "Int64")
+            if (g_reader.IsProbablyValidPointer(q))
+                result["text"] := (result["text"] != "" ? result["text"] " · " : "") "first qword → 0x" Format("{:X}", q)
+        }
+    }
+}
+
+; Heuristic: is `s` plausibly human-readable text (no control chars, length ≥ 2)?
+; Rejects the garbage a struct-shaped-but-not-a-string read can occasionally yield.
+_MemDissectLooksText(s)
+{
+    if (StrLen(s) < 2)
+        return false
+    for _, ch in StrSplit(s)
+    {
+        c := Ord(ch)
+        if (c < 32 || (c >= 127 && c <= 159))   ; C0 / C1 control ranges
+            return false
+    }
+    return true
+}
+
+; Serializes a peek result and pushes it to updateMemDissectPeek in the WebView.
+_MemDissectPushPeek(result)
+{
+    global g_webViewReady
+    if !g_webViewReady
+        return
+    json := "{"
+        . '"addr":' _JsStr(result["addr"]) ","
+        . '"kind":' _JsStr(result["kind"]) ","
+        . '"text":' _JsStr(result["text"]) ","
+        . '"hex":' _JsStr(result["hex"])
+        . "}"
+    try WebViewExec("updateMemDissectPeek(" _JsStr(json) ")")
+}

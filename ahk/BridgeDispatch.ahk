@@ -857,6 +857,12 @@ _DispatchBridgeCall(method, args)
             sVal := (args.Length >= 1) ? String(args[1]) : ""
             sTyp := (args.Length >= 2) ? String(args[2]) : "i32"
             SetTimer(() => _DissectScanAndPush(sVal, sTyp), -1)
+        ; On-demand: resolve what a single pointer points to (args[1] = target hex).
+        case "DissectPeek":
+            pHex  := (args.Length >= 1) ? String(args[1]) : ""
+            pAddr := _ParseHexAddr(pHex)
+            if (pAddr)
+                SetTimer(() => _DissectPeekSafe(pAddr), -1)
         ; Navigation: go back / forward / re-read.
         case "DissectBack":
             SetTimer(() => _SafeDissect(() => MemDissectBack(), "MemDissectBack"), -1)
