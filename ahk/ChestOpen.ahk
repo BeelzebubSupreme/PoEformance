@@ -35,6 +35,7 @@ LoadChestOpen()
 {
     global g_apOpenChests := true          ; master: auto-open regular chests
     global g_apOpenStrongboxes := false    ; also open strongboxes (spawns a pack)
+    global g_apChestRareOnly := true       ; only open Rare+ regular chests (skip the trivial Normal/Magic chests everywhere)
     global g_chestConfigFile := _ConfigPath()
 
     ; Runtime (never persisted)
@@ -46,6 +47,7 @@ LoadChestOpen()
     try {
         g_apOpenChests      := (IniRead(f, "ChestOpen", "openChests", g_apOpenChests ? "1" : "0") = "1")
         g_apOpenStrongboxes := (IniRead(f, "ChestOpen", "openStrongboxes", g_apOpenStrongboxes ? "1" : "0") = "1")
+        g_apChestRareOnly   := (IniRead(f, "ChestOpen", "rareOnly", g_apChestRareOnly ? "1" : "0") = "1")
     } catch as ex {
         LogError("LoadChestOpen", ex)
     }
@@ -54,11 +56,12 @@ LoadChestOpen()
 ; Persists the ChestOpen settings to [ChestOpen].
 SaveChestOpen()
 {
-    global g_apOpenChests, g_apOpenStrongboxes, g_chestConfigFile
+    global g_apOpenChests, g_apOpenStrongboxes, g_apChestRareOnly, g_chestConfigFile
     f := g_chestConfigFile
     try {
         IniWrite(g_apOpenChests ? "1" : "0", f, "ChestOpen", "openChests")
         IniWrite(g_apOpenStrongboxes ? "1" : "0", f, "ChestOpen", "openStrongboxes")
+        IniWrite(g_apChestRareOnly ? "1" : "0", f, "ChestOpen", "rareOnly")
     } catch as ex {
         LogError("SaveChestOpen", ex)
     }
@@ -68,12 +71,14 @@ SaveChestOpen()
 ; key: "openChests" | "openStrongboxes"; val: truthy/falsy from the UI.
 _ChestApplySetting(key, val)
 {
-    global g_apOpenChests, g_apOpenStrongboxes
+    global g_apOpenChests, g_apOpenStrongboxes, g_apChestRareOnly
     on := (val = true || val = 1 || val = "1" || val = "true")
     if (key = "openChests")
         g_apOpenChests := on
     else if (key = "openStrongboxes")
         g_apOpenStrongboxes := on
+    else if (key = "rareOnly")
+        g_apChestRareOnly := on
     SaveChestOpen()
 }
 
@@ -81,10 +86,11 @@ _ChestApplySetting(key, val)
 ; "chestOpen": key is prepended by WebViewBridge (matching the other builders).
 BuildChestOpenHeaderJson()
 {
-    global g_apOpenChests, g_apOpenStrongboxes
+    global g_apOpenChests, g_apOpenStrongboxes, g_apChestRareOnly
     return '{'
         . '"openChests":' (g_apOpenChests ? "true" : "false")
         . ',"openStrongboxes":' (g_apOpenStrongboxes ? "true" : "false")
+        . ',"rareOnly":' (g_apChestRareOnly ? "true" : "false")
         . '}'
 }
 
@@ -256,7 +262,7 @@ _RunChestOpen(radarSnap, gameHwnd, mode)
 ; Returns Map(addr, worldX/Y/Z, dist, kind="chest"|"strongbox") or 0.
 _ChestNearestEligible(radarSnap, px, py)
 {
-    global g_reader, g_apOpenStrongboxes, g_chestBlacklist
+    global g_reader, g_apOpenStrongboxes, g_apChestRareOnly, g_chestBlacklist
 
     ; Prune expired blacklist entries (a chest we gave up on becomes eligible again
     ; after its cooldown — the player may have moved to a spot it's reachable from).
@@ -310,6 +316,13 @@ _ChestNearestEligible(radarSnap, px, py)
         if st["opened"]
             continue
         if (st["strongbox"] && !g_apOpenStrongboxes)
+            continue
+        ; Rare+ filter: regular chests come in huge numbers (trivial Normal ones
+        ; everywhere), so by default only pursue Rare+ (rarityId >= 2) — that stops
+        ; the bot walking to every little chest. Strongboxes are exempt (own toggle,
+        ; always worth opening). Rarity from the radar-decoded Mods/ObjectMagicProperties;
+        ; Normal chests have no such component so ReadEntityRarityId returns 0.
+        if (g_apChestRareOnly && !st["strongbox"] && ReadEntityRarityId(decoded) < 2)
             continue
 
         dx := wx - px, dy := wy - py

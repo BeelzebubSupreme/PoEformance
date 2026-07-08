@@ -5672,6 +5672,13 @@
               <div class="cfg-help">While AutoPilot runs, walk to and open nearby chests once the area is clear —
                 and a chest you're standing on even mid-fight. Regular / reward chests only.</div>
 
+              <div class="cfg-row"><span class="cfg-label">💎 Only Rare+ chests</span>
+                <label class="toggle"><input type="checkbox" id="tog-chest-rareonly"
+                    onchange="ahkCall('SetChestOpen','rareOnly', this.checked?1:0)" checked><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Skip the trivial Normal/Magic chests that litter every zone — only pursue Rare+
+                chests so the bot doesn't detour to every little box. (Strongboxes are exempt — they use their own toggle.)</div>
+
               <div class="cfg-row"><span class="cfg-label">💥 Also open strongboxes</span>
                 <label class="toggle"><input type="checkbox" id="tog-chest-strongbox"
                     onchange="ahkCall('SetChestOpen','openStrongboxes', this.checked?1:0)"><span class="toggle-slider"></span></label>
@@ -8395,6 +8402,7 @@
       const chk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = v === true || v === 1 || v === '1' || v === 'true'; };
       chk('tog-chest-open', s.openChests);
       chk('tog-chest-strongbox', s.openStrongboxes);
+      chk('tog-chest-rareonly', s.rareOnly);
     }
 
     function customLandmarksSyncFromHeader(s) {
