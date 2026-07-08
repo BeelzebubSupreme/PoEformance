@@ -6749,7 +6749,6 @@
             <option value="1024">1 KB (128 rows)</option>
             <option value="2048">2 KB (256 rows)</option>
             <option value="4096">4 KB (512 rows)</option>
-            <option value="8192">8 KB (1024 rows)</option>
           </select>
           <select id="dis-stride" onchange="ahkCall('DissectSetStride',parseInt(this.value))" style="font-size:11px" data-tip="Row stride — 4 bytes aligns to 4-byte struct fields (e.g. +0xC4), 8 bytes is the pointer view">
             <option value="8" selected>8-byte rows</option>

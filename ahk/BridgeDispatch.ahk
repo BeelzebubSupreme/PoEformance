@@ -870,7 +870,9 @@ _DispatchBridgeCall(method, args)
         case "DissectSetSize":
             global g_memDissectSize
             dSz := (args.Length >= 1) ? args[1] : 0x200
-            g_memDissectSize := Max(0x40, Min(0x2000, Integer(dSz)))
+            ; Capped at 4 KB — the 8 KB read's long build widened the reader's SEH
+            ; window (crash correlated with it). Follow pointers for deeper structs.
+            g_memDissectSize := Max(0x40, Min(0x1000, Integer(dSz)))
             SetTimer(() => _SafeDissect(() => MemDissectReread(), "DissectSetSize/reread"), -1)
         ; Row stride in bytes (4 or 8). Re-renders from the SAME buffer (no read).
         case "DissectSetStride":

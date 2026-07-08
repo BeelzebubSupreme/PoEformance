@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.291`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.292`.
 
 ## Language
 
@@ -2374,11 +2374,20 @@ Owner drove the guided walkthrough and reported real issues; fixed:
 - **Back button** (`MemDissectGoto` now reads first, pushes history ONLY on a successful address change):
   a failed pointer read used to push a dead history entry so Back appeared to do nothing.
 - **f64 column moved next to f32** (was after Pointer).
-- **OPEN — 8 KB size crashed the tool** (owner report, error text pending): the manual 8 KB read path is
-  under investigation; auto-size is capped so it can't be reached automatically. Scan is confirmed
-  **current-buffer only** (a process-wide scan would be a separate feature). Deferred to a follow-up:
-  resizable/hideable columns (reuse the TSV viewer's `.tsv-colsz`/`_tsvColWidths`), and a value-vs-pointer
-  type hint in the Field column (ties into Stage 5's inline decode).
+- **8 KB crash — mitigated (0.45.13.292):** the crash was non-reproducible and left NO error-log entry,
+  so it was an uncatchable Windows SEH, not a catchable AHK exception. Code audit: the dissector path is
+  memory-safe by construction — `ReadBytes`/`ReadProcessMemory` can't fault the reader, the JSON build
+  reads only our own in-bounds Buffer (8-byte views now guarded on `off+8`), and the WebView push is async
+  + try-wrapped. Conclusion: the 8 KB read's LONGER build widened the window in which the 50 ms radar loop
+  (which reads many foreign pointers per tick) could interrupt it and hit a momentarily-invalid pointer —
+  the reader's pre-existing concurrent-RPM SEH risk, with 8 KB as the timing trigger, not the fault site.
+  Fixes: (a) **manual read size capped at 4 KB** (removed the 8 KB dropdown option + `DissectSetSize` clamp
+  `Min(0x1000,…)`) — removes the slowest operation; auto-size was already ≤4 KB. (b) **Forensic breadcrumb**:
+  `_MemDissectReadAt` logs `MemDissect read start size=… @ 0x…` for reads ≥ 2 KB (throttled ≤1/2 s), so a
+  future SEH leaves the size+address as the last error-log line. If it ever recurs, the next step is wrapping
+  the read+build in `Critical` so the radar loop can't interrupt it. Scan is confirmed **current-buffer only**.
+- **Deferred follow-up:** resizable/hideable columns (reuse the TSV viewer's `.tsv-colsz`/`_tsvColWidths`),
+  and a value-vs-pointer type hint in the Field column (ties into Stage 5's inline decode).
 
 ## Reference
 

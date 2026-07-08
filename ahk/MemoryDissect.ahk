@@ -566,6 +566,21 @@ _MemDissectReadAt(addr)
     }
 
     sz  := g_memDissectSize
+
+    ; Forensic breadcrumb for the non-reproducible 8 KB crash: log large reads
+    ; (throttled) so if an uncatchable SEH ever kills the app mid-read, the LAST
+    ; error-log line pins the size + address. Cheap + bounded (≤1 line / 2 s).
+    static _lastBigReadLogTick := 0
+    if (sz >= 0x800)
+    {
+        _nowTick := A_TickCount
+        if (_nowTick - _lastBigReadLogTick > 2000)
+        {
+            _lastBigReadLogTick := _nowTick
+            try LogError("MemDissect read start size=" sz " @ 0x" Format("{:X}", addr))
+        }
+    }
+
     buf := _MemDissectPageAwareRead(addr, sz)
     if !buf
     {
