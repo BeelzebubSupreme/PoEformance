@@ -61,15 +61,6 @@ _JunkIsBuiltinCat(key)
     return false
 }
 
-; Resolves a built-in category's display label, or "" when unknown.
-_JunkBuiltinLabel(key)
-{
-    for _, cat in _JunkFilterCategoryDefs()
-        if (cat["key"] = key)
-            return cat["label"]
-    return ""
-}
-
 ; True if the entity path matches any ACTIVE junk pattern (case-insensitive
 ; substring). Cheap hot-path call: a master-switch short-circuit, then an InStr
 ; loop over the precomputed active list. Param: entityPath. Returns: bool.
@@ -161,8 +152,10 @@ _ApplyJunkSetting(key, value)
             (g_junkPatDisabled.Has(pat) && g_junkPatDisabled.Delete(pat))
         }
     }
-    ; Remove one custom pattern. value = "<catKey>|<pattern>". Drops an emptied
-    ; USER category entirely (built-ins persist even with no custom patterns).
+    ; Remove one custom pattern. value = "<catKey>|<pattern>". When the last custom
+    ; pattern goes, drop the g_junkCatCustom entry entirely (built-in OR user) so
+    ; SaveEntityJunkFilter never persists an empty record; a USER category with no
+    ; patterns left is removed too.
     else if (k = "catpatdel")
     {
         parts := StrSplit(value, SEP)
@@ -174,13 +167,15 @@ _ApplyJunkSetting(key, value)
             for _, p in g_junkCatCustom[ck]
                 if (StrLower(p) != StrLower(pat))
                     kept.Push(p)
-            g_junkCatCustom[ck] := kept
             (g_junkPatDisabled.Has(pat) && g_junkPatDisabled.Delete(pat))
-            if (kept.Length = 0 && g_junkUserCats.Has(ck))
+            if (kept.Length = 0)
             {
-                g_junkUserCats.Delete(ck)
                 g_junkCatCustom.Delete(ck)
+                if g_junkUserCats.Has(ck)
+                    g_junkUserCats.Delete(ck)
             }
+            else
+                g_junkCatCustom[ck] := kept
         }
     }
     ; Create an empty user category. value = "<catKey>|<label>".

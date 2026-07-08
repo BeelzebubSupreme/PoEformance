@@ -8103,6 +8103,10 @@
     // c = header category, ck = key.
     function junkCatRow(c, ck) {
       const isUser = (c.user === true || c.user === "true");
+      // The key is embedded raw into inline event handlers (ontoggle/onclick).
+      // Category keys are already slugged at creation, but harden the render layer
+      // too so a hand-edited INI / API-set key can never break out of the handler.
+      const safeCk = String(ck).replace(/[^a-z0-9_-]/g, "");
       const ci = _junkCatInfo[ck] || { short: (c.label || ck), desc: isUser ? "User category — your own junk patterns (added from the Entity Inspector)." : String(c.label || ck) };
       const allOn = (c.on === true || c.on === "true");
       const pills = (Array.isArray(c.patterns) ? c.patterns : []).map(p => {
@@ -8121,20 +8125,20 @@
         return `<span class="filter-pill junk-custom-pill" data-tip="${escAttr("Custom pattern: " + pp)}">`
              + `<input type="checkbox" ${pon ? "checked" : ""} onchange="junkSet('pat:${escAttr(pp)}', this.checked ? 1 : 0)"> `
              + `<span class="junk-pat">${escHtml(pp)}</span>`
-             + `<button class="junk-pat-del" data-tip="Remove this pattern" onclick="junkDelCatPat('${escAttr(ck)}','${escAttr(pp)}')">✕</button></span>`;
+             + `<button class="junk-pat-del" data-tip="Remove this pattern" onclick="junkDelCatPat('${safeCk}','${escAttr(pp)}')">✕</button></span>`;
       }).join("");
       const hasAny = (Array.isArray(c.patterns) && c.patterns.length) || (Array.isArray(c.custom) && c.custom.length);
       // Trailing bulk control — checked when all patterns are on, so a click
       // flips the whole category. Its label states the action it performs.
       const allBtn = hasAny ? `<label class="filter-pill junk-all" data-tip="Enable or disable every pattern in this category">`
-             + `<input type="checkbox" ${allOn ? "checked" : ""} onchange="junkSet('cat:${escAttr(ck)}', this.checked ? 1 : 0)"> `
+             + `<input type="checkbox" ${allOn ? "checked" : ""} onchange="junkSet('cat:${safeCk}', this.checked ? 1 : 0)"> `
              + `<span class="junk-pat">${allOn ? "disable all" : "enable all"}</span></label>` : "";
       // User categories are deletable as a whole (built-ins are permanent).
-      const delCatBtn = isUser ? `<button class="filter-pill junk-catdel" data-tip="Delete this whole category" onclick="junkDelCat('${escAttr(ck)}')">🗑 delete category</button>` : "";
+      const delCatBtn = isUser ? `<button class="filter-pill junk-catdel" data-tip="Delete this whole category" onclick="junkDelCat('${safeCk}')">🗑 delete category</button>` : "";
       const emptyNote = (!hasAny && isUser) ? `<span class="junk-cat-empty">No patterns yet — add one from an entity's Category row.</span>` : "";
-      return `<details class="junk-cat"${_junkOpenCats.has(ck) ? " open" : ""} ontoggle="junkCatToggle('${ck}', this.open)">`
+      return `<details class="junk-cat"${_junkOpenCats.has(safeCk) ? " open" : ""} ontoggle="junkCatToggle('${safeCk}', this.open)">`
            + `<summary class="junk-cat-head">`
-           + `<div class="junk-cat-text" data-snodekey="junk-${escAttr(ck)}">`
+           + `<div class="junk-cat-text" data-snodekey="junk-${safeCk}">`
            + `<div class="junk-cat-titlerow"><span class="junk-cat-name">${escHtml(ci.short)}</span></div>`
            + `<div class="junk-cat-desc">${escHtml(ci.desc)}</div>`
            + `</div>`
@@ -13011,7 +13015,7 @@
     function eiCopyText(ev, text) {
       ev.stopPropagation();
       if (!text) return;
-      try { navigator.clipboard.writeText(text); } catch (e) {}
+      try { navigator.clipboard.writeText(text).catch(() => {}); } catch (e) {}
       const btn = ev.currentTarget;
       if (btn) {
         const orig = btn.textContent;
@@ -13086,10 +13090,16 @@
         label = sel.dataset.autolabel || key;
       } else if (v === '__new__') {
         const inp = document.getElementById('ei-junk-new-' + addr);
-        // Strip the delimiter from a user-typed name so it can't split the field.
-        label = ((inp && inp.value.trim()) || '').split('|').join('');
+        // Keep only safe display chars in the label (drops the field delimiter,
+        // quotes and backslashes) so it can't split the catadd fields or break the
+        // inline event-handler strings the category is later rendered into.
+        label = ((inp && inp.value.trim()) || '').replace(/[|"'\\<>]/g, '').trim();
         if (!label) { if (inp) inp.focus(); return; }
-        key = label.toLowerCase();
+        // The key is embedded raw into ontoggle/onclick handlers, so slug it to a
+        // strictly safe charset ([a-z0-9_-]); this is what fully closes the
+        // injection surface (label is otherwise HTML-escaped on display).
+        key = label.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+        if (!key) { if (inp) inp.focus(); return; }
       } else if (v.indexOf('cat:') === 0) {
         key = v.slice(4);
         const c = (window._junkCatList || []).find(x => x.key === key);
