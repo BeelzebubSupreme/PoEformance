@@ -642,8 +642,11 @@ _DetectCombat(radarSnap)
         result["playerWorldZ"] := pwp.Has("z") ? pwp["z"] : 0
     }
 
+    static _stickyTargetAddr := 0   ; last tick's committed target — kept unless another is much closer
+    static STICKY_BONUS := 600      ; world units another hostile must be closer by to steal focus
     hostileCount := 0
     nearestDist := 999999.0
+    bestScore := 999999.0
 
     for _, entry in sample
     {
@@ -729,8 +732,19 @@ _DetectCombat(radarSnap)
             continue
 
         hostileCount += 1
-        if (dist < nearestDist)
+        ; Sticky targeting: bias selection toward the enemy we're already fighting
+        ; (score = distance minus a bonus for the sticky addr) so the "nearest"
+        ; target no longer flips between packmates at similar range every tick —
+        ; that flip caused the walk-engage zig-zag / constant re-pathing in the
+        ; status log. A genuinely much-closer threat (> STICKY_BONUS nearer) still
+        ; steals focus. nearestDist below stays the REAL distance of the pick, so
+        ; all downstream range / arrival / disengage checks are unaffected.
+        score := dist
+        if (_stickyTargetAddr && entityAddr = _stickyTargetAddr)
+            score -= STICKY_BONUS
+        if (score < bestScore)
         {
+            bestScore := score
             nearestDist := dist
             result["nearestPath"] := path
             result["nearestEntityAddr"] := entityAddr
@@ -762,6 +776,10 @@ _DetectCombat(radarSnap)
         }
     }
 
+    ; Commit the selected target so next tick prefers it (sticky targeting). When
+    ; it dies / leaves the sample / gets blacklisted, it simply won't be found and
+    ; selection falls back to the real nearest, which becomes the new sticky.
+    _stickyTargetAddr := result["nearestEntityAddr"]
     result["hostileCount"] := hostileCount
     result["nearestDist"] := nearestDist
     return result
