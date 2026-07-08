@@ -40,6 +40,7 @@ LoadChestOpen()
     ; Runtime (never persisted)
     global g_chestLastReason := "idle"
     global g_chestState := Map()           ; entityAddr -> Map(opened,strongbox,tick)
+    global g_chestBlacklist := Map()       ; entityAddr -> expiry tick (unreachable / no-progress chests, skipped until then)
 
     f := g_chestConfigFile
     try {
@@ -111,11 +112,20 @@ TryChestOpen(radarSnap, gameHwnd, mode)
 _RunChestOpen(radarSnap, gameHwnd, mode)
 {
     global g_reader, g_chestLastReason, g_combatRange
-    global g_apOpenChests, g_chestState
+    global g_apOpenChests, g_chestState, g_chestBlacklist
 
     static ADJACENT_RANGE   := 250      ; world units — "standing on it"
+    static MAX_SAFE_DIST    := 1600     ; safe pass: don't walk cross-map for a chest — let exploration approach first
     static CLICK_THROTTLE_MS := 450     ; one click per this while walking to a chest
+    static PURSUE_TIMEOUT_MS := 6000    ; give up on a chest we can't get closer to (unreachable / behind terrain)
+    static PROGRESS_EPS     := 80       ; a real "getting closer" step (world units)
     static _lastClickTick   := 0
+    ; Pursuit tracker — detects a chest whose distance won't drop (the log showed
+    ; a chest oscillating at d~1300-1800 hogging the tick for 15 s+). Blacklists it
+    ; and yields, exactly like combat's no-path give-up + LootPickup's attempt budget.
+    static _pursueAddr    := 0
+    static _pursueMinDist := 0.0
+    static _pursueSince   := 0
 
     if !g_apOpenChests
         return false
@@ -123,6 +133,7 @@ _RunChestOpen(radarSnap, gameHwnd, mode)
     playerPos := _GetPlayerPos(radarSnap)
     if !playerPos
         return false
+    now := A_TickCount
 
     target := _ChestNearestEligible(radarSnap, playerPos["x"], playerPos["y"])
     if !target
@@ -132,6 +143,7 @@ _RunChestOpen(radarSnap, gameHwnd, mode)
         ; no chest underfoot.
         if (mode = "safe")
             g_chestLastReason := "no-chest"
+        _pursueAddr := 0
         return false
     }
 
@@ -143,11 +155,43 @@ _RunChestOpen(radarSnap, gameHwnd, mode)
     }
     else   ; "safe"
     {
+        if (target["dist"] > MAX_SAFE_DIST)
+        {
+            ; Too far to walk to directly — don't hog the tick. Exploration moves us
+            ; around; once we're within range the chest gets pursued. Do NOT reset the
+            ; pursuit tracker here: a chest oscillating around the cap would otherwise
+            ; restart the give-up timer every out-of-range tick and never give up.
+            g_chestLastReason := "too-far(" target["kind"] " d=" Round(target["dist"]) ")"
+            return false
+        }
         if (_NearestHostileDistance(radarSnap) < g_combatRange)
         {
             g_chestLastReason := "hostile-nearby"
             return false   ; defer to combat
         }
+    }
+
+    ; ── No-progress give-up ──────────────────────────────────────────────
+    ; Track the chest we're pursuing. Resetting on a real distance drop, we give up
+    ; (blacklist ~60 s + yield) when we can't get closer for PURSUE_TIMEOUT_MS —
+    ; the unreachable-chest case that previously looped forever.
+    if (target["addr"] != _pursueAddr)
+    {
+        _pursueAddr    := target["addr"]
+        _pursueMinDist := target["dist"]
+        _pursueSince   := now
+    }
+    else if (target["dist"] < _pursueMinDist - PROGRESS_EPS)
+    {
+        _pursueMinDist := target["dist"]
+        _pursueSince   := now                 ; progress → reset the give-up timer
+    }
+    else if ((now - _pursueSince) > PURSUE_TIMEOUT_MS)
+    {
+        g_chestBlacklist[target["addr"]] := now + 60000
+        _pursueAddr := 0
+        g_chestLastReason := "giveup(" target["kind"] " d=" Round(target["dist"]) " unreachable)"
+        return false
     }
 
     ; ── Project the chest world position to screen ───────────────────────
@@ -166,8 +210,7 @@ _RunChestOpen(radarSnap, gameHwnd, mode)
     }
 
     ; Throttle FIRST so the label DFS runs ~once per click, not every tick while
-    ; the character walks toward the chest.
-    now := A_TickCount
+    ; the character walks toward the chest. (now was captured at function entry.)
     if ((now - _lastClickTick) < CLICK_THROTTLE_MS)
     {
         g_chestLastReason := "walking(" target["kind"] " d=" Round(target["dist"]) ")"
@@ -213,7 +256,14 @@ _RunChestOpen(radarSnap, gameHwnd, mode)
 ; Returns Map(addr, worldX/Y/Z, dist, kind="chest"|"strongbox") or 0.
 _ChestNearestEligible(radarSnap, px, py)
 {
-    global g_reader, g_apOpenStrongboxes
+    global g_reader, g_apOpenStrongboxes, g_chestBlacklist
+
+    ; Prune expired blacklist entries (a chest we gave up on becomes eligible again
+    ; after its cooldown — the player may have moved to a spot it's reachable from).
+    now := A_TickCount
+    for a in g_chestBlacklist.Clone()
+        if (g_chestBlacklist[a] <= now)
+            g_chestBlacklist.Delete(a)
 
     inGs := radarSnap.Has("inGameState") ? radarSnap["inGameState"] : 0
     area := (inGs && IsObject(inGs) && inGs.Has("areaInstance")) ? inGs["areaInstance"] : 0
@@ -237,6 +287,8 @@ _ChestNearestEligible(radarSnap, px, py)
         addr := entity.Has("address") ? entity["address"] : 0
         if !addr
             continue
+        if (g_chestBlacklist.Has(addr) && g_chestBlacklist[addr] > now)
+            continue   ; gave up on this one recently (unreachable) — skip until it expires
 
         ; World position (chests carry a Render component on the radar path).
         decoded := entity.Has("decodedComponents") ? entity["decodedComponents"] : 0
