@@ -56,7 +56,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.321"
+POEFORMANCE_VERSION := "0.45.13.322"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -401,6 +401,7 @@ try g_atlasOverlayEnabled := (IniRead(A_ScriptDir "\poeformance_config.ini", "At
 ; Custom hotkey / macro engine — init defaults then load persisted hotkeys.json
 HotkeysInit()
 SkillHotkeysInit()
+LoadLearnedSkillSlots()     ; restore the learned send-key → skill map (skill-bar auto-config)
 HotkeysLoadConfig()
 LoadHkAnimCapture()
 LoadReaderProcess()         ; reader-split stage 2: persistent reader process (opt-in, default OFF)

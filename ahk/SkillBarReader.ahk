@@ -377,6 +377,133 @@ _SkillKeysRefreshAndPush()
     try PushHotkeyBindingsToWebView()
 }
 
+; ── Skill-bar slot learner (fixes "auto-config only pulls 1 skill") ──────────
+; A skill-bar slot's ActiveSkill pointer (slot + SkillBarSlot.ActiveSkillPtr) is
+; only populated once that skill has been INSTANTIATED — i.e. cast at least once.
+; So a single auto-config read only sees the CURRENTLY-active skill (proven by the
+; Skill<->Slot probe: only the E slot resolved, because Volatile Dead was active).
+; This runs throttled from the radar tick and ACCUMULATES each slot's resolved
+; skill, keyed by its send key, into g_skillLearnedByKey — so after a few seconds
+; of combat every used skill is remembered. It reuses the proven +0x2F0 read (no
+; new offsets), also refreshes the name→key / slot→name maps (PoB import + UI), and
+; persists the result so a one-click auto-config works across restarts. Throttled
+; ~2 s; cheap no-op when the bar isn't readable. No parameters, no return value.
+LearnSkillBarSlotsTick()
+{
+    global g_reader, g_skillLearnedByKey, g_skillKeyBySkillName, g_skillSlotSkillName
+    static _lastTick := 0, _saveScheduled := false
+    if !IsObject(g_reader)
+        return
+    now := A_TickCount
+    if (_lastTick != 0 && (now - _lastTick) < 2000)
+        return
+    _lastTick := now
+
+    if !(IsSet(g_skillLearnedByKey) && g_skillLearnedByKey is Map)
+        g_skillLearnedByKey := Map()
+
+    list := 0
+    try list := ReadSkillBarSkills(g_reader)
+    if !(list && list is Array && list.Length)
+        return
+
+    changed := false
+    for e in list
+    {
+        if !(e is Map)
+            continue
+        key := e.Has("sendKey") ? e["sendKey"] : ""
+        if (key = "")
+            continue
+        intnm := e.Has("skillInternal") ? e["skillInternal"] : ""
+        disp  := e.Has("skillName") ? e["skillName"] : ""
+        if (intnm = "" && disp = "")
+            continue                           ; slot's skill not resolvable this tick
+        if (StrLower(intnm) = "move")
+            continue                           ; the basic move action is not a rotation skill
+        nm := (disp != "") ? disp : intnm
+
+        prev := g_skillLearnedByKey.Has(key) ? g_skillLearnedByKey[key] : 0
+        if !(prev is Map && prev.Has("skillInternal") && prev["skillInternal"] = intnm
+            && prev.Has("skillName") && prev["skillName"] = nm)
+        {
+            g_skillLearnedByKey[key] := Map("skillInternal", intnm, "skillName", nm)
+            changed := true
+        }
+
+        ; Keep the name→key + slot→name maps fresh (PoB import + the Hotkeys UI).
+        if (IsSet(g_skillKeyBySkillName) && g_skillKeyBySkillName is Map)
+        {
+            if (nm != "")
+                g_skillKeyBySkillName[StrLower(nm)] := key
+            if (intnm != "")
+                g_skillKeyBySkillName[StrLower(intnm)] := key
+        }
+        if (IsSet(g_skillSlotSkillName) && g_skillSlotSkillName is Map && e.Has("slot"))
+            g_skillSlotSkillName[e["slot"]] := nm
+    }
+
+    if (changed && !_saveScheduled)
+    {
+        _saveScheduled := true
+        SetTimer(() => (SaveLearnedSkillSlots(), _saveScheduled := false), -2500)
+    }
+}
+
+; Persists the learned send-key → skill map to [SkillBarLearned] in
+; poeformance_config.ini, one entry per key: value = "<internal>|<display>".
+; Rewrites the whole section so removed binds don't linger. No return value.
+SaveLearnedSkillSlots()
+{
+    global g_skillLearnedByKey
+    if !(IsSet(g_skillLearnedByKey) && g_skillLearnedByKey is Map)
+        return
+    cfgPath := A_ScriptDir "\poeformance_config.ini"
+    try IniDelete(cfgPath, "SkillBarLearned")
+    for key, info in g_skillLearnedByKey
+    {
+        if (key = "" || !(info is Map))
+            continue
+        internal := info.Has("skillInternal") ? info["skillInternal"] : ""
+        disp     := info.Has("skillName") ? info["skillName"] : ""
+        if (internal = "" && disp = "")
+            continue
+        try IniWrite(internal "|" disp, cfgPath, "SkillBarLearned", key)
+    }
+}
+
+; Seeds g_skillLearnedByKey (init gotcha) and loads the persisted mapping so a
+; fresh session already knows the rotation learned in a previous one. Called once
+; at startup. No parameters, no return value.
+LoadLearnedSkillSlots()
+{
+    global g_skillLearnedByKey := Map()
+    cfgPath := A_ScriptDir "\poeformance_config.ini"
+    if !FileExist(cfgPath)
+        return
+    section := ""
+    try section := IniRead(cfgPath, "SkillBarLearned")
+    if (section = "")
+        return
+    for line in StrSplit(section, "`n", "`r")
+    {
+        eq := InStr(line, "=")
+        if (eq < 2)
+            continue
+        key := SubStr(line, 1, eq - 1)
+        val := SubStr(line, eq + 1)
+        parts := StrSplit(val, "|")
+        internal := (parts.Length >= 1) ? parts[1] : ""
+        disp     := (parts.Length >= 2) ? parts[2] : ""
+        if (key = "" || (internal = "" && disp = ""))
+            continue
+        g_skillLearnedByKey[key] := Map(
+            "skillInternal", internal,
+            "skillName", (disp != "") ? disp : internal
+        )
+    }
+}
+
 ; Manual trigger (bridge "DetectSkillKeys"): refreshes from the bar, applies the
 ; result, and reports the detected slot->key mapping so the reader can be verified
 ; in-game. No parameters; shows a message box. No return value.

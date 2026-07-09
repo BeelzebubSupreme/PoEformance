@@ -1482,7 +1482,7 @@ SaveCombatAutoConfig()
 ; Persists the result and returns a short status string ("ok:N" | reason).
 AutoConfigureCombatSlots()
 {
-    global g_reader, g_combatSkillSlots
+    global g_reader, g_combatSkillSlots, g_skillLearnedByKey
     if !IsObject(g_reader)
         return "no-reader"
     slots := 0
@@ -1541,8 +1541,24 @@ AutoConfigureCombatSlots()
         disp  := e.Has("skillName") ? e["skillName"] : ""
         intnm := e.Has("skillInternal") ? e["skillInternal"] : ""
         key   := e.Has("sendKey") ? e["sendKey"] : ""
+        ; A slot's skill only resolves live once it has been cast this session, so
+        ; an un-cast slot reads empty. Fall back to the learned map (accumulated by
+        ; LearnSkillBarSlotsTick as skills are used), keyed by the slot's send key,
+        ; so one click fills every skill the player has cast — not just the active
+        ; one. Persisted, so after one play session the whole rotation is known.
+        if (disp = "" && intnm = "" && key != ""
+            && IsSet(g_skillLearnedByKey) && g_skillLearnedByKey is Map
+            && g_skillLearnedByKey.Has(key))
+        {
+            li := g_skillLearnedByKey[key]
+            if (li is Map)
+            {
+                intnm := li.Has("skillInternal") ? li["skillInternal"] : ""
+                disp  := li.Has("skillName") ? li["skillName"] : ""
+            }
+        }
         if (disp = "" && intnm = "")
-            continue                            ; empty skill-bar slot
+            continue                            ; empty slot / skill never cast yet
         low := StrLower(intnm)
         if (low = "move")                       ; the basic move action is never a rotation skill
             continue

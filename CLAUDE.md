@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.321`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.322`.
 
 ## Language
 
@@ -2780,6 +2780,41 @@ LocalPlayer pointer at PlayerInfo+0x20) but three sibling pointers rendered as `
 non-string bytes passed as "text". Tightened: length ≥ 3, no control chars, AND ≥ 80% ASCII-printable
 (engine paths/names/ids are ASCII). Garbage now falls through to `DATA` (hex) instead of fake text. Accepts a
 rare non-ASCII-string false-negative in exchange, which is fine for RE.
+
+## Combat auto-config: skill-bar slot learner (fixes "only pulls 1 skill", 0.45.13.322)
+
+`AutoConfigureCombatSlots()` only ever picked up ONE skill (the report). Root cause pinned via the
+`DiagSkillSlotLink` probe (Skill↔Slot Link button): the KEYS read perfectly (8 slots, LMB/MMB/RMB +
+Q/W/E/R/T) and all 34 player skills enumerate fine, but a skill-bar slot's **ActiveSkill pointer
+(`slot + SkillBarSlot.ActiveSkillPtr`, +0x2F0) is only populated once that skill has been INSTANTIATED —
+i.e. cast at least once**. The probe found a real `detailsPtr` match ONLY on the E slot (Volatile Dead,
+the active skill); no other slot held ANY skill pointer anywhere in 0x600 bytes × 5 child levels (the
+`0x3F800000` "Living Lightning" matches were the float `1.0f` colliding with a mis-read `dat`, pure
+noise). So a single auto-config read can only ever see the currently-active skill — there is NO readable
+per-slot skill reference for an un-cast slot (the UI resolves its icon lazily from a slot index we can't
+see per-slot). Icon-path matching was ruled out too: UI elements expose no sprite/DDS string here.
+
+Fix (no new offsets — reuses the proven +0x2F0 read): a **background learner** that accumulates the
+mapping over play.
+- **`ahk/SkillBarReader.ahk`** — `LearnSkillBarSlotsTick()` (called from `UpdateRadarFast` after
+  `TryLootTrackerTick`, self-throttled ~2 s): reads `ReadSkillBarSkills`, and for every slot whose skill
+  currently resolves (i.e. it was just cast) records `sendKey → {skillInternal, skillName}` into the new
+  global `g_skillLearnedByKey`, also refreshing `g_skillKeyBySkillName` (name→key, for PoB import) and
+  `g_skillSlotSkillName`. Debounced save (`SetTimer -2500`). `SaveLearnedSkillSlots()` /
+  `LoadLearnedSkillSlots()` persist it to `[SkillBarLearned]` in `poeformance_config.ini` (one entry per
+  key, value `"<internal>|<display>"`; whole-section rewrite). `g_skillLearnedByKey` seeded in
+  `SkillHotkeysInit()` (init gotcha) + loaded at startup (`InGameStateMonitor.ahk`, after
+  `SkillHotkeysInit()`).
+- **`ahk/CombatAutomation.ahk` (`AutoConfigureCombatSlots`)** — for a slot with a key but no live-resolved
+  skill, falls back to `g_skillLearnedByKey[key]`. So after a few seconds of combat (every rotation skill
+  cast once), one click fills the WHOLE rotation; the mapping persists across restarts, so subsequent
+  sessions are one-click from the start. Range/castType still derived from the live skill list (`skByInt`)
+  by internal name (all skills enumerate), so the learned map need only carry the name.
+- Static: full-script `AutoHotkey64 /validate` exit 0; braces balanced on all four edited files.
+- **Pending in-game verification:** with the skill bar visible, fight a pack (each skill fires once),
+  then click auto-config → all 6 slots should populate (not just the active one). The learned map also
+  survives a restart (check `[SkillBarLearned]` in `poeformance_config.ini`). If a slot never fills, that
+  skill was never cast during the sample window — cast it once and re-click.
 
 ## Reference
 
