@@ -369,6 +369,9 @@ _RunExploration(radarSnap, gameHwnd, measureOnly := false)
     static _wdTgtCX := -1, _wdTgtCY := -1
     static _wdBestDist := 999999
     static _wdBestTick := 0
+    ; Last tick exploration actually navigated — used to rebaseline the stuck /
+    ; watchdog timers after combat or loot claimed a run of ticks (see below).
+    static _lastNavTick := 0
 
     ; Precomputed exploration plan — built once per area from the (already
     ; fully-known) walkable terrain grid. ~50-80 sample waypoints in a
@@ -395,6 +398,7 @@ _RunExploration(radarSnap, gameHwnd, measureOnly := false)
         _wdTgtCY := -1
         _wdBestDist := 999999
         _wdBestTick := 0
+        _lastNavTick := 0
         _plan := []
         _planIdx := 1
         _planBuilt := false
@@ -474,11 +478,60 @@ _RunExploration(radarSnap, gameHwnd, measureOnly := false)
             _regionQHead := 1
             if (_regionWalkable > 0)
             {
-                ; Re-base the percentage on the reachable area and rebuild
-                ; the plan so samples get region-filtered.
+                ; Re-base the percentage on the reachable region. Recount visited
+                ; cells INSIDE the region fresh — _regionVisitedCnt was accumulated
+                ; during the (time-sliced) flood using each cell's visited state at
+                ; flood time, so it badly undercounts once exploration has run a
+                ; while (the % otherwise collapsed, e.g. 12%→3%, looking like a reset).
                 _totalWalkable := _regionWalkable
-                _visitedWalkable := Min(_regionVisitedCnt, _regionWalkable)
-                _planBuilt := false
+                vinr := 0
+                Loop (_coarseW * _coarseH)
+                {
+                    ci := A_Index - 1
+                    if (NumGet(_regionMap.Ptr, ci, "UChar") != 0
+                        && NumGet(_visited.Ptr, ci, "UChar") = 1)
+                        vinr++
+                }
+                _visitedWalkable := Min(vinr, _regionWalkable)
+
+                ; Apply the region filter to the plan WITHOUT rebuilding it. A full
+                ; rebuild (_planBuilt := false) re-ran greedy-TSP from the current
+                ; position and reset _planIdx to 1 — which sent the bot BACK to the
+                ; nearest un-visited gap behind it (status log: wp 9/60 → wp 2/59,
+                ; target 9478 → 6130), the "circling / re-exploring" report. Instead
+                ; drop only the out-of-region (unreachable) waypoints and keep the
+                ; tour order + forward progress: _planIdx shifts left by the number
+                ; of dropped waypoints ahead of it, so it still points at the same
+                ; next real waypoint.
+                if (_planBuilt && _plan.Length > 0)
+                {
+                    filtered := []
+                    newIdx := _planIdx
+                    i := 1
+                    while (i <= _plan.Length)
+                    {
+                        wp := _plan[i]
+                        wcX := wp[1] // _STEP
+                        wcY := wp[2] // _STEP
+                        keep := (wcX >= 0 && wcX < _coarseW && wcY >= 0 && wcY < _coarseH
+                            && NumGet(_regionMap.Ptr, wcY * _coarseW + wcX, "UChar") != 0)
+                        if (keep)
+                            filtered.Push(wp)
+                        else if (i < _planIdx)
+                            newIdx--
+                        i++
+                    }
+                    if (filtered.Length > 0)
+                    {
+                        _plan := filtered
+                        _planIdx := Max(1, Min(newIdx, filtered.Length + 1))
+                        _targetCX := -1   ; re-pick a target from the surviving plan
+                    }
+                    else
+                        _planBuilt := false   ; nothing reachable survived → rebuild
+                }
+                else
+                    _planBuilt := false       ; no plan yet → build a region-filtered one
             }
         }
     }
@@ -557,6 +610,24 @@ _RunExploration(radarSnap, gameHwnd, measureOnly := false)
         }
     }
 
+    ; ── Mode-handoff timer rebaseline ────────────────────────────────
+    ; The stuck (below) and per-target watchdog timers measure wall-clock,
+    ; but combat and loot claim whole ticks during which exploration never
+    ; runs. Returning to exploration after such a gap, those timers would
+    ; have kept counting and could instantly trip a FALSE "stuck" / "no-
+    ; progress" give-up on a still-valid target. Detect the gap (no explore
+    ; tick for >600 ms) and rebaseline the timers + stuck baseline to now.
+    if (_lastNavTick != 0 && (now - _lastNavTick) > 600)
+    {
+        _stuckCheckTick := now
+        _stuckPGX := pGX
+        _stuckPGY := pGY
+        _wdBestTick := now
+        _wdBestDist := 999999
+        _lastClickTick := 0
+    }
+    _lastNavTick := now
+
     ; Stuck detection: if player hasn't moved in 3 s, the current waypoint
     ; is probably unreachable from here — rebuild the plan from the new
     ; position. Crucially, the stuck target's coarse cell is marked visited
@@ -575,7 +646,15 @@ _RunExploration(radarSnap, gameHwnd, measureOnly := false)
             _visitedWalkable += _ExploreMarkCoarseVisited(_visited, _targetCX, _targetCY
                 , _coarseW, _coarseH, _STEP, buf, dsz, _bpr, gridW, _rows)
             _targetCX := -1
-            _planBuilt := false   ; rebuild plan from current position
+            ; Advance PAST the stuck waypoint in the EXISTING tour rather than
+            ; rebuilding it. A full rebuild (_planBuilt := false) re-ran greedy-TSP
+            ; from the current position, and its "nearest unvisited sample" often
+            ; sits BEHIND the player → the bot walks back over ground it already
+            ; covered ("looping back over spots", maps taking ~2×). Keeping the
+            ; pre-optimised tour and just skipping the stuck cell (the skip-visited
+            ; loop below also drops the now-marked cell) preserves forward progress.
+            if (_planIdx <= _plan.Length)
+                _planIdx++
         }
         _stuckPGX := pGX
         _stuckPGY := pGY
@@ -639,8 +718,15 @@ _RunExploration(radarSnap, gameHwnd, measureOnly := false)
             _targetCX := -1
         if (_targetCX < 0)
         {
+            ; Pass the floor context so the search skips OFF-FLOOR frontiers (a
+            ; different storey the region flood leaked into via a long ramp). Without
+            ; this the search returned the nearest off-floor cell, the floor gate
+            ; skipped it one-cell-per-tick while STANDING STILL, and coverage stalled
+            ; (status log: a long off-floor-skip(hd=200-296) loop). Rejecting them in
+            ; the search returns the nearest REACHABLE frontier so the bot keeps moving.
             frontier := _FindNearestFrontier(pcX, pcY, _visited, _coarseW, _coarseH,
-                                              buf, _bpr, _rows, dsz, _STEP, regionFilter)
+                                              buf, _bpr, _rows, dsz, _STEP, regionFilter,
+                                              heightCtx, playerWZ, hzOk, 200)
             if (!frontier)
             {
                 g_exploreLastReason := "no-frontier-done(" g_exploreCurrentPercent "%)"
@@ -722,7 +808,17 @@ _RunExploration(radarSnap, gameHwnd, measureOnly := false)
         MAX_FLOOR_DELTA := 200
         if (hzOk && Abs(tgtHD) > MAX_FLOOR_DELTA)
         {
-            _visitedWalkable += _ExploreMarkCoarseVisited(_visited, _targetCX, _targetCY
+            ; Mark the off-floor frontier in the visited buffer so it is not
+            ; re-picked, but DO NOT count it toward _visitedWalkable — it is
+            ; UNREACHABLE (a different storey), not explored. Counting it inflated
+            ; the coverage % to a false done(99%) when the player was cornered with
+            ; only off-floor frontiers left (owner: "stood in a corner and watched
+            ; it climb to 100%"). The mark's return is intentionally discarded now,
+            ; so the % tracks the reachable area actually reached and the run ends
+            ; as an honest no-frontier-done at the true coverage instead of a fake
+            ; completion. (Reaching other storeys via stairs/transitions is a
+            ; separate, larger nav feature — this only stops the false done.)
+            _ExploreMarkCoarseVisited(_visited, _targetCX, _targetCY
                 , _coarseW, _coarseH, _STEP, buf, dsz, _bpr, gridW, _rows)
             if (_planIdx <= _plan.Length)
                 _planIdx++
@@ -771,7 +867,11 @@ _RunExploration(radarSnap, gameHwnd, measureOnly := false)
     if (_targetCX < 0)
         return
 
-    fieldSt := _pf.DFieldExpand(12, pGX, pGY)
+    ; Flood budget per tick. Raised 12→20 ms: the field re-floods from scratch
+    ; on every target switch, and a thin slice left the bot standing still
+    ; ("routing") for many ticks before it could move toward a far target.
+    ; Only costs extra while the field is still building (cheap once covered).
+    fieldSt := _pf.DFieldExpand(20, pGX, pGY)
     _lastFieldSt := fieldSt
     if (fieldSt = "unreach" || fieldSt = "cap")
     {
@@ -929,7 +1029,8 @@ _ExploreMarkCoarseVisited(visited, cx, cy, coarseW, coarseH, STEP, buf, dsz, bpr
 ; reachability map, byte per coarse cell) excludes cells the player can't
 ; physically reach (other floors, disconnected islands).
 ; Returns [cx, cy] or 0 if none found.
-_FindNearestFrontier(pcX, pcY, visited, cW, cH, buf, bpr, rows, dsz, STEP, region := 0)
+_FindNearestFrontier(pcX, pcY, visited, cW, cH, buf, bpr, rows, dsz, STEP, region := 0
+    , heightCtx := 0, playerZ := 0, hzOk := false, maxFloorDelta := 200)
 {
     ; Spiral search: scan outward in rings
     maxRadius := Max(cW, cH)
@@ -947,7 +1048,8 @@ _FindNearestFrontier(pcX, pcY, visited, cW, cH, buf, bpr, rows, dsz, STEP, regio
             {
                 cx := pcX + dxVal
                 cy := pcY + dy
-                result := _CheckFrontierCell(cx, cy, visited, cW, cH, buf, bpr, rows, dsz, gridW, STEP, region)
+                result := _CheckFrontierCell(cx, cy, visited, cW, cH, buf, bpr, rows, dsz, gridW, STEP, region
+                    , heightCtx, playerZ, hzOk, maxFloorDelta)
                 if result
                     return result
             }
@@ -963,7 +1065,8 @@ _FindNearestFrontier(pcX, pcY, visited, cW, cH, buf, bpr, rows, dsz, STEP, regio
             {
                 cx := pcX + dx
                 cy := pcY + dy
-                result := _CheckFrontierCell(cx, cy, visited, cW, cH, buf, bpr, rows, dsz, gridW, STEP, region)
+                result := _CheckFrontierCell(cx, cy, visited, cW, cH, buf, bpr, rows, dsz, gridW, STEP, region
+                    , heightCtx, playerZ, hzOk, maxFloorDelta)
                 if result
                     return result
                 dx++
@@ -978,7 +1081,8 @@ _FindNearestFrontier(pcX, pcY, visited, cW, cH, buf, bpr, rows, dsz, STEP, regio
     return 0
 }
 
-_CheckFrontierCell(cx, cy, visited, cW, cH, buf, bpr, rows, dsz, gridW, STEP, region := 0)
+_CheckFrontierCell(cx, cy, visited, cW, cH, buf, bpr, rows, dsz, gridW, STEP, region := 0
+    , heightCtx := 0, playerZ := 0, hzOk := false, maxFloorDelta := 200)
 {
     if (cx < 0 || cx >= cW || cy < 0 || cy >= cH)
         return 0
@@ -1005,6 +1109,7 @@ _CheckFrontierCell(cx, cy, visited, cW, cH, buf, bpr, rows, dsz, gridW, STEP, re
         return 0
 
     ; Must be adjacent to a visited cell (frontier condition)
+    isFrontier := false
     for _, d in [[1,0],[-1,0],[0,1],[0,-1]]
     {
         nx := cx + d[1]
@@ -1013,10 +1118,24 @@ _CheckFrontierCell(cx, cy, visited, cW, cH, buf, bpr, rows, dsz, gridW, STEP, re
         {
             nIdx := ny * cW + nx
             if (NumGet(visited.Ptr, nIdx, "UChar") = 1)
-                return [cx, cy]
+            {
+                isFrontier := true
+                break
+            }
         }
     }
-    return 0
+    if (!isFrontier)
+        return 0
+
+    ; Reject OFF-FLOOR frontiers (a different storey the region flood leaked into
+    ; via a long ramp). Same test the per-target floor gate uses: |cell height −
+    ; player Z| > maxFloorDelta. Only evaluated on actual frontier cells (few), so
+    ; the extra TerrainHeightAt is cheap. Skipping them here (vs. one-per-tick at the
+    ; gate) keeps the bot moving to a reachable frontier instead of standing still.
+    if (hzOk && heightCtx && Abs(TerrainHeightAt(heightCtx, gx, gy) - playerZ) > maxFloorDelta)
+        return 0
+
+    return [cx, cy]
 }
 
 ; ── World-to-Screen for exploration clicks ───────────────────────────────

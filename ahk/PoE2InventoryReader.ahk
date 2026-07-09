@@ -857,11 +857,58 @@ class PoE2InventoryReader extends PoE2PlayerReader
     }
 
     ; Returns the rarity ID (0=Normal … 5=Currency) for an item entity, or -1 on failure.
+    ; Reads an item's rarity id (0=Normal, 1=Magic, 2=Rare, 3/4=Unique) from its
+    ; rarity-bearing component, resolved BY NAME.
+    ;
+    ; The old implementation went through ReadItemModsAndMagicProperties, which
+    ; BLIND-SCANNED every owned component and read BOTH the Mods (0x94) and the
+    ; ObjectMagicProperties (0x144) Rarity offsets on each one, trusting any value
+    ; in 0-5 and keeping the highest `rarity*10 + modCount` score. Reading the OMP
+    ; offset on a Mods component (and either offset on an unrelated component such
+    ; as Render/Sockets) fabricated spurious candidates, and because the score is
+    ; biased toward higher rarity the noise skewed UP — so Magic/Normal items were
+    ; frequently misread as Rare and slipped through a Rare-only loot filter.
+    ;
+    ; Per the C# reference (GameHelper2): the Mods component is the AUTHORITATIVE
+    ; rarity source (Details0.Rarity, offset 0x94); ObjectMagicProperties only
+    ; carries mod data (its Rarity at 0x144 is a fallback for items that have no
+    ; Mods component). So resolve the component by name and read ONLY its own
+    ; offset — no scan, no cross-offset contamination. Returns the rarity id, or
+    ; -1 when the item has no rarity component (plain white gear, or currency,
+    ; which the loot layer classifies by path upstream).
     ReadItemRarity(itemEntityPtr)
     {
-        info := this.ReadItemModsAndMagicProperties(itemEntityPtr)
-        if (info && info.Has("rarityId"))
-            return info["rarityId"]
+        if !this.IsProbablyValidPointer(itemEntityPtr)
+            return -1
+        comps := this.ReadEntityComponentLookupBasic(itemEntityPtr, 64)
+        if !(comps && comps.Length)
+            return -1
+
+        modsPtr := 0, ompPtr := 0
+        for _, c in comps
+        {
+            n := StrLower(c["name"])
+            if (n = "mods")
+                modsPtr := c["address"]
+            else if (n = "objectmagicproperties")
+                ompPtr := c["address"]
+        }
+
+        ; Mods first (authoritative), OMP as fallback — each at ITS OWN offset.
+        if (modsPtr)
+        {
+            r := -1
+            try r := this.Mem.ReadInt(modsPtr + PoE2Offsets.Mods["Rarity"])
+            if (r >= 0 && r <= 5)
+                return r
+        }
+        if (ompPtr)
+        {
+            r := -1
+            try r := this.Mem.ReadInt(ompPtr + PoE2Offsets.ObjectMagicProperties["Rarity"])
+            if (r >= 0 && r <= 5)
+                return r
+        }
         return -1
     }
 

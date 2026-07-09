@@ -5400,6 +5400,8 @@
           <button class="uib-btn" onclick="ahkCall('UiBrowseDumpSubtree')" data-tip="RE: dump this element's whole subtree (StringId + Displayed Text + pos/size/flags per node) to debug\ui_tree_*.tsv — e.g. to map the skills_bar hotkey labels">🌲 Dump Subtree</button>
           <button class="uib-btn" onclick="ahkCall('DetectSkillKeys')" data-tip="Read the in-game skill-bar key bindings (per-slot Displayed Text), fill the Hotkeys-tab skill slots, and show the detected slot→key mapping">⌨ Detect Skill Keys</button>
           <button class="uib-btn" onclick="ahkCall('DiagSkillSlotLink')" data-tip="RE: probe whether each skill-bar slot references a player skill by pointer (detailsPtr/geplRow/ActiveSkillsDat) — writes debug\skill_slot_link_*.txt to enable automatic skill-name↔slot mapping">🔗 Skill↔Slot Link</button>
+          <button class="uib-btn" onclick="ahkCall('SkillBarArrayProbe')" data-tip="RE: hunt the PLAYER-SIDE skill-bar array (slot→skill) — scans the player entity, Actor, and every component for the equipped skills' stable pointers. Writes debug\skillbar_array_*.txt. Run in a map with all skills equipped.">🎯 Skill-bar Array Hunt</button>
+          <button class="uib-btn" onclick="ahkCall('SkillGemProbe')" data-tip="RE: dump player inventories (flagging skill gems + grid position) and scan PlayerServerData for the equipped skills' pointers — hunts the skill-gem / server-side assignment data model. Writes debug\skillgem_probe_*.txt.">💎 Skill-gem / Server Probe</button>
         </div>
         <div id="uib-search-row">
           <input id="uib-search-input" type="text" placeholder="Search StringId…"
@@ -5706,6 +5708,27 @@
               </div>
               <div class="cfg-help">Stops sending clicks / skills while a game UI panel is open (inventory, stash, passive tree), so inputs don't land on the panel instead of the world.</div>
 
+              <div class="cfg-row"><span class="cfg-label">📦 Auto-open chests</span>
+                <label class="toggle"><input type="checkbox" id="tog-chest-open"
+                    onchange="ahkCall('SetChestOpen','openChests', this.checked?1:0)" checked><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">While AutoPilot runs, walk to and open nearby chests once the area is clear —
+                and a chest you're standing on even mid-fight. Regular / reward chests only.</div>
+
+              <div class="cfg-row"><span class="cfg-label">💎 Only Rare+ chests</span>
+                <label class="toggle"><input type="checkbox" id="tog-chest-rareonly"
+                    onchange="ahkCall('SetChestOpen','rareOnly', this.checked?1:0)" checked><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Skip the trivial Normal/Magic chests that litter every zone — only pursue Rare+
+                chests so the bot doesn't detour to every little box. (Strongboxes are exempt — they use their own toggle.)</div>
+
+              <div class="cfg-row"><span class="cfg-label">💥 Also open strongboxes</span>
+                <label class="toggle"><input type="checkbox" id="tog-chest-strongbox"
+                    onchange="ahkCall('SetChestOpen','openStrongboxes', this.checked?1:0)"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Include strongboxes in auto-open. Each spawns a monster pack the instant it
+                opens (combat then handles the pack). Off by default.</div>
+
               <!-- Hidden legacy toggles — kept in DOM so the existing
                    setChk() helpers in updateHeader don't blow up. -->
               <input type="checkbox" id="tog-combat"  style="display:none">
@@ -5790,7 +5813,45 @@
                     </div>
                   </div>
 
+                  <!-- Auto-dodge: panic dodge-roll on low life -->
+                  <div class="cfg-row" style="margin-top:10px"><span class="cfg-label">🤸 Auto-dodge on low life</span>
+                    <label class="toggle"><input type="checkbox" id="tog-combat-dodge"
+                        onchange="ahkCall('SetCombatAutoDodge', this.checked?1:0)"><span class="toggle-slider"></span></label>
+                  </div>
+                  <div class="cfg-help">During combat, presses your dodge-roll key to escape when life drops to/below the
+                    threshold (throttled ~1.2&nbsp;s). Needs the dodge key set below; dodges in your current facing direction.</div>
+                  <div class="cfg-row"><span class="cfg-label">Dodge key</span>
+                    <input type="text" id="inp-combat-dodge-key" placeholder="e.g. Space" spellcheck="false"
+                      style="width:120px;font-size:12px;font-family:var(--codex-serif)"
+                      onchange="ahkCall('SetCombatDodgeKey', this.value.trim())"
+                      data-tip="The in-game dodge / roll key — an AHK key name (Space, q, e, LButton, …).">
+                  </div>
+                  <div class="cfg-slider-row"><span class="cfg-label">Dodge at life ≤ (%)</span>
+                    <div class="slider-wrap">
+                      <span class="slider-val" id="combat-dodge-hp-bub">50</span>
+                      <input type="range" id="inp-combat-dodge-hp" min="5" max="95" step="5" value="50"
+                        oninput="_sb(this,'combat-dodge-hp-bub',this.value); ahkCall('SetCombatDodgeHp', parseInt(this.value))">
+                    </div>
+                  </div>
+
                   <div style="margin-top:12px;font-size:11px;color:var(--accent);font-weight:600">Skill Slots</div>
+                  <div class="cfg-row" style="margin-top:4px;gap:8px;align-items:center;flex-wrap:wrap">
+                    <button class="hk-btn" onclick="combatAutoConfig()"
+                      data-tip="Reads your equipped skill bar and fills the slots below — each skill on its real key, range from cast type. Afterwards: set AoE/buff types and DISABLE any movement or toggle-aura slot so it isn't spammed.">🎯 Auto-configure from equipped skills</button>
+                    <span id="combat-autoconfig-msg" style="font-size:11px;color:var(--codex-text)"></span>
+                  </div>
+                  <details style="margin-top:6px">
+                    <summary style="font-size:11px;cursor:pointer;color:var(--subtext)">📋 Import build (Path of Building code)</summary>
+                    <div style="padding:6px 0">
+                      <textarea id="pob-code-input" rows="3" spellcheck="false" placeholder="Paste a Path of Building export code here…"
+                        style="width:100%;box-sizing:border-box;font-size:11px;font-family:monospace;resize:vertical"></textarea>
+                      <div class="cfg-row" style="margin-top:4px;gap:8px;align-items:center;flex-wrap:wrap">
+                        <button class="hk-btn" onclick="importPobCode()"
+                          data-tip="Decodes the PoB code locally, extracts the active skills in order, and fills the slots by matching them to your live action-bar keys. A PoB build lists every active gem (auras / heralds / triggered / auto-cast) — only skills actually bound to a bar key are kept; the rest are skipped so they don't crowd out your real castable skills. Result shows kept/total. Applies the build's rotation ORDER as priority.">Import rotation</button>
+                        <span id="pob-import-msg" style="font-size:11px;color:var(--codex-text)"></span>
+                      </div>
+                    </div>
+                  </details>
                   <div id="combat-slots-cfg" style="margin-top:4px"></div>
             </div>
           </details>
@@ -5848,6 +5909,8 @@
                         onchange="ahkCall('SetLootRarity','Unique',this.checked)" checked> Unique</label>
                     <label class="filter-pill"><input type="checkbox" id="loot-rar-currency"
                         onchange="ahkCall('SetLootRarity','Currency',this.checked)" checked> Currency</label>
+                    <label class="filter-pill"><input type="checkbox" id="loot-rar-gems"
+                        onchange="ahkCall('SetLootRarity','Gems',this.checked)" checked> Gems</label>
                   </div>
             </div>
           </details>
@@ -6455,6 +6518,7 @@
                 <label class="toggle"><input type="checkbox" id="startup-trace" onchange="ahkCall('SetStartupTrace', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label>
               </div>
               <div class="cfg-help">Times every startup step (QueryPerformanceCounter) into <code>logs\InGameStateMonitor.startup_trace.log</code>. Most starts are fast — leave this <b>ON across several restarts</b> to catch the occasional slow one, then turn it off. Read the result in <b>Config → Data &amp; Logs</b> (open <code>startup_trace.log</code>).</div>
+
               <div class="cfg-row"><span class="cfg-label">🔌 Reader process (split stage 2)</span>
                 <label class="toggle"><input type="checkbox" id="reader-process" onchange="ahkCall('SetReaderProcess', this.checked ? 1 : 0)"><span class="toggle-slider"></span></label>
               </div>
@@ -6575,6 +6639,7 @@
                   <button class="tree-tbtn" onclick="ahkCall('UiMapProbeRun')" data-tip="Post-patch diagnostic: walk InGameState->UiRoot->GameUi->MapParent->LargeMap to find why LargeMap detection fails. RUN WITH THE LARGE MAP OPEN. Writes logs\InGameStateMonitor.uimap_probe.log">🗺️ Probe UI/Map</button>
                   <button class="tree-tbtn" onclick="ahkCall('SkillProbeRun')" data-tip="Post-patch diagnostic: trace the player's skill-name DAT chain (Actor->ActiveSkills->GrantedEffectsPerLevel->GrantedEffects->name) to find why skill names fall back to Skill_<hex>. Writes logs\InGameStateMonitor.skill_probe.log">✨ Probe Skills</button>
                   <button class="tree-tbtn" onclick="ahkCall('ActorProbeRun')" data-tip="Diagnostic: locate the drifted Actor animationId offset. Resolves the local player's Actor component and TIME-SAMPLES a 4KB int32 window over ~5s while you act, then reports which offset changed (the animationId is the low-int one that cycles 0=Idle/4=Run/skill ids). Click OK, then RUN AROUND and CAST several skills for ~5s. Writes logs\InGameStateMonitor.actor_probe.log">🎭 Probe Actor</button>
+                  <button class="tree-tbtn" onclick="ahkCall('EnemyBuffProbeRun')" data-tip="RE aid: dump the NEAREST hostile monster's active buffs/curses/debuffs via the verified pointer-array read, to confirm enemy-buff reads work before trusting the enemyBuff macro condition. Stand near a cursed/enraged/on-fire enemy, then click. Writes logs\InGameStateMonitor.enemy_buff_probe.log">🩸 Probe Enemy Buffs</button>
                   <button class="tree-tbtn" onclick="ahkCall('ActorVectorProbeRun')" data-tip="Diagnostic: verify/re-base the Actor ActiveSkills / Cooldowns / DeployedEntities vectors. Reads each vector at the current offset AND at current+0x10, DECODES the first entries (castType / cooldown details), and scans the region for vector-shaped pointer pairs — so the correct offset is picked by content (valid detail pointers + sane castTypes), not by a count that just looks plausible. Be in-game, then click. Writes logs\InGameStateMonitor.actor_vector_probe.log">🧬 Probe Actor Vectors</button>
                   <button class="tree-tbtn" onclick="ahkCall('PathfindingProbeRun')" data-tip="Diagnostic: enumerate awake monsters, resolve their Pathfinding component and dump the candidate Flying (0xE5) / BaseSpeed (0xEC) fields plus raw hex, to verify the hypothesis offsets cross-referenced from Sikaka/POE2Radar. Stand in a populated area. Writes logs\InGameStateMonitor.pathfinding_probe.log">🏃 Probe Pathfinding</button></div>
                 <div class="cfg-help">Post-patch triage: each probe re-locates one drifted offset family in the live game (AreaInstance, components, UI/map chain, skills, Actor fields, pathfinding) and writes a log readable under <b>Data &amp; Logs</b>.</div>
@@ -8448,6 +8513,14 @@
       val('rvb-minEx', s.minEx);
     }
 
+    function chestOpenSyncFromHeader(s) {
+      if (!s) return;
+      const chk = (id, v) => { const e = document.getElementById(id); if (e) e.checked = v === true || v === 1 || v === '1' || v === 'true'; };
+      chk('tog-chest-open', s.openChests);
+      chk('tog-chest-strongbox', s.openStrongboxes);
+      chk('tog-chest-rareonly', s.rareOnly);
+    }
+
     function customLandmarksSyncFromHeader(s) {
       if (!s) return;
       const truthy = v => v === true || v === 1 || v === '1' || v === 'true';
@@ -8850,6 +8923,9 @@
     // Buffs seen on the player this session (internal name → display name), accumulated from
     // the live updateBuffs feed so the buff-condition dropdown fills itself automatically.
     let hkSeenBuffs = {};
+    // Restore the accumulated buff catalog from previous sessions so the buff-condition
+    // typeahead is populated even for buffs not currently active (persisted in updateBuffs).
+    try { const _sb = localStorage.getItem('hkSeenBuffs'); if (_sb) hkSeenBuffs = JSON.parse(_sb) || {}; } catch (e) {}
     // Called by AHK with the resolved in-game key bindings + active skill names.
     function updateHotkeyBindings(jsonStr) {
       try { hkBindings = JSON.parse(jsonStr); } catch (e) { return; }
@@ -9232,6 +9308,7 @@
       charges: 'Condition: Charges',
       monsterCount: 'Condition: Monster count',
       enemyAnim: 'Condition: Enemy animation',
+      enemyBuff: 'Condition: Enemy buff/curse',
       aim: 'Mouse move (auto-aim)',
       // Legacy types — kept so pre-merge exports still read correctly.
       press: 'Key press / hold / loop',
@@ -9265,19 +9342,36 @@
       hkChanged();
     }
 
-    // Buff-condition picker: a dropdown that fills itself from the buffs seen on the player
-    // (hkSeenBuffs, accumulated from the live Skills & Buffs feed) — no hand-maintained field.
-    // The option VALUE is the internal buff name the engine substring-matches; the label is
-    // the translated display name. A saved value stays selectable even when that buff isn't
-    // currently active.
+    // ── Buff-condition picker (free-text + typeahead) ──────────────────────────
+    // A free-text input backed by a shared <datalist> of buffs the player has had
+    // active (hkSeenBuffs, persisted across sessions). The stored value is the
+    // internal buff name the engine substring-matches — so ANY buff or curse can be
+    // targeted by typing it, even one that is NOT currently active (the fix for
+    // "the buff I use isn't in the list, so nothing recasts it"). Buffs seen live
+    // are suggested with their pretty label; a partial name works (substring match).
+    function hkBuildBuffDatalist() {
+      let dl = document.getElementById('buff-names-list');
+      if (!dl) { dl = document.createElement('datalist'); dl.id = 'buff-names-list'; document.body.appendChild(dl); }
+      const keys = Object.keys(hkSeenBuffs).sort((x, y) => hkSeenBuffs[x].localeCompare(hkSeenBuffs[y]));
+      if (dl.childElementCount === keys.length) return;   // hkSeenBuffs only grows; skip rebuild when unchanged
+      const frag = document.createDocumentFragment();
+      for (const iv of keys) {
+        const o = document.createElement('option');
+        o.value = iv; o.label = hkSeenBuffs[iv];
+        frag.appendChild(o);
+      }
+      dl.replaceChildren(frag);
+    }
+    function hkBuffInputHtml(cur, onChangeAttr) {
+      return `<input type="text" class="hk-buff-input" list="buff-names-list" spellcheck="false" `
+           + `value="${hkEsc(cur)}" placeholder="buff name…" `
+           + `data-tip="Type any buff/curse internal name (e.g. arcane_surge) or pick a suggested one. Matches by substring; buffs you've had active are suggested and remembered across sessions." `
+           + `${onChangeAttr}>`;
+    }
     function hkBuffField(a, gi, hi, ai) {
+      hkBuildBuffDatalist();
       const cur = a.buffName != null ? String(a.buffName) : '';
-      const entries = Object.keys(hkSeenBuffs).sort((x, y) => hkSeenBuffs[x].localeCompare(hkSeenBuffs[y]));
-      let opts = `<option value="" ${cur === '' ? 'selected' : ''}>— pick a buff —</option>`;
-      opts += entries.map(iv => `<option value="${hkEsc(iv)}" ${cur === iv ? 'selected' : ''}>${hkEsc(hkSeenBuffs[iv])}</option>`).join('');
-      if (cur !== '' && !(cur in hkSeenBuffs))
-        opts += `<option value="${hkEsc(cur)}" selected>${hkEsc(cur)} (not active)</option>`;
-      return `<select data-tip="Fills itself from the player's active buffs (Game › Skills & Buffs)" onchange="hkSetAct(${gi},${hi},${ai},'buffName',this.value)">${opts}</select>`;
+      return hkBuffInputHtml(cur, `onchange="hkSetAct(${gi},${hi},${ai},'buffName',this.value.trim())"`);
     }
 
     // Opens the shared color picker for a monsterCount action's range circle, writing the
@@ -9623,6 +9717,7 @@
         case 'charges':      return { type, chargeType: 'power', op: '>=', value: 1 };
         case 'monsterCount': return { type, rarity: 'any', radiusMode: 'player', radius: 120, op: '>=', value: 1 };
         case 'enemyAnim':    return { type, animIds: '', radiusMode: 'world', worldRadius: 1200, radius: 120, debug: 0, circleColor: '#FF6A6A' };
+        case 'enemyBuff':    return { type, buffName: '', mode: 'present', radiusMode: 'world', worldRadius: 1200, radius: 120 };
         case 'aim':          return { type, targetType: 'monster', rarity: 'any', radius: 150, worldRadius: 1000, radiusMode: 'cursor', chestType: '', chestTypeCustom: 0, name: '', metadataPath: '', press: 1, holdMs: 0, scanAll: 0 };
         default:             return { type: 'key', mode: 'press' };
       }
@@ -9645,7 +9740,7 @@
     //   { kind:'group', mode:'all'|'any', cid, children:[ <node>... ] }
     //   leaf = a condition action ({type:'vitals'|'buff'|'charges'|'monsterCount', ...})
     // cid is a UI-only stable handle for addressing a node in onchange handlers.
-    const HK_COND_TYPES = ['vitals', 'buff', 'charges', 'monsterCount', 'monsterCountCursor', 'enemyAnim'];
+    const HK_COND_TYPES = ['vitals', 'buff', 'charges', 'monsterCount', 'monsterCountCursor', 'enemyAnim', 'enemyBuff'];
     function hkIsCondType(t) { return HK_COND_TYPES.includes(t); }
     let hkCidSeq = 1;
     function hkNewCid() { return hkCidSeq++; }
@@ -9777,12 +9872,9 @@
       return `<input type="text" placeholder="${ph}" value="${hkEsc(a[k] || '')}" onchange="hkSetCond(${gi},${hi},${a.cid},'${k}',this.value)">`;
     }
     function hkCBuffField(a, gi, hi) {
+      hkBuildBuffDatalist();
       const cur = a.buffName != null ? String(a.buffName) : '';
-      const entries = Object.keys(hkSeenBuffs).sort((x, y) => hkSeenBuffs[x].localeCompare(hkSeenBuffs[y]));
-      let opts = `<option value="" ${cur === '' ? 'selected' : ''}>— pick a buff —</option>`;
-      opts += entries.map(iv => `<option value="${hkEsc(iv)}" ${cur === iv ? 'selected' : ''}>${hkEsc(hkSeenBuffs[iv])}</option>`).join('');
-      if (cur !== '' && !(cur in hkSeenBuffs)) opts += `<option value="${hkEsc(cur)}" selected>${hkEsc(cur)} (not active)</option>`;
-      return `<select data-tip="Fills itself from the player's active buffs (Game › Skills & Buffs)" onchange="hkSetCond(${gi},${hi},${a.cid},'buffName',this.value)">${opts}</select>`;
+      return hkBuffInputHtml(cur, `onchange="hkSetCond(${gi},${hi},${a.cid},'buffName',this.value.trim())"`);
     }
 
     // ── Enemy-animation picker (search by NAME, store IDs) ──────────────────────
@@ -9968,6 +10060,7 @@
             <option value="vitals">Vitals</option><option value="buff">Buff</option>
             <option value="charges">Charges</option><option value="monsterCount">Monster count</option>
             <option value="enemyAnim">Enemy animation</option>
+            <option value="enemyBuff">Enemy buff/curse</option>
           </select>
           <button class="hk-btn" data-tip="Add the selected condition to this group" onclick="hkAddCond(${gi},${hi},${cid})">+ Condition</button>
           <button class="hk-btn" data-tip="Add a nested group — a bracket — with its own ALL/ANY" onclick="hkAddCondGroup(${gi},${hi},${cid})">+ Group ( )</button>` : '';
@@ -10022,6 +10115,17 @@
                + eaRadiusField
                + `${hkCSel(a, 'radiusMode', [['world', 'around player (range)'], ['player', 'around player (px)'], ['cursor', 'around cursor (px)']], gi, hi, 'World-unit range around the player, or a pixel radius around the player / cursor')}`
                + eaStrip;
+          break;
+        }
+        case 'enemyBuff': {
+          const ebWorld = (a.radiusMode || 'world') !== 'player' && (a.radiusMode || 'world') !== 'cursor';
+          const ebRadiusField = ebWorld
+            ? `Range ${hkCNum(a, 'worldRadius', 1200, gi, hi, 'Radius in world units (zoom-independent — matches the actual game distance)')} `
+            : `Radius(px) ${hkCNum(a, 'radius', 120, gi, hi, 'Radius in screen pixels')} `;
+          body = `Enemy ${hkCSel(a, 'mode', [['present', 'has'], ['absent', 'missing']], gi, hi, 'has = an enemy in range carries the buff/curse; missing = an enemy in range LACKS it (the recast-a-curse case)')} `
+               + `buff ${hkCBuffField(a, gi, hi)} `
+               + ebRadiusField
+               + `${hkCSel(a, 'radiusMode', [['world', 'around player (range)'], ['player', 'around player (px)'], ['cursor', 'around cursor (px)']], gi, hi, 'World-unit range around the player, or a pixel radius around the player / cursor')}`;
           break;
         }
         default: body = `<span style="color:var(--subtext)">unknown condition</span>`;
@@ -11533,6 +11637,7 @@
       if (d.lootRadarValue !== undefined) _hdrTry('lootRadarValue', () => lootRadarValueSyncFromHeader(d.lootRadarValue));
       if (d.uiHoverPrice !== undefined) _hdrTry('uiHoverPrice', () => uiHoverPriceSyncFromHeader(d.uiHoverPrice));
       if (d.ritualValueBadges !== undefined) _hdrTry('ritualValueBadges', () => ritualValueBadgesSyncFromHeader(d.ritualValueBadges));
+      if (d.chestOpen !== undefined) _hdrTry('chestOpen', () => chestOpenSyncFromHeader(d.chestOpen));
       if (d.customLandmarks !== undefined) _hdrTry('customLandmarks', () => customLandmarksSyncFromHeader(d.customLandmarks));
       if (d.lootLabelClear !== undefined) _hdrTry('lootLabelClear', () => lootLabelClearSyncFromHeader(d.lootLabelClear));
       if (d.lootTradePricing !== undefined) _hdrTry('lootTradePricing', () => lootTradePricingSyncFromHeader(d.lootTradePricing));
@@ -11916,6 +12021,12 @@
         const el = document.getElementById('inp-combat-w2s');
         if (el && el !== document.activeElement) { el.value = d.combatW2S; _sbSync(el, 'combat-w2s-bub', parseFloat(d.combatW2S).toFixed(2)); }
       }
+      if (d.combatAutoDodge !== undefined) { const el = document.getElementById('tog-combat-dodge'); if (el) el.checked = d.combatAutoDodge === true; }
+      if (d.combatDodgeKey !== undefined) { const el = document.getElementById('inp-combat-dodge-key'); if (el && el !== document.activeElement) el.value = d.combatDodgeKey || ''; }
+      if (d.combatDodgeHp !== undefined) {
+        const el = document.getElementById('inp-combat-dodge-hp');
+        if (el && el !== document.activeElement) { el.value = d.combatDodgeHp; _sbSync(el, 'combat-dodge-hp-bub', d.combatDodgeHp); }
+      }
       if (d.combatSlots !== undefined) _renderCombatSlots(d.combatSlots);
 
       // Update range circles when combat enabled state changes (e.g. via F10 hotkey)
@@ -11943,6 +12054,7 @@
         setChk('loot-rar-rare',     r.Rare);
         setChk('loot-rar-unique',   r.Unique);
         setChk('loot-rar-currency', r.Currency);
+        if (r.Gems !== undefined) setChk('loot-rar-gems', r.Gems);
       }
       const lootStatus = document.getElementById('cfg-loot-status');
       if (lootStatus && d.lootReason !== undefined) {
@@ -12050,6 +12162,94 @@
     function _toggleInternalSkills() {
       _showInternalSkills = !_showInternalSkills;
       if (_lastSkillsRaw) updateSkills(_lastSkillsRaw);
+    }
+
+    // Auto-configure the combat slots from the player's equipped skill bar: AHK
+    // reads the live skill→key mapping and rewrites the slots, then re-pushes the
+    // header so _renderCombatSlots repaints them. The outcome comes back via
+    // combatAutoConfigResult (called from AHK by name on window).
+    function combatAutoConfig() {
+      const m = document.getElementById('combat-autoconfig-msg');
+      if (m) { m.textContent = 'reading skill bar…'; m.style.color = 'var(--codex-text)'; }
+      try { ahkCall('AutoConfigCombat'); } catch (e) {}
+    }
+    function combatAutoConfigResult(status) {
+      const m = document.getElementById('combat-autoconfig-msg'); if (!m) return;
+      const s = String(status == null ? '' : status);
+      if (s.slice(0, 3) === 'ok:') {
+        m.textContent = '✓ configured ' + s.slice(3) + ' slot(s) — review AoE/buff types & disable any movement or toggle-aura slot';
+        m.style.color = 'var(--accent)';
+      } else {
+        const why = s === 'no-skillbar' ? 'skill bar not visible — get in-game first'
+                  : s === 'no-reader' ? 'game not connected'
+                  : s === 'no-skills-resolved' ? 'no skills resolved from the bar'
+                  : (s || 'failed');
+        m.textContent = '⚠ ' + why;
+        m.style.color = 'var(--danger, #d88)';
+      }
+    }
+
+    // ── Path of Building import ────────────────────────────────────────────────
+    // Decodes a PoB export code entirely in the browser (base64url → zlib inflate
+    // via the native DecompressionStream → XML) and extracts the ACTIVE skill gem
+    // names in order. The ordered names go to AHK (ImportBuildRotation), which maps
+    // them to the player's live skills + keys and fills the combat slots, applying
+    // the build's recommended rotation ORDER as slot priority.
+    async function pobDecodeToXml(code) {
+      let b64 = String(code || '').trim().replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+      while (b64.length % 4) b64 += '=';
+      const bin = atob(b64);
+      const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+      // PoB uses zlib (deflate WITH header) → DecompressionStream('deflate').
+      const ds = new DecompressionStream('deflate');
+      const buf = await new Response(new Blob([bytes]).stream().pipeThrough(ds)).arrayBuffer();
+      return new TextDecoder().decode(buf);
+    }
+    function pobActiveSkills(xml) {
+      const doc = new DOMParser().parseFromString(xml, 'text/xml');
+      if (doc.querySelector('parsererror')) throw new Error('not valid PoB XML');
+      const out = [], seen = new Set();
+      // Socketed gems are <Gem> elements. Support gems have a skillId starting with
+      // "Support" (and/or "Support" in the nameSpec) — skip those; keep active skills.
+      for (const g of doc.querySelectorAll('Gem')) {
+        const nameSpec = g.getAttribute('nameSpec');
+        const skillId  = g.getAttribute('skillId') || '';
+        if (!nameSpec) continue;
+        if (/^support/i.test(skillId) || /\bsupport\b/i.test(nameSpec)) continue;
+        const key = nameSpec.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(nameSpec);
+      }
+      return out;
+    }
+    async function importPobCode() {
+      const m = document.getElementById('pob-import-msg');
+      const setMsg = (t, ok) => { if (m) { m.textContent = t; m.style.color = ok ? 'var(--accent)' : 'var(--danger, #d88)'; } };
+      const code = (document.getElementById('pob-code-input') || {}).value || '';
+      if (!code.trim()) { setMsg('paste a PoB code first', false); return; }
+      setMsg('decoding…', true);
+      try {
+        const xml = await pobDecodeToXml(code);
+        const skills = pobActiveSkills(xml);
+        if (!skills.length) { setMsg('⚠ no active skills found in that code', false); return; }
+        setMsg('mapping ' + skills.length + ' skill(s) to your keys…', true);
+        ahkCall('ImportBuildRotation', skills.join('\n'));
+      } catch (e) {
+        setMsg('⚠ decode failed: ' + (e && e.message ? e.message : e), false);
+      }
+    }
+    function buildImportResult(status) {
+      const m = document.getElementById('pob-import-msg'); if (!m) return;
+      const s = String(status == null ? '' : status);
+      if (s.slice(0, 3) === 'ok:') {
+        m.textContent = '✓ imported ' + s.slice(3) + ' skill(s) — bound ones enabled; review types & keys';
+        m.style.color = 'var(--accent)';
+      } else {
+        const why = s === 'no-reader' ? 'game not connected' : s === 'no-skills' ? 'no skills to import' : s;
+        m.textContent = '⚠ ' + why;
+        m.style.color = 'var(--danger, #d88)';
+      }
     }
 
     function _renderCombatSlots(slots) {
@@ -12449,7 +12649,11 @@
           _buffGrew = true;
         }
       }
-      if (_buffGrew && typeof hkRender === 'function') hkRender();
+      if (_buffGrew) {
+        try { localStorage.setItem('hkSeenBuffs', JSON.stringify(hkSeenBuffs)); } catch (e) {}
+        if (typeof hkBuildBuffDatalist === 'function') hkBuildBuffDatalist();
+        if (typeof hkRender === 'function') hkRender();
+      }
       const filtered = data.filter(b => !_blacklist.has(b.n || b.name || ''));
       if (filtered.length === 0) { el.innerHTML = '<div class="buff-empty">All buffs blacklisted</div>'; return; }
       const toTitle = s => s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());

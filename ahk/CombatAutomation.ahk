@@ -38,6 +38,7 @@ TryCombatAutomation(radarSnap, gameHwnd)
         global g_combatSkillCooldowns
         global g_radarOverlay
         global g_combatNoPathBlacklist
+        global g_combatAutoDodge, g_combatDodgeKey, g_combatDodgeHpPct, g_combatDodgeCooldownMs
 
         ; Default: no combat path on the overlay. Each tick clears the carrier
         ; first; the LoS-blocked branch later in the function overrides it back
@@ -138,12 +139,70 @@ TryCombatAutomation(radarSnap, gameHwnd)
             return false
         }
 
+        ; ── Auto-dodge (panic) ────────────────────────────────────────────
+        ; When enabled and player life drops to/below the threshold, fire the
+        ; configured dodge-roll key to escape (throttled by g_combatDodgeCooldownMs).
+        ; A keypress needs no aim/projection, so this runs BEFORE the camera gate —
+        ; it still works when the W2S matrix is bad. Dodges in the current facing /
+        ; cursor direction (a later refinement could aim away from the nearest enemy
+        ; first). Opt-in (default off) + needs a configured key, so it can't affect
+        ; anyone who hasn't set it up.
+        if (g_combatAutoDodge && g_combatDodgeKey != "")
+        {
+            static _dodgeLastTick := 0
+            hpPct := _CombatPlayerHpPct(radarSnap)
+            if (hpPct >= 0 && hpPct <= g_combatDodgeHpPct
+                && (A_TickCount - _dodgeLastTick) > g_combatDodgeCooldownMs)
+            {
+                _SendSkillKey(g_combatDodgeKey, gameHwnd)
+                _dodgeLastTick := A_TickCount
+                g_combatLastReason := "auto-dodge(hp=" Round(hpPct) "%)"
+                return true
+            }
+        }
+
         ; Publish the engaged enemy as the combat target marker on the radar
         ; (red ring + crosshair, drawn next to the red combat path polyline).
         if (g_radarOverlay && combatInfo["nearestWorldX"] != 0)
         {
             g_radarOverlay._combatTargetGX := Round(combatInfo["nearestWorldX"] / TerrainPathfinder.WORLD_TO_GRID_RATIO)
             g_radarOverlay._combatTargetGY := Round(combatInfo["nearestWorldY"] / TerrainPathfinder.WORLD_TO_GRID_RATIO)
+        }
+
+        ; ── Continuous-engagement watchdog (fixes the multi-tens-of-seconds hang) ──
+        ; The per-target no-path give-up resets whenever a DIFFERENT packmate
+        ; becomes the nearest enemy, so a mixed pack with off-floor / unreachable
+        ; members (hd~90) could hold the combat tick for 30 s+ while exploration
+        ; stayed frozen (observed: 34 s at one explore waypoint). This global cap
+        ; starts a timer when combat is first entered and RESETS it on real
+        ; progress (any drop in hostileCount = a kill / a mob leaving range). If
+        ; combat holds the tick for MAX_ENGAGE_MS with NO progress AND it is a
+        ; pack (>= 3 hostiles — solo rares/bosses are legitimately slow and must
+        ; NOT be abandoned), blacklist the whole hostile cluster and yield to
+        ; exploration. The lone-straggler case is already covered by the
+        ; per-target no-path give-up above.
+        static MAX_ENGAGE_MS := 28000
+        static _engageStart := 0
+        static _engageMinHostiles := 999999
+        if (prevState = "idle")            ; just transitioned idle → combat this tick
+        {
+            _engageStart := A_TickCount
+            _engageMinHostiles := hostileCount
+        }
+        if (hostileCount < _engageMinHostiles)   ; progress — a hostile died / left range
+        {
+            _engageMinHostiles := hostileCount
+            _engageStart := A_TickCount
+        }
+        if (_engageStart && hostileCount >= 3 && (A_TickCount - _engageStart) > MAX_ENGAGE_MS)
+        {
+            blN := _CombatBlacklistPackNear(radarSnap
+                , combatInfo["nearestWorldX"], combatInfo["nearestWorldY"], 1600, 25000)
+            g_combatState := "idle"
+            _engageStart := 0
+            _engageMinHostiles := 999999
+            g_combatLastReason := "engage-timeout(" MAX_ENGAGE_MS "ms n=" hostileCount " bl=" blN ")"
+            return false
         }
 
         ; ── Camera anchor (shared projection sanity gate, see ClickNav) ───
@@ -358,10 +417,40 @@ TryCombatAutomation(radarSnap, gameHwnd)
         ; ends the combat tick badly. Skip the tick — next frame's
         ; projection geometry usually shifts the aim off the obstacle.
         avoidRects := GetAvoidZones(radarSnap, gameHwnd)
-        if IsPointInAvoidZone(targetScreenPos["x"], targetScreenPos["y"], avoidRects)
+        azKind := AvoidZoneHitKind(targetScreenPos["x"], targetScreenPos["y"], avoidRects)
+        if (azKind = "ent")
         {
-            g_combatLastReason := "avoid-zone(" targetScreenPos["x"] "," targetScreenPos["y"] " aim=" aimTag ")"
-            return true   ; engaged, just skipping the click this tick
+            ; Interactable under the aim (transition / portal / waypoint / NPC) —
+            ; never click near it (would change zone / open a dialog). Skip; the
+            ; next tick's geometry usually shifts the aim off it.
+            g_combatLastReason := "avoid-zone(" targetScreenPos["x"] "," targetScreenPos["y"] " aim=" aimTag "/ent)"
+            return true
+        }
+        if (azKind != "")
+        {
+            ; The DIRECT aim projects onto the HUD / minimap band — a "south" enemy
+            ; that projects low onto the flask/globe strip. IDLING here (the old
+            ; behavior) STALLED combat on such a mob every tick — worse since the
+            ; bottom HUD band was widened, so the enemy's aim kept landing in it and
+            ; the bot just sat there (observed at the end of the owner's status log).
+            ; Instead REPOSITION: rescue a clear point toward the enemy (NavValidateClick
+            ; pulls it up out of the HUD, the same rescue exploration uses) and issue a
+            ; throttled move-click so the character steps and the enemy re-projects off
+            ; the HUD. No skill fire — the cursor isn't on the enemy this tick.
+            static _hudRepoTick := 0
+            rescue := NavValidateClick(targetScreenPos, camAnchor["sp"], avoidRects)
+            nowH := A_TickCount
+            if (rescue["ok"] && (nowH - _hudRepoTick) > 250)
+            {
+                DllCall("SetCursorPos", "int", rescue["sp"]["x"], "int", rescue["sp"]["y"])
+                Sleep(15)
+                DllCall("mouse_event", "uint", 0x0002, "int", 0, "int", 0, "uint", 0, "uptr", 0) ; LDOWN
+                Sleep(15)
+                DllCall("mouse_event", "uint", 0x0004, "int", 0, "int", 0, "uint", 0, "uptr", 0) ; LUP
+                _hudRepoTick := nowH
+            }
+            g_combatLastReason := "hud-reposition(" targetScreenPos["x"] "," targetScreenPos["y"] " aim=" aimTag ")"
+            return true
         }
 
         _MoveMouseToTarget(targetScreenPos)
@@ -383,6 +472,9 @@ TryCombatAutomation(radarSnap, gameHwnd)
         {
             static _walkClickTick := 0
             now := A_TickCount
+            ; Give up on a reachable-but-unwalkable enemy instead of clicking forever.
+            if (_CombatMoveStuckGiveUp(now, radarSnap, combatInfo, aimTag))
+                return false
             if ((now - _walkClickTick) > 250)
             {
                 DllCall("mouse_event", "uint", 0x0002, "int", 0, "int", 0, "uint", 0, "uptr", 0) ; LDOWN
@@ -413,7 +505,13 @@ TryCombatAutomation(radarSnap, gameHwnd)
             if (_aimStartTick = 0)
                 _aimStartTick := A_TickCount
             aimElapsed := A_TickCount - _aimStartTick
-            if (aimElapsed < 1500)
+            ; Grace before firing anyway when the game hasn't confirmed the cursor
+            ; is on the enemy. Was 1500 ms — far too long: the bot stood frozen up
+            ; to 1.5 s per target (status log showed aiming(1406ms)). 500 ms fires
+            ; much sooner so it keeps attacking while repositioning ("attack while
+            ; moving" in spirit) — the cursor is already on the enemy, so a slightly
+            ; early fire still lands.
+            if (aimElapsed < 500)
             {
                 g_combatLastReason := "aiming(" aimElapsed "ms)"
                 return true   ; still in combat — block exploration
@@ -485,6 +583,9 @@ TryCombatAutomation(radarSnap, gameHwnd)
         }
         else if (selResult["outOfRange"])
         {
+            ; Give up if we've been approaching an unreachable enemy without moving.
+            if (_CombatMoveStuckGiveUp(now, radarSnap, combatInfo, "approach"))
+                return false
             ; Direct LoS but every ready skill is out of range. Previously
             ; this branch only set a status ("approaching") without ever
             ; moving — the bot parked the cursor on the enemy and stood
@@ -568,6 +669,21 @@ UpdateCombatPresence(radarSnap)
     }
 }
 
+; Player life % from the radar snapshot's playerVitals (0..100), or -1 when
+; unreadable. Used by the combat auto-dodge trigger.
+_CombatPlayerHpPct(radarSnap)
+{
+    pv := radarSnap.Has("playerVitals") ? radarSnap["playerVitals"] : 0
+    if !(pv && IsObject(pv) && pv.Has("stats"))
+        return -1
+    st := pv["stats"]
+    cur := st.Has("lifeCurrent") ? st["lifeCurrent"] : 0
+    max := st.Has("lifeMax") ? st["lifeMax"] : 0
+    if (max <= 0)
+        return -1
+    return (cur * 100.0) / max
+}
+
 _DetectCombat(radarSnap)
 {
     global g_combatRange, g_reader, g_combatNoPathBlacklist
@@ -600,8 +716,11 @@ _DetectCombat(radarSnap)
         result["playerWorldZ"] := pwp.Has("z") ? pwp["z"] : 0
     }
 
+    static _stickyTargetAddr := 0   ; last tick's committed target — kept unless another is much closer
+    static STICKY_BONUS := 600      ; world units another hostile must be closer by to steal focus
     hostileCount := 0
     nearestDist := 999999.0
+    bestScore := 999999.0
 
     for _, entry in sample
     {
@@ -619,6 +738,14 @@ _DetectCombat(radarSnap)
 
         ; Only monsters/characters (not player, not attachments)
         if !g_reader.IsNpcLikeEntityPath(path)
+            continue
+
+        ; NPCs are never combat targets. IsNpcLikeEntityPath intentionally
+        ; includes metadata/npc/ for the RADAR display (dialogue givers, vendors,
+        ; lore objects), but engaging them makes the bot "fight" a talkable object
+        ; — e.g. "Testament of Keth" (a dialogue monument). Real enemies live under
+        ; metadata/monsters/ or metadata/characters/, so drop npc/ here.
+        if InStr(StrLower(path), "metadata/npc/")
             continue
 
         ; Skip enemies we recently gave up on (no traversable path) so the
@@ -687,8 +814,19 @@ _DetectCombat(radarSnap)
             continue
 
         hostileCount += 1
-        if (dist < nearestDist)
+        ; Sticky targeting: bias selection toward the enemy we're already fighting
+        ; (score = distance minus a bonus for the sticky addr) so the "nearest"
+        ; target no longer flips between packmates at similar range every tick —
+        ; that flip caused the walk-engage zig-zag / constant re-pathing in the
+        ; status log. A genuinely much-closer threat (> STICKY_BONUS nearer) still
+        ; steals focus. nearestDist below stays the REAL distance of the pick, so
+        ; all downstream range / arrival / disengage checks are unaffected.
+        score := dist
+        if (_stickyTargetAddr && entityAddr = _stickyTargetAddr)
+            score -= STICKY_BONUS
+        if (score < bestScore)
         {
+            bestScore := score
             nearestDist := dist
             result["nearestPath"] := path
             result["nearestEntityAddr"] := entityAddr
@@ -720,6 +858,10 @@ _DetectCombat(radarSnap)
         }
     }
 
+    ; Commit the selected target so next tick prefers it (sticky targeting). When
+    ; it dies / leaves the sample / gets blacklisted, it simply won't be found and
+    ; selection falls back to the real nearest, which becomes the new sticky.
+    _stickyTargetAddr := result["nearestEntityAddr"]
     result["hostileCount"] := hostileCount
     result["nearestDist"] := nearestDist
     return result
@@ -774,6 +916,88 @@ _CombatBlacklistPackNear(radarSnap, cx, cy, radius, ms)
     return n
 }
 
+; ── Move-progress watchdog (walk-engage / approach) ────────────────────────
+; The no-path give-up only covers enemies with NO A* route at all. A REACHABLE
+; enemy the character still can't walk to (invisible collision, a mob circling
+; just out of reach, a doorway it can't squeeze through) leaves combat issuing
+; move-clicks forever with the character pinned in place — the single biggest
+; "gets stuck all the time" source. This watchdog tracks the player's grid
+; position while combat is walking/approaching; if it hasn't moved for
+; MOVE_STUCK_MS of CONTINUOUS walking, it blacklists the pack (like the no-path
+; give-up) and disengages so loot/explore can run.
+; Params: now (A_TickCount), radarSnap, combatInfo, aimTag (status label).
+; Returns true if it gave up (the caller must then return false), else false.
+_CombatMoveStuckGiveUp(now, radarSnap, combatInfo, aimTag)
+{
+    global g_combatState, g_combatLastReason, g_combatNoPathBlacklist
+    static MOVE_STUCK_MS := 3500     ; continuous no-move-while-walking before give-up
+    static MOVE_CELLS    := 3        ; grid cells that count as "actually moved"
+    static PURSUIT_CAP   := 1800     ; don't WALK to engage a target past this (world units)
+    static PURSUIT_BL_MS := 5000     ; brief blacklist when pursuit-capped (short: char may explore closer)
+    static _mpGX := -999999, _mpGY := -999999, _mpBaseTick := 0, _mpLastCall := 0
+
+    ; ── Pursuit cap ────────────────────────────────────────────────────────
+    ; Runs only from the walk-engage / approach branches — i.e. when the bot must
+    ; MOVE to reach the target. If that target has drifted beyond PURSUIT_CAP (a
+    ; fleeing enemy, or the next member of a spread pack), don't beeline across the
+    ; map after it: the old disengage was 2500 world units, so the bot chased
+    ; enemies out to there for minutes while loot/explore starved (status log:
+    ; walk-engage d=1973 / 2226). Blacklist it briefly and disengage so loot/
+    ; explore run and the char makes forward progress, re-engaging whatever comes
+    ; into range. Enemies the bot can already hit from where it stands never reach
+    ; here (they fire directly), so real fights are unaffected.
+    td := combatInfo.Has("terrainDist") ? (combatInfo["terrainDist"] + 0) : 0
+    if (td > PURSUIT_CAP)
+    {
+        blN := _CombatBlacklistPackNear(radarSnap
+            , combatInfo["nearestWorldX"], combatInfo["nearestWorldY"], 450, PURSUIT_BL_MS)
+        blAddr := combatInfo.Has("nearestEntityAddr") ? combatInfo["nearestEntityAddr"] : 0
+        if (blAddr && IsSet(g_combatNoPathBlacklist))
+            g_combatNoPathBlacklist[blAddr] := A_TickCount + PURSUIT_BL_MS
+        g_combatState := "idle"
+        _mpGX := -999999, _mpGY := -999999, _mpBaseTick := 0, _mpLastCall := 0
+        g_combatLastReason := "pursuit-cap(d=" Round(td) " cap=" PURSUIT_CAP " bl=" blN ")"
+        return true
+    }
+
+    WGRID := 250.0 / 0x17
+    pgx := Round(combatInfo["playerWorldX"] / WGRID)
+    pgy := Round(combatInfo["playerWorldY"] / WGRID)
+
+    ; Re-baseline whenever we RE-ENTER a move state after a gap (last tick was
+    ; direct-fire / idle / another mode). The timer must only measure time spent
+    ; CONTINUOUSLY trying to walk without progress, never carry over standing
+    ; time from an unrelated combat phase.
+    if (_mpLastCall = 0 || (now - _mpLastCall) > 600)
+    {
+        _mpGX := pgx, _mpGY := pgy, _mpBaseTick := now, _mpLastCall := now
+        return false
+    }
+    _mpLastCall := now
+
+    ; Meaningful movement resets the watchdog — a reachable enemy keeps the
+    ; player moving toward it, so this only fires on a genuine pin.
+    if (Abs(pgx - _mpGX) >= MOVE_CELLS || Abs(pgy - _mpGY) >= MOVE_CELLS)
+    {
+        _mpGX := pgx, _mpGY := pgy, _mpBaseTick := now
+        return false
+    }
+    if ((now - _mpBaseTick) <= MOVE_STUCK_MS)
+        return false
+
+    ; Stuck: the enemy is effectively unreachable. Blacklist its pack and
+    ; disengage so the rest of the AutoPilot chain can proceed.
+    blN := _CombatBlacklistPackNear(radarSnap
+        , combatInfo["nearestWorldX"], combatInfo["nearestWorldY"], 700, 30000)
+    blAddr := combatInfo.Has("nearestEntityAddr") ? combatInfo["nearestEntityAddr"] : 0
+    if (blAddr && IsSet(g_combatNoPathBlacklist))
+        g_combatNoPathBlacklist[blAddr] := A_TickCount + 30000
+    g_combatState := "idle"
+    _mpGX := -999999, _mpGY := -999999, _mpBaseTick := 0, _mpLastCall := 0
+    g_combatLastReason := "move-stuck(" aimTag " bl=" blN ")"
+    return true
+}
+
 ; ── Skill Selection ───────────────────────────────────────────────────────
 ; Resolves the actual send key for a combat slot. Prefers the LIVE skill-bar key
 ; for the slot's configured skill name (so the in-game keybind is always honored,
@@ -794,9 +1018,10 @@ _CombatResolveSlotKey(slotCfg)
 _SelectNextSkill(skills, combatInfo)
 {
     global g_combatSkillSlots, g_combatSkillCooldowns
+    static _rotCursor := 0   ; slotNum last fired — the round-robin advances past it
 
-    bestSlot := 0
-    bestPriority := 99999
+    ready := []              ; slot numbers that passed ALL gates this tick
+    readyPrio := Map()       ; slotNum → priority (for the sort below)
     anyOutOfRange := false
 
     for slotNum, slotCfg in g_combatSkillSlots
@@ -864,14 +1089,55 @@ _SelectNextSkill(skills, combatInfo)
             continue
         }
 
-        if (priority < bestPriority)
-        {
-            bestPriority := priority
-            bestSlot := slotNum
-        }
+        ; Passed every gate — eligible to fire this tick.
+        ready.Push(slotNum)
+        readyPrio[slotNum] := priority
     }
 
-    return Map("slot", bestSlot, "outOfRange", anyOutOfRange)
+    if (ready.Length = 0)
+        return Map("slot", 0, "outOfRange", anyOutOfRange)
+
+    ; Order the ready slots by priority (asc), slot number (asc) as a stable
+    ; tiebreak. Insertion sort — the list is ≤ 8 entries.
+    i := 2
+    while (i <= ready.Length)
+    {
+        j := i
+        while (j > 1)
+        {
+            a := ready[j - 1], b := ready[j]
+            if (readyPrio[a] < readyPrio[b] || (readyPrio[a] = readyPrio[b] && a < b))
+                break
+            ready[j - 1] := b, ready[j] := a
+            j--
+        }
+        i++
+    }
+
+    ; ── Rotation cursor ──────────────────────────────────────────────────
+    ; The old selector always returned the SINGLE lowest-priority ready slot,
+    ; so one skill monopolised casting and the others rarely fired ("rotation
+    ; isn't the best"). Instead advance a round-robin cursor through the ready
+    ; slots in priority order: after firing a slot, the next cast picks the
+    ; next ready slot (wrapping), so every enabled+ready skill takes its turn.
+    ; Per-slot cooldownMs still paces how often each re-enters the ready set,
+    ; and priority still orders the cycle (a permanently-ready main skill fires
+    ; once per lap). The cursor tracks a slot NUMBER, so it survives the ready
+    ; set changing between ticks; when the last-fired slot isn't ready, the
+    ; cycle restarts from the highest-priority ready slot.
+    startIdx := 0
+    for idx, s in ready
+    {
+        if (s = _rotCursor)
+        {
+            startIdx := idx
+            break
+        }
+    }
+    nextIdx := Mod(startIdx, ready.Length) + 1
+    chosen := ready[nextIdx]
+    _rotCursor := chosen
+    return Map("slot", chosen, "outOfRange", anyOutOfRange)
 }
 
 ; ── Update cooldown state for UI display ──────────────────────────────────
@@ -1099,6 +1365,8 @@ LoadCombatAutoConfig()
     global g_combatAutoEnabled, g_combatRange, g_combatDisengageRange
     global g_combatGlobalCooldownMs, g_combatSkillSlots, g_combatToggleHotkey
     global g_combatW2SScale, g_combatNoPathBlacklist
+    global g_combatAutoDodge, g_combatDodgeKey, g_combatDodgeHpPct, g_combatDodgeCooldownMs
+    global g_combatRotationAuto, g_combatRotationUserEdited
 
     cfgPath := A_ScriptDir "\poeformance_config.ini"
 
@@ -1108,6 +1376,17 @@ LoadCombatAutoConfig()
     g_combatGlobalCooldownMs := 120
     g_combatToggleHotkey := "F10"
     g_combatW2SScale := 0.20
+    ; Auto-dodge (panic dodge-roll on low life). Opt-in; needs a dodge key set.
+    g_combatAutoDodge := false
+    g_combatDodgeKey := ""
+    g_combatDodgeHpPct := 50
+    g_combatDodgeCooldownMs := 1200
+    ; Auto-manage the rotation from the skill-bar learner: as skills are learned
+    ; during play, fill the combat slots automatically (no auto-config click). The
+    ; moment the user edits a slot, userEdited latches true and auto-management stops
+    ; (clicking auto-config re-enables it). Default ON so a fresh install is hands-off.
+    g_combatRotationAuto := true
+    g_combatRotationUserEdited := false
     ; entityAddr → expiry tick for enemies the no-path give-up disengaged
     ; from (seeded here unconditionally — module-init gotcha, see CLAUDE.md)
     g_combatNoPathBlacklist := Map()
@@ -1118,6 +1397,12 @@ LoadCombatAutoConfig()
     try g_combatGlobalCooldownMs := Integer(IniRead(cfgPath, "CombatAutomation", "globalCooldownMs", "120"))
     try g_combatToggleHotkey := IniRead(cfgPath, "CombatAutomation", "toggleHotkey", "F10")
     try g_combatW2SScale := Float(IniRead(cfgPath, "CombatAutomation", "worldToScreenScale", "0.20"))
+    try g_combatAutoDodge := IniRead(cfgPath, "CombatAutomation", "autoDodge", "0") = "1"
+    try g_combatDodgeKey := IniRead(cfgPath, "CombatAutomation", "dodgeKey", "")
+    try g_combatDodgeHpPct := Integer(IniRead(cfgPath, "CombatAutomation", "dodgeHpPct", "50"))
+    try g_combatDodgeCooldownMs := Integer(IniRead(cfgPath, "CombatAutomation", "dodgeCooldownMs", "1200"))
+    try g_combatRotationAuto := IniRead(cfgPath, "CombatAutomation", "rotationAuto", "1") = "1"
+    try g_combatRotationUserEdited := IniRead(cfgPath, "CombatAutomation", "rotationUserEdited", "0") = "1"
 
     ; Load up to 8 skill slots
     g_combatSkillSlots := Map()
@@ -1163,15 +1448,23 @@ SaveCombatAutoConfig()
     global g_combatAutoEnabled, g_combatRange, g_combatDisengageRange
     global g_combatGlobalCooldownMs, g_combatSkillSlots, g_combatToggleHotkey
     global g_combatW2SScale
+    global g_combatAutoDodge, g_combatDodgeKey, g_combatDodgeHpPct, g_combatDodgeCooldownMs
+    global g_combatRotationAuto, g_combatRotationUserEdited
 
     cfgPath := A_ScriptDir "\poeformance_config.ini"
 
+    try IniWrite((IsSet(g_combatRotationAuto) && g_combatRotationAuto) ? "1" : "0", cfgPath, "CombatAutomation", "rotationAuto")
+    try IniWrite((IsSet(g_combatRotationUserEdited) && g_combatRotationUserEdited) ? "1" : "0", cfgPath, "CombatAutomation", "rotationUserEdited")
     try IniWrite(g_combatAutoEnabled ? "1" : "0", cfgPath, "CombatAutomation", "enabled")
     try IniWrite(String(g_combatRange), cfgPath, "CombatAutomation", "combatRange")
     try IniWrite(String(g_combatDisengageRange), cfgPath, "CombatAutomation", "disengageRange")
     try IniWrite(String(g_combatGlobalCooldownMs), cfgPath, "CombatAutomation", "globalCooldownMs")
     try IniWrite(g_combatToggleHotkey, cfgPath, "CombatAutomation", "toggleHotkey")
     try IniWrite(Format("{:.2f}", g_combatW2SScale), cfgPath, "CombatAutomation", "worldToScreenScale")
+    try IniWrite(g_combatAutoDodge ? "1" : "0", cfgPath, "CombatAutomation", "autoDodge")
+    try IniWrite(g_combatDodgeKey, cfgPath, "CombatAutomation", "dodgeKey")
+    try IniWrite(String(g_combatDodgeHpPct), cfgPath, "CombatAutomation", "dodgeHpPct")
+    try IniWrite(String(g_combatDodgeCooldownMs), cfgPath, "CombatAutomation", "dodgeCooldownMs")
 
     Loop 8
     {
@@ -1189,6 +1482,233 @@ SaveCombatAutoConfig()
             try IniWrite(String(slot.Has("skillRange") ? slot["skillRange"] : 0), cfgPath, "CombatAutomation", prefix "Range")
         }
     }
+}
+
+; ── Auto-configure combat slots from the equipped skill bar ────────────────
+; Reads the player's LIVE skill bar (which skill sits on which key, via
+; SkillBarReader) plus each skill's castType, and rewrites the 8 combat slots to
+; match whatever build is currently equipped — real skill names bound to their
+; real keys. Priority follows skill-bar order; range is inferred from castType
+; (melee 300 / spell 1200); type defaults to "single" and cooldown pacing is left
+; to the live game canUse gate (the name match reads the real cooldown each tick).
+; Persists the result and returns a short status string ("ok:N" | reason).
+AutoConfigureCombatSlots()
+{
+    global g_reader, g_combatSkillSlots, g_skillLearnedByKey
+    if !IsObject(g_reader)
+        return "no-reader"
+    slots := 0
+    try slots := ReadSkillBarSkills(g_reader)
+    if !(slots && slots is Array && slots.Length)
+        return "no-skillbar"     ; not in-game / skill bar not visible on the HUD
+
+    ; Diagnostic dump (triage "only pulled N skills"): logs the RAW skill-bar read
+    ; so we can tell whether it's the enumeration (too few slots), the key-label
+    ; read (slots present but sendKey empty), or skill resolution (key present but
+    ; skill empty). Written on every auto-config click; cheap.
+    try
+    {
+        _dbg := "AutoConfig skill-bar read: " slots.Length " slot(s)`n"
+        for _di, _de in slots
+        {
+            if !(_de is Map)
+                continue
+            _dbg .= "  #" _di
+                . " sendKey='" (_de.Has("sendKey") ? _de["sendKey"] : "") "'"
+                . " rawKey='"  (_de.Has("key") ? _de["key"] : "") "'"
+                . " skill='"   (_de.Has("skillName") ? _de["skillName"] : "") "'"
+                . " int='"     (_de.Has("skillInternal") ? _de["skillInternal"] : "") "'"
+                . " sx=" (_de.Has("screenX") ? Round(_de["screenX"]) : "?")
+                . " sy=" (_de.Has("screenY") ? Round(_de["screenY"]) : "?") "`n"
+        }
+        FileAppend(FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") "`n" _dbg "`n"
+            , A_ScriptDir "\logs\InGameStateMonitor.skillbar_diag.log")
+    }
+
+    ; internalName -> live skill map (for castType).
+    skByInt := Map()
+    lp := _SkillBarLocalPlayerPtr()
+    if lp
+    {
+        sd := 0
+        try sd := g_reader.ReadPlayerSkills(lp)
+        if (sd && sd is Map && sd.Has("skills"))
+        {
+            for sk in sd["skills"]
+            {
+                if (sk is Map && sk.Has("name") && sk["name"] != "")
+                    skByInt[StrLower(sk["name"])] := sk
+            }
+        }
+    }
+
+    newSlots := Map()
+    n := 0
+    for e in slots
+    {
+        if (n >= 8)
+            break
+        if !(e is Map)
+            continue
+        disp  := e.Has("skillName") ? e["skillName"] : ""
+        intnm := e.Has("skillInternal") ? e["skillInternal"] : ""
+        key   := e.Has("sendKey") ? e["sendKey"] : ""
+        ; A slot's skill only resolves live once it has been cast this session, so
+        ; an un-cast slot reads empty. Fall back to the learned map (accumulated by
+        ; LearnSkillBarSlotsTick as skills are used), keyed by the slot's send key,
+        ; so one click fills every skill the player has cast — not just the active
+        ; one. Persisted, so after one play session the whole rotation is known.
+        if (disp = "" && intnm = "" && key != ""
+            && IsSet(g_skillLearnedByKey) && g_skillLearnedByKey is Map
+            && g_skillLearnedByKey.Has(key))
+        {
+            li := g_skillLearnedByKey[key]
+            if (li is Map)
+            {
+                intnm := li.Has("skillInternal") ? li["skillInternal"] : ""
+                disp  := li.Has("skillName") ? li["skillName"] : ""
+            }
+        }
+        if (disp = "" && intnm = "")
+            continue                            ; empty slot / skill never cast yet
+        low := StrLower(intnm)
+        if (low = "move")                       ; the basic move action is never a rotation skill
+            continue
+        if (key = "")                           ; slot not bound to a usable key → can't be cast
+            continue
+
+        castType := -1
+        if (intnm != "" && skByInt.Has(low))
+        {
+            sk := skByInt[low]
+            castType := sk.Has("castType") ? sk["castType"] : -1
+        }
+        rng := 0
+        if (castType = 0)
+            rng := 300                          ; melee / attack
+        else if (castType = 1)
+            rng := 1200                         ; spell
+
+        n += 1
+        nm := (disp != "") ? disp : intnm
+        newSlots[n] := Map(
+            "enabled",     true,
+            "key",         key,
+            "priority",    n,
+            "skillName",   nm,
+            "name",        nm,
+            "type",        "single",
+            "cooldownMs",  0,
+            "lastUseTick", 0,
+            "skillRange",  rng
+        )
+    }
+    if (n = 0)
+        return "no-skills-resolved"
+    g_combatSkillSlots := newSlots
+    SaveCombatAutoConfig()
+    return "ok:" n
+}
+
+; ── Import a build's rotation (ordered skill names) into the combat slots ──
+; The UI decodes a Path of Building code (client-side) into an ORDERED list of
+; active-skill names and passes them here (newline-joined). A PoB build lists
+; EVERY active gem — auras / heralds / curses / triggered / auto-cast skills —
+; not just the manually-spammed damage skills. Only a skill that is actually
+; BOUND TO AN ACTION-BAR KEY can be manually cast, so build-listed skills that
+; don't resolve to a live bar key (reserved / auto-cast / triggered / not yet
+; socketed) are SKIPPED ENTIRELY — they no longer consume one of the 8 slots,
+; which previously let them crowd out the real castable rotation (they were
+; added disabled before). Each remaining name is matched against the player's
+; live skills (by display OR internal name); the key comes from the live skill
+; bar (g_skillKeyBySkillName). Priority follows the build's order. Persists +
+; returns "ok:N/total" (N bound + placed of total listed) | reason.
+ImportBuildRotation(namesText)
+{
+    global g_reader, g_combatSkillSlots, g_skillKeyBySkillName
+    if !IsObject(g_reader)
+        return "no-reader"
+    names := StrSplit(Trim(namesText, " `t`r`n"), "`n")
+    if (names.Length = 0)
+        return "no-skills"
+
+    ; live skills keyed by lowercased display AND internal name.
+    skByName := Map()
+    lp := _SkillBarLocalPlayerPtr()
+    if lp
+    {
+        sd := 0
+        try sd := g_reader.ReadPlayerSkills(lp)
+        if (sd && sd is Map && sd.Has("skills"))
+        {
+            for sk in sd["skills"]
+            {
+                if !(sk is Map)
+                    continue
+                dn  := sk.Has("displayName") ? sk["displayName"] : ""
+                inm := sk.Has("name") ? sk["name"] : ""
+                if (dn != "")
+                    skByName[StrLower(dn)] := sk
+                if (inm != "")
+                    skByName[StrLower(inm)] := sk
+            }
+        }
+    }
+    haveKeys := (IsSet(g_skillKeyBySkillName) && g_skillKeyBySkillName is Map)
+
+    newSlots := Map()
+    n := 0, total := 0
+    for _, raw in names
+    {
+        nm := Trim(raw)
+        if (nm = "")
+            continue
+        total += 1
+        low := StrLower(nm)
+        sk := skByName.Has(low) ? skByName[low] : 0
+
+        key := ""
+        if (haveKeys)
+        {
+            if (g_skillKeyBySkillName.Has(low))
+                key := g_skillKeyBySkillName[low]
+            else if (sk && sk.Has("name") && g_skillKeyBySkillName.Has(StrLower(sk["name"])))
+                key := g_skillKeyBySkillName[StrLower(sk["name"])]
+        }
+        ; Only skills bound to an action-bar key can be manually cast. Auras /
+        ; heralds / triggered / auto-cast / not-yet-socketed gems aren't on the
+        ; bar, so they can never fire — skip them WITHOUT consuming a slot so the
+        ; real castable skills (in build order) fill the 8 slots instead.
+        if (key = "")
+            continue
+        if (n >= 8)
+            continue
+
+        castType := (sk && sk.Has("castType")) ? sk["castType"] : -1
+        rng := 0
+        if (castType = 0)
+            rng := 300
+        else if (castType = 1)
+            rng := 1200
+
+        n += 1
+        newSlots[n] := Map(
+            "enabled",     true,             ; only bound skills reach here
+            "key",         key,
+            "priority",    n,
+            "skillName",   nm,
+            "name",        nm,
+            "type",        "single",
+            "cooldownMs",  0,
+            "lastUseTick", 0,
+            "skillRange",  rng
+        )
+    }
+    if (n = 0)
+        return "no-bound-skills"   ; none of the build's skills are on your action bar
+    g_combatSkillSlots := newSlots
+    SaveCombatAutoConfig()
+    return "ok:" n "/" total
 }
 
 ; ── Hotkey registration ───────────────────────────────────────────────────

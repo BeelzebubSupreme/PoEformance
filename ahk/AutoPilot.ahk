@@ -82,9 +82,21 @@ _RunAutoPilot(radarSnap)
     }
     gameHwnd := guard["gameHwnd"]
 
-    ; ── Priority chain: combat > loot > explore ──────────────────────────
+    ; ── Priority chain: (adjacent chest) > combat > loot > chest > explore ──
     ; Each sub-routine returns true to claim the tick (block the rest).
-    ; Combat first — fighting always beats picking up loot or scouting.
+
+    ; Adjacent-chest opportunistic open — BEFORE combat, so a chest the character
+    ; is standing on gets grabbed even mid-fight (owner-requested). Only fires
+    ; within ADJACENT_RANGE; otherwise it declines and combat runs normally.
+    if (TryChestOpen(radarSnap, gameHwnd, "adjacent"))
+    {
+        global g_chestLastReason
+        g_autoPilotState  := "loot"
+        g_autoPilotReason := "chest: " g_chestLastReason
+        return
+    }
+
+    ; Combat next — fighting beats picking up loot or scouting.
     inCombat := TryCombatAutomation(radarSnap, gameHwnd)
     if (inCombat)
     {
@@ -106,7 +118,18 @@ _RunAutoPilot(radarSnap)
         return
     }
 
-    ; Explore last — no fight, no loot pending; scout the area.
+    ; Chest (safe pass) — no fight, no ground loot pending. Walk to / open the
+    ; nearest eligible chest when the area is clear (this pass gates on
+    ; g_combatRange internally, so a lurking mob defers back to combat).
+    if (TryChestOpen(radarSnap, gameHwnd, "safe"))
+    {
+        global g_chestLastReason
+        g_autoPilotState  := "loot"
+        g_autoPilotReason := "chest: " g_chestLastReason
+        return
+    }
+
+    ; Explore last — no fight, no loot, no chest pending; scout the area.
     TryExploration(radarSnap, gameHwnd)
     g_autoPilotState  := "explore"
     g_autoPilotReason := "scouting"

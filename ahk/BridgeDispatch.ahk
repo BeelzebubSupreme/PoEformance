@@ -194,6 +194,12 @@ _DispatchBridgeCall(method, args)
                 _RvbApplySetting(args[1], args[2])
             SaveRitualValueBadges()
             SetTimer(PushHeaderToWebView, -50)
+        case "SetChestOpen":
+            ; AutoPilot chest auto-open. args[1]=key ("openChests"|"openStrongboxes"),
+            ; args[2]=value. _ChestApplySetting persists internally.
+            if (args.Length >= 2)
+                _ChestApplySetting(args[1], args[2])
+            SetTimer(PushHeaderToWebView, -50)
         case "SetCustomLandmarks":
             ; Curated tile-path landmark labels on the radar (Sikaka port). args[1]=key, args[2]=value.
             if (args.Length >= 2)
@@ -748,6 +754,22 @@ _DispatchBridgeCall(method, args)
             val := (args.Length >= 1) ? args[1] : 0.20
             g_combatW2SScale := Max(0.05, Min(1.0, Float(val)))
             SetTimer(() => SaveCombatAutoConfig(), -100)
+        case "SetCombatAutoDodge":
+            global g_combatAutoDodge
+            g_combatAutoDodge := (args.Length >= 1 && (args[1] = 1 || args[1] = "1" || args[1] = true))
+            SetTimer(() => SaveCombatAutoConfig(), -100)
+            SetTimer(PushHeaderToWebView, -50)
+        case "SetCombatDodgeKey":
+            ; args: [ahkKeyString] — the in-game dodge-roll key ("" clears / disables the press).
+            global g_combatDodgeKey
+            g_combatDodgeKey := (args.Length >= 1) ? Trim(String(args[1])) : ""
+            SetTimer(() => SaveCombatAutoConfig(), -100)
+            SetTimer(PushHeaderToWebView, -50)
+        case "SetCombatDodgeHp":
+            global g_combatDodgeHpPct
+            val := (args.Length >= 1) ? args[1] : 50
+            g_combatDodgeHpPct := Max(5, Min(95, Integer(val)))
+            SetTimer(() => SaveCombatAutoConfig(), -100)
         case "SetCombatSlot":
             ; args: [slotNum, key, priority, skillName, type, cooldownMs, enabled, skillRange]
             _ApplyCombatSlotConfig(args)
@@ -759,12 +781,27 @@ _DispatchBridgeCall(method, args)
             SaveCombatAutoConfig()
             RegisterCombatHotkey()
             SetTimer(PushHeaderToWebView, -50)
+        case "AutoConfigCombat":
+            ; Fill the combat slots from the equipped skill bar, report the result,
+            ; then re-push the header so the slot rows re-render populated. An
+            ; explicit auto-config click re-enables learner auto-management.
+            global g_combatRotationUserEdited
+            g_combatRotationUserEdited := false
+            acRes := AutoConfigureCombatSlots()
+            try WebViewExec("window.combatAutoConfigResult && window.combatAutoConfigResult(" _JsStr(acRes) ")")
+            SetTimer(PushHeaderToWebView, -60)
+        case "ImportBuildRotation":
+            ; args: [newline-joined ordered active-skill names, decoded from a PoB
+            ; code client-side]. Map to live skills/keys → fill slots → report.
+            ibRes := ImportBuildRotation((args.Length >= 1) ? String(args[1]) : "")
+            try WebViewExec("window.buildImportResult && window.buildImportResult(" _JsStr(ibRes) ")")
+            SetTimer(PushHeaderToWebView, -60)
 
             ; ── Loot Pickup rarity filter (no toggle — empty filter = off) ─
         case "SetLootRarity":
             ; args: [rarityLabel ("Normal"|"Magic"|"Rare"|"Unique"|"Currency"), bool]
             global g_lootRarityNormal, g_lootRarityMagic, g_lootRarityRare
-            global g_lootRarityUnique, g_lootRarityCurrency
+            global g_lootRarityUnique, g_lootRarityCurrency, g_lootRarityGems
             lblRar := (args.Length >= 1) ? String(args[1]) : ""
             vRar := (args.Length >= 2) ? args[2] : false
             bvRar := (vRar = "true" || vRar = true || vRar = 1) ? true : false
@@ -775,6 +812,7 @@ _DispatchBridgeCall(method, args)
                 case "Rare":     g_lootRarityRare     := bvRar
                 case "Unique":   g_lootRarityUnique   := bvRar
                 case "Currency": g_lootRarityCurrency := bvRar
+                case "Gems":     g_lootRarityGems     := bvRar
             }
             SetTimer(() => SaveLootPickupConfig(), -100)
 
@@ -923,6 +961,10 @@ _DispatchBridgeCall(method, args)
             SetTimer(() => DetectSkillKeysAndReport(), -1)
         case "DiagSkillSlotLink":
             SetTimer(() => DiagSkillSlotLink(), -1)
+        case "SkillBarArrayProbe":
+            SetTimer(() => SkillBarArrayProbe(), -1)
+        case "SkillGemProbe":
+            SetTimer(() => SkillGemProbe(), -1)
         case "RefreshSkillKeys":
             SetTimer(PushHotkeyBindingsToWebView, -1)
         case "RefreshItemSizes":
@@ -1007,6 +1049,9 @@ _DispatchBridgeCall(method, args)
         case "ActorProbeRun":
             ; TEMP diagnostic: time-sample the Actor struct to locate the drifted animationId.
             SetTimer(() => ActorProbeRun(), -1)
+        case "EnemyBuffProbeRun":
+            ; RE aid: dump the nearest hostile's buffs via the verified pointer-array read.
+            SetTimer(() => EnemyBuffProbeRun(), -1)
         case "ActorVectorProbeRun":
             ; TEMP diagnostic: verify/re-base the Actor ActiveSkills/Cooldowns/Deployed vectors.
             SetTimer(() => ActorVectorProbeRun(), -1)

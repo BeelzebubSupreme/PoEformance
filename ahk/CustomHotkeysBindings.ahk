@@ -21,6 +21,7 @@ SkillHotkeysInit()
     global g_skillKeyLoadStatus := "default"
     global g_skillKeyBySkillName := Map()   ; lowercased skill name (display + internal) -> send key
     global g_skillSlotSkillName := Map()    ; slot -> skill display name (from the live bar)
+    global g_skillLearnedByKey := Map()     ; send key -> Map(skillInternal, skillName) learned from casts
 }
 
 ; Best-effort parse of skill-slot key bindings from the PoE2 config INI.

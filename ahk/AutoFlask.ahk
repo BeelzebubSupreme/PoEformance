@@ -121,6 +121,12 @@ UpdateRadarFast()
         TryLootTrackerTick(radarSnap)
         Profiler.End("tick.loot")
 
+        ; ── Skill-bar learner — remember each slot's skill as it is cast (self-throttled ~2 s) ──
+        ; The slot's ActiveSkill pointer only populates once a skill is cast, so this
+        ; accumulates the send-key → skill mapping over play, letting a one-click
+        ; combat auto-config fill the whole rotation instead of just the active skill.
+        LearnSkillBarSlotsTick()
+
         ; ── Always-on map-coverage measurement (feeds the on-map Loot bar's explored %) ──
         ; Reuse the AutoPilot ExplorationModule's proven visited + reachable-region
         ; measurement in measure-only mode (no navigation). When AutoPilot IS on, its

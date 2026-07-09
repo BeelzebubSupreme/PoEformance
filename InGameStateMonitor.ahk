@@ -362,6 +362,8 @@ LoadLootPricing()         ; poe.ninja price layer (loads cache, kicks refresh if
 StTrace("LoadLootPricing")
 LoadLootRadarValue()      ; value-aware loot radar (price ground drops) + [LootRadarValue] config
 StTrace("LoadLootRadarValue")
+LoadChestOpen()           ; AutoPilot chest auto-open (regular + optional strongbox) + [ChestOpen] config
+StTrace("LoadChestOpen")
 LoadUiHoverPrice()        ; price-on-hover for inventory/stash items + [UiHoverPrice] config
 StTrace("LoadUiHoverPrice")
 LoadRitualValueBadges()   ; persistent value badges on Ritual (Favours) reward cells + [RitualValueBadges]
@@ -399,6 +401,7 @@ try g_atlasOverlayEnabled := (IniRead(A_ScriptDir "\poeformance_config.ini", "At
 ; Custom hotkey / macro engine — init defaults then load persisted hotkeys.json
 HotkeysInit()
 SkillHotkeysInit()
+LoadLearnedSkillSlots()     ; restore the learned send-key → skill map (skill-bar auto-config)
 HotkeysLoadConfig()
 LoadHkAnimCapture()
 LoadReaderProcess()         ; reader-split stage 2: persistent reader process (opt-in, default OFF)
@@ -1043,6 +1046,7 @@ OnTreeTabChanged(*)
 #Include ahk/LootTrackerKills.ahk
 #Include ahk/LootTrackerSessions.ahk
 #Include ahk/ExplorationModule.ahk
+#Include ahk/ChestOpen.ahk
 #Include ahk/AutoPilot.ahk
 #Include ahk/CustomHotkeys.ahk
 #Include ahk/SharedMem.ahk
@@ -1066,6 +1070,7 @@ OnTreeTabChanged(*)
 #Include ahk/PathfindingProbe.ahk
 #Include ahk/StackMaxProbe.ahk
 #Include ahk/ActorProbe.ahk
+#Include ahk/EnemyBuffProbe.ahk
 #Include ahk/CurrencyLayoutProbe.ahk
 #Include ahk/LandscapeGridProbe.ahk
 #Include ahk/OffsetCompare.ahk

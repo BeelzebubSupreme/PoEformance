@@ -78,20 +78,14 @@ _RunLootPickup(radarSnap, gameHwnd)
         return false
     }
 
-    ; Hostile-proximity gate: even though AutoPilot already runs combat
-    ; before us, a stray non-engaged hostile (e.g. one juuust outside
-    ; engage range that's still wandering near a fresh drop) should still
-    ; postpone pickup. We use the same combat range threshold for symmetry.
+    ; Nearest hostile distance (Euclidean). We NO LONGER block ALL pickup
+    ; whenever any hostile is within combat range — that was the "kill
+    ; everything, then run back around for loot" behaviour. Instead a drop is
+    ; grabbed mid-clear only when it is very close AND closer than any mob (the
+    ; loot-relative safety gate applied after target selection, below). The
+    ; cache is still refreshed unconditionally further down, so drops noticed
+    ; during a fight are never forgotten.
     nearestHostileDist := _NearestHostileDistance(radarSnap)
-    if (nearestHostileDist < g_combatRange)
-    {
-        g_lootLastReason := "hostile-nearby(d=" Round(nearestHostileDist) ")"
-        ; Even though we won't click, we DO want to keep updating the cache
-        ; so items dropped during a fight aren't forgotten. Fall through to
-        ; the refresh, but don't issue any action.
-        _RefreshLootCache(radarSnap)
-        return false
-    }
 
     ; Refresh the cache (also expires stale entries) — does this before
     ; the picked-up check so lastSeenTick reflects the just-arrived snapshot.
@@ -166,6 +160,22 @@ _RunLootPickup(radarSnap, gameHwnd)
     if !target
     {
         g_lootLastReason := "no-target"
+        return false
+    }
+
+    ; ── Loot-relative safety gate ───────────────────────────────────────
+    ; When a hostile is within combat range, only grab the drop if it is
+    ; genuinely "on the way": within SAFE_GRAB_DIST of the player AND closer
+    ; than the nearest hostile (never walk toward loot that sits past a mob).
+    ; This collects loot as the bot moves through a lull instead of only after
+    ; the whole area is clear. Far / behind-mob drops stay cached for the
+    ; normal post-combat sweep. SAFE_GRAB_DIST is the tuning knob.
+    static SAFE_GRAB_DIST := 600
+    if (nearestHostileDist < g_combatRange
+        && !(target["dist"] <= SAFE_GRAB_DIST && nearestHostileDist > target["dist"]))
+    {
+        g_lootLastReason := "hostile-nearby(d=" Round(nearestHostileDist)
+            . " drop=" Round(target["dist"]) ")"
         return false
     }
 
@@ -273,8 +283,20 @@ _RunLootPickup(radarSnap, gameHwnd)
 
     freeTag := (free < 0) ? "" : (" free=" free)
     sizeTag := (rw > 0 && rh > 0) ? (" " rw "x" rh "/" fpSrc) : ""
+    ; Base-name of the item (last path segment) so the status log shows WHAT was
+    ; picked up — makes any rarity mis-classification (e.g. a Magic item read as
+    ; Currency) visible for triage without a separate probe.
+    tPath := target.Has("path") ? target["path"] : ""
+    baseName := tPath
+    if (tPath != "")
+    {
+        slashPos := InStr(tPath, "/", , -1)   ; last "/" (paths are forward-slash)
+        if (slashPos)
+            baseName := SubStr(tPath, slashPos + 1)
+    }
+    nameTag := (baseName != "") ? (" [" baseName "]") : ""
     g_lootLastReason := "pickup(" target["rarity"] sizeTag " " clickTag " d=" Round(target["dist"])
-        . " " (g_lootCache.Count) "cached" freeTag ")"
+        . " " (g_lootCache.Count) "cached" freeTag nameTag ")"
     return true
 }
 
@@ -471,7 +493,15 @@ _LootResolveItemInfo(wrapperAddr, wrapperPath, decoded)
         ; _SmItemCategory), otherwise it fell through to "Normal" and — with
         ; Normal off — was never picked up, even though it is the most valuable
         ; class (this was the bug: cache-empty "0 passed filter" for currency).
-        if (InStr(StrLower(itemPath), "/currency/"))
+        lowerP := StrLower(itemPath)
+        ; Skill / support gems carry NO rarity component either (ReadItemRarity → -1),
+        ; so like currency they fell through to "Normal" and — with Normal off — were
+        ; never picked up (owner: "not picking up skill or support gems"). Match them
+        ; by PATH first and give them their own "Gems" filter class. Ground gem drops
+        ; are uncut gems: "Metadata/Items/Gem[s]/SkillGem…" / "…SupportGemUncut…".
+        if (InStr(lowerP, "/gems/") || InStr(lowerP, "/gem/"))
+            rarity := "Gems"
+        else if (InStr(lowerP, "/currency/"))
             rarity := "Currency"
         else
         {
@@ -503,7 +533,7 @@ _LootResolveItemInfo(wrapperAddr, wrapperPath, decoded)
 _IsRarityEnabled(rarity)
 {
     global g_lootRarityNormal, g_lootRarityMagic, g_lootRarityRare
-    global g_lootRarityUnique, g_lootRarityCurrency
+    global g_lootRarityUnique, g_lootRarityCurrency, g_lootRarityGems
     switch rarity
     {
         case "Normal":   return g_lootRarityNormal
@@ -511,6 +541,7 @@ _IsRarityEnabled(rarity)
         case "Rare":     return g_lootRarityRare
         case "Unique":   return g_lootRarityUnique
         case "Currency": return g_lootRarityCurrency
+        case "Gems":     return (IsSet(g_lootRarityGems) ? g_lootRarityGems : true)
     }
     return false
 }
@@ -565,6 +596,10 @@ _NearestHostileDistance(radarSnap)
         if (path = "")
             continue
         if !g_reader.IsNpcLikeEntityPath(path)
+            continue
+        ; NPCs (dialogue / vendors / lore objects) are not hostiles — don't let one
+        ; block loot pickup. Mirrors the combat-target npc/ exclusion.
+        if InStr(StrLower(path), "metadata/npc/")
             continue
         decoded := entity.Has("decodedComponents") ? entity["decodedComponents"] : 0
         if !(decoded && IsObject(decoded))
@@ -1099,24 +1134,26 @@ _EstimateItemFootprint(rarity)
 LoadLootPickupConfig()
 {
     global g_lootRarityNormal, g_lootRarityMagic, g_lootRarityRare
-    global g_lootRarityUnique, g_lootRarityCurrency
+    global g_lootRarityUnique, g_lootRarityCurrency, g_lootRarityGems
 
     iniFile := A_ScriptDir "\poeformance_config.ini"
     section := "LootPickup"
 
     ; Sensible defaults: all enabled except Normal (Normal items are usually
-    ; vendor trash; users who want them can flip the flag).
+    ; vendor trash; users who want them can flip the flag). Gems (uncut skill/
+    ; support) are valuable → default ON.
     g_lootRarityNormal   := IniRead(iniFile, section, "Normal",   "0") = "1"
     g_lootRarityMagic    := IniRead(iniFile, section, "Magic",    "1") = "1"
     g_lootRarityRare     := IniRead(iniFile, section, "Rare",     "1") = "1"
     g_lootRarityUnique   := IniRead(iniFile, section, "Unique",   "1") = "1"
     g_lootRarityCurrency := IniRead(iniFile, section, "Currency", "1") = "1"
+    g_lootRarityGems     := IniRead(iniFile, section, "Gems",     "1") = "1"
 }
 
 SaveLootPickupConfig()
 {
     global g_lootRarityNormal, g_lootRarityMagic, g_lootRarityRare
-    global g_lootRarityUnique, g_lootRarityCurrency
+    global g_lootRarityUnique, g_lootRarityCurrency, g_lootRarityGems
 
     iniFile := A_ScriptDir "\poeformance_config.ini"
     section := "LootPickup"
@@ -1126,4 +1163,5 @@ SaveLootPickupConfig()
     IniWrite(g_lootRarityRare     ? "1" : "0", iniFile, section, "Rare")
     IniWrite(g_lootRarityUnique   ? "1" : "0", iniFile, section, "Unique")
     IniWrite(g_lootRarityCurrency ? "1" : "0", iniFile, section, "Currency")
+    IniWrite((IsSet(g_lootRarityGems) && g_lootRarityGems) ? "1" : "0", iniFile, section, "Gems")
 }

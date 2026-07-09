@@ -119,11 +119,15 @@ _ApplyEntityFilter(etype, bval)
 ; Args: [slotNum, key, priority, skillName, type, cooldownMs, enabled]
 _ApplyCombatSlotConfig(args)
 {
-    global g_combatSkillSlots
+    global g_combatSkillSlots, g_combatRotationUserEdited
 
     slotNum := (args.Length >= 1) ? Integer(args[1]) : 0
     if (slotNum < 1 || slotNum > 8)
         return
+
+    ; A hand-edit latches auto-management off so the learner never overwrites the
+    ; user's rotation (clicking auto-config re-enables it).
+    g_combatRotationUserEdited := true
 
     key       := (args.Length >= 2) ? String(args[2]) : ""
     priority  := (args.Length >= 3) ? Integer(args[3]) : slotNum

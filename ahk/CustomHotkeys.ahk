@@ -1013,7 +1013,7 @@ _HotkeysRuntime(id)
 ; True if t names a condition (gate) type rather than an effect type.
 _HotkeysIsCondType(t)
 {
-    return (t = "vitals" || t = "buff" || t = "charges" || t = "monsterCount" || t = "monsterCountCursor" || t = "enemyAnim")
+    return (t = "vitals" || t = "buff" || t = "charges" || t = "monsterCount" || t = "monsterCountCursor" || t = "enemyAnim" || t = "enemyBuff")
 }
 
 ; Counts the condition leaves under a tree node (a leaf counts as 1; a group
@@ -1111,6 +1111,7 @@ _HotkeysEvalLeaf(a, snap)
         case "monsterCount":       return _HotkeysCheckMonsterCount(a, snap)
         case "monsterCountCursor": return _HotkeysCheckMonsterCountCursor(a, snap)
         case "enemyAnim":          return _HotkeysCheckEnemyAnim(a, snap)
+        case "enemyBuff":          return _HotkeysCheckEnemyBuff(a, snap)
     }
     return true
 }
@@ -1536,6 +1537,100 @@ _HotkeysCheckEnemyAnim(a, snap)
                 continue
         }
         return true   ; a dangerous enemy is in range → the condition passes
+    }
+    return false
+}
+
+; Enemy-buff condition: checks whether a hostile monster within the radius HAS
+; ("present") or LACKS ("absent") a named buff/curse/debuff. "absent" is the
+; recast-a-curse case (fire when an in-range enemy is missing it). Mirrors the
+; enemyAnim monster gate; reads each enemy's buffs on demand via the verified
+; ReadEntityBuffEffects (bounded to a few reads/tick since it is uncached).
+; Fields: buffName (substring, internal name), mode (present|absent),
+; radiusMode (world|player|cursor), worldRadius / radius.
+_HotkeysCheckEnemyBuff(a, snap)
+{
+    global g_reader
+    if !(snap && IsObject(g_reader))
+        return false
+    name := a.Has("buffName") ? Trim(a["buffName"]) : ""
+    if (name = "")
+        return false
+    mode  := a.Has("mode") ? a["mode"] : "present"
+    rmode := a.Has("radiusMode") ? a["radiusMode"] : "world"
+    radius := (rmode = "world")
+        ? (a.Has("worldRadius") ? (a["worldRadius"] + 0) : 1200)
+        : (a.Has("radius") ? (a["radius"] + 0) : 120)
+
+    octx := 0
+    if (rmode != "world")
+    {
+        octx := _HotkeysPxOrigin(snap, rmode)
+        if !octx
+            return false
+    }
+
+    needle := StrLower(name)
+    checked := 0
+    maxChecks := 6              ; bound the uncached on-demand buff reads per tick
+    for entry in _HotkeysAwakeSample(snap)
+    {
+        if (checked >= maxChecks)
+            break
+        entity := entry.Has("entity") ? entry["entity"] : 0
+        if !(entity && entity is Map)
+            continue
+        if !InStr(entity.Has("path") ? StrLower(entity["path"]) : "", "metadata/monsters/")
+            continue
+        dc := entity.Has("decodedComponents") ? entity["decodedComponents"] : 0
+        if !(dc && dc is Map) || !_HotkeysIsTargetable(dc)
+            continue
+        pos := dc.Has("positioned") ? dc["positioned"] : 0
+        if (pos && pos is Map && pos.Has("isFriendly") && pos["isFriendly"])
+            continue
+        ; within the configured radius?
+        if (rmode = "world")
+        {
+            dist := entry.Has("distance") ? entry["distance"] : -1
+            if (dist < 0 || dist > radius)
+                continue
+        }
+        else
+        {
+            render := dc.Has("render") ? dc["render"] : 0
+            wp := (render && render is Map && render.Has("worldPosition")) ? render["worldPosition"] : 0
+            if !(wp && wp is Map)
+                continue
+            d := _HotkeysPxDist(octx, wp.Has("x") ? wp["x"] : 0, wp.Has("y") ? wp["y"] : 0, wp.Has("z") ? wp["z"] : 0)
+            if (d < 0 || d > radius)
+                continue
+        }
+        ; Read this enemy's buffs and test the name.
+        addr := entity.Has("address") ? entity["address"] : 0
+        if !addr
+            continue
+        checked += 1
+        hasBuff := false
+        effs := 0
+        try effs := g_reader.ReadEntityBuffEffects(addr)
+        if (effs && effs is Array)
+        {
+            for eff in effs
+            {
+                if !(eff is Map)
+                    continue
+                bn := eff.Has("name") ? StrLower(eff["name"]) : ""
+                if (bn != "" && InStr(bn, needle))
+                {
+                    hasBuff := true
+                    break
+                }
+            }
+        }
+        if (mode = "present" && hasBuff)
+            return true
+        if (mode = "absent" && !hasBuff)
+            return true
     }
     return false
 }

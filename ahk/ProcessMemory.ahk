@@ -190,6 +190,8 @@ class ProcessMemory
         if (!pid)
             return false
 
+        ; Access flags: PROCESS_VM_READ (0x0010) | PROCESS_QUERY_INFORMATION (0x0400).
+        ; The tool is strictly read-only on game memory — no VM_WRITE / VM_OPERATION.
         handle := DllCall("OpenProcess", "UInt", 0x0010 | 0x0400, "Int", false, "UInt", pid, "Ptr")
         this.LastOpenError := A_LastError
         if (!handle)

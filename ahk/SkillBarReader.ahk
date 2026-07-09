@@ -377,6 +377,185 @@ _SkillKeysRefreshAndPush()
     try PushHotkeyBindingsToWebView()
 }
 
+; ── Skill-bar slot learner (fixes "auto-config only pulls 1 skill") ──────────
+; A skill-bar slot's ActiveSkill pointer (slot + SkillBarSlot.ActiveSkillPtr) is
+; only populated once that skill has been INSTANTIATED — i.e. cast at least once.
+; So a single auto-config read only sees the CURRENTLY-active skill (proven by the
+; Skill<->Slot probe: only the E slot resolved, because Volatile Dead was active).
+; This runs throttled from the radar tick and ACCUMULATES each slot's resolved
+; skill, keyed by its send key, into g_skillLearnedByKey — so after a few seconds
+; of combat every used skill is remembered. It reuses the proven +0x2F0 read (no
+; new offsets), also refreshes the name→key / slot→name maps (PoB import + UI), and
+; persists the result so a one-click auto-config works across restarts. Throttled
+; ~2 s; cheap no-op when the bar isn't readable. No parameters, no return value.
+LearnSkillBarSlotsTick()
+{
+    global g_reader, g_skillLearnedByKey, g_skillKeyBySkillName, g_skillSlotSkillName
+    static _addrCache := [], _addrTick := 0, _lastPoll := 0, _saveScheduled := false
+    if !IsObject(g_reader)
+        return
+    now := A_TickCount
+
+    ; The slot's ActiveSkill pointer (+0x2F0) is only populated WHILE that slot's
+    ; skill is mid-cast (a few hundred ms), then clears — so a slow full re-read
+    ; almost always misses it (why "fire each skill once" didn't learn anything).
+    ; Instead: cache the 8 slot addresses+keys occasionally (the UI-tree walk is the
+    ; only costly part), then fast-poll just the pointer every ~150 ms so every cast
+    ; is caught the instant it fires.
+    if (_addrTick = 0 || (now - _addrTick) > 3000)
+    {
+        _addrTick := now
+        fresh := []
+        list := 0
+        try list := ReadSkillBarHotkeys(g_reader)
+        if (list && list is Array)
+        {
+            for e in list
+            {
+                if !(e is Map)
+                    continue
+                key := e.Has("sendKey") ? e["sendKey"] : ""
+                addr := e.Has("addr") ? e["addr"] : 0
+                if (key != "" && addr)
+                    fresh.Push(Map("key", key, "addr", addr, "slot", e.Has("slot") ? e["slot"] : 0))
+            }
+        }
+        if (fresh.Length)
+            _addrCache := fresh
+    }
+
+    if ((now - _lastPoll) < 150)
+        return
+    _lastPoll := now
+    if !(_addrCache is Array && _addrCache.Length)
+        return
+    if !(IsSet(g_skillLearnedByKey) && g_skillLearnedByKey is Map)
+        g_skillLearnedByKey := Map()
+
+    changed := false
+    for s in _addrCache
+    {
+        key  := s["key"]
+        addr := s["addr"]
+        if !_IsUiElement(g_reader, addr)          ; slot element still live (UI may rebuild)
+            continue
+        dp := 0
+        try dp := g_reader.Mem.ReadPtr(addr + PoE2Offsets.SkillBarSlot["ActiveSkillPtr"])
+        if !g_reader.IsProbablyValidPointer(dp)
+            continue                              ; slot idle this instant — skill not cast
+        gepl := 0
+        try gepl := g_reader.Mem.ReadPtr(dp + PoE2Offsets.ActiveSkillDetails["GrantedEffectsPerLevelDatRow"])
+        if !g_reader.IsProbablyValidPointer(gepl)
+            continue
+        names := 0
+        try names := g_reader._ResolveSkillName(gepl)
+        if !(names is Map)
+            continue
+        intnm := names.Has("internalName") ? names["internalName"] : ""
+        disp  := (names.Has("displayName") && names["displayName"] != "") ? names["displayName"] : intnm
+        if (intnm = "" && disp = "")
+            continue
+        if (StrLower(intnm) = "move" || SubStr(intnm, 1, 6) = "Skill_")
+            continue                              ; basic move / unresolved skill → not a rotation skill
+        nm := (disp != "") ? disp : intnm
+
+        prev := g_skillLearnedByKey.Has(key) ? g_skillLearnedByKey[key] : 0
+        if !(prev is Map && prev.Has("skillInternal") && prev["skillInternal"] = intnm)
+        {
+            g_skillLearnedByKey[key] := Map("skillInternal", intnm, "skillName", nm)
+            changed := true
+        }
+
+        ; Keep the name→key + slot→name maps fresh (PoB import + the Hotkeys UI).
+        if (IsSet(g_skillKeyBySkillName) && g_skillKeyBySkillName is Map)
+        {
+            if (nm != "")
+                g_skillKeyBySkillName[StrLower(nm)] := key
+            if (intnm != "")
+                g_skillKeyBySkillName[StrLower(intnm)] := key
+        }
+        if (IsSet(g_skillSlotSkillName) && g_skillSlotSkillName is Map && s.Has("slot") && s["slot"])
+            g_skillSlotSkillName[s["slot"]] := nm
+    }
+
+    if (changed && !_saveScheduled)
+    {
+        _saveScheduled := true
+        SetTimer(() => (SaveLearnedSkillSlots(), _saveScheduled := false), -2500)
+        ; Seamless auto-config: when auto-management is on and the user hasn't
+        ; hand-edited the rotation, rebuild the combat slots from the (now larger)
+        ; learned set — so the rotation fills itself during play with no button
+        ; click. Deferred off the tick; AutoConfigureCombatSlots reads the bar.
+        global g_combatRotationAuto, g_combatRotationUserEdited
+        if ((IsSet(g_combatRotationAuto) && g_combatRotationAuto)
+            && !(IsSet(g_combatRotationUserEdited) && g_combatRotationUserEdited))
+            SetTimer(_AutoApplyLearnedRotation, -1)
+    }
+}
+
+; Deferred worker: rebuild the combat rotation from the learned skill map and
+; refresh the UI. Split out so the learner tick never blocks on the bar read.
+; No parameters, no return value.
+_AutoApplyLearnedRotation()
+{
+    try AutoConfigureCombatSlots()
+    try PushHeaderToWebView()
+}
+
+; Persists the learned send-key → skill map to [SkillBarLearned] in
+; poeformance_config.ini, one entry per key: value = "<internal>|<display>".
+; Rewrites the whole section so removed binds don't linger. No return value.
+SaveLearnedSkillSlots()
+{
+    global g_skillLearnedByKey
+    if !(IsSet(g_skillLearnedByKey) && g_skillLearnedByKey is Map)
+        return
+    cfgPath := A_ScriptDir "\poeformance_config.ini"
+    try IniDelete(cfgPath, "SkillBarLearned")
+    for key, info in g_skillLearnedByKey
+    {
+        if (key = "" || !(info is Map))
+            continue
+        internal := info.Has("skillInternal") ? info["skillInternal"] : ""
+        disp     := info.Has("skillName") ? info["skillName"] : ""
+        if (internal = "" && disp = "")
+            continue
+        try IniWrite(internal "|" disp, cfgPath, "SkillBarLearned", key)
+    }
+}
+
+; Seeds g_skillLearnedByKey (init gotcha) and loads the persisted mapping so a
+; fresh session already knows the rotation learned in a previous one. Called once
+; at startup. No parameters, no return value.
+LoadLearnedSkillSlots()
+{
+    global g_skillLearnedByKey := Map()
+    cfgPath := A_ScriptDir "\poeformance_config.ini"
+    if !FileExist(cfgPath)
+        return
+    section := ""
+    try section := IniRead(cfgPath, "SkillBarLearned")
+    if (section = "")
+        return
+    for line in StrSplit(section, "`n", "`r")
+    {
+        eq := InStr(line, "=")
+        if (eq < 2)
+            continue
+        key := SubStr(line, 1, eq - 1)
+        val := SubStr(line, eq + 1)
+        parts := StrSplit(val, "|")
+        internal := (parts.Length >= 1) ? parts[1] : ""
+        disp     := (parts.Length >= 2) ? parts[2] : ""
+        if (key = "" || (internal = "" && disp = ""))
+            continue
+        g_skillLearnedByKey[key] := Map(
+            "skillInternal", internal,
+            "skillName", (disp != "") ? disp : internal
+        )
+    }
+}
+
 ; Manual trigger (bridge "DetectSkillKeys"): refreshes from the bar, applies the
 ; result, and reports the detected slot->key mapping so the reader can be verified
 ; in-game. No parameters; shows a message box. No return value.
@@ -453,6 +632,18 @@ DiagSkillSlotLink()
         dat := 0
         if (dp && g_reader.IsProbablyValidPointer(dp))
             try dat := g_reader.Mem.ReadPtr(dp + PoE2Offsets.ActiveSkillDetails["ActiveSkillsDatPtr"])
+        ; STATIC references a slot can hold for an UN-CAST skill (to draw its icon):
+        ; the GrantedEffect DAT row (geplRow→+0x00) and the ActiveSkills DAT row
+        ; (GE row + the auto-discovered ActiveSkill foreignrow offset). These exist
+        ; whether or not the skill was ever cast — unlike detailsPtr — so a slot
+        ; referencing one of them is the stable link we need.
+        ge := 0
+        if (gr && g_reader.IsProbablyValidPointer(gr))
+            try ge := g_reader.Mem.ReadPtr(gr + PoE2Offsets.GrantedEffectsPerLevelDat["GrantedEffectDatPtr"])
+        asOff := (g_reader.HasOwnProp("_activeSkillOffset") ? g_reader._activeSkillOffset : 0)
+        asRow := 0
+        if (ge && asOff && g_reader.IsProbablyValidPointer(ge))
+            try asRow := g_reader.Mem.ReadPtr(ge + asOff)
         ip := sk.Has("iconPath") ? sk["iconPath"] : ""
         if (dp)
             ptrMap[dp] := nm " (detailsPtr)"
@@ -460,7 +651,11 @@ DiagSkillSlotLink()
             ptrMap[gr] := nm " (geplRow)"
         if (dat)
             ptrMap[dat] := nm " (activeSkillsDat)"
-        skillLines.Push(Format("  {} | details=0x{:X} gepl=0x{:X} dat=0x{:X}`n     icon={}", nm, dp, gr, dat, ip))
+        if (ge)
+            ptrMap[ge] := nm " (geRow)"
+        if (asRow)
+            ptrMap[asRow] := nm " (activeSkillsRow)"
+        skillLines.Push(Format("  {} | det=0x{:X} gepl=0x{:X} geRow=0x{:X} asRow=0x{:X}`n     icon={}", nm, dp, gr, ge, asRow, ip))
     }
 
     slots := ReadSkillBarHotkeys(g_reader)
@@ -499,6 +694,8 @@ _SkillBarScanPtrMatches(reader, rootPtr, ptrMap)
         return out
     queue := [{ptr: rootPtr, d: 0}]
     seen := Map()
+    entSeen := Map()          ; dedupe entity resolution by pointer value
+    entChecks := 0
     nodes := 0
     while (queue.Length > 0 && nodes < 200)
     {
@@ -517,6 +714,23 @@ _SkillBarScanPtrMatches(reader, rootPtr, ptrMap)
                 v := NumGet(blk.Ptr, off, "Ptr")
                 if (ptrMap.Has(v))
                     out.Push(Format("MATCH @+0x{:03X} (node 0x{:X}): {} = 0x{:X}", off, p, ptrMap[v], v))
+                else if (entChecks < 800 && reader.IsProbablyValidPointer(v) && !entSeen.Has(v))
+                {
+                    ; A slot may reference its skill by the socketed GEM ITEM entity
+                    ; (present for un-cast skills too). Resolve the pointer's entity
+                    ; path and report gem / skill-item hits.
+                    entSeen[v] := true
+                    entChecks += 1
+                    idp := ""
+                    try
+                    {
+                        idm := reader.ReadEntityIdentityBasic(v, 160)
+                        if (idm is Map && idm.Has("path"))
+                            idp := idm["path"]
+                    }
+                    if (idp != "" && (InStr(idp, "Gems") || InStr(idp, "Metadata/Items") || InStr(idp, "GrantedEffect")))
+                        out.Push(Format("ENTITY @+0x{:03X} (node 0x{:X}): {} = 0x{:X}", off, p, idp, v))
+                }
                 off += 8
             }
         }
@@ -545,4 +759,316 @@ _SkillBarScanPtrMatches(reader, rootPtr, ptrMap)
         }
     }
     return out
+}
+
+; ── Player-side skill-bar array hunt (RE diagnostic) ─────────────────────────
+; DiagSkillSlotLink proved the UI slot element holds NO stable slot→skill link for
+; an un-cast skill (only the actively-cast slot matches +0x2F0; no geRow/asRow/gem
+; match on the others), and the GameHelper2 reference Actor has no hotbar mapping
+; either. So the slot→skill assignment must live in a PLAYER-SIDE structure the UI
+; resolves by index. This scans the player entity, its Actor component, and every
+; player component for a small array/cluster holding the EQUIPPED skills' stable
+; pointers (geplRow / GrantedEffect row; detailsPtr as a bonus for a cast skill) —
+; i.e. the bar assignment. It also dumps each equipped skill's ActiveSkillDetails
+; small-int fields (a slot-index candidate) and hunts a contiguous run of small
+; ints (a slot→skill-index array). Writes debug\skillbar_array_*.txt. No params.
+SkillBarArrayProbe()
+{
+    global g_reader
+    if !IsObject(g_reader)
+    {
+        try MsgBox("Game not connected.", "Skill-bar array probe", 0x10)
+        return
+    }
+    lpPtr := _SkillBarLocalPlayerPtr()
+    if !g_reader.IsProbablyValidPointer(lpPtr)
+    {
+        try MsgBox("No local player — get in-game with skills equipped, then retry.", "Skill-bar array probe", 0x30)
+        return
+    }
+    skillsData := 0
+    try skillsData := g_reader.ReadPlayerSkills(lpPtr)
+    skills := (skillsData && skillsData is Map && skillsData.Has("skills")) ? skillsData["skills"] : []
+
+    ; Interesting pointers = the EQUIPPED (real-gem) skills' stable identifiers.
+    ptrMap := Map()
+    equipped := []
+    for sk in skills
+    {
+        if !(sk is Map)
+            continue
+        ip := sk.Has("iconPath") ? sk["iconPath"] : ""
+        hr := sk.Has("hasRealName") ? sk["hasRealName"] : false
+        if (ip = "" && !hr)
+            continue                          ; skip innate/action skills (Move, Ascend, …)
+        nm := (sk.Has("displayName") && sk["displayName"] != "") ? sk["displayName"] : (sk.Has("name") ? sk["name"] : "?")
+        dp := sk.Has("detailsPtr") ? sk["detailsPtr"] : 0
+        gr := sk.Has("geplRow") ? sk["geplRow"] : 0
+        ge := 0
+        if (g_reader.IsProbablyValidPointer(gr))
+            try ge := g_reader.Mem.ReadPtr(gr + PoE2Offsets.GrantedEffectsPerLevelDat["GrantedEffectDatPtr"])
+        ; ActiveSkillsDat row = the skill's ICON source. detailsPtr is stable for
+        ; every granted skill (it lives in the Actor's skill vector), so this reads
+        ; for un-cast skills too — the prime candidate for what a slot references.
+        asd := 0
+        if (g_reader.IsProbablyValidPointer(dp))
+            try asd := g_reader.Mem.ReadPtr(dp + PoE2Offsets.ActiveSkillDetails["ActiveSkillsDatPtr"])
+        if (g_reader.IsProbablyValidPointer(dp))
+            ptrMap[dp] := nm " (detailsPtr)"
+        if (g_reader.IsProbablyValidPointer(gr))
+            ptrMap[gr] := nm " (geplRow)"
+        if (g_reader.IsProbablyValidPointer(ge))
+            ptrMap[ge] := nm " (geRow)"
+        if (g_reader.IsProbablyValidPointer(asd))
+            ptrMap[asd] := nm " (activeSkillsDatRow)"
+        equipped.Push(Map("nm", nm, "dp", dp, "gr", gr, "ge", ge, "asd", asd))
+    }
+
+    rpt := "Skill-bar array hunt`n`nEquipped skills (" equipped.Length "):`n"
+    for e in equipped
+        rpt .= Format("  {} | det=0x{:X} gepl=0x{:X} geRow=0x{:X} asDat=0x{:X}`n", e["nm"], e["dp"], e["gr"], e["ge"], e["asd"])
+
+    ; Regions: player entity, Actor component, and each player component.
+    regions := []
+    regions.Push(Map("name", "player", "base", lpPtr, "len", 0x3000))
+    actorPtr := 0
+    try actorPtr := g_reader.FindEntityComponentAddress(lpPtr, "Actor")
+    if (g_reader.IsProbablyValidPointer(actorPtr))
+        regions.Push(Map("name", "Actor", "base", actorPtr, "len", 0x2000))
+    compFirst := 0, compLast := 0
+    try compFirst := g_reader.Mem.ReadInt64(lpPtr + PoE2Offsets.Entity["ComponentsVec"])
+    try compLast  := g_reader.Mem.ReadInt64(lpPtr + PoE2Offsets.Entity["ComponentsVecLast"])
+    if (compFirst > 0 && compLast > compFirst)
+    {
+        cnt := Min((compLast - compFirst) // 8, 96)
+        Loop cnt
+        {
+            cp := g_reader.Mem.ReadPtr(compFirst + (A_Index - 1) * 8)
+            if (g_reader.IsProbablyValidPointer(cp) && cp != actorPtr)
+                regions.Push(Map("name", "comp#" (A_Index - 1), "base", cp, "len", 0x800))
+        }
+    }
+    ; The bar assignment may live in the UI data model — add the GameUI root struct.
+    gameUi := 0
+    try gameUi := _UiBrowser_GetGameUiPtr()
+    if (g_reader.IsProbablyValidPointer(gameUi))
+        regions.Push(Map("name", "GameUI", "base", gameUi, "len", 0x2000))
+
+    ; Scan each region for the interesting-pointer hits (the bar assignment array).
+    rpt .= "`n=== Pointer hits (region +off → skill) ===`n"
+    totalHits := 0
+    for rg in regions
+    {
+        blk := g_reader.Mem.ReadBytes(rg["base"], rg["len"])
+        if !blk
+            continue
+        hits := []
+        off := 0
+        while (off + 8 <= rg["len"])
+        {
+            v := NumGet(blk.Ptr, off, "Ptr")
+            if (ptrMap.Has(v))
+                hits.Push(Format("   +0x{:X} → {} = 0x{:X}", off, ptrMap[v], v))
+            off += 8
+        }
+        ; Report a region with ≥2 hits (a cluster/array) or any hit in player/Actor.
+        if (hits.Length >= 2 || (hits.Length >= 1 && (rg["name"] = "player" || rg["name"] = "Actor")))
+        {
+            rpt .= Format("`n[{} @0x{:X}]  {} hit(s)`n", rg["name"], rg["base"], hits.Length)
+            for h in hits
+                rpt .= h "`n"
+            totalHits += hits.Length
+        }
+    }
+    if (totalHits = 0)
+        rpt .= "  (no equipped-skill pointer found in the player entity / Actor / components)`n"
+
+    ; Scan each UI skill-bar SLOT subtree with the full pointer set — the slot draws
+    ; the skill icon, so it should reference the ActiveSkillsDat row (or the skill)
+    ; somewhere in its subtree even when the skill isn't being cast.
+    rpt .= "`n=== UI slot subtree hits (icon source = activeSkillsDatRow expected) ===`n"
+    uiSlots := 0
+    try uiSlots := ReadSkillBarHotkeys(g_reader)
+    if (uiSlots is Array)
+    {
+        for e in uiSlots
+        {
+            if !(e is Map)
+                continue
+            m := _SkillBarScanPtrMatches(g_reader, e["addr"], ptrMap)
+            rpt .= Format("`nslot {} key='{}' addr=0x{:X}  ({} hit(s))`n", e["slot"], e["key"], e["addr"], m.Length)
+            shown := 0
+            for ln in m
+            {
+                rpt .= "   " ln "`n"
+                if (++shown >= 16)
+                {
+                    rpt .= "   … (truncated)`n"
+                    break
+                }
+            }
+        }
+    }
+
+    ; Per-skill ActiveSkillDetails small-int dump (a slot-index field would be 0–15).
+    rpt .= "`n=== ActiveSkillDetails small ints [+off]=val (0–31), slot-index candidates ===`n"
+    for e in equipped
+    {
+        dp := e["dp"]
+        if !g_reader.IsProbablyValidPointer(dp)
+            continue
+        db := g_reader.Mem.ReadBytes(dp, 0x100)
+        if !db
+            continue
+        line := "  " e["nm"] ":"
+        o := 0
+        while (o + 4 <= 0x100)
+        {
+            iv := NumGet(db.Ptr, o, "Int")
+            if (iv >= 0 && iv <= 31)
+                line .= Format(" [+0x{:X}]={}", o, iv)
+            o += 4
+        }
+        rpt .= line "`n"
+    }
+
+    outDir := A_ScriptDir "\debug"
+    if !DirExist(outDir)
+        DirCreate(outDir)
+    outPath := outDir "\skillbar_array_" FormatTime(A_Now, "yyyyMMdd_HHmmss") ".txt"
+    try FileAppend(rpt, outPath, "UTF-8")
+    try MsgBox("Skill-bar array probe written to:`n" outPath "`n`nEquipped: " equipped.Length "   pointer hits: " totalHits, "Skill-bar array probe", 0x40)
+}
+
+; ── Skill-gem / server-side assignment probe (RE diagnostic) ─────────────────
+; The UI tree, player entity, Actor, components and GameUI are all exhausted for a
+; stable slot→skill link. This checks the remaining data models: (1) the player
+; INVENTORIES — every inventory + item (path + grid pos), flagging skill GEMS, to
+; see whether a gem inventory's positions map to the bar; and (2) PlayerServerData
+; — scanned for the equipped skills' stable pointers (geplRow / detailsPtr), in
+; case the assignment is server-authoritative. Writes debug\skillgem_probe_*.txt.
+SkillGemProbe()
+{
+    global g_reader
+    if !IsObject(g_reader)
+    {
+        try MsgBox("Game not connected.", "Skill-gem probe", 0x10)
+        return
+    }
+    sdPtr := 0
+    try sdPtr := _SmResolveServerData()
+    if !g_reader.IsProbablyValidPointer(sdPtr)
+    {
+        try MsgBox("Could not resolve ServerData — get in-game, then retry.", "Skill-gem probe", 0x30)
+        return
+    }
+
+    rpt := "Skill-gem / server-side assignment probe`n`n"
+
+    ; (1) Inventories + items (flag skill gems).
+    invs := 0
+    try invs := g_reader.ReadAllPlayerInventories(sdPtr)
+    if (invs is Array)
+    {
+        rpt .= "=== Inventories (" invs.Length ") — items path + grid (GEM = skill gem) ===`n"
+        gemTotal := 0
+        for inv in invs
+        {
+            if !(inv is Map)
+                continue
+            id   := inv.Has("inventoryId") ? inv["inventoryId"] : -1
+            ty   := inv.Has("inventoryType") ? inv["inventoryType"] : "?"
+            dimX := inv.Has("totalBoxesX") ? inv["totalBoxesX"] : 0
+            dimY := inv.Has("totalBoxesY") ? inv["totalBoxesY"] : 0
+            items := inv.Has("items") ? inv["items"] : []
+            rpt .= Format("`n[inv id={} type={} {}x{}]  {} item(s)`n", id, ty, dimX, dimY, items.Length)
+            for it in items
+            {
+                if !(it is Map)
+                    continue
+                ep := it.Has("itemEntityPtr") ? it["itemEntityPtr"] : 0
+                path := ""
+                if g_reader.IsProbablyValidPointer(ep)
+                {
+                    try
+                    {
+                        idm := g_reader.ReadEntityIdentityBasic(ep, 200)
+                        if (idm is Map && idm.Has("path"))
+                            path := idm["path"]
+                    }
+                }
+                sx := it.Has("slotStartX") ? it["slotStartX"] : -1
+                sy := it.Has("slotStartY") ? it["slotStartY"] : -1
+                isGem := (path != "" && InStr(path, "/Gems/"))
+                if (isGem)
+                    gemTotal += 1
+                rpt .= Format("   {} ({},{})  {}`n", isGem ? "GEM " : "    ", sx, sy, path)
+            }
+        }
+        rpt .= "`n(total skill gems found in inventories: " gemTotal ")`n"
+    }
+    else
+        rpt .= "  (ReadAllPlayerInventories returned nothing)`n"
+
+    ; (2) Scan PlayerServerData for the equipped skills' stable pointers.
+    ptrMap := Map()
+    lpPtr := _SkillBarLocalPlayerPtr()
+    if g_reader.IsProbablyValidPointer(lpPtr)
+    {
+        sd := 0
+        try sd := g_reader.ReadPlayerSkills(lpPtr)
+        skills := (sd is Map && sd.Has("skills")) ? sd["skills"] : []
+        for sk in skills
+        {
+            if !(sk is Map)
+                continue
+            if ((sk.Has("iconPath") ? sk["iconPath"] : "") = "")
+                continue
+            nm := (sk.Has("displayName") && sk["displayName"] != "") ? sk["displayName"] : (sk.Has("name") ? sk["name"] : "?")
+            dp := sk.Has("detailsPtr") ? sk["detailsPtr"] : 0
+            gr := sk.Has("geplRow") ? sk["geplRow"] : 0
+            if g_reader.IsProbablyValidPointer(dp)
+                ptrMap[dp] := nm " (detailsPtr)"
+            if g_reader.IsProbablyValidPointer(gr)
+                ptrMap[gr] := nm " (geplRow)"
+        }
+    }
+    playerDataPtr := 0
+    try
+    {
+        pdv := g_reader.Mem.ReadInt64(sdPtr + PoE2Offsets.ServerData["PlayerServerData"])
+        if (pdv > 0)
+            playerDataPtr := g_reader.Mem.ReadPtr(pdv)
+    }
+    rpt .= "`n=== PlayerServerData pointer scan (equipped-skill stable ptrs) ===`n"
+    if g_reader.IsProbablyValidPointer(playerDataPtr)
+    {
+        blk := g_reader.Mem.ReadBytes(playerDataPtr, 0x4000)
+        hits := 0
+        if blk
+        {
+            off := 0
+            while (off + 8 <= 0x4000)
+            {
+                v := NumGet(blk.Ptr, off, "Ptr")
+                if (ptrMap.Has(v))
+                {
+                    rpt .= Format("   +0x{:X} → {} = 0x{:X}`n", off, ptrMap[v], v)
+                    hits += 1
+                }
+                off += 8
+            }
+        }
+        if (hits = 0)
+            rpt .= "   (no equipped-skill pointer in PlayerServerData[0..0x4000])`n"
+    }
+    else
+        rpt .= "   (could not resolve PlayerServerData)`n"
+
+    outDir := A_ScriptDir "\debug"
+    if !DirExist(outDir)
+        DirCreate(outDir)
+    outPath := outDir "\skillgem_probe_" FormatTime(A_Now, "yyyyMMdd_HHmmss") ".txt"
+    try FileAppend(rpt, outPath, "UTF-8")
+    try MsgBox("Skill-gem probe written to:`n" outPath, "Skill-gem probe", 0x40)
 }

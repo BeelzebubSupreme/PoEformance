@@ -55,6 +55,7 @@ PushHeaderToWebView()
     global g_cfgOpenSections
     global g_combatAutoEnabled, g_combatState, g_combatLastReason, g_combatToggleHotkey
     global g_combatRange, g_combatDisengageRange, g_combatGlobalCooldownMs, g_combatSkillSlots
+    global g_combatAutoDodge, g_combatDodgeKey, g_combatDodgeHpPct
     global g_exploreEnabled, g_exploreCurrentPercent, g_exploreTargetPercent, g_exploreLastReason
     global g_lootRarityNormal, g_lootRarityMagic, g_lootRarityRare
     global g_lootRarityUnique, g_lootRarityCurrency, g_lootCache, g_lootLastReason
@@ -139,6 +140,9 @@ PushHeaderToWebView()
         . '"combatDisengage":' g_combatDisengageRange ","
         . '"combatGCD":' g_combatGlobalCooldownMs ","
         . '"combatW2S":' Format("{:.2f}", g_combatW2SScale) ","
+        . '"combatAutoDodge":' (g_combatAutoDodge ? "true" : "false") ","
+        . '"combatDodgeKey":' _JsStr(g_combatDodgeKey) ","
+        . '"combatDodgeHp":' g_combatDodgeHpPct ","
         . '"combatSlots":' _SerializeCombatSlots() ","
         . '"exploreEnabled":' (g_exploreEnabled ? "true" : "false") ","
         . '"explorePct":' Format("{:.1f}", g_exploreCurrentPercent) ","
@@ -157,6 +161,7 @@ PushHeaderToWebView()
         . ',"lootRadarValue":' BuildLootRadarValueHeaderJson()
         . ',"uiHoverPrice":' BuildUiHoverPriceHeaderJson()
         . ',"ritualValueBadges":' BuildRitualValueBadgesHeaderJson()
+        . ',"chestOpen":' BuildChestOpenHeaderJson()
         . ',"lootLabelClear":' BuildLootLabelClearHeaderJson()
         . ',"lootTradePricing":' BuildLootTradePricingHeaderJson()
         . ',"overlayPlacement":' BuildOverlayPlacementHeaderJson()
@@ -175,13 +180,14 @@ PushHeaderToWebView()
 _SerializeLootRarity()
 {
     global g_lootRarityNormal, g_lootRarityMagic, g_lootRarityRare
-    global g_lootRarityUnique, g_lootRarityCurrency
+    global g_lootRarityUnique, g_lootRarityCurrency, g_lootRarityGems
     return "{"
     . '"Normal":' (g_lootRarityNormal ? "true" : "false") ","
     . '"Magic":' (g_lootRarityMagic ? "true" : "false") ","
     . '"Rare":' (g_lootRarityRare ? "true" : "false") ","
     . '"Unique":' (g_lootRarityUnique ? "true" : "false") ","
-    . '"Currency":' (g_lootRarityCurrency ? "true" : "false")
+    . '"Currency":' (g_lootRarityCurrency ? "true" : "false") ","
+    . '"Gems":' ((IsSet(g_lootRarityGems) && g_lootRarityGems) ? "true" : "false")
     . "}"
 }
 
