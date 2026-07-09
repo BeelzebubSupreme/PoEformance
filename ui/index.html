@@ -5401,6 +5401,7 @@
           <button class="uib-btn" onclick="ahkCall('DetectSkillKeys')" data-tip="Read the in-game skill-bar key bindings (per-slot Displayed Text), fill the Hotkeys-tab skill slots, and show the detected slot→key mapping">⌨ Detect Skill Keys</button>
           <button class="uib-btn" onclick="ahkCall('DiagSkillSlotLink')" data-tip="RE: probe whether each skill-bar slot references a player skill by pointer (detailsPtr/geplRow/ActiveSkillsDat) — writes debug\skill_slot_link_*.txt to enable automatic skill-name↔slot mapping">🔗 Skill↔Slot Link</button>
           <button class="uib-btn" onclick="ahkCall('SkillBarArrayProbe')" data-tip="RE: hunt the PLAYER-SIDE skill-bar array (slot→skill) — scans the player entity, Actor, and every component for the equipped skills' stable pointers. Writes debug\skillbar_array_*.txt. Run in a map with all skills equipped.">🎯 Skill-bar Array Hunt</button>
+          <button class="uib-btn" onclick="ahkCall('SkillGemProbe')" data-tip="RE: dump player inventories (flagging skill gems + grid position) and scan PlayerServerData for the equipped skills' pointers — hunts the skill-gem / server-side assignment data model. Writes debug\skillgem_probe_*.txt.">💎 Skill-gem / Server Probe</button>
         </div>
         <div id="uib-search-row">
           <input id="uib-search-input" type="text" placeholder="Search StringId…"

@@ -482,7 +482,24 @@ LearnSkillBarSlotsTick()
     {
         _saveScheduled := true
         SetTimer(() => (SaveLearnedSkillSlots(), _saveScheduled := false), -2500)
+        ; Seamless auto-config: when auto-management is on and the user hasn't
+        ; hand-edited the rotation, rebuild the combat slots from the (now larger)
+        ; learned set — so the rotation fills itself during play with no button
+        ; click. Deferred off the tick; AutoConfigureCombatSlots reads the bar.
+        global g_combatRotationAuto, g_combatRotationUserEdited
+        if ((IsSet(g_combatRotationAuto) && g_combatRotationAuto)
+            && !(IsSet(g_combatRotationUserEdited) && g_combatRotationUserEdited))
+            SetTimer(_AutoApplyLearnedRotation, -1)
     }
+}
+
+; Deferred worker: rebuild the combat rotation from the learned skill map and
+; refresh the UI. Split out so the learner tick never blocks on the bar read.
+; No parameters, no return value.
+_AutoApplyLearnedRotation()
+{
+    try AutoConfigureCombatSlots()
+    try PushHeaderToWebView()
 }
 
 ; Persists the learned send-key → skill map to [SkillBarLearned] in
@@ -921,4 +938,137 @@ SkillBarArrayProbe()
     outPath := outDir "\skillbar_array_" FormatTime(A_Now, "yyyyMMdd_HHmmss") ".txt"
     try FileAppend(rpt, outPath, "UTF-8")
     try MsgBox("Skill-bar array probe written to:`n" outPath "`n`nEquipped: " equipped.Length "   pointer hits: " totalHits, "Skill-bar array probe", 0x40)
+}
+
+; ── Skill-gem / server-side assignment probe (RE diagnostic) ─────────────────
+; The UI tree, player entity, Actor, components and GameUI are all exhausted for a
+; stable slot→skill link. This checks the remaining data models: (1) the player
+; INVENTORIES — every inventory + item (path + grid pos), flagging skill GEMS, to
+; see whether a gem inventory's positions map to the bar; and (2) PlayerServerData
+; — scanned for the equipped skills' stable pointers (geplRow / detailsPtr), in
+; case the assignment is server-authoritative. Writes debug\skillgem_probe_*.txt.
+SkillGemProbe()
+{
+    global g_reader
+    if !IsObject(g_reader)
+    {
+        try MsgBox("Game not connected.", "Skill-gem probe", 0x10)
+        return
+    }
+    sdPtr := 0
+    try sdPtr := _SmResolveServerData()
+    if !g_reader.IsProbablyValidPointer(sdPtr)
+    {
+        try MsgBox("Could not resolve ServerData — get in-game, then retry.", "Skill-gem probe", 0x30)
+        return
+    }
+
+    rpt := "Skill-gem / server-side assignment probe`n`n"
+
+    ; (1) Inventories + items (flag skill gems).
+    invs := 0
+    try invs := g_reader.ReadAllPlayerInventories(sdPtr)
+    if (invs is Array)
+    {
+        rpt .= "=== Inventories (" invs.Length ") — items path + grid (GEM = skill gem) ===`n"
+        gemTotal := 0
+        for inv in invs
+        {
+            if !(inv is Map)
+                continue
+            id   := inv.Has("inventoryId") ? inv["inventoryId"] : -1
+            ty   := inv.Has("inventoryType") ? inv["inventoryType"] : "?"
+            dimX := inv.Has("totalBoxesX") ? inv["totalBoxesX"] : 0
+            dimY := inv.Has("totalBoxesY") ? inv["totalBoxesY"] : 0
+            items := inv.Has("items") ? inv["items"] : []
+            rpt .= Format("`n[inv id={} type={} {}x{}]  {} item(s)`n", id, ty, dimX, dimY, items.Length)
+            for it in items
+            {
+                if !(it is Map)
+                    continue
+                ep := it.Has("itemEntityPtr") ? it["itemEntityPtr"] : 0
+                path := ""
+                if g_reader.IsProbablyValidPointer(ep)
+                {
+                    try
+                    {
+                        idm := g_reader.ReadEntityIdentityBasic(ep, 200)
+                        if (idm is Map && idm.Has("path"))
+                            path := idm["path"]
+                    }
+                }
+                sx := it.Has("slotStartX") ? it["slotStartX"] : -1
+                sy := it.Has("slotStartY") ? it["slotStartY"] : -1
+                isGem := (path != "" && InStr(path, "/Gems/"))
+                if (isGem)
+                    gemTotal += 1
+                rpt .= Format("   {} ({},{})  {}`n", isGem ? "GEM " : "    ", sx, sy, path)
+            }
+        }
+        rpt .= "`n(total skill gems found in inventories: " gemTotal ")`n"
+    }
+    else
+        rpt .= "  (ReadAllPlayerInventories returned nothing)`n"
+
+    ; (2) Scan PlayerServerData for the equipped skills' stable pointers.
+    ptrMap := Map()
+    lpPtr := _SkillBarLocalPlayerPtr()
+    if g_reader.IsProbablyValidPointer(lpPtr)
+    {
+        sd := 0
+        try sd := g_reader.ReadPlayerSkills(lpPtr)
+        skills := (sd is Map && sd.Has("skills")) ? sd["skills"] : []
+        for sk in skills
+        {
+            if !(sk is Map)
+                continue
+            if ((sk.Has("iconPath") ? sk["iconPath"] : "") = "")
+                continue
+            nm := (sk.Has("displayName") && sk["displayName"] != "") ? sk["displayName"] : (sk.Has("name") ? sk["name"] : "?")
+            dp := sk.Has("detailsPtr") ? sk["detailsPtr"] : 0
+            gr := sk.Has("geplRow") ? sk["geplRow"] : 0
+            if g_reader.IsProbablyValidPointer(dp)
+                ptrMap[dp] := nm " (detailsPtr)"
+            if g_reader.IsProbablyValidPointer(gr)
+                ptrMap[gr] := nm " (geplRow)"
+        }
+    }
+    playerDataPtr := 0
+    try
+    {
+        pdv := g_reader.Mem.ReadInt64(sdPtr + PoE2Offsets.ServerData["PlayerServerData"])
+        if (pdv > 0)
+            playerDataPtr := g_reader.Mem.ReadPtr(pdv)
+    }
+    rpt .= "`n=== PlayerServerData pointer scan (equipped-skill stable ptrs) ===`n"
+    if g_reader.IsProbablyValidPointer(playerDataPtr)
+    {
+        blk := g_reader.Mem.ReadBytes(playerDataPtr, 0x4000)
+        hits := 0
+        if blk
+        {
+            off := 0
+            while (off + 8 <= 0x4000)
+            {
+                v := NumGet(blk.Ptr, off, "Ptr")
+                if (ptrMap.Has(v))
+                {
+                    rpt .= Format("   +0x{:X} → {} = 0x{:X}`n", off, ptrMap[v], v)
+                    hits += 1
+                }
+                off += 8
+            }
+        }
+        if (hits = 0)
+            rpt .= "   (no equipped-skill pointer in PlayerServerData[0..0x4000])`n"
+    }
+    else
+        rpt .= "   (could not resolve PlayerServerData)`n"
+
+    outDir := A_ScriptDir "\debug"
+    if !DirExist(outDir)
+        DirCreate(outDir)
+    outPath := outDir "\skillgem_probe_" FormatTime(A_Now, "yyyyMMdd_HHmmss") ".txt"
+    try FileAppend(rpt, outPath, "UTF-8")
+    try MsgBox("Skill-gem probe written to:`n" outPath, "Skill-gem probe", 0x40)
 }

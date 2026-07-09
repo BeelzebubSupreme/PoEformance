@@ -1366,6 +1366,7 @@ LoadCombatAutoConfig()
     global g_combatGlobalCooldownMs, g_combatSkillSlots, g_combatToggleHotkey
     global g_combatW2SScale, g_combatNoPathBlacklist
     global g_combatAutoDodge, g_combatDodgeKey, g_combatDodgeHpPct, g_combatDodgeCooldownMs
+    global g_combatRotationAuto, g_combatRotationUserEdited
 
     cfgPath := A_ScriptDir "\poeformance_config.ini"
 
@@ -1380,6 +1381,12 @@ LoadCombatAutoConfig()
     g_combatDodgeKey := ""
     g_combatDodgeHpPct := 50
     g_combatDodgeCooldownMs := 1200
+    ; Auto-manage the rotation from the skill-bar learner: as skills are learned
+    ; during play, fill the combat slots automatically (no auto-config click). The
+    ; moment the user edits a slot, userEdited latches true and auto-management stops
+    ; (clicking auto-config re-enables it). Default ON so a fresh install is hands-off.
+    g_combatRotationAuto := true
+    g_combatRotationUserEdited := false
     ; entityAddr → expiry tick for enemies the no-path give-up disengaged
     ; from (seeded here unconditionally — module-init gotcha, see CLAUDE.md)
     g_combatNoPathBlacklist := Map()
@@ -1394,6 +1401,8 @@ LoadCombatAutoConfig()
     try g_combatDodgeKey := IniRead(cfgPath, "CombatAutomation", "dodgeKey", "")
     try g_combatDodgeHpPct := Integer(IniRead(cfgPath, "CombatAutomation", "dodgeHpPct", "50"))
     try g_combatDodgeCooldownMs := Integer(IniRead(cfgPath, "CombatAutomation", "dodgeCooldownMs", "1200"))
+    try g_combatRotationAuto := IniRead(cfgPath, "CombatAutomation", "rotationAuto", "1") = "1"
+    try g_combatRotationUserEdited := IniRead(cfgPath, "CombatAutomation", "rotationUserEdited", "0") = "1"
 
     ; Load up to 8 skill slots
     g_combatSkillSlots := Map()
@@ -1440,9 +1449,12 @@ SaveCombatAutoConfig()
     global g_combatGlobalCooldownMs, g_combatSkillSlots, g_combatToggleHotkey
     global g_combatW2SScale
     global g_combatAutoDodge, g_combatDodgeKey, g_combatDodgeHpPct, g_combatDodgeCooldownMs
+    global g_combatRotationAuto, g_combatRotationUserEdited
 
     cfgPath := A_ScriptDir "\poeformance_config.ini"
 
+    try IniWrite((IsSet(g_combatRotationAuto) && g_combatRotationAuto) ? "1" : "0", cfgPath, "CombatAutomation", "rotationAuto")
+    try IniWrite((IsSet(g_combatRotationUserEdited) && g_combatRotationUserEdited) ? "1" : "0", cfgPath, "CombatAutomation", "rotationUserEdited")
     try IniWrite(g_combatAutoEnabled ? "1" : "0", cfgPath, "CombatAutomation", "enabled")
     try IniWrite(String(g_combatRange), cfgPath, "CombatAutomation", "combatRange")
     try IniWrite(String(g_combatDisengageRange), cfgPath, "CombatAutomation", "disengageRange")

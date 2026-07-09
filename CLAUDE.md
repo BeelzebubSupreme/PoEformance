@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.325`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.326`.
 
 ## Language
 
@@ -2780,6 +2780,35 @@ LocalPlayer pointer at PlayerInfo+0x20) but three sibling pointers rendered as `
 non-string bytes passed as "text". Tightened: length ≥ 3, no control chars, AND ≥ 80% ASCII-printable
 (engine paths/names/ids are ASCII). Garbage now falls through to `DATA` (hex) instead of fake text. Accepts a
 rare non-ASCII-string false-negative in exchange, which is fine for RE.
+
+## Combat rotation: seamless auto-apply + skill-bar link hunt (0.45.13.322–326)
+
+Goal: public-grade automatic combat rotation (no per-user RE). Status: the fast-poll
+LEARNER works and now AUTO-APPLIES (zero clicks); the hunt for a stable, zero-play
+slot→skill link is ONGOING (UI tree, player entity, Actor, components, GameUI all ruled
+out; skill-gem / server-side data model still to check).
+
+- **Seamless auto-apply (0.45.13.326):** `g_combatRotationAuto` (default ON) +
+  `g_combatRotationUserEdited` (latches on a hand-edit) in Load/SaveCombatAutoConfig
+  (`[CombatAutomation] rotationAuto`/`rotationUserEdited`). When the learner adds a new
+  skill (`LearnSkillBarSlotsTick` `changed`), if auto is on and the user hasn't edited,
+  it defers `_AutoApplyLearnedRotation` (→ `AutoConfigureCombatSlots` + `PushHeaderToWebView`)
+  so the rotation fills itself DURING PLAY with no button click. `_ApplyCombatSlotConfig`
+  sets `g_combatRotationUserEdited := true` (stop overwriting the user); the `AutoConfigCombat`
+  bridge click resets it to false (re-enable auto-management).
+- **`SkillGemProbe` (0.45.13.326, RE diagnostic):** the "keep hunting" branch. Dumps every
+  player inventory + item (path + grid pos, flagging `/Gems/` skill gems) and scans
+  `PlayerServerData[0..0x4000]` for the equipped skills' stable pointers (detailsPtr/geplRow)
+  — i.e. the skill-gem / server-side assignment data model. Bridge `SkillGemProbe`; UI
+  "💎 Skill-gem / Server Probe". Writes `debug\skillgem_probe_*.txt`.
+- **`SkillBarArrayProbe` (0.45.13.324–325):** hunts a player-side slot→skill array — scans the
+  player entity, Actor, every component, GameUI, and each UI slot subtree for the equipped
+  skills' stable pointers (geplRow / GrantedEffect row / ActiveSkillsDat row `detailsPtr+0x20`
+  — the last is 0/unused) + a per-skill slot-index int dump. Bridge `SkillBarArrayProbe`; UI
+  "🎯 Skill-bar Array Hunt". RESULT so far: NO stable link in any of those — only the actively
+  -cast slot's transient `+0x2F0` detailsPtr; the ActiveSkillsDat pointer is 0; no slot-index
+  field. The UI slot renders the icon from a graphics/sprite object, not a data row, so the UI
+  tree cannot yield the identity for an un-cast slot.
 
 ## Combat auto-config: skill-bar slot learner (fixes "only pulls 1 skill", 0.45.13.322)
 

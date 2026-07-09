@@ -783,7 +783,10 @@ _DispatchBridgeCall(method, args)
             SetTimer(PushHeaderToWebView, -50)
         case "AutoConfigCombat":
             ; Fill the combat slots from the equipped skill bar, report the result,
-            ; then re-push the header so the slot rows re-render populated.
+            ; then re-push the header so the slot rows re-render populated. An
+            ; explicit auto-config click re-enables learner auto-management.
+            global g_combatRotationUserEdited
+            g_combatRotationUserEdited := false
             acRes := AutoConfigureCombatSlots()
             try WebViewExec("window.combatAutoConfigResult && window.combatAutoConfigResult(" _JsStr(acRes) ")")
             SetTimer(PushHeaderToWebView, -60)
@@ -959,6 +962,8 @@ _DispatchBridgeCall(method, args)
             SetTimer(() => DiagSkillSlotLink(), -1)
         case "SkillBarArrayProbe":
             SetTimer(() => SkillBarArrayProbe(), -1)
+        case "SkillGemProbe":
+            SetTimer(() => SkillGemProbe(), -1)
         case "RefreshSkillKeys":
             SetTimer(PushHotkeyBindingsToWebView, -1)
         case "RefreshItemSizes":
