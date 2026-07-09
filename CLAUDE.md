@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.322`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.323`.
 
 ## Language
 
@@ -2794,27 +2794,37 @@ noise). So a single auto-config read can only ever see the currently-active skil
 per-slot skill reference for an un-cast slot (the UI resolves its icon lazily from a slot index we can't
 see per-slot). Icon-path matching was ruled out too: UI elements expose no sprite/DDS string here.
 
-Fix (no new offsets — reuses the proven +0x2F0 read): a **background learner** that accumulates the
-mapping over play.
-- **`ahk/SkillBarReader.ahk`** — `LearnSkillBarSlotsTick()` (called from `UpdateRadarFast` after
-  `TryLootTrackerTick`, self-throttled ~2 s): reads `ReadSkillBarSkills`, and for every slot whose skill
-  currently resolves (i.e. it was just cast) records `sendKey → {skillInternal, skillName}` into the new
-  global `g_skillLearnedByKey`, also refreshing `g_skillKeyBySkillName` (name→key, for PoB import) and
-  `g_skillSlotSkillName`. Debounced save (`SetTimer -2500`). `SaveLearnedSkillSlots()` /
-  `LoadLearnedSkillSlots()` persist it to `[SkillBarLearned]` in `poeformance_config.ini` (one entry per
-  key, value `"<internal>|<display>"`; whole-section rewrite). `g_skillLearnedByKey` seeded in
-  `SkillHotkeysInit()` (init gotcha) + loaded at startup (`InGameStateMonitor.ahk`, after
-  `SkillHotkeysInit()`).
+**IMPORTANT correction (0.45.13.323):** the offset comment on `SkillBarSlot.ActiveSkillPtr` (+0x2F0)
+claimed "every visible slot matched its detailsPtr at +0x2F0" (2026-06-21) — that was a character where
+every slot happened to be ACTIVE. +0x2F0 is only populated WHILE a slot's skill is mid-cast (a few
+hundred ms), then clears. So it is NOT a stable slot→skill link.
+
+Fix — two parts, no new offsets:
+- **Learn reliably during play (`ahk/SkillBarReader.ahk` `LearnSkillBarSlotsTick`, 0.45.13.323):** the
+  0.45.13.322 version re-read the whole bar every 2 s and almost always missed the brief cast window (why
+  "fire each skill once" learned nothing). Rewritten to CACHE the 8 slot addresses+keys (`ReadSkillBarHotkeys`,
+  refreshed ~3 s — the UI-tree walk is the only costly part) then FAST-POLL just each slot's +0x2F0 pointer
+  every ~150 ms (`_IsUiElement`-guarded; `dp → +0x48 geplRow → _ResolveSkillName`), so every cast is caught
+  the instant it fires. Records `sendKey → {skillInternal, skillName}` into `g_skillLearnedByKey`, refreshes
+  `g_skillKeyBySkillName` (name→key, PoB import) + `g_skillSlotSkillName`, debounced save. Persisted to
+  `[SkillBarLearned]` in `poeformance_config.ini` (`SaveLearnedSkillSlots`/`LoadLearnedSkillSlots`);
+  `g_skillLearnedByKey` seeded in `SkillHotkeysInit()` (init gotcha) + loaded at startup. Called from
+  `UpdateRadarFast` after `TryLootTrackerTick`.
 - **`ahk/CombatAutomation.ahk` (`AutoConfigureCombatSlots`)** — for a slot with a key but no live-resolved
-  skill, falls back to `g_skillLearnedByKey[key]`. So after a few seconds of combat (every rotation skill
-  cast once), one click fills the WHOLE rotation; the mapping persists across restarts, so subsequent
-  sessions are one-click from the start. Range/castType still derived from the live skill list (`skByInt`)
-  by internal name (all skills enumerate), so the learned map need only carry the name.
-- Static: full-script `AutoHotkey64 /validate` exit 0; braces balanced on all four edited files.
-- **Pending in-game verification:** with the skill bar visible, fight a pack (each skill fires once),
-  then click auto-config → all 6 slots should populate (not just the active one). The learned map also
-  survives a restart (check `[SkillBarLearned]` in `poeformance_config.ini`). If a slot never fills, that
-  skill was never cast during the sample window — cast it once and re-click.
+  skill, falls back to `g_skillLearnedByKey[key]`, so one click fills the WHOLE rotation once each skill has
+  been cast at least once; persists across restarts. Range/castType still derived from the live skill list.
+- **Enriched probe for the STABLE link (still needed for zero-play instant config):** `DiagSkillSlotLink`
+  now also maps each skill's GrantedEffect DAT row (geplRow→+0x00) and ActiveSkills DAT row (GE row + the
+  auto-discovered ActiveSkill offset) — the STATIC refs a slot holds to draw an un-cast icon — and the
+  subtree scan additionally resolves each pointer as an ENTITY (`ReadEntityIdentityBasic`), reporting
+  gem / `Metadata/Items` / `GrantedEffect` hits (bounded to 800 checks/slot). One run with un-cast slots
+  should reveal a consistent per-slot offset → hardcode it → truly instant one-click for everyone. The
+  earlier probe only matched detailsPtr/geplRow/dat, which un-cast slots don't hold, so it looked empty.
+- Static: full-script `AutoHotkey64 /validate` exit 0; braces balanced.
+- **Pending in-game verification:** (a) with the fast-poll learner, cast each skill once → auto-config
+  should now fill all slots (and `[SkillBarLearned]` persists across restart); (b) for the instant path,
+  run the enriched `🔗 Skill↔Slot Link` probe on a char with un-cast slots and send the file so the stable
+  offset can be pinned.
 
 ## Reference
 

@@ -391,41 +391,76 @@ _SkillKeysRefreshAndPush()
 LearnSkillBarSlotsTick()
 {
     global g_reader, g_skillLearnedByKey, g_skillKeyBySkillName, g_skillSlotSkillName
-    static _lastTick := 0, _saveScheduled := false
+    static _addrCache := [], _addrTick := 0, _lastPoll := 0, _saveScheduled := false
     if !IsObject(g_reader)
         return
     now := A_TickCount
-    if (_lastTick != 0 && (now - _lastTick) < 2000)
-        return
-    _lastTick := now
 
+    ; The slot's ActiveSkill pointer (+0x2F0) is only populated WHILE that slot's
+    ; skill is mid-cast (a few hundred ms), then clears — so a slow full re-read
+    ; almost always misses it (why "fire each skill once" didn't learn anything).
+    ; Instead: cache the 8 slot addresses+keys occasionally (the UI-tree walk is the
+    ; only costly part), then fast-poll just the pointer every ~150 ms so every cast
+    ; is caught the instant it fires.
+    if (_addrTick = 0 || (now - _addrTick) > 3000)
+    {
+        _addrTick := now
+        fresh := []
+        list := 0
+        try list := ReadSkillBarHotkeys(g_reader)
+        if (list && list is Array)
+        {
+            for e in list
+            {
+                if !(e is Map)
+                    continue
+                key := e.Has("sendKey") ? e["sendKey"] : ""
+                addr := e.Has("addr") ? e["addr"] : 0
+                if (key != "" && addr)
+                    fresh.Push(Map("key", key, "addr", addr, "slot", e.Has("slot") ? e["slot"] : 0))
+            }
+        }
+        if (fresh.Length)
+            _addrCache := fresh
+    }
+
+    if ((now - _lastPoll) < 150)
+        return
+    _lastPoll := now
+    if !(_addrCache is Array && _addrCache.Length)
+        return
     if !(IsSet(g_skillLearnedByKey) && g_skillLearnedByKey is Map)
         g_skillLearnedByKey := Map()
 
-    list := 0
-    try list := ReadSkillBarSkills(g_reader)
-    if !(list && list is Array && list.Length)
-        return
-
     changed := false
-    for e in list
+    for s in _addrCache
     {
-        if !(e is Map)
+        key  := s["key"]
+        addr := s["addr"]
+        if !_IsUiElement(g_reader, addr)          ; slot element still live (UI may rebuild)
             continue
-        key := e.Has("sendKey") ? e["sendKey"] : ""
-        if (key = "")
+        dp := 0
+        try dp := g_reader.Mem.ReadPtr(addr + PoE2Offsets.SkillBarSlot["ActiveSkillPtr"])
+        if !g_reader.IsProbablyValidPointer(dp)
+            continue                              ; slot idle this instant — skill not cast
+        gepl := 0
+        try gepl := g_reader.Mem.ReadPtr(dp + PoE2Offsets.ActiveSkillDetails["GrantedEffectsPerLevelDatRow"])
+        if !g_reader.IsProbablyValidPointer(gepl)
             continue
-        intnm := e.Has("skillInternal") ? e["skillInternal"] : ""
-        disp  := e.Has("skillName") ? e["skillName"] : ""
+        names := 0
+        try names := g_reader._ResolveSkillName(gepl)
+        if !(names is Map)
+            continue
+        intnm := names.Has("internalName") ? names["internalName"] : ""
+        disp  := (names.Has("displayName") && names["displayName"] != "") ? names["displayName"] : intnm
         if (intnm = "" && disp = "")
-            continue                           ; slot's skill not resolvable this tick
-        if (StrLower(intnm) = "move")
-            continue                           ; the basic move action is not a rotation skill
+            continue
+        if (StrLower(intnm) = "move" || SubStr(intnm, 1, 6) = "Skill_")
+            continue                              ; basic move / unresolved skill → not a rotation skill
         nm := (disp != "") ? disp : intnm
 
         prev := g_skillLearnedByKey.Has(key) ? g_skillLearnedByKey[key] : 0
-        if !(prev is Map && prev.Has("skillInternal") && prev["skillInternal"] = intnm
-            && prev.Has("skillName") && prev["skillName"] = nm)
+        if !(prev is Map && prev.Has("skillInternal") && prev["skillInternal"] = intnm)
         {
             g_skillLearnedByKey[key] := Map("skillInternal", intnm, "skillName", nm)
             changed := true
@@ -439,8 +474,8 @@ LearnSkillBarSlotsTick()
             if (intnm != "")
                 g_skillKeyBySkillName[StrLower(intnm)] := key
         }
-        if (IsSet(g_skillSlotSkillName) && g_skillSlotSkillName is Map && e.Has("slot"))
-            g_skillSlotSkillName[e["slot"]] := nm
+        if (IsSet(g_skillSlotSkillName) && g_skillSlotSkillName is Map && s.Has("slot") && s["slot"])
+            g_skillSlotSkillName[s["slot"]] := nm
     }
 
     if (changed && !_saveScheduled)
@@ -580,6 +615,18 @@ DiagSkillSlotLink()
         dat := 0
         if (dp && g_reader.IsProbablyValidPointer(dp))
             try dat := g_reader.Mem.ReadPtr(dp + PoE2Offsets.ActiveSkillDetails["ActiveSkillsDatPtr"])
+        ; STATIC references a slot can hold for an UN-CAST skill (to draw its icon):
+        ; the GrantedEffect DAT row (geplRow→+0x00) and the ActiveSkills DAT row
+        ; (GE row + the auto-discovered ActiveSkill foreignrow offset). These exist
+        ; whether or not the skill was ever cast — unlike detailsPtr — so a slot
+        ; referencing one of them is the stable link we need.
+        ge := 0
+        if (gr && g_reader.IsProbablyValidPointer(gr))
+            try ge := g_reader.Mem.ReadPtr(gr + PoE2Offsets.GrantedEffectsPerLevelDat["GrantedEffectDatPtr"])
+        asOff := (g_reader.HasOwnProp("_activeSkillOffset") ? g_reader._activeSkillOffset : 0)
+        asRow := 0
+        if (ge && asOff && g_reader.IsProbablyValidPointer(ge))
+            try asRow := g_reader.Mem.ReadPtr(ge + asOff)
         ip := sk.Has("iconPath") ? sk["iconPath"] : ""
         if (dp)
             ptrMap[dp] := nm " (detailsPtr)"
@@ -587,7 +634,11 @@ DiagSkillSlotLink()
             ptrMap[gr] := nm " (geplRow)"
         if (dat)
             ptrMap[dat] := nm " (activeSkillsDat)"
-        skillLines.Push(Format("  {} | details=0x{:X} gepl=0x{:X} dat=0x{:X}`n     icon={}", nm, dp, gr, dat, ip))
+        if (ge)
+            ptrMap[ge] := nm " (geRow)"
+        if (asRow)
+            ptrMap[asRow] := nm " (activeSkillsRow)"
+        skillLines.Push(Format("  {} | det=0x{:X} gepl=0x{:X} geRow=0x{:X} asRow=0x{:X}`n     icon={}", nm, dp, gr, ge, asRow, ip))
     }
 
     slots := ReadSkillBarHotkeys(g_reader)
@@ -626,6 +677,8 @@ _SkillBarScanPtrMatches(reader, rootPtr, ptrMap)
         return out
     queue := [{ptr: rootPtr, d: 0}]
     seen := Map()
+    entSeen := Map()          ; dedupe entity resolution by pointer value
+    entChecks := 0
     nodes := 0
     while (queue.Length > 0 && nodes < 200)
     {
@@ -644,6 +697,23 @@ _SkillBarScanPtrMatches(reader, rootPtr, ptrMap)
                 v := NumGet(blk.Ptr, off, "Ptr")
                 if (ptrMap.Has(v))
                     out.Push(Format("MATCH @+0x{:03X} (node 0x{:X}): {} = 0x{:X}", off, p, ptrMap[v], v))
+                else if (entChecks < 800 && reader.IsProbablyValidPointer(v) && !entSeen.Has(v))
+                {
+                    ; A slot may reference its skill by the socketed GEM ITEM entity
+                    ; (present for un-cast skills too). Resolve the pointer's entity
+                    ; path and report gem / skill-item hits.
+                    entSeen[v] := true
+                    entChecks += 1
+                    idp := ""
+                    try
+                    {
+                        idm := reader.ReadEntityIdentityBasic(v, 160)
+                        if (idm is Map && idm.Has("path"))
+                            idp := idm["path"]
+                    }
+                    if (idp != "" && (InStr(idp, "Gems") || InStr(idp, "Metadata/Items") || InStr(idp, "GrantedEffect")))
+                        out.Push(Format("ENTITY @+0x{:03X} (node 0x{:X}): {} = 0x{:X}", off, p, idp, v))
+                }
                 off += 8
             }
         }
