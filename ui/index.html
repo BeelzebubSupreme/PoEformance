@@ -5909,6 +5909,8 @@
                         onchange="ahkCall('SetLootRarity','Unique',this.checked)" checked> Unique</label>
                     <label class="filter-pill"><input type="checkbox" id="loot-rar-currency"
                         onchange="ahkCall('SetLootRarity','Currency',this.checked)" checked> Currency</label>
+                    <label class="filter-pill"><input type="checkbox" id="loot-rar-gems"
+                        onchange="ahkCall('SetLootRarity','Gems',this.checked)" checked> Gems</label>
                   </div>
             </div>
           </details>
@@ -12099,6 +12101,7 @@
         setChk('loot-rar-rare',     r.Rare);
         setChk('loot-rar-unique',   r.Unique);
         setChk('loot-rar-currency', r.Currency);
+        if (r.Gems !== undefined) setChk('loot-rar-gems', r.Gems);
       }
       const lootStatus = document.getElementById('cfg-loot-status');
       if (lootStatus && d.lootReason !== undefined) {

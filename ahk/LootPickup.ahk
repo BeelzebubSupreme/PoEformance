@@ -283,8 +283,20 @@ _RunLootPickup(radarSnap, gameHwnd)
 
     freeTag := (free < 0) ? "" : (" free=" free)
     sizeTag := (rw > 0 && rh > 0) ? (" " rw "x" rh "/" fpSrc) : ""
+    ; Base-name of the item (last path segment) so the status log shows WHAT was
+    ; picked up — makes any rarity mis-classification (e.g. a Magic item read as
+    ; Currency) visible for triage without a separate probe.
+    tPath := target.Has("path") ? target["path"] : ""
+    baseName := tPath
+    if (tPath != "")
+    {
+        slashPos := InStr(tPath, "/", , -1)   ; last "/" (paths are forward-slash)
+        if (slashPos)
+            baseName := SubStr(tPath, slashPos + 1)
+    }
+    nameTag := (baseName != "") ? (" [" baseName "]") : ""
     g_lootLastReason := "pickup(" target["rarity"] sizeTag " " clickTag " d=" Round(target["dist"])
-        . " " (g_lootCache.Count) "cached" freeTag ")"
+        . " " (g_lootCache.Count) "cached" freeTag nameTag ")"
     return true
 }
 
@@ -481,7 +493,15 @@ _LootResolveItemInfo(wrapperAddr, wrapperPath, decoded)
         ; _SmItemCategory), otherwise it fell through to "Normal" and — with
         ; Normal off — was never picked up, even though it is the most valuable
         ; class (this was the bug: cache-empty "0 passed filter" for currency).
-        if (InStr(StrLower(itemPath), "/currency/"))
+        lowerP := StrLower(itemPath)
+        ; Skill / support gems carry NO rarity component either (ReadItemRarity → -1),
+        ; so like currency they fell through to "Normal" and — with Normal off — were
+        ; never picked up (owner: "not picking up skill or support gems"). Match them
+        ; by PATH first and give them their own "Gems" filter class. Ground gem drops
+        ; are uncut gems: "Metadata/Items/Gem[s]/SkillGem…" / "…SupportGemUncut…".
+        if (InStr(lowerP, "/gems/") || InStr(lowerP, "/gem/"))
+            rarity := "Gems"
+        else if (InStr(lowerP, "/currency/"))
             rarity := "Currency"
         else
         {
@@ -513,7 +533,7 @@ _LootResolveItemInfo(wrapperAddr, wrapperPath, decoded)
 _IsRarityEnabled(rarity)
 {
     global g_lootRarityNormal, g_lootRarityMagic, g_lootRarityRare
-    global g_lootRarityUnique, g_lootRarityCurrency
+    global g_lootRarityUnique, g_lootRarityCurrency, g_lootRarityGems
     switch rarity
     {
         case "Normal":   return g_lootRarityNormal
@@ -521,6 +541,7 @@ _IsRarityEnabled(rarity)
         case "Rare":     return g_lootRarityRare
         case "Unique":   return g_lootRarityUnique
         case "Currency": return g_lootRarityCurrency
+        case "Gems":     return (IsSet(g_lootRarityGems) ? g_lootRarityGems : true)
     }
     return false
 }
@@ -1113,24 +1134,26 @@ _EstimateItemFootprint(rarity)
 LoadLootPickupConfig()
 {
     global g_lootRarityNormal, g_lootRarityMagic, g_lootRarityRare
-    global g_lootRarityUnique, g_lootRarityCurrency
+    global g_lootRarityUnique, g_lootRarityCurrency, g_lootRarityGems
 
     iniFile := A_ScriptDir "\poeformance_config.ini"
     section := "LootPickup"
 
     ; Sensible defaults: all enabled except Normal (Normal items are usually
-    ; vendor trash; users who want them can flip the flag).
+    ; vendor trash; users who want them can flip the flag). Gems (uncut skill/
+    ; support) are valuable → default ON.
     g_lootRarityNormal   := IniRead(iniFile, section, "Normal",   "0") = "1"
     g_lootRarityMagic    := IniRead(iniFile, section, "Magic",    "1") = "1"
     g_lootRarityRare     := IniRead(iniFile, section, "Rare",     "1") = "1"
     g_lootRarityUnique   := IniRead(iniFile, section, "Unique",   "1") = "1"
     g_lootRarityCurrency := IniRead(iniFile, section, "Currency", "1") = "1"
+    g_lootRarityGems     := IniRead(iniFile, section, "Gems",     "1") = "1"
 }
 
 SaveLootPickupConfig()
 {
     global g_lootRarityNormal, g_lootRarityMagic, g_lootRarityRare
-    global g_lootRarityUnique, g_lootRarityCurrency
+    global g_lootRarityUnique, g_lootRarityCurrency, g_lootRarityGems
 
     iniFile := A_ScriptDir "\poeformance_config.ini"
     section := "LootPickup"
@@ -1140,4 +1163,5 @@ SaveLootPickupConfig()
     IniWrite(g_lootRarityRare     ? "1" : "0", iniFile, section, "Rare")
     IniWrite(g_lootRarityUnique   ? "1" : "0", iniFile, section, "Unique")
     IniWrite(g_lootRarityCurrency ? "1" : "0", iniFile, section, "Currency")
+    IniWrite((IsSet(g_lootRarityGems) && g_lootRarityGems) ? "1" : "0", iniFile, section, "Gems")
 }

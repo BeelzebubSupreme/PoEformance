@@ -801,7 +801,7 @@ _DispatchBridgeCall(method, args)
         case "SetLootRarity":
             ; args: [rarityLabel ("Normal"|"Magic"|"Rare"|"Unique"|"Currency"), bool]
             global g_lootRarityNormal, g_lootRarityMagic, g_lootRarityRare
-            global g_lootRarityUnique, g_lootRarityCurrency
+            global g_lootRarityUnique, g_lootRarityCurrency, g_lootRarityGems
             lblRar := (args.Length >= 1) ? String(args[1]) : ""
             vRar := (args.Length >= 2) ? args[2] : false
             bvRar := (vRar = "true" || vRar = true || vRar = 1) ? true : false
@@ -812,6 +812,7 @@ _DispatchBridgeCall(method, args)
                 case "Rare":     g_lootRarityRare     := bvRar
                 case "Unique":   g_lootRarityUnique   := bvRar
                 case "Currency": g_lootRarityCurrency := bvRar
+                case "Gems":     g_lootRarityGems     := bvRar
             }
             SetTimer(() => SaveLootPickupConfig(), -100)
 

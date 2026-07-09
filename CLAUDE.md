@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.328`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.329`.
 
 ## Language
 
@@ -2780,6 +2780,33 @@ LocalPlayer pointer at PlayerInfo+0x20) but three sibling pointers rendered as `
 non-string bytes passed as "text". Tightened: length ≥ 3, no control chars, AND ≥ 80% ASCII-printable
 (engine paths/names/ids are ASCII). Garbage now falls through to `DATA` (hex) instead of fake text. Accepts a
 rare non-ASCII-string false-negative in exchange, which is fine for RE.
+
+## Loot filter: Gems category + Magic-on-by-default diagnosis (0.45.13.329)
+
+Report: "loot filter still isn't working — not picking up skill/support gems, still picking up
+random normal and magic items." Diagnosis from the autopilot_status.log + config:
+- **Gems not picked up (real bug):** skill/support gems carry NO rarity component, so
+  `ReadItemRarity` → -1 and `_LootResolveItemInfo` classified them "Normal" → filtered out with
+  Normal off (exactly the currency bug from 0.45.13.119, same root). Ground gem drops are uncut
+  gems (`Metadata/Items/Gem[s]/SkillGem…` / `…SupportGemUncut…`).
+- **"picking up magic" = defaults, not a broken filter:** the log showed ONLY Currency (172) +
+  Rare (6) ever attempted — zero Normal/Magic. But the user's `poeformance_config.ini` has NO
+  `[LootPickup]` section, so every launch uses the DEFAULTS where **Magic is ON** (only Normal
+  off). The filter IS applied (`_IsRarityEnabled` gate at `_RefreshLootCache`); the user just
+  needs to uncheck Magic (now persisted once toggled).
+- **Fix — new "Gems" pickup category (default ON):** gems matched by PATH first (like currency)
+  → `rarity := "Gems"`; `g_lootRarityGems` global (`[LootPickup] Gems`, default 1);
+  `_IsRarityEnabled` "Gems" case; `SetLootRarity` "Gems" case; `_SerializeLootRarity` emits it;
+  UI Gems checkbox (`loot-rar-gems`) + header sync. So skill/support gems get picked up and are
+  toggleable separately.
+- **Diagnostic — pickup log now shows the item base-name:** `pickup(<rarity> … [<BaseName>])` (last
+  path segment) so any rarity MIS-classification (e.g. a Magic item read as Currency/Rare) is
+  visible in the status log without a separate probe. If normal/magic still get picked up after
+  unchecking them, the `[BaseName]` + rarity in the log pins whether it's a `ReadItemRarity` offset
+  drift (Mods 0x94 / OMP 0x144) vs. just the default being on.
+- **Pending in-game verification:** uncheck Magic (and Normal stays off) → confirm `[LootPickup]`
+  is written and magic stops being picked up; gems now get collected (`pickup(Gems …)`); the
+  `[BaseName]` tag appears on pickups.
 
 ## Exploration: region-completion plan rebuild caused re-exploring (fixed 0.45.13.327)
 

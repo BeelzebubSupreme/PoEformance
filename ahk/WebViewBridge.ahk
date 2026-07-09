@@ -182,13 +182,14 @@ PushHeaderToWebView()
 _SerializeLootRarity()
 {
     global g_lootRarityNormal, g_lootRarityMagic, g_lootRarityRare
-    global g_lootRarityUnique, g_lootRarityCurrency
+    global g_lootRarityUnique, g_lootRarityCurrency, g_lootRarityGems
     return "{"
     . '"Normal":' (g_lootRarityNormal ? "true" : "false") ","
     . '"Magic":' (g_lootRarityMagic ? "true" : "false") ","
     . '"Rare":' (g_lootRarityRare ? "true" : "false") ","
     . '"Unique":' (g_lootRarityUnique ? "true" : "false") ","
-    . '"Currency":' (g_lootRarityCurrency ? "true" : "false")
+    . '"Currency":' (g_lootRarityCurrency ? "true" : "false") ","
+    . '"Gems":' ((IsSet(g_lootRarityGems) && g_lootRarityGems) ? "true" : "false")
     . "}"
 }
 
