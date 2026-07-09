@@ -478,11 +478,60 @@ _RunExploration(radarSnap, gameHwnd, measureOnly := false)
             _regionQHead := 1
             if (_regionWalkable > 0)
             {
-                ; Re-base the percentage on the reachable area and rebuild
-                ; the plan so samples get region-filtered.
+                ; Re-base the percentage on the reachable region. Recount visited
+                ; cells INSIDE the region fresh — _regionVisitedCnt was accumulated
+                ; during the (time-sliced) flood using each cell's visited state at
+                ; flood time, so it badly undercounts once exploration has run a
+                ; while (the % otherwise collapsed, e.g. 12%→3%, looking like a reset).
                 _totalWalkable := _regionWalkable
-                _visitedWalkable := Min(_regionVisitedCnt, _regionWalkable)
-                _planBuilt := false
+                vinr := 0
+                Loop (_coarseW * _coarseH)
+                {
+                    ci := A_Index - 1
+                    if (NumGet(_regionMap.Ptr, ci, "UChar") != 0
+                        && NumGet(_visited.Ptr, ci, "UChar") = 1)
+                        vinr++
+                }
+                _visitedWalkable := Min(vinr, _regionWalkable)
+
+                ; Apply the region filter to the plan WITHOUT rebuilding it. A full
+                ; rebuild (_planBuilt := false) re-ran greedy-TSP from the current
+                ; position and reset _planIdx to 1 — which sent the bot BACK to the
+                ; nearest un-visited gap behind it (status log: wp 9/60 → wp 2/59,
+                ; target 9478 → 6130), the "circling / re-exploring" report. Instead
+                ; drop only the out-of-region (unreachable) waypoints and keep the
+                ; tour order + forward progress: _planIdx shifts left by the number
+                ; of dropped waypoints ahead of it, so it still points at the same
+                ; next real waypoint.
+                if (_planBuilt && _plan.Length > 0)
+                {
+                    filtered := []
+                    newIdx := _planIdx
+                    i := 1
+                    while (i <= _plan.Length)
+                    {
+                        wp := _plan[i]
+                        wcX := wp[1] // _STEP
+                        wcY := wp[2] // _STEP
+                        keep := (wcX >= 0 && wcX < _coarseW && wcY >= 0 && wcY < _coarseH
+                            && NumGet(_regionMap.Ptr, wcY * _coarseW + wcX, "UChar") != 0)
+                        if (keep)
+                            filtered.Push(wp)
+                        else if (i < _planIdx)
+                            newIdx--
+                        i++
+                    }
+                    if (filtered.Length > 0)
+                    {
+                        _plan := filtered
+                        _planIdx := Max(1, Min(newIdx, filtered.Length + 1))
+                        _targetCX := -1   ; re-pick a target from the surviving plan
+                    }
+                    else
+                        _planBuilt := false   ; nothing reachable survived → rebuild
+                }
+                else
+                    _planBuilt := false       ; no plan yet → build a region-filtered one
             }
         }
     }

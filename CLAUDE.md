@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.326`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.327`.
 
 ## Language
 
@@ -2780,6 +2780,31 @@ LocalPlayer pointer at PlayerInfo+0x20) but three sibling pointers rendered as `
 non-string bytes passed as "text". Tightened: length ≥ 3, no control chars, AND ≥ 80% ASCII-printable
 (engine paths/names/ids are ASCII). Garbage now falls through to `DATA` (hex) instead of fake text. Accepts a
 rare non-ASCII-string false-negative in exchange, which is fine for RE.
+
+## Exploration: region-completion plan rebuild caused re-exploring (fixed 0.45.13.327)
+
+Report: "autopilot is still circling back and re-exploring areas." The autopilot_status.log
+showed the smoking gun: mid-map the tour count changed `/60 → /59` and at that instant
+coverage **collapsed 12.2% → 3.1%** and the target jumped **backward** (wp 9/60 → wp 2/59,
+target `9478,3913` → `6130,2783`). Cause: `ExplorationModule._RunExploration`, when the
+reachability-region flood completes, re-based coverage AND did a FULL plan rebuild
+(`_planBuilt := false`) — re-running greedy-TSP from the current position with `_planIdx := 1`,
+which sent the bot to the nearest un-visited gap BEHIND it (the same "looping back" anti-pattern
+the earlier stuck-handler fix removed, still present on this path). Two fixes in the
+region-completion block:
+- **Filter the plan IN PLACE instead of rebuilding:** drop only the out-of-region (unreachable)
+  waypoints, keep tour order, and shift `_planIdx` left by the count of dropped waypoints ahead
+  of it so it still points at the same next real waypoint (forward progress preserved). Only
+  falls back to a full rebuild if NOTHING reachable survives / no plan exists yet.
+- **Recount visited-in-region fresh:** `_regionVisitedCnt` was accumulated during the time-sliced
+  flood using each cell's visited state AT flood time, so it undercounts badly once exploration
+  has run a while (the 12%→3% collapse). Replaced with a one-time full recount of
+  `_regionMap ∩ _visited` at completion; the per-tick vision-sweep increment (region-gated) keeps
+  it accurate after.
+- **Pending in-game verification:** re-run a map with AutoPilot — coverage % should climb
+  monotonically (no collapse when `rg:build → rg:on`), and the bot should stop jumping back to
+  earlier waypoints. Some greedy gap-fill backtracking is inherent to coverage, but the big
+  disruptive tour-reset is gone.
 
 ## Combat rotation: seamless auto-apply + skill-bar link hunt (0.45.13.322–326)
 
