@@ -190,11 +190,9 @@ class ProcessMemory
         if (!pid)
             return false
 
-        ; Access flags: PROCESS_VM_READ (0x0010) | PROCESS_QUERY_INFORMATION (0x0400)
-        ; plus PROCESS_VM_WRITE (0x0020) | PROCESS_VM_OPERATION (0x0008) — the write
-        ; pair was added for the opt-in Camera Zoom feature (WriteFloat). The tool is
-        ; still read-only in practice: nothing writes unless the user enables zoom.
-        handle := DllCall("OpenProcess", "UInt", 0x0010 | 0x0020 | 0x0008 | 0x0400, "Int", false, "UInt", pid, "Ptr")
+        ; Access flags: PROCESS_VM_READ (0x0010) | PROCESS_QUERY_INFORMATION (0x0400).
+        ; The tool is strictly read-only on game memory — no VM_WRITE / VM_OPERATION.
+        handle := DllCall("OpenProcess", "UInt", 0x0010 | 0x0400, "Int", false, "UInt", pid, "Ptr")
         this.LastOpenError := A_LastError
         if (!handle)
             return false
@@ -376,40 +374,6 @@ class ProcessMemory
     {
         buf := this.ReadBytes(address, 4)
         return buf ? NumGet(buf.Ptr, 0, "Float") : 0
-    }
-
-    ; Writes raw bytes to the target process via WriteProcessMemory. Requires the
-    ; handle to hold PROCESS_VM_WRITE | PROCESS_VM_OPERATION (see OpenProcess above).
-    ; Returns true on a full write, false otherwise. The ONLY write path in the tool
-    ; (used by the opt-in Camera Zoom); everything else is read-only.
-    WriteBytes(address, buf, size)
-    {
-        this.LastWriteError := 0
-        this.LastWriteProtect := 0
-        if (!this.Handle || !address || size <= 0)
-            return false
-        ; Flip the target page to writable first. Live game-data pages are usually
-        ; already RW, but some are protected — WriteProcessMemory respects page
-        ; protection, so a straight write returns ACCESS_DENIED (5) on those. This
-        ; is the standard memory-editor pattern: VirtualProtectEx → write → restore.
-        oldProtect := 0
-        changedProt := DllCall("VirtualProtectEx", "Ptr", this.Handle, "Ptr", address, "UPtr", size
-            , "UInt", 0x40, "UInt*", &oldProtect, "Int")   ; 0x40 = PAGE_EXECUTE_READWRITE
-        this.LastWriteProtect := changedProt ? 1 : 0
-        wrote := 0
-        ok := DllCall("WriteProcessMemory", "Ptr", this.Handle, "Ptr", address, "Ptr", buf.Ptr, "UPtr", size, "UPtr*", &wrote, "Int")
-        this.LastWriteError := A_LastError
-        if (changedProt)
-            DllCall("VirtualProtectEx", "Ptr", this.Handle, "Ptr", address, "UPtr", size, "UInt", oldProtect, "UInt*", &oldProtect, "Int")
-        return (ok && wrote = size)
-    }
-
-    ; Writes a single 32-bit float. Returns true on success.
-    WriteFloat(address, value)
-    {
-        b := Buffer(4, 0)
-        NumPut("Float", value, b, 0)
-        return this.WriteBytes(address, b, 4)
     }
 
     ; Reads a boolean value by interpreting a non-zero UChar as true.

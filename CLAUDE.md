@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.313`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.314`.
 
 ## Language
 
@@ -2573,30 +2573,42 @@ cursed/enraged/etc." Built on the tool's PROVEN buff read, not the suspect enemy
   dat SCHEMA (poe_tools.py works off GGPK CSVs — columns unknown to me, so not written); skill→granted-
   buff linkage + structured AoE/buff/curse skill tags need a live RE pass. These stay as the honest gap.
 
-### Phase 5 — in-game camera zoom: read-only camera probe (shipped 0.45.13.298)
+### Phase 5 — in-game camera zoom: NATIVE GGPK patch (shipped 0.45.13.313)
 
-Owner wants an in-game camera zoom (see more/less of the play area). The tool is currently READ-ONLY
-on game memory (the process handle is opened `PROCESS_VM_READ | PROCESS_QUERY_INFORMATION` in
-`ProcessMemory.__New`, no `VM_WRITE`/`VM_OPERATION`), so zoom needs a memory WRITE — a deliberate
-escalation (detection-footprint + ToS + crash-if-wrong). This phase ships ONLY the safe first step:
+Owner wants an in-game camera zoom (see more of the play area). The **memory-write approach was tried
+and ABANDONED** (removed 0.45.13.313): a probe (`CameraZoomProbe.ahk`) dumped the `CameraStructure`
+floats and a reversible write feature (`CameraZoom.ahk`, plus `ProcessMemory.WriteFloat`/`WriteBytes`
++ `VM_WRITE|VM_OPERATION`) scaled candidate offsets — but in-game the game OVERWRITES the camera
+fields every frame (except one that stuck without changing the view), so no writable zoom field
+exists. **All of that was deleted**: `ahk/CameraZoom.ahk`, `ahk/CameraZoomProbe.ahk`, the
+`ProcessMemory` write path (handle is back to `PROCESS_VM_READ | PROCESS_QUERY_INFORMATION` only —
+the tool is strictly READ-ONLY on game memory again), and every bridge/UI/header hook.
 
-- **`ahk/CameraZoomProbe.ahk` (new, READ-ONLY, writes NOTHING):** `CameraZoomProbeRun` resolves the
-  CameraStructure (`_radarInGameStateCache` → `InGameState.WorldData` → `WorldData.CameraStructure`
-  0xA0 — same chain the W2S matrix uses) and dumps every float in `CameraStructure+0x00..0x1FC` (offset
-  / float / int), marking the 0x40-byte W2S-matrix region (`+0x100`) and flagging plausible
-  zoom/FoV/distance candidates (`0.05 < f < 10000`). MsgBox summary + `logs\…camera_probe.log`. Bridge
-  `CameraZoomProbeRun`; UI "🎥 Probe Camera" in the RE-tools row.
-- **Deliberately NOT built (needs the in-game probe first — no guessed offset):** the memory-WRITE
-  capability (`WriteProcessMemory` + reopening the handle with `VM_WRITE|VM_OPERATION`) and the actual
-  zoom control (hotkey/UI that writes the field, likely per-frame). A wrong write crashes the game and
-  adding write access changes the tool's process footprint, so both are made as an INFORMED step once
-  the probe pins the offset with the owner present — not blind.
-- **Verified:** `/validate` exit 0; inline `node --check` clean.
-- **Pending in-game (the RE session):** get in-game, click "🎥 Probe Camera", read the log. If PoE2
-  exposes any zoom, change it and re-run to see which float moved; otherwise identify the FoV /
-  camera-distance value from the candidates. Then we add the write path + zoom control against the
-  confirmed offset. (Note: PoE ARPGs historically lock the camera, so a writable zoom field may not
-  exist — the probe tells us.)
+The working solution is a **persistent GGPK bundle patch** (`ggpk-tools/PoePatcher/Patches/ZoomPatch.cs`),
+RE'd from the KintaroEB zoom `.ggpx` via a before/after bundle diff: the zoom-out is one injected line
+in `metadata/characters/character.ot` —
+`on_initial_position_set = { CreateCameraZoomNode(1000000000.0f, 1000000000.0f, <factor>f); }` (the two
+huge radii = "everywhere"; the 3rd arg is the zoom FACTOR, 1.0 ≈ default, higher = further out). Clean
+template ends after `team = 1`, so Apply is a single injection + Revert restores the backed-up bytes
+(BackupManager), same model as MinimapPatch. character.ot is UTF-16LE **with BOM** (encode with
+`Encoding.Unicode`, keep the leading U+FEFF). **Verified in-game (2026-07-08): applying at factor 1.9
+zooms the camera out.**
+
+- **CLI:** `poe-patcher apply --ggpk <_.index.bin> --patch zoom --zoom-factor 1.9` (clamped 1.0–3.0);
+  `revert` restores default. Registered in `PoePatcher/Program.cs` alongside `minimap`.
+- **Tool UI (shipped 0.45.13.313):** wired exactly like the minimap GGPK maphack (same "game must be
+  CLOSED" rule). `GgpkToolBridge`: generalized `_RunPatchVerb(verb, patchName, extraArgs, applyMsg,
+  revertMsg)` (minimap callers unchanged via defaults) + `ApplyZoomPatch`/`RevertZoomPatch`/
+  `IsZoomApplied` (`backups\zoom` dir signal) / `Get`/`SetZoomFactor` (persisted `[GgpkTools]
+  zoomFactor`, forwarded as `--zoom-factor`). `BridgeDispatch` `SetZoomPatch`/`SetZoomFactor` +
+  `GgpkZoomUi_Run`; `WebViewBridge` pushes `ggpkZoomApplied`/`ggpkZoomFactor`; UI **Overlay → Map
+  Hack → "Camera Zoom (GGPK)"** (toggle = apply/revert, factor slider, status; disabled while PoE2
+  runs / install path unknown). `_FindExe` already prefers `ggpk-tools\bin`, where the built
+  `poe-patcher.exe` (lists both `minimap` + `zoom`) + `oo2core.dll` live — no publish-path change
+  needed.
+- **Note (Oodle):** PoE2 ships no standalone `oo2core`; the shared `ggpk-tools\bin` needs Kintaro's
+  `oo2core.dll` (630 KB) copied in next to the exes or PoeDataExtract/PoePatcher crash in
+  `LibBundle3.Bundle.ReadWithoutCache`.
 
 ## Reference
 

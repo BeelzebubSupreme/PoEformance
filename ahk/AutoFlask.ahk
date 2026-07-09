@@ -140,9 +140,6 @@ UpdateRadarFast()
         ; ── Stash Mover overlay button — position/show next to the inventory grid ──
         StashMoverTick(radarSnap)
 
-        ; ── Camera zoom (experimental memory write) — re-apply / restore each tick ──
-        CameraZoomTick()
-
         ; ── Atlas overlay snapshot (self-gated on g_atlasOverlayEnabled, throttled) ──
         TryBuildAtlasRender(radarSnap)
         if !IsObject(g_overlayManager)

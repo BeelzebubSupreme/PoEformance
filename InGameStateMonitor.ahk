@@ -56,7 +56,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.313"
+POEFORMANCE_VERSION := "0.45.13.314"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -371,8 +371,6 @@ LoadLootTradePricing()    ; official PoE2 trade-API unique pricing (off by defau
 StTrace("LoadLootTradePricing")
 LoadStashMover()          ; "dump backpack to open stash" feature + [StashMover] config
 StTrace("LoadStashMover")
-LoadCameraZoom()          ; experimental reversible camera zoom (the tool's only memory write) + [CameraZoom]
-StTrace("LoadCameraZoom")
 LoadNpcIdentify()         ; TEST: hideout "click Doryani -> Identify Items" hotkey + [NpcIdentify]
 StTrace("LoadNpcIdentify")
 LoadOverlayIcons()        ; GDI+ currency orb icons for the value-aware loot radar
@@ -486,7 +484,6 @@ try WinSetAlwaysOnTop(g_alwaysOnTop ? 1 : 0, "ahk_id " g_webGui.Hwnd)
 
 ; Free the GDI+ overlay icons on exit.
 OnExit((*) => StopOverlayIcons())
-OnExit((*) => CameraZoomRestore())   ; restore the game's original camera value on quit
 
 ; Save window geometry on exit and after move/resize
 OnExit((*) => (_CaptureWindowGeometry(), SaveConfig(), SaveCombatAutoConfig()))
@@ -1068,8 +1065,6 @@ OnTreeTabChanged(*)
 #Include ahk/StackMaxProbe.ahk
 #Include ahk/ActorProbe.ahk
 #Include ahk/EnemyBuffProbe.ahk
-#Include ahk/CameraZoomProbe.ahk
-#Include ahk/CameraZoom.ahk
 #Include ahk/CurrencyLayoutProbe.ahk
 #Include ahk/LandscapeGridProbe.ahk
 #Include ahk/OffsetCompare.ahk
