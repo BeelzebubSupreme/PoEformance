@@ -62,10 +62,13 @@ TryAutoPilot(radarSnap)
 _RunAutoPilot(radarSnap)
 {
     global g_autoPilotEnabled, g_autoPilotState, g_autoPilotReason
-    global g_updatesPaused
+    global g_updatesPaused, g_combatAssistMode
 
-    ; Master gate. Updates are paused or master switch is off.
-    if (g_updatesPaused || !g_autoPilotEnabled)
+    ; Master gate. Run when EITHER the full AutoPilot toggle OR Combat Assist is
+    ; on (and updates aren't paused). Assist is the "you move, it fights" mode.
+    apOn     := g_autoPilotEnabled
+    assistOn := (IsSet(g_combatAssistMode) && g_combatAssistMode)
+    if (g_updatesPaused || (!apOn && !assistOn))
     {
         g_autoPilotState  := "idle"
         g_autoPilotReason := g_updatesPaused ? "paused" : "disabled"
@@ -81,6 +84,18 @@ _RunAutoPilot(radarSnap)
         return
     }
     gameHwnd := guard["gameHwnd"]
+
+    ; ── Combat Assist mode (you move, it fights) ─────────────────────────
+    ; Assist on + full AutoPilot off: run ONLY the combat rotation with movement
+    ; suppressed (no loot walking, no chest pursuit, no scouting). The player
+    ; drives movement with WASD; the tool aims, fires skills, and auto-dodges.
+    if (assistOn && !apOn)
+    {
+        inCombat := TryCombatAutomation(radarSnap, gameHwnd, true)
+        g_autoPilotState  := inCombat ? "combat" : "idle"
+        g_autoPilotReason := inCombat ? "assist-engaged" : "assist-idle"
+        return
+    }
 
     ; ── Priority chain: (adjacent chest) > combat > loot > chest > explore ──
     ; Each sub-routine returns true to claim the tick (block the rest).

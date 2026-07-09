@@ -5702,6 +5702,18 @@
                 avoids transitions / portals / UI).
               </div>
 
+              <div class="cfg-row">
+                <span class="cfg-label">🎯 Combat Assist (you move)</span>
+                <label class="toggle"><input type="checkbox" id="tog-combat-assist"
+                    onchange="ahkCall('ToggleCombatAssist')"><span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">
+                "You move, it fights." Runs only the combat rotation — aims, fires your skill
+                slots, and auto-dodges — with ALL auto-movement suppressed, so you drive with
+                <strong>WASD</strong> (the tool controls the mouse to aim, so keyboard movement
+                is required). Independent of AutoPilot; if AutoPilot is on, it takes precedence.
+              </div>
+
               <div class="cfg-row"><span class="cfg-label">Pause while a UI panel is open</span>
                 <label class="toggle"><input type="checkbox" id="tog-panel-pauseautopilot"
                     onchange="ahkCall('SetPanelRespect','autopilot', this.checked?1:0)" checked><span class="toggle-slider"></span></label>
@@ -12013,6 +12025,7 @@
 
       // AutoPilot config sync (master state machine over combat + exploration)
       setChk('tog-autopilot', d.autoPilot);
+      setChk('tog-combat-assist', d.combatAssist);
       const apState = document.getElementById('cfg-autopilot-state');
       const apReason = document.getElementById('cfg-autopilot-reason');
       if (apState) {

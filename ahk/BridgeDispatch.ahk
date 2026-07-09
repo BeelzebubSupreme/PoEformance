@@ -474,6 +474,19 @@ _DispatchBridgeCall(method, args)
             SetTimer(() => SaveCombatAutoConfig(), -100)
             SetTimer(() => SaveExplorationConfig(), -100)
             SetTimer(PushHeaderToWebView, -50)
+        case "ToggleCombatAssist":
+            ; "You move, it fights" — run the combat rotation with all
+            ; click-to-move suppressed while the player drives movement (WASD).
+            ; Independent of ToggleAutoPilot; full AutoPilot takes precedence.
+            global g_combatAssistMode, g_combatState, g_combatLastReason
+            g_combatAssistMode := !g_combatAssistMode
+            if !g_combatAssistMode
+            {
+                g_combatState      := "idle"
+                g_combatLastReason := "assist-off"
+            }
+            SetTimer(() => SaveCombatAutoConfig(), -100)
+            SetTimer(PushHeaderToWebView, -50)
         case "RequestInventory":
             ; UI polls this when the Inventory tab is active. Off-snapshot read so
             ; the per-frame cost is zero when the user isn't looking at the tab.

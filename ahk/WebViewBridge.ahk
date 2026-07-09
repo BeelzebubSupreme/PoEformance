@@ -49,7 +49,7 @@ PushHeaderToWebView()
     global g_panelHideOverlays, g_panelPauseAutoPilot, g_panelHideLootBars
     global g_maphackMaskDebug, g_mapHackUnexplored
     global g_mapHackUnexploredColor, g_mapHackUnexploredSpacing
-    global g_autoPilotEnabled, g_autoPilotState, g_autoPilotReason
+    global g_autoPilotEnabled, g_autoPilotState, g_autoPilotReason, g_combatAssistMode
     global g_inventoryChainDumpEnabled, g_overlayStatusTextEnabled, g_alwaysOnTop, g_localApiEnabled, g_localApiPort
     global g_overlayPoeOnly
     global g_cfgOpenSections
@@ -128,6 +128,7 @@ PushHeaderToWebView()
         . '"panelHideLootBars":' (g_panelHideLootBars ? "true" : "false") ","
         . '"cfgSections":' _JsStr(g_cfgOpenSections) ","
         . '"autoPilot":' (g_autoPilotEnabled ? "true" : "false") ","
+        . '"combatAssist":' ((IsSet(g_combatAssistMode) && g_combatAssistMode) ? "true" : "false") ","
         . '"autoPilotState":' _JsStr(g_autoPilotState) ","
         . '"autoPilotReason":' _JsStr(g_autoPilotReason) ","
         . '"invChainDump":' (g_inventoryChainDumpEnabled ? "true" : "false") ","

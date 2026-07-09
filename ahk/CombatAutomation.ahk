@@ -23,8 +23,12 @@
 ;
 ; Params: radarSnap - full radar snapshot
 ;         gameHwnd  - resolved PoE2 window handle (must be valid + active)
+;         assistMode - when true, run "you move, it fights": aim + fire skills
+;                    + auto-dodge only, and suppress every click-to-move branch
+;                    (walk-to-engage / HUD-reposition / approach) plus the
+;                    stuck/pack give-ups, so the tool never steers the character.
 ; Returns: true if combat engaged this tick, false if idle
-TryCombatAutomation(radarSnap, gameHwnd)
+TryCombatAutomation(radarSnap, gameHwnd, assistMode := false)
 {
     static _running := false
     if _running
@@ -194,7 +198,7 @@ TryCombatAutomation(radarSnap, gameHwnd)
             _engageMinHostiles := hostileCount
             _engageStart := A_TickCount
         }
-        if (_engageStart && hostileCount >= 3 && (A_TickCount - _engageStart) > MAX_ENGAGE_MS)
+        if (!assistMode && _engageStart && hostileCount >= 3 && (A_TickCount - _engageStart) > MAX_ENGAGE_MS)
         {
             blN := _CombatBlacklistPackNear(radarSnap
                 , combatInfo["nearestWorldX"], combatInfo["nearestWorldY"], 1600, 25000)
@@ -437,19 +441,24 @@ TryCombatAutomation(radarSnap, gameHwnd)
             ; pulls it up out of the HUD, the same rescue exploration uses) and issue a
             ; throttled move-click so the character steps and the enemy re-projects off
             ; the HUD. No skill fire — the cursor isn't on the enemy this tick.
-            static _hudRepoTick := 0
-            rescue := NavValidateClick(targetScreenPos, camAnchor["sp"], avoidRects)
-            nowH := A_TickCount
-            if (rescue["ok"] && (nowH - _hudRepoTick) > 250)
+            ; Assist mode owns no movement, so skip the reposition move-click; the
+            ; player steps off the enemy's HUD-overlap themselves. Just hold the tick.
+            if (!assistMode)
             {
-                DllCall("SetCursorPos", "int", rescue["sp"]["x"], "int", rescue["sp"]["y"])
-                Sleep(15)
-                DllCall("mouse_event", "uint", 0x0002, "int", 0, "int", 0, "uint", 0, "uptr", 0) ; LDOWN
-                Sleep(15)
-                DllCall("mouse_event", "uint", 0x0004, "int", 0, "int", 0, "uint", 0, "uptr", 0) ; LUP
-                _hudRepoTick := nowH
+                static _hudRepoTick := 0
+                rescue := NavValidateClick(targetScreenPos, camAnchor["sp"], avoidRects)
+                nowH := A_TickCount
+                if (rescue["ok"] && (nowH - _hudRepoTick) > 250)
+                {
+                    DllCall("SetCursorPos", "int", rescue["sp"]["x"], "int", rescue["sp"]["y"])
+                    Sleep(15)
+                    DllCall("mouse_event", "uint", 0x0002, "int", 0, "int", 0, "uint", 0, "uptr", 0) ; LDOWN
+                    Sleep(15)
+                    DllCall("mouse_event", "uint", 0x0004, "int", 0, "int", 0, "uint", 0, "uptr", 0) ; LUP
+                    _hudRepoTick := nowH
+                }
             }
-            g_combatLastReason := "hud-reposition(" targetScreenPos["x"] "," targetScreenPos["y"] " aim=" aimTag ")"
+            g_combatLastReason := (assistMode ? "assist-hud-hold(" : "hud-reposition(") targetScreenPos["x"] "," targetScreenPos["y"] " aim=" aimTag ")"
             return true
         }
 
@@ -470,6 +479,15 @@ TryCombatAutomation(radarSnap, gameHwnd)
         ; finds direct LoS and flips aimMode back to "direct".
         if (aimMode = "walk")
         {
+            ; Assist mode: the player owns movement, so don't issue the move-click
+            ; and don't run the stuck give-up (the character isn't stuck — it just
+            ; hasn't been walked into LoS yet). Hold the engagement; a later tick
+            ; flips to "direct" once the player clears the obstacle.
+            if (assistMode)
+            {
+                g_combatLastReason := "assist-hold(no-LoS d=" Round(terrainDist) " " aimTag ")"
+                return true
+            }
             static _walkClickTick := 0
             now := A_TickCount
             ; Give up on a reachable-but-unwalkable enemy instead of clicking forever.
@@ -583,41 +601,47 @@ TryCombatAutomation(radarSnap, gameHwnd)
         }
         else if (selResult["outOfRange"])
         {
-            ; Give up if we've been approaching an unreachable enemy without moving.
-            if (_CombatMoveStuckGiveUp(now, radarSnap, combatInfo, "approach"))
-                return false
-            ; Direct LoS but every ready skill is out of range. Previously
-            ; this branch only set a status ("approaching") without ever
-            ; moving — the bot parked the cursor on the enemy and stood
-            ; still until the mob happened to walk over. Now we issue a
-            ; throttled move-click at a point ~60% toward the enemy so the
-            ; character actually closes the gap; skills fire on a later
-            ; tick once the distance drops below the slot range.
-            static _approachClickTick := 0
-            if ((now - _approachClickTick) > 300)
+            ; Assist mode owns no movement: don't close the gap and don't run the
+            ; stuck give-up. Stay aimed at the enemy and wait — skills fire on a
+            ; later tick once the PLAYER walks it inside a slot's range.
+            if (!assistMode)
             {
-                apX := combatInfo["playerWorldX"] + (combatInfo["nearestWorldX"] - combatInfo["playerWorldX"]) * 0.6
-                apY := combatInfo["playerWorldY"] + (combatInfo["nearestWorldY"] - combatInfo["playerWorldY"]) * 0.6
-                apInfo := Map(
-                    "nearestWorldX", apX,
-                    "nearestWorldY", apY,
-                    "nearestWorldZ", combatInfo["nearestWorldZ"],
-                    "w2sMatrix",     combatInfo["w2sMatrix"],
-                    "playerWorldX",  combatInfo["playerWorldX"],
-                    "playerWorldY",  combatInfo["playerWorldY"]
-                )
-                apPos := _WorldToScreen(apInfo, gameHwnd, camAnchor)
-                if (apPos && !IsPointInAvoidZone(apPos["x"], apPos["y"], avoidRects))
+                ; Give up if we've been approaching an unreachable enemy without moving.
+                if (_CombatMoveStuckGiveUp(now, radarSnap, combatInfo, "approach"))
+                    return false
+                ; Direct LoS but every ready skill is out of range. Previously
+                ; this branch only set a status ("approaching") without ever
+                ; moving — the bot parked the cursor on the enemy and stood
+                ; still until the mob happened to walk over. Now we issue a
+                ; throttled move-click at a point ~60% toward the enemy so the
+                ; character actually closes the gap; skills fire on a later
+                ; tick once the distance drops below the slot range.
+                static _approachClickTick := 0
+                if ((now - _approachClickTick) > 300)
                 {
-                    DllCall("SetCursorPos", "int", apPos["x"], "int", apPos["y"])
-                    Sleep(20)
-                    DllCall("mouse_event", "uint", 0x0002, "int", 0, "int", 0, "uint", 0, "uptr", 0) ; LDOWN
-                    Sleep(20)
-                    DllCall("mouse_event", "uint", 0x0004, "int", 0, "int", 0, "uint", 0, "uptr", 0) ; LUP
-                    _approachClickTick := now
+                    apX := combatInfo["playerWorldX"] + (combatInfo["nearestWorldX"] - combatInfo["playerWorldX"]) * 0.6
+                    apY := combatInfo["playerWorldY"] + (combatInfo["nearestWorldY"] - combatInfo["playerWorldY"]) * 0.6
+                    apInfo := Map(
+                        "nearestWorldX", apX,
+                        "nearestWorldY", apY,
+                        "nearestWorldZ", combatInfo["nearestWorldZ"],
+                        "w2sMatrix",     combatInfo["w2sMatrix"],
+                        "playerWorldX",  combatInfo["playerWorldX"],
+                        "playerWorldY",  combatInfo["playerWorldY"]
+                    )
+                    apPos := _WorldToScreen(apInfo, gameHwnd, camAnchor)
+                    if (apPos && !IsPointInAvoidZone(apPos["x"], apPos["y"], avoidRects))
+                    {
+                        DllCall("SetCursorPos", "int", apPos["x"], "int", apPos["y"])
+                        Sleep(20)
+                        DllCall("mouse_event", "uint", 0x0002, "int", 0, "int", 0, "uint", 0, "uptr", 0) ; LDOWN
+                        Sleep(20)
+                        DllCall("mouse_event", "uint", 0x0004, "int", 0, "int", 0, "uint", 0, "uptr", 0) ; LUP
+                        _approachClickTick := now
+                    }
                 }
             }
-            g_combatLastReason := "approaching(d=" Round(nearestDist) ")"
+            g_combatLastReason := (assistMode ? "assist-inrange-wait(d=" : "approaching(d=") Round(nearestDist) ")"
         }
         else
         {
@@ -1367,9 +1391,14 @@ LoadCombatAutoConfig()
     global g_combatW2SScale, g_combatNoPathBlacklist
     global g_combatAutoDodge, g_combatDodgeKey, g_combatDodgeHpPct, g_combatDodgeCooldownMs
     global g_combatRotationAuto, g_combatRotationUserEdited
+    global g_combatAssistMode
 
     cfgPath := A_ScriptDir "\poeformance_config.ini"
 
+    ; Combat Assist ("you move, it fights"): run the combat rotation with all
+    ; click-to-move suppressed while the player drives movement (WASD). Opt-in,
+    ; independent of the full AutoPilot toggle. Default OFF.
+    g_combatAssistMode := false
     g_combatAutoEnabled := false
     g_combatRange := 1500
     g_combatDisengageRange := 2500
@@ -1391,6 +1420,7 @@ LoadCombatAutoConfig()
     ; from (seeded here unconditionally — module-init gotcha, see CLAUDE.md)
     g_combatNoPathBlacklist := Map()
 
+    try g_combatAssistMode := IniRead(cfgPath, "CombatAutomation", "assistMode", "0") = "1"
     try g_combatAutoEnabled := IniRead(cfgPath, "CombatAutomation", "enabled", "0") = "1"
     try g_combatRange := Integer(IniRead(cfgPath, "CombatAutomation", "combatRange", "1500"))
     try g_combatDisengageRange := Integer(IniRead(cfgPath, "CombatAutomation", "disengageRange", "2500"))
@@ -1450,9 +1480,11 @@ SaveCombatAutoConfig()
     global g_combatW2SScale
     global g_combatAutoDodge, g_combatDodgeKey, g_combatDodgeHpPct, g_combatDodgeCooldownMs
     global g_combatRotationAuto, g_combatRotationUserEdited
+    global g_combatAssistMode
 
     cfgPath := A_ScriptDir "\poeformance_config.ini"
 
+    try IniWrite((IsSet(g_combatAssistMode) && g_combatAssistMode) ? "1" : "0", cfgPath, "CombatAutomation", "assistMode")
     try IniWrite((IsSet(g_combatRotationAuto) && g_combatRotationAuto) ? "1" : "0", cfgPath, "CombatAutomation", "rotationAuto")
     try IniWrite((IsSet(g_combatRotationUserEdited) && g_combatRotationUserEdited) ? "1" : "0", cfgPath, "CombatAutomation", "rotationUserEdited")
     try IniWrite(g_combatAutoEnabled ? "1" : "0", cfgPath, "CombatAutomation", "enabled")
