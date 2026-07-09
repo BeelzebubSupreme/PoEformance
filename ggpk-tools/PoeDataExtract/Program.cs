@@ -321,7 +321,13 @@ internal static class Program
             var p = kv.Value.Path;
             if (p is null) continue;
             if (match is not null && !p.Contains(match, StringComparison.OrdinalIgnoreCase)) continue;
-            rows.Add($"{p}\t{kv.Value.Size}");
+            // Third column = the bundle the file lives in. A GGPK patcher
+            // (e.g. the .ggpx zoom patch) repacks the modified file into its own
+            // patch bundle (LibGGPK3/0.bundle.bin) and repoints the index there,
+            // so filtering this column to that bundle lists exactly the patched
+            // files — even when the content edit is the SAME SIZE (a changed float),
+            // which a path+size diff can't see.
+            rows.Add($"{p}\t{kv.Value.Size}\t{kv.Value.BundleRecord.Path}");
         }
         rows.Sort(StringComparer.Ordinal);   // deterministic order → a clean line-diff between two dumps
 
@@ -366,18 +372,37 @@ internal static class Program
         if (!File.Exists(ggpkPath)) { Console.Error.WriteLine($"GGPK not found: {ggpkPath}"); return 2; }
 
         using var ggpk = GgpkOpener.Open(ggpkPath);
-        if (!ggpk.Index.TryFindNode(internalPath, out var node)
-            || node is not LibBundle3.Nodes.FileNode file)
+        byte[]? bytes = null;
+        if (ggpk.Index.TryFindNode(internalPath, out var node)
+            && node is LibBundle3.Nodes.FileNode file)
+        {
+            bytes = file.Record.Read().ToArray();
+        }
+        else
+        {
+            // Fallback: TryFindNode's tree walk misses some paths that Index.Files
+            // (the flat record map `manifest`/`ls` iterate) resolves — case /
+            // separator quirks. Scan the flat map so anything `manifest` lists is
+            // cat-able (case-insensitive, matching the path form manifest prints).
+            foreach (var kv in ggpk.Index.Files)
+            {
+                if (string.Equals(kv.Value.Path, internalPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    bytes = kv.Value.Read().ToArray();
+                    break;
+                }
+            }
+        }
+        if (bytes is null)
         {
             Console.Error.WriteLine($"Not found in GGPK: {internalPath}");
             return 3;
         }
-        var bytes = file.Record.Read();
         if (outputPath is null)
             using (var stdout = Console.OpenStandardOutput())
-                stdout.Write(bytes.Span);
+                stdout.Write(bytes);
         else
-            File.WriteAllBytes(outputPath, bytes.ToArray());
+            File.WriteAllBytes(outputPath, bytes);
         return 0;
     }
 
