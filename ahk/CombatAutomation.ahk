@@ -932,7 +932,34 @@ _CombatMoveStuckGiveUp(now, radarSnap, combatInfo, aimTag)
     global g_combatState, g_combatLastReason, g_combatNoPathBlacklist
     static MOVE_STUCK_MS := 3500     ; continuous no-move-while-walking before give-up
     static MOVE_CELLS    := 3        ; grid cells that count as "actually moved"
+    static PURSUIT_CAP   := 1800     ; don't WALK to engage a target past this (world units)
+    static PURSUIT_BL_MS := 5000     ; brief blacklist when pursuit-capped (short: char may explore closer)
     static _mpGX := -999999, _mpGY := -999999, _mpBaseTick := 0, _mpLastCall := 0
+
+    ; ── Pursuit cap ────────────────────────────────────────────────────────
+    ; Runs only from the walk-engage / approach branches — i.e. when the bot must
+    ; MOVE to reach the target. If that target has drifted beyond PURSUIT_CAP (a
+    ; fleeing enemy, or the next member of a spread pack), don't beeline across the
+    ; map after it: the old disengage was 2500 world units, so the bot chased
+    ; enemies out to there for minutes while loot/explore starved (status log:
+    ; walk-engage d=1973 / 2226). Blacklist it briefly and disengage so loot/
+    ; explore run and the char makes forward progress, re-engaging whatever comes
+    ; into range. Enemies the bot can already hit from where it stands never reach
+    ; here (they fire directly), so real fights are unaffected.
+    td := combatInfo.Has("terrainDist") ? (combatInfo["terrainDist"] + 0) : 0
+    if (td > PURSUIT_CAP)
+    {
+        blN := _CombatBlacklistPackNear(radarSnap
+            , combatInfo["nearestWorldX"], combatInfo["nearestWorldY"], 450, PURSUIT_BL_MS)
+        blAddr := combatInfo.Has("nearestEntityAddr") ? combatInfo["nearestEntityAddr"] : 0
+        if (blAddr && IsSet(g_combatNoPathBlacklist))
+            g_combatNoPathBlacklist[blAddr] := A_TickCount + PURSUIT_BL_MS
+        g_combatState := "idle"
+        _mpGX := -999999, _mpGY := -999999, _mpBaseTick := 0, _mpLastCall := 0
+        g_combatLastReason := "pursuit-cap(d=" Round(td) " cap=" PURSUIT_CAP " bl=" blN ")"
+        return true
+    }
+
     WGRID := 250.0 / 0x17
     pgx := Round(combatInfo["playerWorldX"] / WGRID)
     pgy := Round(combatInfo["playerWorldY"] / WGRID)
