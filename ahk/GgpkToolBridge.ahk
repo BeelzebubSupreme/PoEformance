@@ -302,6 +302,68 @@ class GgpkToolBridge
         return this._RunPatchVerb("revert")
     }
 
+    ; ────────────────────────────────────────────────────────────────
+    ; Camera zoom — a second persistent GGPK patch (PoePatcher --patch
+    ; zoom) that injects a CreateCameraZoomNode into character.ot to zoom
+    ; the gameplay camera further out. Same "game must be CLOSED" rule as
+    ; the minimap patch (the bundle file is open + cached while PoE2 runs).
+    ; The zoom FACTOR (1.0 ≈ default, higher = further out) is persisted
+    ; under [GgpkTools] zoomFactor and forwarded as --zoom-factor.
+    ; ────────────────────────────────────────────────────────────────
+
+    static ApplyZoomPatch()
+    {
+        factor := this.GetZoomFactor()
+        extra := ' --zoom-factor ' factor
+        return this._RunPatchVerb("apply", "zoom", extra
+            , "Camera zoom patch applied (factor " factor "). Start PoE2 to see the zoom."
+            , "Camera zoom reverted. Default camera restored.")
+    }
+
+    static RevertZoomPatch()
+    {
+        return this._RunPatchVerb("revert", "zoom", ""
+            , "Camera zoom patch applied. Start PoE2 to see the zoom."
+            , "Camera zoom reverted. Default camera restored.")
+    }
+
+    ; Currently-applied signal for the zoom patch — mirrors IsMaphackApplied
+    ; (BackupManager.Save creates <ggpkdir>\backups\zoom on apply; Clear()
+    ; removes it on revert), so it works while the game is running or not.
+    static IsZoomApplied()
+    {
+        indexPath := IniRead(_ConfigPath(), "GgpkTools", "lastIndexPath", "")
+        if (indexPath = "" || !FileExist(indexPath))
+            return false
+        SplitPath(indexPath, , &dir)
+        return DirExist(dir "\backups\zoom") ? true : false
+    }
+
+    ; Persisted zoom factor (string, so the CLI gets exactly what the user
+    ; picked). Clamped to the CLI's 1.0–3.0 band; the patcher clamps too.
+    static GetZoomFactor()
+    {
+        f := IniRead(_ConfigPath(), "GgpkTools", "zoomFactor", "1.6")
+        n := f + 0
+        if (n < 1.0)
+            n := 1.0
+        else if (n > 3.0)
+            n := 3.0
+        return Format("{:.1f}", n)
+    }
+
+    static SetZoomFactor(factor)
+    {
+        n := factor + 0
+        if (n < 1.0)
+            n := 1.0
+        else if (n > 3.0)
+            n := 3.0
+        val := Format("{:.1f}", n)
+        try IniWrite(val, _ConfigPath(), "GgpkTools", "zoomFactor")
+        return val
+    }
+
     ; Returns true when we have a cached install path AND the file
     ; still exists on disk. The Apply/Revert UI hides itself when this
     ; is false. Three paths populate the cache:
@@ -465,7 +527,10 @@ class GgpkToolBridge
         return DirExist(backupDir) ? true : false
     }
 
-    static _RunPatchVerb(verb)
+    ; Runs a PoePatcher verb (apply/revert) for a given patch. Defaults
+    ; keep the original minimap callers working; zoom passes patchName
+    ; "zoom" + extraArgs "--zoom-factor N" + its own status messages.
+    static _RunPatchVerb(verb, patchName := "minimap", extraArgs := "", applyMsg := "", revertMsg := "")
     {
         ; Hard pre-flight: refuse if PoE2 is running. The UI also
         ; disables the buttons but this is defense in depth.
@@ -491,12 +556,12 @@ class GgpkToolBridge
         stderr := A_Temp "\poe-patcher.stderr.txt"
         try FileDelete(stderr)
 
-        cmd := exe["invoke"] . ' ' verb ' --ggpk "' indexPath '" --patch minimap'
+        cmd := exe["invoke"] . ' ' verb ' --ggpk "' indexPath '" --patch ' patchName
 
         ; Apply-only: forward the user-configured shader colors to the
         ; patcher. Revert restores the backed-up shader verbatim, so the
         ; colors don't need to (and shouldn't) be passed there.
-        if (verb = "apply")
+        if (verb = "apply" && patchName = "minimap")
         {
             global g_maphackOutlineHex, g_maphackBackgroundHex
             if (g_maphackOutlineHex != "")
@@ -504,6 +569,9 @@ class GgpkToolBridge
             if (g_maphackBackgroundHex != "")
                 cmd .= ' --minimap-background "' g_maphackBackgroundHex '"'
         }
+        ; Patch-specific extra args (e.g. --zoom-factor N for the zoom patch).
+        if (extraArgs != "")
+            cmd .= " " extraArgs
         fullCmd := A_ComSpec ' /c "' cmd ' 2> "' stderr '""'
 
         try LogError("GgpkTools/" verb " cmd: " fullCmd)
@@ -525,9 +593,12 @@ class GgpkToolBridge
             return this._Fail("poe-patcher " verb " exited with code " exit (tail = "" ? "" : ":`n" tail))
         }
 
-        return Map("ok", true, "msg", (verb = "apply"
-            ? "Minimap patch applied. Start PoE2 to see the full minimap."
-            : "Minimap patch reverted. Vanilla shaders restored."), "rows", 0)
+        ; Custom per-patch messages when supplied (zoom), else the minimap
+        ; defaults.
+        okMsg := (verb = "apply")
+            ? (applyMsg != "" ? applyMsg : "Minimap patch applied. Start PoE2 to see the full minimap.")
+            : (revertMsg != "" ? revertMsg : "Minimap patch reverted. Vanilla shaders restored.")
+        return Map("ok", true, "msg", okMsg, "rows", 0)
     }
 
     ; ---- internals ----

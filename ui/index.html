@@ -5977,6 +5977,28 @@
                   style="display:none">Revert</button>
               </div>
 
+              <!-- ── Camera Zoom (GGPK patch) ─────────────────────────
+                   A second persistent bundle patch (character.ot) that
+                   zooms the gameplay camera out. Same "PoE2 must be
+                   CLOSED" rule as the maphack shader patch. The toggle
+                   applies/reverts; the slider sets the zoom factor used
+                   on the next apply. -->
+              <div class="cfg-row"><span class="cfg-label">Camera Zoom (GGPK)</span>
+                <label class="toggle"><input type="checkbox" id="tog-zoom-patch" onchange="zoomPatchToggle(this.checked)">
+                    <span class="toggle-slider"></span></label>
+              </div>
+              <div class="cfg-help">Zooms the gameplay camera further out via a persistent GGPK patch (injects a camera-zoom node into <code>character.ot</code>). <strong>PoE2 must be CLOSED</strong> to apply or revert. Higher factor = further out. Requires the install path to be known (same as the GGPK maphack).</div>
+              <div id="zoom-patch-subrow" class="cfg-slider-row" style="padding-left:18px;padding-right:8px;gap:8px">
+                <span class="cfg-label" style="min-width:auto" data-tip="Camera zoom factor. 1.0 ≈ default, higher zooms further out. Change then re-apply (toggle off/on) to take effect. Clamped 1.0–3.0.">↳ Zoom factor</span>
+                <div class="slider-wrap">
+                  <span class="slider-val" id="zoom-factor-val">1.6</span>
+                  <input type="range" id="zoom-factor" min="1.0" max="3.0" step="0.1" value="1.6"
+                         oninput="_sb(this,'zoom-factor-val',this.value)"
+                         onchange="ahkCall('SetZoomFactor', this.value)">
+                </div>
+              </div>
+              <div id="ggpk-zoom-status" style="color:var(--subtext);font-size:11px;min-height:14px;padding-left:18px"></div>
+
               <div class="cfg-row"><span class="cfg-label">Highlight Unexplored</span>
                 <label class="toggle"><input type="checkbox" id="tog-maphack-unexplored" onchange="ahkCall('ToggleMapHackUnexplored');mapHackUnexpSubVis(this.checked)"
                     ><span class="toggle-slider"></span></label>
@@ -11563,6 +11585,31 @@
         }
         // Don't auto-clear ggpkStatus here — see note above.
       }
+
+      // ── GGPK camera-zoom patch sync ────────────────────────────────
+      // Toggle reflects applied state; slider reflects the persisted
+      // factor. Toggle is disabled while PoE2 runs (can't patch the open
+      // bundle) or the install path is unknown. Don't fight a click in
+      // flight (updateGgpkZoomStatus clears _ggpkZoomBusy on completion).
+      if (!_ggpkZoomBusy) {
+        const zoomTog = document.getElementById('tog-zoom-patch');
+        if (zoomTog && d.ggpkZoomApplied !== undefined)
+          zoomTog.checked = (d.ggpkZoomApplied === true);
+        if (zoomTog) {
+          const zoomBlocked = poeIsRunning || !pathKnown;
+          zoomTog.disabled = zoomBlocked;
+          zoomTog.closest('.cfg-row')?.setAttribute('data-tip', poeIsRunning
+            ? 'Close PoE2 first — modifying bundle files while the game has them open will corrupt the index.'
+            : (!pathKnown
+              ? 'PoE2 install path unknown — start the game once, or set it in the GGPK maphack section above.'
+              : 'Apply/revert the camera-zoom GGPK patch.'));
+        }
+      }
+      if (d.ggpkZoomFactor !== undefined) {
+        const zsl = document.getElementById('zoom-factor');
+        if (zsl) { zsl.value = d.ggpkZoomFactor; _sb(zsl, 'zoom-factor-val', d.ggpkZoomFactor); }
+      }
+
       setChk('tog-rangecircles', d.rangeCircles !== undefined ? d.rangeCircles : true);
       setChk('tog-panel-hideoverlays', d.panelHideOverlays !== undefined ? d.panelHideOverlays : true);
       setChk('tog-panel-pauseautopilot', d.panelPauseAutoPilot !== undefined ? d.panelPauseAutoPilot : true);
@@ -14586,6 +14633,40 @@
       // based on the resulting ggpkMaphackApplied + poeRunning state).
       _ggpkMaphackBusy = false;
       const el = document.getElementById('ggpk-maphack-status');
+      if (!el) return;
+      el.style.color = r.ok ? 'var(--accent, #8aff8a)' : 'var(--err, #ff8a8a)';
+      el.textContent = r.msg || (r.ok ? 'Done.' : 'Failed.');
+    }
+
+    // ── GGPK camera-zoom patch ─────────────────────────────────────────
+    // The toggle maps to apply (on) / revert (off); AHK shells out to
+    // PoePatcher (game must be closed) and echoes the result via
+    // updateGgpkZoomStatus. _ggpkZoomBusy suppresses the header push from
+    // flipping the toggle back mid-operation.
+    let _ggpkZoomBusy = false;
+    function zoomPatchToggle(on) {
+      if (_ggpkZoomBusy) return;
+      _ggpkZoomBusy = true;
+      const tog = document.getElementById('tog-zoom-patch');
+      if (tog) tog.disabled = true;
+      const status = document.getElementById('ggpk-zoom-status');
+      if (status) {
+        status.style.color = 'var(--subtext)';
+        status.textContent = on
+          ? 'Applying camera-zoom patch — this will take a few seconds…'
+          : 'Reverting camera-zoom patch — this will take a few seconds…';
+      }
+      ahkCall('SetZoomPatch', on ? 'apply' : 'revert');
+    }
+    function updateGgpkZoomStatus(json) {
+      let r;
+      try { r = JSON.parse(json); } catch (e) { r = { ok: false, msg: 'bad status payload: ' + e }; }
+      _ggpkZoomBusy = false;
+      const tog = document.getElementById('tog-zoom-patch');
+      // On failure, snap the toggle back to its true (pre-op) state; the
+      // header push that follows carries the authoritative ggpkZoomApplied.
+      if (tog && !r.ok) tog.checked = !tog.checked;
+      const el = document.getElementById('ggpk-zoom-status');
       if (!el) return;
       el.style.color = r.ok ? 'var(--accent, #8aff8a)' : 'var(--err, #ff8a8a)';
       el.textContent = r.msg || (r.ok ? 'Done.' : 'Failed.');

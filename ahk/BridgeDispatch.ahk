@@ -937,6 +937,18 @@ _DispatchBridgeCall(method, args)
             SetTimer(() => GgpkMaphackUi_Apply(), -1)
         case "GgpkMaphackRevert":
             SetTimer(() => GgpkMaphackUi_Revert(), -1)
+        case "SetZoomPatch":
+            ; args[1] = "apply" | "revert". Shells out to PoePatcher
+            ; (game must be closed); status lands on #ggpk-zoom-status.
+            zoomVerb := (args.Length >= 1) ? String(args[1]) : ""
+            SetTimer(() => GgpkZoomUi_Run(zoomVerb), -1)
+        case "SetZoomFactor":
+            ; args[1] = zoom factor string. Persist only; the next apply
+            ; forwards it as --zoom-factor. Re-push the header so the
+            ; slider reflects the clamped/normalized value.
+            zoomFactorArg := (args.Length >= 1) ? String(args[1]) : ""
+            GgpkToolBridge.SetZoomFactor(zoomFactorArg)
+            SetTimer(PushHeaderToWebView, -50)
         case "SetGgpkInstallPath":
             ; args[1] is the user-entered path. Validate + persist on a
             ; background timer so the WebView message thread stays
@@ -1124,6 +1136,21 @@ GgpkMaphackUi_Revert()
 {
     result := GgpkToolBridge.RevertMinimapPatch()
     _PushGgpkToolStatus(result)
+}
+
+; UI-side wrapper for the GGPK camera-zoom patch/revert. Mirrors the
+; maphack wrappers but sinks its status on the zoom row
+; (#ggpk-zoom-status) and re-pushes the header so the toggle state
+; (ggpkZoomApplied) flips immediately.
+GgpkZoomUi_Run(verb)
+{
+    result := (verb = "apply")
+        ? GgpkToolBridge.ApplyZoomPatch()
+        : GgpkToolBridge.RevertZoomPatch()
+    json := '{"ok":' (result["ok"] ? "true" : "false")
+        . ',"msg":' _BridgeJsonEscape(result["msg"]) '}'
+    try WebViewExec("updateGgpkZoomStatus(" _JsStr(json) ")")
+    SetTimer(PushHeaderToWebView, -50)
 }
 _PushGgpkToolStatus(result)
 {
