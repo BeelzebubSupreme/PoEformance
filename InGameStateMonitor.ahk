@@ -56,7 +56,7 @@ When you create new functions, always add a 2-3 line comment beforehand: what th
 When you create new variables, always name them meaningfully and follow the existing general style.
 */
 
-POEFORMANCE_VERSION := "0.45.13.330"
+POEFORMANCE_VERSION := "0.45.13.331"
 
 ; ── WebView2Loader.dll bundling (compiled .exe only) ──────────────────────
 ; Lib/WebView2.ahk loads WebView2Loader.dll via DllCall, with a fallback that
@@ -866,6 +866,18 @@ ForceRefreshActiveTree()
         return
 
     ReadAndShow(true)
+}
+
+; Recovery path for the top Refresh button AND the page-ready signal.
+; Re-attempts the PoE2 connection and re-broadcasts the FULL UI state, so a
+; launch where the initial WebView push raced the page load (blank UI +
+; "disconnected" while the backend actually connected fine) recovers on one
+; click / on page load — no app restart needed. Cheap when already connected.
+ForceReconnectAndRefresh()
+{
+    EnsureConnected()            ; re-attach if the process is up (no-op if already on this pid)
+    try PushAllDataToWebView()   ; re-push header (incl. isConnected) + watchlist + hotkeys + status
+    ForceRefreshActiveTree()     ; force a fresh game snapshot into the tree
 }
 
 ; Synchronises the g_valueTree and g_nodePaths globals with the currently-selected tab.

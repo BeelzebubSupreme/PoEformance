@@ -17,7 +17,12 @@ _DispatchBridgeCall(method, args)
     switch method
     {
         case "PageReady":
-            ; No-op: NavigationCompleted already handles initial push
+            ; The page's JS is fully initialized (window 'load'). NavigationCompleted
+            ; fires earlier (HTML parsed) and its initial push can race ahead of the
+            ; script wiring up updateHeader() — a lost push leaves the UI blank +
+            ; "disconnected" even though the backend connected. Re-push the full state
+            ; now that the page is provably ready, and re-attempt the connection.
+            SetTimer(ForceReconnectAndRefresh, -1)
         case "ToggleRadar":
             SetTimer(ToggleRadar, -1)
         case "ToggleVitals":
@@ -603,7 +608,10 @@ _DispatchBridgeCall(method, args)
         case "WatchNpc":
             SetTimer(AddNearbyNpcScannerToWatchlist, -1)
         case "TreeRefresh":
-            SetTimer(ForceRefreshActiveTree, -1)
+            ; Top Refresh button. Full recovery (reconnect + re-push), not just a
+            ; tree re-read, so it can dig the UI out of a blank/"disconnected"
+            ; launch instead of no-op'ing when g_isConnected is false.
+            SetTimer(ForceReconnectAndRefresh, -1)
         case "F3Dump":
             SetTimer(OnF3DebugDump, -1)
         case "ProfilerToggle":

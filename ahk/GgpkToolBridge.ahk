@@ -213,6 +213,22 @@ class GgpkToolBridge
                 SetTimer(() => GgpkToolBridge.MaybeAutoRefresh(retryAttempt), -15000)
                 return
             }
+
+            ; The extractor reads the game's bundle files. Doing that while PoE2
+            ; is RUNNING crashes LibBundle3 (STATUS_STACK_BUFFER_OVERRUN) and —
+            ; via the blocking RunWait below — freezes the GUI for a second or
+            ; two. So only auto-refresh while the game is CLOSED; the install
+            ; path cached on the last connect lets us read the bundles offline.
+            ; While the game is up, defer and re-check on a slow timer (the
+            ; natural window is after the user closes it, e.g. to apply a patch).
+            ; This is also why the old code re-fired the failing extract on every
+            ; launch: it crashed before recording lastRefreshedAtPatch.
+            if (FindPoePid())
+            {
+                SetTimer(() => GgpkToolBridge.MaybeAutoRefresh(0), -60000)
+                return
+            }
+
             tsvPath := A_ScriptDir "\data\base_item_sizes.tsv"
             tsvOk := FileExist(tsvPath) && FileGetSize(tsvPath) >= 100
             iniFile := _ConfigPath()
@@ -230,14 +246,20 @@ class GgpkToolBridge
                 return
             }
 
-            ; Need PoE2 running so we have an install path to read from.
+            ; Game is closed here — resolve the index from the path cached on the
+            ; last connect (EnsureConnected writes [GgpkTools] lastIndexPath), or a
+            ; manually-entered one. Without a cached path we can't refresh offline;
+            ; skip quietly until a future connect records it.
             indexPath := this._ResolveGameDataPath()
             if (indexPath = "")
             {
-                if (retryAttempt < 3)
-                    SetTimer(() => GgpkToolBridge.MaybeAutoRefresh(retryAttempt + 1), -30000)
-                else
-                    try LogError("GgpkTools: auto-refresh skipped — PoE not running after 3 retries")
+                cached := IniRead(iniFile, "GgpkTools", "lastIndexPath", "")
+                if (cached != "" && FileExist(cached))
+                    indexPath := cached
+            }
+            if (indexPath = "")
+            {
+                try LogError("GgpkTools: auto-refresh deferred — no cached install path yet")
                 return
             }
 
