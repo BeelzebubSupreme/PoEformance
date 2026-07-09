@@ -4,7 +4,7 @@
 
 **A modern AutoHotkey v2 toolset for *Path of Exile 2* — overlays, automation, reverse-engineering workbench, and GGPK-level map reveal in one place.**
 
-![Version](https://img.shields.io/badge/version-v0.45.13.314-blue)
+![Version](https://img.shields.io/badge/version-v0.45.13.315-blue)
 ![Build](https://img.shields.io/badge/build-stable-green)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Language](https://img.shields.io/badge/language-AutoHotkey%20v2-orange)
@@ -371,6 +371,7 @@ Two compact-mode tiers kick in as the window narrows: pills shrink at ≤ 1300 p
 - **Administrator privileges** — required for `ReadProcessMemory` against an elevated game process
 - **WebView2 Runtime** — pre-installed on Windows 11; Windows 10 may need the [Evergreen runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)
 - **.NET 8 SDK** *(only if you want to use the GGPK Maphack or rebuild the data extractor)* — [download](https://dotnet.microsoft.com/download/dotnet/8.0)
+- **Oodle decompression DLL (`oo2core.dll`)** *(only for the GGPK features — Maphack + Camera Zoom)* — this is the proprietary RAD/Epic Oodle library. It is **not shipped** with PoEformance and is intentionally **git-ignored**, because redistributing it is not permitted — you must supply your own copy from a product you already own. The GGPK tools try to auto-locate it on first run by scanning your installed Oodle-using games (Path of Exile 1, Cyberpunk 2077, Apex Legends, Warframe, Manor Lords, …). If none is found, copy an `oo2core_9_win64.dll` from such a game (or from a [VisualGGPK3](https://github.com/aianlinb/LibGGPK3/releases) release) into `ggpk-tools\bin\` — it's renamed to `oo2core.dll` automatically. One-time, per machine. PoE2 itself statically links Oodle, so it does **not** ship a usable copy.
 - **Node.js** *(only for the optional MCP server that exposes the local API to an AI assistant)* — [download](https://nodejs.org/)
 - **PowerShell** *(ships with Windows 10/11; used by the Loot Tracker's off-thread poe.ninja price fetch)*
 
