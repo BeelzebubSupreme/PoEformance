@@ -1490,6 +1490,29 @@ AutoConfigureCombatSlots()
     if !(slots && slots is Array && slots.Length)
         return "no-skillbar"     ; not in-game / skill bar not visible on the HUD
 
+    ; Diagnostic dump (triage "only pulled N skills"): logs the RAW skill-bar read
+    ; so we can tell whether it's the enumeration (too few slots), the key-label
+    ; read (slots present but sendKey empty), or skill resolution (key present but
+    ; skill empty). Written on every auto-config click; cheap.
+    try
+    {
+        _dbg := "AutoConfig skill-bar read: " slots.Length " slot(s)`n"
+        for _di, _de in slots
+        {
+            if !(_de is Map)
+                continue
+            _dbg .= "  #" _di
+                . " sendKey='" (_de.Has("sendKey") ? _de["sendKey"] : "") "'"
+                . " rawKey='"  (_de.Has("key") ? _de["key"] : "") "'"
+                . " skill='"   (_de.Has("skillName") ? _de["skillName"] : "") "'"
+                . " int='"     (_de.Has("skillInternal") ? _de["skillInternal"] : "") "'"
+                . " sx=" (_de.Has("screenX") ? Round(_de["screenX"]) : "?")
+                . " sy=" (_de.Has("screenY") ? Round(_de["screenY"]) : "?") "`n"
+        }
+        FileAppend(FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") "`n" _dbg "`n"
+            , A_ScriptDir "\logs\InGameStateMonitor.skillbar_diag.log")
+    }
+
     ; internalName -> live skill map (for castType).
     skByInt := Map()
     lp := _SkillBarLocalPlayerPtr()
