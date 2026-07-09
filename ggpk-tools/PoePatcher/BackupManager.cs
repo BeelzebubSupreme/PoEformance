@@ -58,6 +58,15 @@ internal sealed class BackupManager
         return File.ReadAllBytes(src);
     }
 
+    /// <summary>Loads a backup if one exists, otherwise returns null (no throw).
+    /// Used when a patch touches a VARIABLE set of files (e.g. the zoom patch's
+    /// per-scene camerazoom nodes) and revert must restore only what it saved.</summary>
+    public byte[]? TryLoad(string patchName, string internalPath)
+    {
+        string src = PathFor(patchName, internalPath);
+        return File.Exists(src) ? File.ReadAllBytes(src) : null;
+    }
+
     public void Clear(string patchName)
     {
         var dir = Path.Combine(_root, patchName);

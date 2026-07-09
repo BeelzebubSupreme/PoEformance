@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 using LibBundle3;
 using Index = LibBundle3.Index;
 using LibBundle3.Records;
@@ -73,13 +74,76 @@ internal sealed class ZoomPatch : IPatch
         text = text[..at] + injected + text[(at + CleanMarker.Length)..];
 
         rec.Write(Encoding.Unicode.GetBytes(text));
+
+        // Stub the per-scene camerazoom nodes so they stop fighting the general
+        // zoom (the "camera pulses between default and the zoom factor" bug). Each
+        // is a small .ot with a CreateCameraZoomNode(inner, outer, factor); we set
+        // the FACTOR to the same value (radii kept) so, wherever one is active, it
+        // matches the character.ot zoom instead of overriding it. Mirrors the
+        // KintaroEB patch, which sets every touched file to the chosen factor
+        // (its zoom13/16/19 presets are byte-identical in size — same files, only
+        // the factor differs). Best-effort: files without the call are skipped.
+        StubSceneCameraZooms(index, backups, factor);
+    }
+
+    // CreateCameraZoomNode(inner, outer, factor). The scene files use plain floats
+    // (no 'f' suffix, unlike the character.ot injection), e.g.
+    // "CreateCameraZoomNode(4.0, 10.0, 0.75)". Capture the two radii, replace only
+    // the factor.
+    private static readonly Regex ZoomNodeRe = new(
+        @"CreateCameraZoomNode\(\s*([-\d.]+)\s*,\s*([-\d.]+)\s*,\s*([-\d.]+)\s*\)",
+        RegexOptions.Compiled);
+
+    // A camerazoom scene node lives at a path containing "camerazoom" ending in
+    // ".ot" (the miscellaneousobjects/camerazoom/* family + a few terrain ones).
+    private static bool IsSceneCameraZoom(string? path)
+        => path is not null
+        && path.IndexOf("camerazoom", StringComparison.OrdinalIgnoreCase) >= 0
+        && path.EndsWith(".ot", StringComparison.OrdinalIgnoreCase)
+        && !string.Equals(path, TargetPath, StringComparison.OrdinalIgnoreCase);
+
+    private void StubSceneCameraZooms(Index index, BackupManager backups, string factor)
+    {
+        // Collect first (don't mutate bundle records mid-enumeration of Files).
+        var targets = new List<FileRecord>();
+        foreach (var kv in index.Files)
+            if (kv.Value is FileRecord fr && IsSceneCameraZoom(fr.Path))
+                targets.Add(fr);
+
+        foreach (var r in targets)
+        {
+            var orig = r.Read();
+            string t = Encoding.Unicode.GetString(orig.Span);   // UTF-16LE + BOM, like character.ot
+            if (!ZoomNodeRe.IsMatch(t))
+                continue;
+            string patched = ZoomNodeRe.Replace(t, m =>
+                $"CreateCameraZoomNode({m.Groups[1].Value}, {m.Groups[2].Value}, {factor})");
+            if (patched == t)
+                continue;   // already at the target factor
+            backups.Save(Name, r.Path, orig.Span);
+            r.Write(Encoding.Unicode.GetBytes(patched));
+        }
     }
 
     public void Revert(Index index, BackupManager backups)
     {
+        // Primary file first.
         var rec = ResolveRecord(index, TargetPath);
-        var original = backups.Load(Name, TargetPath);
-        rec.Write(original);
+        rec.Write(backups.Load(Name, TargetPath));
+
+        // Restore any per-scene camerazoom files this patch modified (TryLoad =
+        // only the ones we actually backed up).
+        var targets = new List<FileRecord>();
+        foreach (var kv in index.Files)
+            if (kv.Value is FileRecord fr && IsSceneCameraZoom(fr.Path))
+                targets.Add(fr);
+        foreach (var r in targets)
+        {
+            var bak = backups.TryLoad(Name, r.Path);
+            if (bak != null)
+                r.Write(bak);
+        }
+
         backups.Clear(Name);
     }
 
@@ -92,8 +156,8 @@ internal sealed class ZoomPatch : IPatch
     private static FileRecord ResolveRecord(Index index, string path)
     {
         foreach (var kv in index.Files)
-            if (string.Equals(kv.Value.Path, path, StringComparison.OrdinalIgnoreCase))
-                return kv.Value;
+            if (kv.Value is FileRecord fr && string.Equals(fr.Path, path, StringComparison.OrdinalIgnoreCase))
+                return fr;
         throw new FileNotFoundException(path);
     }
 }
