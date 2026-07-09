@@ -743,3 +743,142 @@ _SkillBarScanPtrMatches(reader, rootPtr, ptrMap)
     }
     return out
 }
+
+; ── Player-side skill-bar array hunt (RE diagnostic) ─────────────────────────
+; DiagSkillSlotLink proved the UI slot element holds NO stable slot→skill link for
+; an un-cast skill (only the actively-cast slot matches +0x2F0; no geRow/asRow/gem
+; match on the others), and the GameHelper2 reference Actor has no hotbar mapping
+; either. So the slot→skill assignment must live in a PLAYER-SIDE structure the UI
+; resolves by index. This scans the player entity, its Actor component, and every
+; player component for a small array/cluster holding the EQUIPPED skills' stable
+; pointers (geplRow / GrantedEffect row; detailsPtr as a bonus for a cast skill) —
+; i.e. the bar assignment. It also dumps each equipped skill's ActiveSkillDetails
+; small-int fields (a slot-index candidate) and hunts a contiguous run of small
+; ints (a slot→skill-index array). Writes debug\skillbar_array_*.txt. No params.
+SkillBarArrayProbe()
+{
+    global g_reader
+    if !IsObject(g_reader)
+    {
+        try MsgBox("Game not connected.", "Skill-bar array probe", 0x10)
+        return
+    }
+    lpPtr := _SkillBarLocalPlayerPtr()
+    if !g_reader.IsProbablyValidPointer(lpPtr)
+    {
+        try MsgBox("No local player — get in-game with skills equipped, then retry.", "Skill-bar array probe", 0x30)
+        return
+    }
+    skillsData := 0
+    try skillsData := g_reader.ReadPlayerSkills(lpPtr)
+    skills := (skillsData && skillsData is Map && skillsData.Has("skills")) ? skillsData["skills"] : []
+
+    ; Interesting pointers = the EQUIPPED (real-gem) skills' stable identifiers.
+    ptrMap := Map()
+    equipped := []
+    for sk in skills
+    {
+        if !(sk is Map)
+            continue
+        ip := sk.Has("iconPath") ? sk["iconPath"] : ""
+        hr := sk.Has("hasRealName") ? sk["hasRealName"] : false
+        if (ip = "" && !hr)
+            continue                          ; skip innate/action skills (Move, Ascend, …)
+        nm := (sk.Has("displayName") && sk["displayName"] != "") ? sk["displayName"] : (sk.Has("name") ? sk["name"] : "?")
+        dp := sk.Has("detailsPtr") ? sk["detailsPtr"] : 0
+        gr := sk.Has("geplRow") ? sk["geplRow"] : 0
+        ge := 0
+        if (g_reader.IsProbablyValidPointer(gr))
+            try ge := g_reader.Mem.ReadPtr(gr + PoE2Offsets.GrantedEffectsPerLevelDat["GrantedEffectDatPtr"])
+        if (g_reader.IsProbablyValidPointer(dp))
+            ptrMap[dp] := nm " (detailsPtr)"
+        if (g_reader.IsProbablyValidPointer(gr))
+            ptrMap[gr] := nm " (geplRow)"
+        if (g_reader.IsProbablyValidPointer(ge))
+            ptrMap[ge] := nm " (geRow)"
+        equipped.Push(Map("nm", nm, "dp", dp, "gr", gr, "ge", ge))
+    }
+
+    rpt := "Skill-bar array hunt`n`nEquipped skills (" equipped.Length "):`n"
+    for e in equipped
+        rpt .= Format("  {} | det=0x{:X} gepl=0x{:X} geRow=0x{:X}`n", e["nm"], e["dp"], e["gr"], e["ge"])
+
+    ; Regions: player entity, Actor component, and each player component.
+    regions := []
+    regions.Push(Map("name", "player", "base", lpPtr, "len", 0x3000))
+    actorPtr := 0
+    try actorPtr := g_reader.FindEntityComponentAddress(lpPtr, "Actor")
+    if (g_reader.IsProbablyValidPointer(actorPtr))
+        regions.Push(Map("name", "Actor", "base", actorPtr, "len", 0x2000))
+    compFirst := 0, compLast := 0
+    try compFirst := g_reader.Mem.ReadInt64(lpPtr + PoE2Offsets.Entity["ComponentsVec"])
+    try compLast  := g_reader.Mem.ReadInt64(lpPtr + PoE2Offsets.Entity["ComponentsVecLast"])
+    if (compFirst > 0 && compLast > compFirst)
+    {
+        cnt := Min((compLast - compFirst) // 8, 96)
+        Loop cnt
+        {
+            cp := g_reader.Mem.ReadPtr(compFirst + (A_Index - 1) * 8)
+            if (g_reader.IsProbablyValidPointer(cp) && cp != actorPtr)
+                regions.Push(Map("name", "comp#" (A_Index - 1), "base", cp, "len", 0x800))
+        }
+    }
+
+    ; Scan each region for the interesting-pointer hits (the bar assignment array).
+    rpt .= "`n=== Pointer hits (region +off → skill) ===`n"
+    totalHits := 0
+    for rg in regions
+    {
+        blk := g_reader.Mem.ReadBytes(rg["base"], rg["len"])
+        if !blk
+            continue
+        hits := []
+        off := 0
+        while (off + 8 <= rg["len"])
+        {
+            v := NumGet(blk.Ptr, off, "Ptr")
+            if (ptrMap.Has(v))
+                hits.Push(Format("   +0x{:X} → {} = 0x{:X}", off, ptrMap[v], v))
+            off += 8
+        }
+        ; Report a region with ≥2 hits (a cluster/array) or any hit in player/Actor.
+        if (hits.Length >= 2 || (hits.Length >= 1 && (rg["name"] = "player" || rg["name"] = "Actor")))
+        {
+            rpt .= Format("`n[{} @0x{:X}]  {} hit(s)`n", rg["name"], rg["base"], hits.Length)
+            for h in hits
+                rpt .= h "`n"
+            totalHits += hits.Length
+        }
+    }
+    if (totalHits = 0)
+        rpt .= "  (no equipped-skill pointer found in the player entity / Actor / components)`n"
+
+    ; Per-skill ActiveSkillDetails small-int dump (a slot-index field would be 0–15).
+    rpt .= "`n=== ActiveSkillDetails small ints [+off]=val (0–31), slot-index candidates ===`n"
+    for e in equipped
+    {
+        dp := e["dp"]
+        if !g_reader.IsProbablyValidPointer(dp)
+            continue
+        db := g_reader.Mem.ReadBytes(dp, 0x100)
+        if !db
+            continue
+        line := "  " e["nm"] ":"
+        o := 0
+        while (o + 4 <= 0x100)
+        {
+            iv := NumGet(db.Ptr, o, "Int")
+            if (iv >= 0 && iv <= 31)
+                line .= Format(" [+0x{:X}]={}", o, iv)
+            o += 4
+        }
+        rpt .= line "`n"
+    }
+
+    outDir := A_ScriptDir "\debug"
+    if !DirExist(outDir)
+        DirCreate(outDir)
+    outPath := outDir "\skillbar_array_" FormatTime(A_Now, "yyyyMMdd_HHmmss") ".txt"
+    try FileAppend(rpt, outPath, "UTF-8")
+    try MsgBox("Skill-bar array probe written to:`n" outPath "`n`nEquipped: " equipped.Length "   pointer hits: " totalHits, "Skill-bar array probe", 0x40)
+}

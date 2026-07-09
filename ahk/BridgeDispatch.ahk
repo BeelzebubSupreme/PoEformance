@@ -957,6 +957,8 @@ _DispatchBridgeCall(method, args)
             SetTimer(() => DetectSkillKeysAndReport(), -1)
         case "DiagSkillSlotLink":
             SetTimer(() => DiagSkillSlotLink(), -1)
+        case "SkillBarArrayProbe":
+            SetTimer(() => SkillBarArrayProbe(), -1)
         case "RefreshSkillKeys":
             SetTimer(PushHotkeyBindingsToWebView, -1)
         case "RefreshItemSizes":
