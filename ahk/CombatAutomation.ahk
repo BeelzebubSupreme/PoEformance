@@ -740,6 +740,14 @@ _DetectCombat(radarSnap)
         if !g_reader.IsNpcLikeEntityPath(path)
             continue
 
+        ; NPCs are never combat targets. IsNpcLikeEntityPath intentionally
+        ; includes metadata/npc/ for the RADAR display (dialogue givers, vendors,
+        ; lore objects), but engaging them makes the bot "fight" a talkable object
+        ; — e.g. "Testament of Keth" (a dialogue monument). Real enemies live under
+        ; metadata/monsters/ or metadata/characters/, so drop npc/ here.
+        if InStr(StrLower(path), "metadata/npc/")
+            continue
+
         ; Skip enemies we recently gave up on (no traversable path) so the
         ; idle→combat state machine doesn't immediately re-engage them.
         entityAddr := entity.Has("address") ? entity["address"] : 0

@@ -576,6 +576,10 @@ _NearestHostileDistance(radarSnap)
             continue
         if !g_reader.IsNpcLikeEntityPath(path)
             continue
+        ; NPCs (dialogue / vendors / lore objects) are not hostiles — don't let one
+        ; block loot pickup. Mirrors the combat-target npc/ exclusion.
+        if InStr(StrLower(path), "metadata/npc/")
+            continue
         decoded := entity.Has("decodedComponents") ? entity["decodedComponents"] : 0
         if !(decoded && IsObject(decoded))
             continue
