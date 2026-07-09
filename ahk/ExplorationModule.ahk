@@ -597,7 +597,15 @@ _RunExploration(radarSnap, gameHwnd, measureOnly := false)
             _visitedWalkable += _ExploreMarkCoarseVisited(_visited, _targetCX, _targetCY
                 , _coarseW, _coarseH, _STEP, buf, dsz, _bpr, gridW, _rows)
             _targetCX := -1
-            _planBuilt := false   ; rebuild plan from current position
+            ; Advance PAST the stuck waypoint in the EXISTING tour rather than
+            ; rebuilding it. A full rebuild (_planBuilt := false) re-ran greedy-TSP
+            ; from the current position, and its "nearest unvisited sample" often
+            ; sits BEHIND the player → the bot walks back over ground it already
+            ; covered ("looping back over spots", maps taking ~2×). Keeping the
+            ; pre-optimised tour and just skipping the stuck cell (the skip-visited
+            ; loop below also drops the now-marked cell) preserves forward progress.
+            if (_planIdx <= _plan.Length)
+                _planIdx++
         }
         _stuckPGX := pGX
         _stuckPGY := pGY
