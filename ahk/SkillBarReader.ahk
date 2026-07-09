@@ -790,18 +790,26 @@ SkillBarArrayProbe()
         ge := 0
         if (g_reader.IsProbablyValidPointer(gr))
             try ge := g_reader.Mem.ReadPtr(gr + PoE2Offsets.GrantedEffectsPerLevelDat["GrantedEffectDatPtr"])
+        ; ActiveSkillsDat row = the skill's ICON source. detailsPtr is stable for
+        ; every granted skill (it lives in the Actor's skill vector), so this reads
+        ; for un-cast skills too — the prime candidate for what a slot references.
+        asd := 0
+        if (g_reader.IsProbablyValidPointer(dp))
+            try asd := g_reader.Mem.ReadPtr(dp + PoE2Offsets.ActiveSkillDetails["ActiveSkillsDatPtr"])
         if (g_reader.IsProbablyValidPointer(dp))
             ptrMap[dp] := nm " (detailsPtr)"
         if (g_reader.IsProbablyValidPointer(gr))
             ptrMap[gr] := nm " (geplRow)"
         if (g_reader.IsProbablyValidPointer(ge))
             ptrMap[ge] := nm " (geRow)"
-        equipped.Push(Map("nm", nm, "dp", dp, "gr", gr, "ge", ge))
+        if (g_reader.IsProbablyValidPointer(asd))
+            ptrMap[asd] := nm " (activeSkillsDatRow)"
+        equipped.Push(Map("nm", nm, "dp", dp, "gr", gr, "ge", ge, "asd", asd))
     }
 
     rpt := "Skill-bar array hunt`n`nEquipped skills (" equipped.Length "):`n"
     for e in equipped
-        rpt .= Format("  {} | det=0x{:X} gepl=0x{:X} geRow=0x{:X}`n", e["nm"], e["dp"], e["gr"], e["ge"])
+        rpt .= Format("  {} | det=0x{:X} gepl=0x{:X} geRow=0x{:X} asDat=0x{:X}`n", e["nm"], e["dp"], e["gr"], e["ge"], e["asd"])
 
     ; Regions: player entity, Actor component, and each player component.
     regions := []
@@ -823,6 +831,11 @@ SkillBarArrayProbe()
                 regions.Push(Map("name", "comp#" (A_Index - 1), "base", cp, "len", 0x800))
         }
     }
+    ; The bar assignment may live in the UI data model — add the GameUI root struct.
+    gameUi := 0
+    try gameUi := _UiBrowser_GetGameUiPtr()
+    if (g_reader.IsProbablyValidPointer(gameUi))
+        regions.Push(Map("name", "GameUI", "base", gameUi, "len", 0x2000))
 
     ; Scan each region for the interesting-pointer hits (the bar assignment array).
     rpt .= "`n=== Pointer hits (region +off → skill) ===`n"
@@ -852,6 +865,33 @@ SkillBarArrayProbe()
     }
     if (totalHits = 0)
         rpt .= "  (no equipped-skill pointer found in the player entity / Actor / components)`n"
+
+    ; Scan each UI skill-bar SLOT subtree with the full pointer set — the slot draws
+    ; the skill icon, so it should reference the ActiveSkillsDat row (or the skill)
+    ; somewhere in its subtree even when the skill isn't being cast.
+    rpt .= "`n=== UI slot subtree hits (icon source = activeSkillsDatRow expected) ===`n"
+    uiSlots := 0
+    try uiSlots := ReadSkillBarHotkeys(g_reader)
+    if (uiSlots is Array)
+    {
+        for e in uiSlots
+        {
+            if !(e is Map)
+                continue
+            m := _SkillBarScanPtrMatches(g_reader, e["addr"], ptrMap)
+            rpt .= Format("`nslot {} key='{}' addr=0x{:X}  ({} hit(s))`n", e["slot"], e["key"], e["addr"], m.Length)
+            shown := 0
+            for ln in m
+            {
+                rpt .= "   " ln "`n"
+                if (++shown >= 16)
+                {
+                    rpt .= "   … (truncated)`n"
+                    break
+                }
+            }
+        }
+    }
 
     ; Per-skill ActiveSkillDetails small-int dump (a slot-index field would be 0–15).
     rpt .= "`n=== ActiveSkillDetails small ints [+off]=val (0–31), slot-index candidates ===`n"
