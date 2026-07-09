@@ -1,3 +1,4 @@
+using System.Globalization;
 using GgpkTools;
 using LibBundle3;
 using PoePatcher.Patches;
@@ -25,6 +26,7 @@ internal static class Program
         new Dictionary<string, IPatch>(StringComparer.OrdinalIgnoreCase)
         {
             ["minimap"] = new MinimapPatch(),
+            ["zoom"]    = new ZoomPatch(),
         };
 
     [STAThread] // required for the comdlg32 file picker the Oodle resolver may show
@@ -93,6 +95,8 @@ internal static class Program
                 if (opts.MinimapOutline    is var o && o.HasValue) mp.OutlineColor    = o.Value;
                 if (opts.MinimapBackground is var b && b.HasValue) mp.BackgroundColor = b.Value;
             }
+            if (patch is ZoomPatch zp && opts.ZoomFactor is float zf)
+                zp.ZoomFactor = zf;
 
             return verb.ToLowerInvariant() switch
             {
@@ -206,7 +210,8 @@ internal static class Program
     private sealed record Options(
         string GgpkPath, string PatchName, bool DryRun,
         (float R, float G, float B, float A)? MinimapOutline,
-        (float R, float G, float B, float A)? MinimapBackground);
+        (float R, float G, float B, float A)? MinimapBackground,
+        float? ZoomFactor);
 
     private static Options? ParseArgs(ReadOnlySpan<string> args)
     {
@@ -214,6 +219,7 @@ internal static class Program
         bool dryRun = false;
         (float, float, float, float)? outline = null;
         (float, float, float, float)? background = null;
+        float? zoomFactor = null;
         for (int i = 0; i < args.Length; i++)
         {
             switch (args[i])
@@ -227,10 +233,18 @@ internal static class Program
                 case "--minimap-background":
                     if (++i < args.Length) background = ParseRgba(args[i], "--minimap-background");
                     break;
+                case "--zoom-factor":
+                    if (++i < args.Length)
+                    {
+                        if (!float.TryParse(args[i], NumberStyles.Float, CultureInfo.InvariantCulture, out var zf))
+                            throw new ArgumentException($"--zoom-factor expects a number; got \"{args[i]}\"");
+                        zoomFactor = Math.Clamp(zf, 1.0f, 3.0f);   // sane camera range
+                    }
+                    break;
             }
         }
         if (ggpk is null || patch is null) return null;
-        return new Options(ggpk, patch, dryRun, outline, background);
+        return new Options(ggpk, patch, dryRun, outline, background, zoomFactor);
     }
 
     /// <summary>
@@ -295,5 +309,7 @@ internal static class Program
         Console.Error.WriteLine("  --minimap-outline / --minimap-background  = hex RGB(A) overrides for");
         Console.Error.WriteLine("               MinimapPatch's two color literals. 6 or 8 chars,");
         Console.Error.WriteLine("               with optional leading '#'. Missing alpha = FF (opaque).");
+        Console.Error.WriteLine("  --zoom-factor <n>  = zoom patch camera factor (1.0 default … up to 3.0;");
+        Console.Error.WriteLine("               1.6/1.9 = moderate/far). Used with --patch zoom.");
     }
 }

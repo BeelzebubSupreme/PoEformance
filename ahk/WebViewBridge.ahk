@@ -118,6 +118,8 @@ PushHeaderToWebView()
         . '"configSubTab":' _JsStr(IsSet(g_configSubTab) ? g_configSubTab : "general") ","
         . '"ggpkInstallPathKnown":' (GgpkToolBridge.HasCachedIndexPath() ? "true" : "false") ","
         . '"ggpkMaphackApplied":' (GgpkToolBridge.IsMaphackApplied() ? "true" : "false") ","
+        . '"ggpkZoomApplied":' (GgpkToolBridge.IsZoomApplied() ? "true" : "false") ","
+        . '"ggpkZoomFactor":' _JsStr(GgpkToolBridge.GetZoomFactor()) ","
         . '"isConnected":' (IsSet(g_isConnected) && g_isConnected ? "true" : "false") ","
         . '"rangeCircles":' (g_rangeCirclesEnabled ? "true" : "false") ","
         . '"panelHideOverlays":' (g_panelHideOverlays ? "true" : "false") ","
