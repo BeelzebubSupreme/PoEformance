@@ -718,8 +718,15 @@ _RunExploration(radarSnap, gameHwnd, measureOnly := false)
             _targetCX := -1
         if (_targetCX < 0)
         {
+            ; Pass the floor context so the search skips OFF-FLOOR frontiers (a
+            ; different storey the region flood leaked into via a long ramp). Without
+            ; this the search returned the nearest off-floor cell, the floor gate
+            ; skipped it one-cell-per-tick while STANDING STILL, and coverage stalled
+            ; (status log: a long off-floor-skip(hd=200-296) loop). Rejecting them in
+            ; the search returns the nearest REACHABLE frontier so the bot keeps moving.
             frontier := _FindNearestFrontier(pcX, pcY, _visited, _coarseW, _coarseH,
-                                              buf, _bpr, _rows, dsz, _STEP, regionFilter)
+                                              buf, _bpr, _rows, dsz, _STEP, regionFilter,
+                                              heightCtx, playerWZ, hzOk, 200)
             if (!frontier)
             {
                 g_exploreLastReason := "no-frontier-done(" g_exploreCurrentPercent "%)"
@@ -1022,7 +1029,8 @@ _ExploreMarkCoarseVisited(visited, cx, cy, coarseW, coarseH, STEP, buf, dsz, bpr
 ; reachability map, byte per coarse cell) excludes cells the player can't
 ; physically reach (other floors, disconnected islands).
 ; Returns [cx, cy] or 0 if none found.
-_FindNearestFrontier(pcX, pcY, visited, cW, cH, buf, bpr, rows, dsz, STEP, region := 0)
+_FindNearestFrontier(pcX, pcY, visited, cW, cH, buf, bpr, rows, dsz, STEP, region := 0
+    , heightCtx := 0, playerZ := 0, hzOk := false, maxFloorDelta := 200)
 {
     ; Spiral search: scan outward in rings
     maxRadius := Max(cW, cH)
@@ -1040,7 +1048,8 @@ _FindNearestFrontier(pcX, pcY, visited, cW, cH, buf, bpr, rows, dsz, STEP, regio
             {
                 cx := pcX + dxVal
                 cy := pcY + dy
-                result := _CheckFrontierCell(cx, cy, visited, cW, cH, buf, bpr, rows, dsz, gridW, STEP, region)
+                result := _CheckFrontierCell(cx, cy, visited, cW, cH, buf, bpr, rows, dsz, gridW, STEP, region
+                    , heightCtx, playerZ, hzOk, maxFloorDelta)
                 if result
                     return result
             }
@@ -1056,7 +1065,8 @@ _FindNearestFrontier(pcX, pcY, visited, cW, cH, buf, bpr, rows, dsz, STEP, regio
             {
                 cx := pcX + dx
                 cy := pcY + dy
-                result := _CheckFrontierCell(cx, cy, visited, cW, cH, buf, bpr, rows, dsz, gridW, STEP, region)
+                result := _CheckFrontierCell(cx, cy, visited, cW, cH, buf, bpr, rows, dsz, gridW, STEP, region
+                    , heightCtx, playerZ, hzOk, maxFloorDelta)
                 if result
                     return result
                 dx++
@@ -1071,7 +1081,8 @@ _FindNearestFrontier(pcX, pcY, visited, cW, cH, buf, bpr, rows, dsz, STEP, regio
     return 0
 }
 
-_CheckFrontierCell(cx, cy, visited, cW, cH, buf, bpr, rows, dsz, gridW, STEP, region := 0)
+_CheckFrontierCell(cx, cy, visited, cW, cH, buf, bpr, rows, dsz, gridW, STEP, region := 0
+    , heightCtx := 0, playerZ := 0, hzOk := false, maxFloorDelta := 200)
 {
     if (cx < 0 || cx >= cW || cy < 0 || cy >= cH)
         return 0
@@ -1098,6 +1109,7 @@ _CheckFrontierCell(cx, cy, visited, cW, cH, buf, bpr, rows, dsz, gridW, STEP, re
         return 0
 
     ; Must be adjacent to a visited cell (frontier condition)
+    isFrontier := false
     for _, d in [[1,0],[-1,0],[0,1],[0,-1]]
     {
         nx := cx + d[1]
@@ -1106,10 +1118,24 @@ _CheckFrontierCell(cx, cy, visited, cW, cH, buf, bpr, rows, dsz, gridW, STEP, re
         {
             nIdx := ny * cW + nx
             if (NumGet(visited.Ptr, nIdx, "UChar") = 1)
-                return [cx, cy]
+            {
+                isFrontier := true
+                break
+            }
         }
     }
-    return 0
+    if (!isFrontier)
+        return 0
+
+    ; Reject OFF-FLOOR frontiers (a different storey the region flood leaked into
+    ; via a long ramp). Same test the per-target floor gate uses: |cell height −
+    ; player Z| > maxFloorDelta. Only evaluated on actual frontier cells (few), so
+    ; the extra TerrainHeightAt is cheap. Skipping them here (vs. one-per-tick at the
+    ; gate) keeps the bot moving to a reachable frontier instead of standing still.
+    if (hzOk && heightCtx && Abs(TerrainHeightAt(heightCtx, gx, gy) - playerZ) > maxFloorDelta)
+        return 0
+
+    return [cx, cy]
 }
 
 ; ── World-to-Screen for exploration clicks ───────────────────────────────

@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.327`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.328`.
 
 ## Language
 
@@ -2801,10 +2801,23 @@ region-completion block:
   has run a while (the 12%→3% collapse). Replaced with a one-time full recount of
   `_regionMap ∩ _visited` at completion; the per-tick vision-sweep increment (region-gated) keeps
   it accurate after.
-- **Pending in-game verification:** re-run a map with AutoPilot — coverage % should climb
-  monotonically (no collapse when `rg:build → rg:on`), and the bot should stop jumping back to
-  earlier waypoints. Some greedy gap-fill backtracking is inherent to coverage, but the big
-  disruptive tour-reset is gone.
+- **VERIFIED in-game (0.45.13.327, autopilot_status.log 11:20+ run):** the fix works — a clean
+  single `/40` tour with NO mid-run rebuild and coverage climbing MONOTONICALLY 4.2% → 31.7%
+  (no collapse); reasons were overwhelmingly `click`/`moving`. The circling/re-exploring is gone.
+- **Follow-up — off-floor frontier stall (0.45.13.328):** the same post-fix run exposed a residual:
+  `off-floor-skip(hd=200-296)` loops where coverage plateaued (bot standing still). Cause: the
+  reachability flood leaks up a long ramp onto another storey, so `_FindNearestFrontier` returned
+  the nearest OFF-FLOOR cell; the per-target floor gate (`MAX_FLOOR_DELTA=200`) then marked it
+  visited one-cell-per-tick WITHOUT moving, so grinding through an upper-storey pocket stalled the
+  bot for many ticks. Fix: `_FindNearestFrontier`/`_CheckFrontierCell` take the floor context
+  (`heightCtx`, `playerZ`, `hzOk`, `maxFloorDelta`) and reject a frontier whose
+  `|TerrainHeightAt − playerZ| > maxFloorDelta` — mirroring the gate, evaluated only on actual
+  frontier cells (cheap). So the search returns the nearest REACHABLE frontier directly and the bot
+  keeps moving; if only off-floor frontiers remain it ends as an honest `no-frontier-done` at the
+  true coverage (reaching other storeys via stairs is a separate, larger nav feature).
+- **Pending in-game verification (0.45.13.328):** re-run a multi-storey map — the long
+  `off-floor-skip` stalls should be gone (fewer/no plateaus), the bot moving to reachable frontiers
+  instead of standing still.
 
 ## Combat rotation: seamless auto-apply + skill-bar link hunt (0.45.13.322–326)
 
