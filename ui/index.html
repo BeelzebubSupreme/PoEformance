@@ -2065,6 +2065,7 @@
     .dis-tbl td { padding: 2px 6px; border-bottom: 1px solid rgba(37,42,69,.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
     .dis-tbl tr:hover td { background: rgba(106,143,191,.08) }
     .dis-off  { color: var(--accent); width: 60px }
+    .dis-fld  { color: #d6a65a; width: 200px; font-size: 10px }
     .dis-adr  { color: var(--subtext); width: 130px }
     .dis-hex  { color: #a0a8c0; width: 180px }
     .dis-i32  { color: #c0c8e0; width: 80px }
@@ -2076,6 +2077,46 @@
     .dis-ptr-link { color: var(--info); cursor: pointer; text-decoration: underline dotted }
     .dis-ptr-link:hover { color: #b0e0f5 }
     .dis-status { font-family: var(--codex-serif); font-size: 11px; color: var(--codex-text-dim); margin-left: 8px }
+    /* Live-watch group — pinned to the right of the Scan row */
+    .dis-live-group { margin-left: auto; display: inline-flex; align-items: center; gap: 6px }
+    .dis-live-txt { font-family: var(--codex-serif); font-size: 12px; color: var(--codex-text) }
+    /* Live-watch: a row whose 8 bytes changed since the previous refresh gets an
+       inline amber background (alpha faded by age in JS). tr bg shows through the
+       transparent cells. */
+    .dis-tbl tr.dis-chg td { transition: none }
+    /* Scan matches: a left rail on the row + a subtle tint. */
+    .dis-tbl tr.dis-match td { box-shadow: inset 3px 0 0 var(--info) }
+    .dis-tbl tr.dis-match td.dis-off { color: var(--info) }
+    /* Sub-bars (struct/chain + scan) */
+    .dis-subbar { padding: 4px 10px; background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex-shrink: 0 }
+    .dis-subbar-lbl { font-family: var(--codex-serif); font-size: 11px; color: var(--codex-text-dim); text-transform: uppercase; letter-spacing: .04em }
+    .dis-chain-sep { color: var(--border) }
+    .dis-chain { font-family: Consolas, monospace; font-size: 11px; color: #d6a65a; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 2px 7px; min-width: 120px; max-width: 420px; overflow-x: auto; white-space: nowrap }
+    .dis-scan-results { font-family: var(--codex-serif); font-size: 11px; color: var(--codex-text-dim); display: flex; align-items: center; gap: 4px; flex-wrap: wrap }
+    .dis-scan-chip { font-family: Consolas, monospace; font-size: 10px; color: var(--info); background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px; cursor: pointer }
+    .dis-scan-chip:hover { background: rgba(106,143,191,.12) }
+    /* Pointer peek (Stage 5): 🔍 button + inline resolved detail row */
+    .dis-peek-btn { cursor: pointer; margin-right: 5px; opacity: .55; font-size: 10px }
+    .dis-peek-btn:hover { opacity: 1 }
+    .dis-peek-row td { background: rgba(200,168,90,.05); border-bottom: 1px solid rgba(37,42,69,.5); padding: 3px 10px 3px 28px; white-space: normal }
+    .dis-pk-kind { display: inline-block; font-family: var(--codex-serif); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; color: var(--codex-text-dim); border: 1px solid var(--border); border-radius: 3px; padding: 0 5px; margin-right: 8px }
+    .dis-pk-text { font-family: Consolas, monospace; font-size: 11px; color: #d6c08a; word-break: break-all }
+    .dis-pk-text.dis-pk-entity { color: #b0d0b0 }
+    .dis-pk-text.dis-pk-wstr, .dis-pk-text.dis-pk-wstrraw, .dis-pk-text.dis-pk-str { color: #a8c8ff }
+    .dis-pk-text.dis-pk-vector { color: #cda8ff }
+    .dis-pk-hex { font-family: Consolas, monospace; font-size: 10px; color: #7f889c; margin-left: 10px }
+    .dis-peek-close { cursor: pointer; color: var(--subtext); margin-left: 10px; font-size: 10px }
+    .dis-peek-close:hover { color: var(--danger, #e06666) }
+    /* Drag-to-resize handle on each dissector column header */
+    .dis-colsz { position: absolute; top: 0; right: 0; width: 6px; height: 100%; cursor: col-resize; user-select: none }
+    .dis-colsz:hover { background: var(--codex-gold, #c8a85a); opacity: .55 }
+    /* Column show/hide popover */
+    .dis-cols-wrap { position: relative; display: inline-block }
+    .dis-cols-menu { display: none; position: absolute; top: 100%; left: 0; z-index: 50; margin-top: 3px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 5px 4px; box-shadow: 0 4px 14px rgba(0,0,0,.4); min-width: 130px }
+    .dis-cols-menu.open { display: block }
+    .dis-cols-menu label { display: flex; align-items: center; gap: 6px; font-family: var(--codex-serif); font-size: 12px; color: var(--codex-text); padding: 3px 7px; cursor: pointer; border-radius: 3px; white-space: nowrap }
+    .dis-cols-menu label:hover { background: rgba(200,168,90,.08) }
+    .dis-cols-menu input { cursor: pointer }
     /* Mod categories — saturated, period-correct inks chosen for legibility
        against the warm parchment background. Avoid washed-out pastels:
        deep amethyst for implicits, illuminated gold for enchants, and a
@@ -6814,27 +6855,62 @@
             <option value="1024">1 KB (128 rows)</option>
             <option value="2048">2 KB (256 rows)</option>
             <option value="4096">4 KB (512 rows)</option>
-            <option value="8192">8 KB (1024 rows)</option>
           </select>
-          <span id="dis-status" class="dis-status">idle</span>
+          <select id="dis-stride" onchange="ahkCall('DissectSetStride',parseInt(this.value))" style="font-size:11px" data-tip="Row stride — 4 bytes aligns to 4-byte struct fields (e.g. +0xC4), 8 bytes is the pointer view">
+            <option value="8" selected>8-byte rows</option>
+            <option value="4">4-byte rows</option>
+          </select>
+          <span class="dis-cols-wrap">
+            <button class="tree-tbtn" onclick="dissectToggleColsMenu(event)" data-tip="Show/hide columns">⌗ Columns</button>
+            <div id="dis-cols-menu" class="dis-cols-menu"></div>
+          </span>
+        </div>
+        <!-- Struct template + offset-chain breadcrumb -->
+        <div class="dis-subbar">
+          <span class="dis-subbar-lbl">Type as</span>
+          <select id="dis-struct" onchange="dissectSetStruct()" style="font-size:11px" data-tip="Overlay known field names from PoE2Offsets onto this view">
+            <option value="">(none)</option>
+          </select>
+          <span class="dis-chain-sep">│</span>
+          <span class="dis-subbar-lbl">Chain</span>
+          <code id="dis-chain" class="dis-chain" data-tip="The pointer path you followed from the root">—</code>
+          <button class="tree-tbtn" onclick="dissectCopyChain()" data-tip="Copy the offset chain to the clipboard">📋</button>
+          <input id="dis-chain-in" class="dis-addr-input" style="width:240px" type="text" placeholder="Resolve chain e.g. AreaInstance+0x30+0x18" onkeydown="if(event.key==='Enter')dissectResolveChain()">
+          <button class="tree-tbtn" onclick="dissectResolveChain()">Resolve</button>
+        </div>
+        <!-- Value scan within the current view -->
+        <div class="dis-subbar">
+          <span class="dis-subbar-lbl">Scan</span>
+          <input id="dis-scan-val" class="dis-addr-input" style="width:160px" type="text" placeholder="value…" onkeydown="if(event.key==='Enter')dissectScan()">
+          <select id="dis-scan-type" style="font-size:11px">
+            <option value="i32">i32</option>
+            <option value="u32">u32</option>
+            <option value="f32">f32</option>
+            <option value="i64">i64</option>
+            <option value="hex">hex bytes</option>
+            <option value="str">ASCII</option>
+          </select>
+          <button class="tree-tbtn" onclick="dissectScan()">Scan</button>
+          <button class="tree-tbtn" onclick="dissectScanClear()" data-tip="Clear scan highlights">✕</button>
+          <span id="dis-scan-results" class="dis-scan-results"></span>
+          <span class="dis-live-group" data-tip="Auto-refresh: re-read the current address and flash rows whose bytes changed. Act in-game to spot which offset holds a live-changing value.">
+            <span class="dis-live-txt">Live</span>
+            <label class="toggle"><input type="checkbox" id="dis-live" onchange="dissectToggleLive()"><span class="toggle-slider"></span></label>
+            <select id="dis-live-rate" onchange="dissectLiveRateChanged()" style="font-size:11px" data-tip="Refresh rate">
+              <option value="250">4/s</option>
+              <option value="500" selected>2/s</option>
+              <option value="1000">1/s</option>
+              <option value="2000">0.5/s</option>
+            </select>
+            <span id="dis-status" class="dis-status">idle</span>
+          </span>
         </div>
         <div class="dis-table-wrap">
-          <table class="dis-tbl" id="dis-tbl">
-            <thead>
-              <tr>
-                <th class="dis-off">Offset</th>
-                <th class="dis-adr">Address</th>
-                <th class="dis-hex">Hex (8B)</th>
-                <th class="dis-i32">i32</th>
-                <th class="dis-u32">u32</th>
-                <th class="dis-f32">f32</th>
-                <th class="dis-ptr">Pointer</th>
-                <th class="dis-f64">f64</th>
-                <th class="dis-asc">ASCII</th>
-              </tr>
-            </thead>
+          <table class="dis-tbl" id="dis-tbl" style="table-layout:fixed">
+            <colgroup id="dis-colgroup"></colgroup>
+            <thead id="dis-thead"></thead>
             <tbody id="dis-body">
-              <tr><td colspan="9" class="no-data-msg">Enter an address or click a symbol to begin.</td></tr>
+              <tr><td class="no-data-msg">Enter an address or click a symbol to begin.</td></tr>
             </tbody>
           </table>
         </div>
@@ -8110,6 +8186,10 @@
     // c = header category, ck = key.
     function junkCatRow(c, ck) {
       const isUser = (c.user === true || c.user === "true");
+      // The key is embedded raw into inline event handlers (ontoggle/onclick).
+      // Category keys are already slugged at creation, but harden the render layer
+      // too so a hand-edited INI / API-set key can never break out of the handler.
+      const safeCk = String(ck).replace(/[^a-z0-9_-]/g, "");
       const ci = _junkCatInfo[ck] || { short: (c.label || ck), desc: isUser ? "User category — your own junk patterns (added from the Entity Inspector)." : String(c.label || ck) };
       const allOn = (c.on === true || c.on === "true");
       const pills = (Array.isArray(c.patterns) ? c.patterns : []).map(p => {
@@ -8128,20 +8208,20 @@
         return `<span class="filter-pill junk-custom-pill" data-tip="${escAttr("Custom pattern: " + pp)}">`
              + `<input type="checkbox" ${pon ? "checked" : ""} onchange="junkSet('pat:${escAttr(pp)}', this.checked ? 1 : 0)"> `
              + `<span class="junk-pat">${escHtml(pp)}</span>`
-             + `<button class="junk-pat-del" data-tip="Remove this pattern" onclick="junkDelCatPat('${escAttr(ck)}','${escAttr(pp)}')">✕</button></span>`;
+             + `<button class="junk-pat-del" data-tip="Remove this pattern" onclick="junkDelCatPat('${safeCk}','${escAttr(pp)}')">✕</button></span>`;
       }).join("");
       const hasAny = (Array.isArray(c.patterns) && c.patterns.length) || (Array.isArray(c.custom) && c.custom.length);
       // Trailing bulk control — checked when all patterns are on, so a click
       // flips the whole category. Its label states the action it performs.
       const allBtn = hasAny ? `<label class="filter-pill junk-all" data-tip="Enable or disable every pattern in this category">`
-             + `<input type="checkbox" ${allOn ? "checked" : ""} onchange="junkSet('cat:${escAttr(ck)}', this.checked ? 1 : 0)"> `
+             + `<input type="checkbox" ${allOn ? "checked" : ""} onchange="junkSet('cat:${safeCk}', this.checked ? 1 : 0)"> `
              + `<span class="junk-pat">${allOn ? "disable all" : "enable all"}</span></label>` : "";
       // User categories are deletable as a whole (built-ins are permanent).
-      const delCatBtn = isUser ? `<button class="filter-pill junk-catdel" data-tip="Delete this whole category" onclick="junkDelCat('${escAttr(ck)}')">🗑 delete category</button>` : "";
+      const delCatBtn = isUser ? `<button class="filter-pill junk-catdel" data-tip="Delete this whole category" onclick="junkDelCat('${safeCk}')">🗑 delete category</button>` : "";
       const emptyNote = (!hasAny && isUser) ? `<span class="junk-cat-empty">No patterns yet — add one from an entity's Category row.</span>` : "";
-      return `<details class="junk-cat"${_junkOpenCats.has(ck) ? " open" : ""} ontoggle="junkCatToggle('${ck}', this.open)">`
+      return `<details class="junk-cat"${_junkOpenCats.has(safeCk) ? " open" : ""} ontoggle="junkCatToggle('${safeCk}', this.open)">`
            + `<summary class="junk-cat-head">`
-           + `<div class="junk-cat-text" data-snodekey="junk-${escAttr(ck)}">`
+           + `<div class="junk-cat-text" data-snodekey="junk-${safeCk}">`
            + `<div class="junk-cat-titlerow"><span class="junk-cat-name">${escHtml(ci.short)}</span></div>`
            + `<div class="junk-cat-desc">${escHtml(ci.desc)}</div>`
            + `</div>`
@@ -8245,6 +8325,17 @@
     function _runTabSideEffects(key, prev) {
       if (prev === 'ui' && key !== 'ui')
         ahkCall('UiBrowserClearHighlight');
+      // Stop the dissector's live auto-refresh when leaving its tab.
+      if (prev === 'dissect' && key !== 'dissect') {
+        dissectStopLive();
+        const lc = document.getElementById('dis-live');
+        if (lc) lc.checked = false;
+      }
+      // Populate the "Type as" struct dropdown once, on first entering the tab.
+      if (key === 'dissect') {
+        if (!_disStructsBuilt) ahkCall('DissectRequestStructs');
+        _disRenderHead(parseInt((document.getElementById('dis-stride') || {}).value) || 8);
+      }
       if (treeTabs.has(key))
         ahkCall('SwitchTab', key.charAt(0).toUpperCase() + key.slice(1));
       if (key === 'ui')
@@ -10301,15 +10392,36 @@
       const v = (document.getElementById('dis-addr').value || '').trim();
       if (v) ahkCall('DissectGoto', v);
     }
+    // ── Live watch: auto re-read the current address so changed bytes flash ──
+    let _disLiveTimer = null;
+    function dissectStopLive() {
+      if (_disLiveTimer) { clearInterval(_disLiveTimer); _disLiveTimer = null; }
+    }
+    function dissectToggleLive() {
+      dissectStopLive();
+      const on = document.getElementById('dis-live').checked;
+      if (on) {
+        const rate = parseInt(document.getElementById('dis-live-rate').value) || 500;
+        _disLiveTimer = setInterval(() => ahkCall('DissectReread'), rate);
+      }
+    }
+    function dissectLiveRateChanged() {
+      if (document.getElementById('dis-live') && document.getElementById('dis-live').checked)
+        dissectToggleLive();   // restart with the new rate
+    }
     function dissectSymbolGo() {
       const sym = document.getElementById('dis-symbol').value;
       ahkCall('DissectSymbol', sym, '0x0');
     }
     // Called when the user clicks a pointer value in the dissector table.
-    function dissectClickPtr(hexStr) {
+    // Passes the source byte offset so AHK can grow the offset-chain breadcrumb.
+    function dissectClickPtr(hexStr, offVal) {
       if (!hexStr) return;
       document.getElementById('dis-addr').value = hexStr;
-      ahkCall('DissectGoto', hexStr);
+      if (offVal !== undefined && offVal !== null && offVal !== '')
+        ahkCall('DissectFollow', String(offVal), hexStr);
+      else
+        ahkCall('DissectGoto', hexStr);
     }
     // Event delegation: one listener on the tbody, fires when any
     // .dis-ptr-link inside it (or its child) gets clicked. This avoids the
@@ -10320,15 +10432,51 @@
       const tbody = document.getElementById('dis-body');
       if (!tbody) { setTimeout(attachDissectClick, 50); return; }
       tbody.addEventListener('click', (ev) => {
+        const peek = ev.target.closest('.dis-peek-btn');
+        if (peek && peek.dataset && peek.dataset.peek) { dissectPeek(peek.dataset.off, peek.dataset.peek); return; }
+        const close = ev.target.closest('.dis-peek-close');
+        if (close && close.dataset) { dissectPeekClose(close.dataset.off); return; }
         const link = ev.target.closest('.dis-ptr-link');
-        if (link && link.dataset && link.dataset.ptr) dissectClickPtr(link.dataset.ptr);
+        if (link && link.dataset && link.dataset.ptr) dissectClickPtr(link.dataset.ptr, link.dataset.off);
       });
     })();
+
+    // Live-watch change tracking: previous hex per absolute address, and the
+    // timestamp each address last changed (drives the fade). Reset when the base
+    // address changes (a navigation), so a fresh page never all-flashes.
+    let _disBaseAddr = null;
+    let _disPrevHex = Object.create(null);
+    let _disChgTick = Object.create(null);
+    const DIS_FADE_MS = 1500;
+    let _disLastJson = null;              // last payload, for scan re-render
+    let _disScanSet = new Set();          // row offsets currently matched by a scan
+    let _disStructsBuilt = false;         // "Type as" dropdown populated once
+    let _disPeek = Object.create(null);   // row off → pointer-peek result {kind,text,hex}
+    let _disPeekOff = null;               // row whose 🔍 was last clicked (target for the reply)
+    // Column model — header, colgroup and rows are all generated from this so
+    // resize (width) and hide (visible) are trivial. Session-only prefs.
+    const DIS_COLS = [
+      { key: 'off', label: 'Offset',  cls: 'dis-off', w: 62 },
+      { key: 'fld', label: 'Field',   cls: 'dis-fld', w: 190 },
+      { key: 'adr', label: 'Address', cls: 'dis-adr', w: 130 },
+      { key: 'hex', label: 'Hex',     cls: 'dis-hex', w: 180 },
+      { key: 'i32', label: 'i32',     cls: 'dis-i32', w: 84 },
+      { key: 'u32', label: 'u32',     cls: 'dis-u32', w: 84 },
+      { key: 'f32', label: 'f32',     cls: 'dis-f32', w: 84 },
+      { key: 'f64', label: 'f64',     cls: 'dis-f64', w: 92 },
+      { key: 'ptr', label: 'Pointer', cls: 'dis-ptr', w: 170 },
+      { key: 'asc', label: 'ASCII',   cls: 'dis-asc', w: 90 }
+    ];
+    let _disColW = Object.create(null);       // key → current width px (defaults from DIS_COLS)
+    let _disColHidden = new Set();            // keys currently hidden
+    DIS_COLS.forEach(c => { _disColW[c.key] = c.w; });
+    const _disVisCols = () => DIS_COLS.filter(c => !_disColHidden.has(c.key));
 
     // AHK pushes this after every Goto / Back / Forward / Reread.
     function updateMemDissect(jsonStr) {
       let d;
       try { d = JSON.parse(jsonStr); } catch (e) { return; }
+      _disLastJson = jsonStr;   // cache so a scan can re-render without a round-trip
 
       // Status
       const statusEl = document.getElementById('dis-status');
@@ -10338,6 +10486,26 @@
       const addrEl = document.getElementById('dis-addr');
       if (addrEl && addrEl !== document.activeElement && d.addr)
         addrEl.value = d.addr;
+
+      // Size + stride dropdowns (auto-size on Type-as changes the size server-side)
+      const sizeEl = document.getElementById('dis-size');
+      if (sizeEl && sizeEl !== document.activeElement && d.size)
+        sizeEl.value = String(d.size);
+      const strideEl = document.getElementById('dis-stride');
+      if (strideEl && strideEl !== document.activeElement && d.stride)
+        strideEl.value = String(d.stride);
+
+      // Header + colgroup (regenerated so column widths/visibility apply).
+      _disRenderHead(d.stride || 8);
+
+      // Applied struct template dropdown
+      const structEl = document.getElementById('dis-struct');
+      if (structEl && structEl !== document.activeElement)
+        structEl.value = d.struct || '';
+
+      // Offset-chain breadcrumb
+      const chainEl = document.getElementById('dis-chain');
+      if (chainEl) chainEl.textContent = d.chain || '—';
 
       // Back / Forward buttons
       const bb = document.getElementById('dis-back-btn');
@@ -10349,36 +10517,285 @@
       const tbody = document.getElementById('dis-body');
       if (!tbody) return;
       const rows = d.rows;
+      const nCols = _disVisCols().length;
       if (!Array.isArray(rows) || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="no-data-msg">'
+        tbody.innerHTML = '<tr><td colspan="' + nCols + '" class="no-data-msg">'
           + escHtml(d.status || 'No data') + '</td></tr>';
         return;
       }
 
+      // Reset change tracking when the viewed base address changes (navigation),
+      // so following a pointer doesn't flash the whole new page.
+      if (d.addr !== _disBaseAddr) {
+        _disBaseAddr = d.addr;
+        _disPrevHex = Object.create(null);
+        _disChgTick = Object.create(null);
+        _disPeek = Object.create(null);   // peeks are per-view (offsets relative to base)
+      }
+      const now = (typeof performance !== 'undefined' ? performance.now() : Date.now());
+
       let html = '';
       for (const row of rows) {
         const offHex = '+0x' + row.off.toString(16).toUpperCase().padStart(3, '0');
+
+        // Change highlight: compare this row's 8 bytes to the previous refresh.
+        const prev = _disPrevHex[row.addr];
+        if (prev !== undefined && prev !== row.hex) _disChgTick[row.addr] = now;
+        _disPrevHex[row.addr] = row.hex;
+        // Row classes: change-flash (inline amber) + scan-match rail.
+        const cls = [];
+        let bgStyle = '';
+        const chgAt = _disChgTick[row.addr];
+        if (chgAt !== undefined) {
+          const age = now - chgAt;
+          if (age < DIS_FADE_MS) {
+            const a = (0.42 * (1 - age / DIS_FADE_MS)).toFixed(3);
+            cls.push('dis-chg');
+            bgStyle = ' style="background:rgba(214,166,90,' + a + ')"';
+          } else {
+            delete _disChgTick[row.addr];   // fade complete — forget it
+          }
+        }
+        if (_disScanSet.has(row.off)) cls.push('dis-match');
+        let trOpen = '<tr id="dis-row-' + row.off + '"'
+          + (cls.length ? ' class="' + cls.join(' ') + '"' : '')
+          + bgStyle + '>';
+
         let ptrCell;
         if (row.isPtr) {
           // Use data attribute + event delegation rather than inline onclick —
           // avoids quote-escaping issues and survives innerHTML rebuilds.
-          ptrCell = '<span class="dis-ptr-link" data-ptr="' + escAttr(row.ptr) + '" data-tip="Click to follow pointer">' + escHtml(row.ptr) + '</span>';
+          // 🔍 peeks (resolves the target) without navigating; the address follows.
+          ptrCell = '<span class="dis-peek-btn" data-peek="' + escAttr(row.ptr) + '" data-off="' + row.off + '" data-tip="Resolve what this points to (entity / string / vector / data)">🔍</span>'
+            + '<span class="dis-ptr-link" data-ptr="' + escAttr(row.ptr) + '" data-off="' + row.off + '" data-tip="Click to follow pointer">' + escHtml(row.ptr) + '</span>';
         } else {
           ptrCell = '<span style="color:var(--subtext)">' + escHtml(row.ptr) + '</span>';
         }
-        html += '<tr>'
-          + '<td class="dis-off">'  + escHtml(offHex)         + '</td>'
-          + '<td class="dis-adr">'  + escHtml(row.addr)       + '</td>'
-          + '<td class="dis-hex">'  + escHtml(row.hex)        + '</td>'
-          + '<td class="dis-i32">'  + escHtml(String(row.i32))+ '</td>'
-          + '<td class="dis-u32">'  + escHtml(String(row.u32))+ '</td>'
-          + '<td class="dis-f32">'  + escHtml(String(row.f32))+ '</td>'
-          + '<td class="dis-ptr">'  + ptrCell                 + '</td>'
-          + '<td class="dis-f64">'  + escHtml(String(row.f64))+ '</td>'
-          + '<td class="dis-asc">'  + escHtml(row.ascii)      + '</td>'
-          + '</tr>';
+        html += trOpen;
+        for (const col of _disVisCols())
+          html += _disCellHtml(col, row, ptrCell, offHex);
+        html += '</tr>';
+
+        // Stage 5: an expanded pointer-peek result under this row (persists
+        // across refreshes because it's rebuilt from _disPeek every render).
+        const pk = _disPeek[row.off];
+        if (pk) {
+          const kindCls = 'dis-pk-' + (pk.kind || 'data').replace(/[^a-z]/gi, '');
+          let body = '';
+          if (pk.text) body += '<span class="dis-pk-text ' + kindCls + '">' + escHtml(pk.text) + '</span>';
+          if (pk.hex)  body += '<span class="dis-pk-hex">' + escHtml(pk.hex) + '</span>';
+          if (!body)   body = '<span class="dis-pk-text">' + escHtml(pk.kind || '—') + '</span>';
+          html += '<tr class="dis-peek-row"><td colspan="' + nCols + '">'
+            + '<span class="dis-pk-kind">' + escHtml(pk.kind || '') + '</span>'
+            + body
+            + '<span class="dis-peek-close" data-off="' + row.off + '" data-tip="Close">✕</span>'
+            + '</td></tr>';
+        }
       }
       tbody.innerHTML = html;
+    }
+
+    // Builds one <td> for a column key from a row (used by updateMemDissect).
+    function _disCellHtml(col, row, ptrCell, offHex) {
+      switch (col.key) {
+        case 'off': return '<td class="dis-off">' + escHtml(offHex) + '</td>';
+        case 'fld': return '<td class="dis-fld" data-tip="' + escAttr(row.name || '') + '">' + escHtml(row.name || '') + '</td>';
+        case 'adr': return '<td class="dis-adr">' + escHtml(row.addr) + '</td>';
+        case 'hex': return '<td class="dis-hex">' + escHtml(row.hex) + '</td>';
+        case 'i32': return '<td class="dis-i32">' + escHtml(String(row.i32)) + '</td>';
+        case 'u32': return '<td class="dis-u32">' + escHtml(String(row.u32)) + '</td>';
+        case 'f32': return '<td class="dis-f32">' + escHtml(String(row.f32)) + '</td>';
+        case 'f64': return '<td class="dis-f64">' + escHtml(String(row.f64)) + '</td>';
+        case 'ptr': return '<td class="dis-ptr">' + ptrCell + '</td>';
+        case 'asc': return '<td class="dis-asc">' + escHtml(row.ascii) + '</td>';
+      }
+      return '';
+    }
+
+    // Regenerates the colgroup + header row from the visible columns, applying
+    // per-column widths (resizable) and the current stride's Hex label.
+    function _disRenderHead(stride) {
+      const cg = document.getElementById('dis-colgroup');
+      const th = document.getElementById('dis-thead');
+      const tbl = document.getElementById('dis-tbl');
+      if (!cg || !th) return;
+      const vis = _disVisCols();
+      cg.innerHTML = vis.map(c => '<col style="width:' + (_disColW[c.key] || c.w) + 'px">').join('');
+      let hr = '<tr>';
+      for (const c of vis) {
+        const label = (c.key === 'hex') ? ('Hex (' + stride + 'B)') : c.label;
+        hr += '<th class="' + c.cls + '" style="position:relative">' + escHtml(label)
+          + '<span class="dis-colsz" data-ck="' + c.key + '"></span></th>';
+      }
+      hr += '</tr>';
+      th.innerHTML = hr;
+      if (tbl) tbl.style.width = vis.reduce((a, c) => a + (_disColW[c.key] || c.w), 0) + 'px';
+    }
+
+    // ── Stage 2: "Type as" struct-template dropdown ──
+    // AHK pushes the full list of PoE2Offsets struct names once (tab open).
+    function updateMemDissectStructs(jsonStr) {
+      let names;
+      try { names = JSON.parse(jsonStr); } catch (e) { return; }
+      if (!Array.isArray(names)) return;
+      const sel = document.getElementById('dis-struct');
+      if (!sel) return;
+      const cur = sel.value;
+      let html = '<option value="">(none)</option>';
+      for (const n of names.slice().sort()) html += '<option value="' + escAttr(n) + '">' + escHtml(n) + '</option>';
+      sel.innerHTML = html;
+      sel.value = cur;            // preserve current selection across rebuilds
+      _disStructsBuilt = true;
+    }
+    function dissectSetStruct() {
+      const sel = document.getElementById('dis-struct');
+      ahkCall('DissectSetStruct', sel ? sel.value : '');
+    }
+
+    // ── Stage 3: offset-chain copy + typed-chain resolve ──
+    function dissectCopyChain() {
+      const el = document.getElementById('dis-chain');
+      const txt = el ? el.textContent : '';
+      if (!txt || txt === '—') return;
+      try { navigator.clipboard.writeText(txt); } catch (e) {}
+      // brief visual ack
+      if (el) { const o = el.style.color; el.style.color = 'var(--info)'; setTimeout(() => el.style.color = o, 350); }
+    }
+    function dissectResolveChain() {
+      const v = (document.getElementById('dis-chain-in').value || '').trim();
+      if (v) ahkCall('DissectResolveChain', v);
+    }
+
+    // ── Stage 4: value scan ──
+    function dissectScan() {
+      const v = (document.getElementById('dis-scan-val').value || '').trim();
+      const t = document.getElementById('dis-scan-type').value;
+      if (v) ahkCall('DissectScan', v, t);
+    }
+    function dissectScanClear() {
+      _disScanSet = new Set();
+      const res = document.getElementById('dis-scan-results');
+      if (res) res.innerHTML = '';
+      if (_disLastJson) updateMemDissect(_disLastJson);   // re-render without match rails
+    }
+    // AHK pushes the scan match list [{off, at, addr}]. We store the matched row
+    // offsets, render clickable chips, and re-render the table to add the rails.
+    function updateMemDissectScan(jsonStr) {
+      let matches;
+      try { matches = JSON.parse(jsonStr); } catch (e) { return; }
+      if (!Array.isArray(matches)) matches = [];
+      _disScanSet = new Set(matches.map(m => m.off));
+      const res = document.getElementById('dis-scan-results');
+      if (res) {
+        if (matches.length === 0) {
+          res.textContent = 'no matches';
+        } else {
+          let html = matches.length + ' match' + (matches.length === 1 ? '' : 'es') + ': ';
+          for (const m of matches.slice(0, 40)) {
+            const offHex = '+0x' + (m.off >>> 0).toString(16).toUpperCase();
+            html += '<span class="dis-scan-chip" onclick="dissectJumpToRow(' + m.off + ')">' + offHex + '</span>';
+          }
+          if (matches.length > 40) html += ' +' + (matches.length - 40) + ' more';
+          res.innerHTML = html;
+        }
+      }
+      if (_disLastJson) updateMemDissect(_disLastJson);   // re-render with match rails
+    }
+    // Scroll a matched row into view and flash it.
+    function dissectJumpToRow(off) {
+      const tr = document.getElementById('dis-row-' + off);
+      if (!tr) return;
+      tr.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      const o = tr.style.background;
+      tr.style.background = 'rgba(106,143,191,.35)';
+      setTimeout(() => { tr.style.background = o; }, 700);
+    }
+
+    // ── Stage 5: on-demand pointer-target peek ──
+    // 🔍 resolves what a pointer points to (one read, user-triggered). We remember
+    // which row was clicked so the async reply lands under the right row.
+    function dissectPeek(offVal, hexStr) {
+      if (!hexStr) return;
+      _disPeekOff = (offVal === undefined || offVal === null) ? null : parseInt(offVal);
+      _disPeek[_disPeekOff] = { kind: '…', text: 'resolving…', hex: '' };  // instant feedback
+      if (_disLastJson) updateMemDissect(_disLastJson);
+      ahkCall('DissectPeek', hexStr);
+    }
+    function dissectPeekClose(offVal) {
+      const off = parseInt(offVal);
+      delete _disPeek[off];
+      if (_disLastJson) updateMemDissect(_disLastJson);
+    }
+    // AHK reply for a peek — store under the row we last clicked and re-render.
+    function updateMemDissectPeek(jsonStr) {
+      let d;
+      try { d = JSON.parse(jsonStr); } catch (e) { return; }
+      if (_disPeekOff === null || _disPeekOff === undefined) return;
+      _disPeek[_disPeekOff] = { kind: d.kind || 'data', text: d.text || '', hex: d.hex || '' };
+      if (_disLastJson) updateMemDissect(_disLastJson);
+    }
+
+    // ── Follow-up batch: resizable + hideable columns ──
+    // Drag-to-resize, delegated on the stable table wrap (the thead is regenerated
+    // each render, so per-th listeners wouldn't survive).
+    (function attachDisColResize() {
+      const wrap = document.querySelector('#panel-dissect .dis-table-wrap');
+      if (!wrap) { setTimeout(attachDisColResize, 50); return; }
+      wrap.addEventListener('mousedown', (ev) => {
+        const h = ev.target.closest('.dis-colsz');
+        if (!h) return;
+        ev.preventDefault(); ev.stopPropagation();
+        const ck = h.getAttribute('data-ck');
+        const startX = ev.clientX, startW = _disColW[ck] || 100;
+        const tbl = document.getElementById('dis-tbl');
+        const cg = document.getElementById('dis-colgroup');
+        const vis = _disVisCols();
+        const idx = vis.findIndex(c => c.key === ck);
+        const onMove = (e) => {
+          const w = Math.max(36, startW + (e.clientX - startX));
+          _disColW[ck] = w;
+          if (cg && cg.children[idx]) cg.children[idx].style.width = w + 'px';
+          if (tbl) tbl.style.width = vis.reduce((a, c) => a + (_disColW[c.key] || c.w), 0) + 'px';
+        };
+        const onUp = () => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          window.removeEventListener('blur', onUp);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        window.addEventListener('blur', onUp);
+      });
+    })();
+    // Close the columns popover on an outside click.
+    document.addEventListener('click', (ev) => {
+      const menu = document.getElementById('dis-cols-menu');
+      if (menu && menu.classList.contains('open') && !ev.target.closest('.dis-cols-wrap'))
+        menu.classList.remove('open');
+    });
+    function _disBuildColsMenu() {
+      const menu = document.getElementById('dis-cols-menu');
+      if (!menu) return;
+      menu.innerHTML = DIS_COLS.map(c =>
+        '<label><input type="checkbox" data-ck="' + c.key + '"' + (_disColHidden.has(c.key) ? '' : ' checked')
+        + ' onchange="dissectToggleCol(\'' + c.key + '\', this.checked)"> ' + escHtml(c.label) + '</label>'
+      ).join('');
+    }
+    function dissectToggleColsMenu(ev) {
+      if (ev) ev.stopPropagation();
+      const menu = document.getElementById('dis-cols-menu');
+      if (!menu) return;
+      if (!menu.classList.contains('open')) _disBuildColsMenu();
+      menu.classList.toggle('open');
+    }
+    function dissectToggleCol(key, checked) {
+      if (checked) _disColHidden.delete(key);
+      else {
+        if (_disColHidden.size >= DIS_COLS.length - 1) { _disBuildColsMenu(); return; }  // keep ≥1 column
+        _disColHidden.add(key);
+      }
+      if (_disLastJson) updateMemDissect(_disLastJson);
+      else _disRenderHead(parseInt(document.getElementById('dis-stride').value) || 8);
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -12844,7 +13261,7 @@
     function eiCopyText(ev, text) {
       ev.stopPropagation();
       if (!text) return;
-      try { navigator.clipboard.writeText(text); } catch (e) {}
+      try { navigator.clipboard.writeText(text).catch(() => {}); } catch (e) {}
       const btn = ev.currentTarget;
       if (btn) {
         const orig = btn.textContent;
@@ -12919,10 +13336,16 @@
         label = sel.dataset.autolabel || key;
       } else if (v === '__new__') {
         const inp = document.getElementById('ei-junk-new-' + addr);
-        // Strip the delimiter from a user-typed name so it can't split the field.
-        label = ((inp && inp.value.trim()) || '').split('|').join('');
+        // Keep only safe display chars in the label (drops the field delimiter,
+        // quotes and backslashes) so it can't split the catadd fields or break the
+        // inline event-handler strings the category is later rendered into.
+        label = ((inp && inp.value.trim()) || '').replace(/[|"'\\<>]/g, '').trim();
         if (!label) { if (inp) inp.focus(); return; }
-        key = label.toLowerCase();
+        // The key is embedded raw into ontoggle/onclick handlers, so slug it to a
+        // strictly safe charset ([a-z0-9_-]); this is what fully closes the
+        // injection surface (label is otherwise HTML-escaped on display).
+        key = label.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+        if (!key) { if (inp) inp.focus(); return; }
       } else if (v.indexOf('cat:') === 0) {
         key = v.slice(4);
         const c = (window._junkCatList || []).find(x => x.key === key);

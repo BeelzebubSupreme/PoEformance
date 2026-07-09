@@ -1,7 +1,7 @@
 # Project conventions for Claude
 
 Path of Exile 2 memory-reading / overlay assistant. AutoHotkey v2 + a WebView2 UI.
-Reimplementation of the original C# project (see Reference). Version `0.45.13.315`.
+Reimplementation of the original C# project (see Reference). Version `0.45.13.316`.
 
 ## Language
 
@@ -2609,6 +2609,177 @@ zooms the camera out.**
 - **Note (Oodle):** PoE2 ships no standalone `oo2core`; the shared `ggpk-tools\bin` needs Kintaro's
   `oo2core.dll` (630 KB) copied in next to the exes or PoeDataExtract/PoePatcher crash in
   `LibBundle3.Bundle.ReadWithoutCache`.
+## Memory Dissector — power features (shipped 0.45.13.290)
+
+The CE-style Dissector (`ahk/MemoryDissect.ahk` + RE → Dissector tab) grew from a static
+8-byte-stride byte viewer into a real RE workbench. Goal: one tool that replaces the one-off
+probe scripts (`ActorProbe`, `StackMaxProbe`, `AutoPilotMatrixScan`, …) AND emits a ready-to-paste
+`PoE2Offsets` chain. Four capabilities, all opt-in per interaction, none on the render hot path:
+
+- **Live-watch + change highlight (UI-only):** a "Live" toggle + rate select (4/2/1/0.5 Hz) in the
+  toolbar drives `setInterval(() => ahkCall('DissectReread'))`. `updateMemDissect` keeps
+  `_disPrevHex` (per absolute addr) + `_disChgTick`; a row whose 8 bytes changed since the previous
+  refresh gets an inline amber background, alpha faded by age (`DIS_FADE_MS`=1500). Reset when the
+  base address changes (navigation), so following a pointer never all-flashes. Live is stopped on
+  leaving the tab (`_runTabSideEffects`). This is how you find a drifting/changing offset: enable
+  Live, act in-game, watch which row flickers. The per-Reread `LogError` debug spam was removed
+  (it fired at up to 4 Hz).
+- **Known field names from `PoE2Offsets` ("Type as"):** a struct-template dropdown (populated once
+  via `DissectRequestStructs` → `MemDissectStructNames()`, which enumerates every static Map on the
+  `PoE2Offsets` class) overlays field names onto the view. `_MemDissectFieldAnnotations(struct)`
+  builds a row-offset → "Field(+0xNN) …" map (multiple fields aggregate into their 8-byte row); the
+  new **Field** table column shows it (amber). A symbol jump auto-applies a matching template
+  (`_MemDissectStructForSymbol`: InGameState/AreaInstance/ServerDataStructure). Pure data, NO RPM.
+- **Offset-chain workflow:** the followed pointer path is a breadcrumb. Clicking a pointer cell now
+  routes through `DissectFollow off addr` → `MemDissectFollowPointer` (records `{off,addr}` in
+  `g_memDissectChain`); a typed address ("Go") is a NEW custom root (`MemDissectGotoCustom`, resets
+  chain). `_MemDissectChainString()` renders "AreaInstance → +0x598 → +0x20" (root = symbol or raw
+  address), copyable via 📋. The reverse, `MemDissectResolveChain(str)`, parses a typed chain
+  ("AreaInstance+0x30+0x18", arrows/spaces tolerated), follows each hop (`ReadInt64` at cur+off),
+  jumps to the end and rebuilds the breadcrumb. Back/Forward re-root the breadcrumb to the shown
+  address (`_MemDissectRebaseRoot`) — honest rather than a stale path.
+- **Value scan (in the current buffer):** `MemDissectScan(value, type)` scans `g_memDissectBuf` at
+  EVERY byte offset for i32/u32/f32/i64/hex-bytes/ASCII (`_MemDissectParseHexBytes`/`_MemDissectStrBytes`,
+  f32 within 1e-4), returns JSON matches `[{off,at,addr}]` deduped by 8-byte row. `_DissectScanAndPush`
+  pushes `updateMemDissectScan` (clickable `+0xNN` chips that scroll+flash the row via `dis-row-<off>`
+  ids) then re-pushes the state; matched rows get a left-rail `dis-match` class re-applied on each
+  render (`_disScanSet`). Operates on the already-read buffer only — no new reads, low risk.
+
+Wiring: globals `g_memDissectStructName`/`g_memDissectRootSym`/`g_memDissectRootAddr`/`g_memDissectChain`
+(InGameStateMonitor). `_BuildMemDissectJson` emits `struct` + `chain` (payload) and `name` (per row).
+Bridge cases `DissectFollow` / `DissectSetStruct` / `DissectRequestStructs` / `DissectResolveChain` /
+`DissectScan` (existing `DissectGoto` now → `MemDissectGotoCustom`). Verified in the browser preview:
+struct dropdown populate + sync, field-name annotation, chain breadcrumb + typed-chain shape, pointer
+row carries its offset, live change-flash + navigation reset + timer stop-on-leave, scan chips + row
+rail + clear. Static: full `/validate` exit 0; UI `node --check` clean.
+- **Pending in-game verification:** with the tool connected, RE → Dissector: Go Symbol (fields should
+  name themselves), enable Live and act in-game (changing offsets flash), follow pointers (chain grows,
+  📋 copies it), Resolve a typed chain, and Scan a known value (e.g. current area level) to confirm the
+  match lands on the right offset.
+- **Next candidate (Stage 5, deferred):** inline pointer-target decode (StdWString→text, StdVector→count,
+  entity→Metadata path) as an ON-DEMAND per-row expand (the `_DecodeComponentOnDemand` safe pattern),
+  NOT on the live-refresh path — the RPM-heavy piece, left out deliberately until the above is proven.
+
+### Usability pass from first in-game test (0.45.13.291)
+
+Owner drove the guided walkthrough and reported real issues; fixed:
+- **4-byte row stride** (`g_memDissectStride`, bridge `DissectSetStride`, UI "8-byte/4-byte rows"): many
+  `PoE2Offsets` fields sit on 4-byte boundaries (e.g. `CurrentAreaLevel` +0xC4). `_BuildMemDissectJson`
+  strides by 4 or 8; the 8-byte views (i64/ptr/f64) guard on `off+8<=bufSize`; `_MemDissectFieldAnnotations`
+  aligns names to the stride so a 4-byte field lands on its own row. Header shows "Hex (4B/8B)".
+- **Auto-size on "Type as"** (`MemDissectSetStruct` → `_MemDissectStructMaxOffset`/`_MemDissectSnapSize`):
+  applying a struct sets the read window to cover its largest field, snapped to a dropdown size and
+  **capped at 4 KB for auto** (so a big struct like ServerData@0x21E0 never itself triggers the 8 KB read).
+  Size + stride dropdowns now sync from the payload (`d.size`/`d.stride`). Solves "I don't know the size".
+- **Field template clears when following a pointer** (`MemDissectFollowPointer` sets `g_memDissectStructName:=""`):
+  the old struct's names no longer stick to a deeper pointer target.
+- **Back button** (`MemDissectGoto` now reads first, pushes history ONLY on a successful address change):
+  a failed pointer read used to push a dead history entry so Back appeared to do nothing.
+- **f64 column moved next to f32** (was after Pointer).
+- **8 KB crash — mitigated (0.45.13.292):** the crash was non-reproducible and left NO error-log entry,
+  so it was an uncatchable Windows SEH, not a catchable AHK exception. Code audit: the dissector path is
+  memory-safe by construction — `ReadBytes`/`ReadProcessMemory` can't fault the reader, the JSON build
+  reads only our own in-bounds Buffer (8-byte views now guarded on `off+8`), and the WebView push is async
+  + try-wrapped. Conclusion: the 8 KB read's LONGER build widened the window in which the 50 ms radar loop
+  (which reads many foreign pointers per tick) could interrupt it and hit a momentarily-invalid pointer —
+  the reader's pre-existing concurrent-RPM SEH risk, with 8 KB as the timing trigger, not the fault site.
+  Fixes: (a) **manual read size capped at 4 KB** (removed the 8 KB dropdown option + `DissectSetSize` clamp
+  `Min(0x1000,…)`) — removes the slowest operation; auto-size was already ≤4 KB. (b) **Forensic breadcrumb**:
+  `_MemDissectReadAt` logs `MemDissect read start size=… @ 0x…` for reads ≥ 2 KB (throttled ≤1/2 s), so a
+  future SEH leaves the size+address as the last error-log line. If it ever recurs, the next step is wrapping
+  the read+build in `Critical` so the radar loop can't interrupt it. Scan is confirmed **current-buffer only**.
+### Stage 5: on-demand pointer-target decode ("peek", shipped 0.45.13.293)
+
+Resolves what a pointer points to — the piece that turns pointer soup into readable structure. Strictly
+**on-demand, one target per click**: a 🔍 button on each pointer row triggers exactly ONE small read (never
+in the build loop, never on the live-refresh path — the safe `_DecodeComponentOnDemand` pattern; deliberately
+built AFTER the 8 KB SEH scare precisely because it does RPM).
+
+- **`MemDissectPeek(addr)` (`ahk/MemoryDissect.ahk`):** classifies the target in priority order — **entity**
+  (`ReadEntityIdentityBasic` → path contains `Metadata/`), **wstr** (`ReadStdWStringAt`, SSO-safe), **wstr(raw)**
+  (`Mem.ReadUnicodeString` — a bare wchar buffer), **str** (`ReadStdStringAt`, UTF-8), **vector?** (begin/end
+  pointers at +0x00/+0x08 with a sane span → shows `span=N (÷8 ÷4 ÷0x38)`), else **data** (32-byte hex preview
+  + a first-qword-is-a-pointer hint). Code/vtable pointers (≥ 0x7FF000000000) are tagged `code`. Every read is
+  in its own try; `_MemDissectLooksText` rejects garbage (control chars) so a struct-shaped-but-not-a-string
+  read doesn't show noise. Pushes `updateMemDissectPeek` via `_MemDissectPushPeek`. Bridge `DissectPeek` →
+  `_DissectPeekSafe` (outer try/catch so nothing escapes the SetTimer thread).
+- **UI (`ui/index.html`):** 🔍 in the Pointer cell peeks (the address text still follows/navigates). The result
+  renders as an inline `.dis-peek-row` under the row, color-coded by kind (entity green / string blue / vector
+  purple), with a ✕ to close. Kept in `_disPeek` (row off → result) so it survives live refreshes; `_disPeekOff`
+  routes the async reply to the clicked row; cleared on base-address change. Instant "resolving…" feedback.
+- **Verified in the browser preview:** 🔍 present on pointer rows; entity/wstr/vector/data kinds render with the
+  right colors; peek persists across a refresh and clears on navigation; ✕ closes. Static: `/validate` exit 0;
+  UI `node --check` clean.
+- **Pending in-game verification:** peek a pointer that leads to an entity (→ `Metadata/…` path), a name
+  string, and a vector field (→ plausible count) to confirm the classifier against real memory.
+
+### Follow-up: resizable + hideable columns (shipped 0.45.13.294, UI-only)
+
+The dissector table is now driven by a central column model so width + visibility are trivial. Pure
+`ui/index.html` change (no AHK).
+- **`DIS_COLS`** (key/label/cls/default-width) is the single source of truth; header, `<colgroup>`, and
+  every row cell are generated from `_disVisCols()`. `_disRenderHead(stride)` rebuilds the colgroup +
+  `<thead>` (Hex label reflects 4B/8B); `_disCellHtml(col,row,…)` builds one `<td>` per key. The table is
+  `table-layout:fixed` with colgroup widths (the old per-class `.dis-*{width}` rules are now redundant).
+- **Resize:** a `.dis-colsz` handle per `<th>` (reused from the TSV viewer), drag delegated on the stable
+  `.dis-table-wrap` (the thead regenerates each render, so per-th listeners wouldn't survive) → updates
+  `_disColW[key]` live on the `<col>` + table width.
+- **Hide:** "⌗ Columns" toolbar button opens a `.dis-cols-menu` checkbox popover (`_disBuildColsMenu` /
+  `dissectToggleCol`); hidden keys go in `_disColHidden` and are skipped everywhere (header, colgroup,
+  cells, colspans). Guard keeps ≥1 column. Closes on outside click. Header renders on tab entry (before
+  the first Go). **Session-only** (not persisted across restarts) — could be persisted later if wanted.
+- **Verified in the browser preview:** header renders pre-Go; hiding i32/u32 drops them from header +
+  colgroup + cells; resize sets the `<col>` width; re-show restores; popover opens with 10 checkboxes +
+  outside-click close; the ≥1-column guard holds. Static: UI `node --check` clean.
+
+This closes the deferred dissector follow-ups. Remaining optional idea only: persist column widths/visibility
+(and size/stride) across restarts via a `[Dissector]` INI section if the owner wants sticky prefs.
+
+### Auto-size also on "Go Symbol" (0.45.13.295)
+
+`MemDissectGotoSymbol` set the struct template but NOT the size (only the "Type as" dropdown did), so a
+symbol jump left the window at 512 B and hid fields like `PlayerInfo(+0x598)`. Extracted the snap logic into
+`_MemDissectAutoSizeFor(structName)` (max field offset + 8 → snapped, capped 4 KB) and call it from BOTH
+`MemDissectGotoSymbol` (before the read) and `MemDissectSetStruct`. Now Go Symbol AreaInstance immediately
+shows the whole struct labeled.
+
+### In-game walkthrough fixes (0.45.13.296)
+
+Owner drove the full walkthrough; three fixes:
+- **Auto-size actually works now (the AHK v2 global gotcha):** `MemDissectGotoSymbol` and `MemDissectSetStruct`
+  ASSIGNED `g_memDissectSize` but did NOT list it in their `global` declaration, so the assignment created a
+  function-LOCAL and the real global never changed — auto-size silently no-op'd (and `MemDissectSetStruct`
+  even threw on the read-before-assign of the local, swallowed by `_SafeDissect`). `/validate` can't catch this
+  (valid syntax). Added `g_memDissectSize` (+ `g_memDissectAddress` in SetStruct) to both declarations. Lesson
+  reconfirmed: **in AHK v2, any global you ASSIGN inside a function must be in its `global` line** — assigning
+  an undeclared name makes it local for the whole function.
+- **Scan respects the row stride:** `_MemDissectPushMatch` floored matches to 8-byte rows (`at // 8 * 8`), so in
+  4-byte mode a hit at +0xC4 was reported at +0xC0 ("4 bytes too early"). Now it aligns to the current
+  `g_memDissectStride` so the chip lands on the exact visible row.
+- **Live controls moved to the Scan row:** the raw `Live` checkbox + rate + status left the crowded toolbar
+  row 1 and now sit right-aligned (`margin-left:auto`) on the Scan sub-bar, with Live as the themed pill
+  toggle (`.toggle`/`.toggle-slider`) instead of a bare checkbox.
+
+### Non-finite float broke big reads → "loads nothing" (0.45.13.297)
+
+Right after auto-size started working, "Go Symbol AreaInstance loaded nothing" (only AreaInstance — it's the
+only symbol that auto-sizes to the 4 KB max; the others stay small). Root cause: arbitrary memory bytes
+interpreted as a **float can be NaN or ±Infinity**, and AHK serialized those into the row JSON as bare
+`nan`/`inf` tokens → the WHOLE payload is invalid JSON → `updateMemDissect`'s `JSON.parse` throws → it bails
+and the table renders nothing (the old view stays). Big reads (500+ rows) almost always contain one such
+float; the small structs happened not to. Fix: `_DisSafeFloat(raw, digits)` in `WebViewBridge` clamps any
+non-finite value to 0 BEFORE `Round` (NaN via `raw != raw`, Inf via the ±1e308 bound), used for both `f32`
+and `f64`. Confirmed the failure mode in the browser preview (a `"f32":nan` payload makes `JSON.parse` throw
+and the view stays unchanged). This is a general robustness fix, not AreaInstance-specific.
+
+### Peek text filter tightened (0.45.13.298)
+
+First real peek run showed the entity case working (`ENTITY Metadata/Characters/Int/IntFourb` on the
+LocalPlayer pointer at PlayerInfo+0x20) but three sibling pointers rendered as `WSTR(RAW)` with CJK garbage
+(`回马翻`) — the raw-wchar text heuristic (`_MemDissectLooksText`) only rejected control chars, so random
+non-string bytes passed as "text". Tightened: length ≥ 3, no control chars, AND ≥ 80% ASCII-printable
+(engine paths/names/ids are ASCII). Garbage now falls through to `DATA` (hex) instead of fake text. Accepts a
+rare non-ASCII-string false-negative in exchange, which is fine for RE.
 
 ## Reference
 

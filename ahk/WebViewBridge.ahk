@@ -1009,30 +1009,114 @@ PushMemDissectToWebView()
     try WebViewExec("updateMemDissect(" _JsStr(json) ")")
 }
 
+; Pushes the list of every PoE2Offsets struct template name to the WebView so
+; the dissector's "Type as" dropdown can be populated. Sent once when the tab is
+; opened (DissectRequestStructs), not on the live-refresh path.
+PushMemDissectStructsToWebView()
+{
+    global g_webViewReady
+    if !g_webViewReady
+        return
+    try
+    {
+        names := MemDissectStructNames()
+        json  := "["
+        first := true
+        for n in names
+        {
+            if !first
+                json .= ","
+            first := false
+            json .= _JsStr(n)
+        }
+        json .= "]"
+        WebViewExec("updateMemDissectStructs(" _JsStr(json) ")")
+    }
+    catch as ex
+    {
+        try LogError("PushMemDissectStructsToWebView exception: " (ex.HasOwnProp("Message") ? ex.Message : "?"))
+    }
+}
+
+; Safe wrapper for the on-demand pointer peek — any exception is logged and
+; swallowed so it never escapes the SetTimer thread as a blocking error dialog.
+_DissectPeekSafe(addr)
+{
+    try
+        MemDissectPeek(addr)
+    catch as ex
+    {
+        try LogError("DissectPeek exception: " (ex.HasOwnProp("Message") ? ex.Message : "?"))
+    }
+}
+
+; Runs a value scan over the current buffer, pushes the match set to the UI,
+; then re-pushes the dissector state so the status + row highlights update.
+_DissectScanAndPush(val, typ)
+{
+    global g_webViewReady
+    json := "[]"
+    try
+    {
+        json := MemDissectScan(val, typ)
+    }
+    catch as ex
+    {
+        try LogError("DissectScan exception: " (ex.HasOwnProp("Message") ? ex.Message : "?"))
+    }
+    if g_webViewReady
+    {
+        try WebViewExec("updateMemDissectScan(" _JsStr(json) ")")
+    }
+    try PushMemDissectToWebView()
+}
+
+; Arbitrary memory bytes interpreted as a float can be NaN or ±Infinity, which
+; serialize to non-JSON tokens (nan / inf / -1.#IND…) and break the ENTIRE
+; payload — JSON.parse then fails in the WebView and the table renders nothing.
+; (This is why a large read like AreaInstance @4 KB "loaded nothing": one of its
+; 500+ rows held such a float.) Clamp any non-finite value to 0 before Round.
+_DisSafeFloat(raw, digits)
+{
+    if (raw != raw)                          ; NaN never equals itself
+        return 0
+    if (raw > 1.0e308 || raw < -1.0e308)     ; ±Infinity (beyond double range)
+        return 0
+    return Round(raw, digits)
+}
+
 ; Internal: build the full dissector JSON payload. May throw — the caller is
 ; responsible for catching and falling back to a status-only payload.
 _BuildMemDissectJson()
 {
     global g_reader, g_memDissectAddress, g_memDissectSize, g_memDissectBuf
-    global g_memDissectHistory, g_memDissectFwd, g_memDissectStatus
+    global g_memDissectHistory, g_memDissectFwd, g_memDissectStatus, g_memDissectStructName
+    global g_memDissectStride
 
     baseAddr := g_memDissectAddress
     buf := g_memDissectBuf
     canRead := (IsObject(g_reader) && IsObject(g_reader.Mem) && g_reader.Mem.Handle)
+    stride := (g_memDissectStride = 4) ? 4 : 8
+
+    ; Known-field annotations for the applied struct template (offset → names),
+    ; aligned to the current row stride so 4-byte fields land on their own row.
+    ann := _MemDissectFieldAnnotations(g_memDissectStructName, stride)
 
     json := "{"
         . '"addr":' _JsStr(baseAddr ? Format("0x{:X}", baseAddr) : "") ","
         . '"size":' g_memDissectSize ","
+        . '"stride":' stride ","
         . '"status":' _JsStr(g_memDissectStatus) ","
+        . '"struct":' _JsStr(g_memDissectStructName) ","
+        . '"chain":' _JsStr(_MemDissectChainString()) ","
         . '"canBack":' (g_memDissectHistory.Length > 0 ? "true" : "false") ","
         . '"canFwd":' (g_memDissectFwd.Length > 0 ? "true" : "false") ","
         . '"rows":['
 
-    if (buf && Type(buf) = "Buffer" && baseAddr && buf.Size >= 8)
+    if (buf && Type(buf) = "Buffer" && baseAddr && buf.Size >= 4)
     {
         bufPtr := buf.Ptr      ; snapshot Ptr+Size up front so concurrent reassignments
         bufSize := buf.Size     ;  to g_memDissectBuf can't make us read off the end.
-        stride := 8
         maxRows := bufSize // stride
         first := true
         r := 0
@@ -1047,7 +1131,7 @@ _BuildMemDissectJson()
             rowOk := true
             try
             {
-                ; Raw bytes hex string (8 bytes)
+                ; Raw bytes hex string (stride bytes)
                 rawHex := ""
                 jj := 0
                 while (jj < stride)
@@ -1057,15 +1141,17 @@ _BuildMemDissectJson()
                 }
                 rawHex := RTrim(rawHex)
 
-                ; Numeric decodes
+                ; Numeric decodes. The 8-byte views (i64/ptr/f64) need 8 bytes;
+                ; with a 4-byte stride the final rows may lack them — guard.
+                have8 := (off + 8 <= bufSize)
                 u8v := NumGet(bufPtr, off, "UChar")
                 u16v := NumGet(bufPtr, off, "UShort")
                 i32v := NumGet(bufPtr, off, "Int")
                 u32v := NumGet(bufPtr, off, "UInt")
-                f32v := Round(NumGet(bufPtr, off, "Float"), 4)
-                i64v := NumGet(bufPtr, off, "Int64")
+                f32v := _DisSafeFloat(NumGet(bufPtr, off, "Float"), 4)
+                i64v := have8 ? NumGet(bufPtr, off, "Int64") : 0
                 ptrHex := Format("0x{:X}", i64v & 0xFFFFFFFFFFFFFFFF)
-                f64v := Round(NumGet(bufPtr, off, "Double"), 6)
+                f64v := have8 ? _DisSafeFloat(NumGet(bufPtr, off, "Double"), 6) : 0
 
                 ascii := ""
                 kk := 0
@@ -1111,6 +1197,7 @@ _BuildMemDissectJson()
 
             json .= "{"
                 . '"off":' off ","
+                . '"name":' _JsStr(ann.Has(off) ? ann[off] : "") ","
                 . '"addr":' _JsStr(absAddr) ","
                 . '"hex":' _JsStr(rawHex) ","
                 . '"u8":' u8v ","
