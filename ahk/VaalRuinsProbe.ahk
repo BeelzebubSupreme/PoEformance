@@ -511,50 +511,154 @@ _VrRoomFromTex(s)
     return n
 }
 
-; Scan one board-cell UiElement for its room-icon texture + a few sample strings.
-; Mirrors UiBrowseScanStrings: for each pointer field in elem+0x000..0x400, deref and
-; read wstrings at target+0x000..0x140, keeping any that look like a room texture
-; (".dds"/"roomhover"/"incursion2") plus up to a few other printable strings so the
-; log is conclusive even if the room naming differs. Params: reader, elem (cell addr).
-; Returns Map("tex", <best room string or "">, "at", <offset str>, "samples", Array).
-_VrCellDds(reader, elem)
+; Deref each pointer under <base>[0..span] and return the first wstring that looks
+; like a room texture (".dds"/"roomhover"/"incursion"). Params: reader, base, span.
+_VrFindDdsUnder(reader, base, span)
 {
-    tex := "", at := "", samples := [], seen := Map()
     o := 0
-    while (o < 0x400)
+    while (o + 8 <= span)
     {
-        p := 0
-        try p := reader.Mem.ReadPtr(elem + o)
+        q := 0
+        try q := reader.Mem.ReadPtr(base + o)
         o += 8
-        if (!reader.IsProbablyValidPointer(p) || p = elem || p >= 0x7FF000000000)
+        if (!_VrIsHeap(q))
             continue
         po := 0
-        while (po < 0x140)
+        while (po < 0x100)
         {
             s := ""
-            try s := reader.ReadStdWStringAt(p + po, 128)
+            try s := reader.ReadStdWStringAt(q + po, 128)
             po += 8
-            if (s = "" || StrLen(s) < 3 || !_AtlasPrintable(s))
+            if (s = "" || StrLen(s) < 4)
                 continue
             ls := StrLower(s)
-            if (tex = "" && (InStr(ls, ".dds") || InStr(ls, "roomhover") || InStr(ls, "incursion2")))
-            {
-                tex := s
-                at  := Format("@+0x{:X}->+0x{:X}", o - 8, po)
-            }
-            ; Collect a few distinct non-coordinate sample strings for diagnostics.
-            if (!seen.Has(s) && samples.Length < 6 && !RegExMatch(s, "^\(\d+,\s*\d+\)$"))
-            {
-                seen[s] := true
-                samples.Push(s)
-            }
+            if (InStr(ls, ".dds") || InStr(ls, "roomhover") || InStr(ls, "incursion"))
+                return s
         }
     }
-    return Map("tex", tex, "at", at, "samples", samples)
+    return ""
 }
 
-; One-shot board reader. BFS the GameUI for "(r, c)" cells, read each cell's room
-; texture, log a per-cell list + a rendered grid. No params; writes the log + MsgBox.
+; From a candidate room-object pointer, dump its int32 room-enum fields [1..40] +
+; any room texture within a shallow scan. Params: reader, p. Returns a one-liner.
+_VrDerefRoom(reader, p)
+{
+    if !reader.IsProbablyValidPointer(p)
+        return "(bad)"
+    b := reader.Mem.ReadBytes(p, 0x80)
+    ints := ""
+    if b
+    {
+        o := 0
+        while (o + 4 <= 0x80)
+        {
+            iv := NumGet(b.Ptr, o, "Int")
+            if (iv >= 1 && iv <= 40)
+                ints .= Format("@{:X}={}({}) ", o, iv, _VrRoomName(iv))
+            o += 4
+        }
+    }
+    dds := _VrFindDdsUnder(reader, p, 0x80)
+    return "ints[" Trim(ints) "]" (dds != "" ? " dds=" dds : "")
+}
+
+; Auto-find the discriminating int32 field: across all cells, an offset whose value
+; is DOMINANT on most cells (empty) yet DEVIATES on a minority (the filled rooms) is
+; the room field, whatever the encoding. Reports each such offset + the deviating
+; cells. Params: cells (Array), blkKey (which byte-buffer on each cell), size, &rpt,
+; label. No return.
+_VrAnalyzeInts(cells, blkKey, size, &rpt, label)
+{
+    nl := "`r`n", hits := 0, off := 0
+    while (off + 4 <= size)
+    {
+        counts := Map(), total := 0
+        for _, cell in cells
+        {
+            b := cell.Has(blkKey) ? cell[blkKey] : 0
+            if !(b && off + 4 <= b.Size)
+                continue
+            v := NumGet(b.Ptr, off, "Int")
+            counts[v] := counts.Has(v) ? counts[v] + 1 : 1
+            total += 1
+        }
+        if (total < 20)
+        {
+            off += 4
+            continue
+        }
+        modV := 0, modC := 0
+        for v, c in counts
+            if (c > modC)
+                modC := c, modV := v
+        dev := total - modC
+        ; Dominant value on ≥55% of cells, a small minority deviate, few distinct
+        ; values (a room enum) → skip position/pointer-lowbit noise.
+        if (modC >= total * 0.55 && dev >= 3 && dev <= 40 && counts.Count <= 45)
+        {
+            line := ""
+            for _, cell in cells
+            {
+                b := cell.Has(blkKey) ? cell[blkKey] : 0
+                if !(b && off + 4 <= b.Size)
+                    continue
+                v := NumGet(b.Ptr, off, "Int")
+                if (v != modV)
+                {
+                    nm := (v >= 0 && v <= 40) ? ("(" _VrRoomName(v) ")") : ""
+                    line .= Format("({},{})={}{} ", cell["r"], cell["c"], v, nm)
+                }
+            }
+            mnm := (modV >= 0 && modV <= 40) ? ("(" _VrRoomName(modV) ")") : ""
+            rpt .= Format("  {} @+0x{:X}: modal={}{} x{}, {} deviate:", label, off, modV, mnm, modC, dev) nl
+            rpt .= "     " Trim(line) nl
+            hits += 1
+        }
+        off += 4
+    }
+    if (hits = 0)
+        rpt .= "  (no discriminating int field in " label ")" nl
+}
+
+; Auto-find a "filled marker" POINTER: an 8-aligned offset that holds a heap pointer
+; on only a minority of cells (the filled rooms) — deref each to expose the room.
+; Params: cells (Array), reader, &rpt. No return.
+_VrAnalyzePtrs(cells, reader, &rpt)
+{
+    nl := "`r`n", hits := 0, off := 0
+    while (off + 8 <= 0x400)
+    {
+        present := [], total := 0
+        for _, cell in cells
+        {
+            b := cell.Has("blk") ? cell["blk"] : 0
+            if !(b && off + 8 <= b.Size)
+                continue
+            total += 1
+            v := NumGet(b.Ptr, off, "Int64")
+            if (_VrIsHeap(v))
+                present.Push(cell)
+        }
+        np := present.Length
+        if (total >= 20 && np >= 3 && np <= 40)
+        {
+            rpt .= Format("  ptr @+0x{:X}: present on {}/{} cells:", off, np, total) nl
+            for _, cell in present
+            {
+                pv := NumGet(cell["blk"].Ptr, off, "Int64")
+                rpt .= Format("     ({},{}) -> 0x{:X}  {}", cell["r"], cell["c"], pv, _VrDerefRoom(reader, pv)) nl
+            }
+            hits += 1
+        }
+        off += 8
+    }
+    if (hits = 0)
+        rpt .= "  (no minority-present pointer field)" nl
+}
+
+; One-shot board reader. BFS the GameUI for "(r, c)" cells, then AUTO-LOCATE the room
+; field by diffing all cells' structs (the room is the field that is constant on the
+; empty cells and deviates on the filled ones). No params; writes the log + MsgBox.
 VaalRuinsBoardCellProbeRun()
 {
     global g_reader
@@ -609,82 +713,67 @@ VaalRuinsBoardCellProbeRun()
         }
     }
 
-    ; ── 2) Read each cell's room texture ──
-    maxR := 0, maxC := 0, filled := 0
-    grid := Map()
+    ; ── 2) Read each cell's element struct (0x200) + its +0x4F8 object (0x100) ──
     for _, cell in cells
     {
-        info := _VrCellDds(reader, cell["addr"])
-        cell["tex"] := info["tex"]
-        cell["at"]  := info["at"]
-        cell["samples"] := info["samples"]
-        cell["room"] := (info["tex"] != "") ? _VrRoomFromTex(info["tex"]) : ""
-        if (cell["room"] != "")
-            filled += 1
-        grid[cell["r"] "," cell["c"]] := cell["room"]
-        maxR := Max(maxR, cell["r"]), maxC := Max(maxC, cell["c"])
+        cell["blk"] := reader.Mem.ReadBytes(cell["addr"], 0x200)
+        obj := 0
+        try obj := reader.Mem.ReadPtr(cell["addr"] + 0x4F8)
+        cell["obj"] := obj
+        cell["objblk"] := (_VrIsHeap(obj)) ? reader.Mem.ReadBytes(obj, 0x100) : 0
     }
 
-    ; Sort cells by row then col for a stable listing.
     _VrSortCells(cells)
 
     nl := "`r`n"
-    rpt := "=== BOARD-CELL probe (UI grid, StringId '(r, c)') ===" nl
-    rpt .= "GameUI root=0x" Format("{:X}", root) "  nodes=" nodes "  cells=" cells.Length "  with-room=" filled nl
-    rpt .= "Run with the Temple Console OPEN. Each cell's room = its .dds icon path." nl nl
+    rpt := "=== BOARD-CELL probe (UI grid '(r, c)' — auto-locate the room field) ===" nl
+    rpt .= "GameUI root=0x" Format("{:X}", root) "  nodes=" nodes "  cells=" cells.Length nl
+    rpt .= "Run with the Temple Console OPEN. The room field = the struct offset that is" nl
+    rpt .= "constant on the empty cells and deviates on the placed rooms." nl nl
 
-    rpt .= "--- FILLED cells (room resolved) ---" nl
+    rpt .= "--- discriminating INT fields on the cell element (elem+0x000..0x200) ---" nl
+    _VrAnalyzeInts(cells, "blk", 0x200, &rpt, "elem")
+
+    rpt .= nl "--- discriminating INT fields on the +0x4F8 object (obj+0x000..0x100) ---" nl
+    _VrAnalyzeInts(cells, "objblk", 0x100, &rpt, "p4F8")
+
+    rpt .= nl "--- minority-present POINTER fields on the cell (elem+0x000..0x400) ---" nl
+    _VrAnalyzePtrs(cells, reader, &rpt)
+
+    ; Raw per-cell int[1..40] dump (fallback so the room value is visible by eye even
+    ; if the auto-heuristic misses). Only cells that carry any [1..40] int are listed.
+    rpt .= nl "--- per-cell room-enum ints [1..40] (elem struct) ---" nl
+    listed := 0
     for _, cell in cells
     {
-        if (cell["room"] = "")
+        b := cell["blk"]
+        if !b
             continue
-        rpt .= Format("  ({}, {})  0x{:X}  = {}   [{} {}]", cell["r"], cell["c"], cell["addr"]
-                    , cell["room"], cell["at"], cell["tex"]) nl
-    }
-    if (filled = 0)
-        rpt .= "  (none resolved — see sample strings below to find the room field)" nl
-
-    ; Sample strings for the first cells that had strings but no room match — so if
-    ; the .dds filter missed, the real referenced strings are visible in the log.
-    rpt .= nl "--- sample strings per cell (first 30 cells with any string) ---" nl
-    shown := 0
-    for _, cell in cells
-    {
-        if (cell["samples"].Length = 0 || shown >= 30)
-            continue
-        shown += 1
-        line := ""
-        for _, s in cell["samples"]
-            line .= " | " s
-        rpt .= Format("  ({}, {}):{}", cell["r"], cell["c"], line) nl
-    }
-
-    ; Rendered grid (room key abbreviated to 4 chars; '.' = empty/unrevealed).
-    rpt .= nl "--- GRID (rows 0.." maxR ", cols 0.." maxC ") ---" nl
-    r := 0
-    while (r <= maxR)
-    {
-        row := Format("  r{:X} ", r)
-        c := 0
-        while (c <= maxC)
+        line := "", o := 0
+        while (o + 4 <= 0x200)
         {
-            v := grid.Has(r "," c) ? grid[r "," c] : ""
-            row .= Format("{:-6}", (v = "" ? "." : SubStr(v, 1, 5)))
-            c += 1
+            iv := NumGet(b.Ptr, o, "Int")
+            if (iv >= 1 && iv <= 40)
+                line .= Format("@{:X}={}({}) ", o, iv, _VrRoomName(iv))
+            o += 4
         }
-        rpt .= row nl
-        r += 1
+        if (line != "")
+        {
+            rpt .= Format("  ({}, {}) 0x{:X}: {}", cell["r"], cell["c"], cell["addr"], Trim(line)) nl
+            listed += 1
+        }
     }
+    if (listed = 0)
+        rpt .= "  (no cell carries a [1..40] int in its first 0x200 bytes)" nl
 
     outDir := A_ScriptDir "\logs"
     if !DirExist(outDir)
         DirCreate(outDir)
     outPath := outDir "\InGameStateMonitor.vaal_ruins_probe.log"
     try FileAppend(FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") " [BOARD-CELL]" nl rpt nl nl, outPath, "UTF-8")
-    try MsgBox("Board-cell probe done.`n`nCells found: " cells.Length "`nRooms resolved: " filled
+    try MsgBox("Board-cell probe done.`n`nCells found: " cells.Length
              . "`n`nLog: logs\InGameStateMonitor.vaal_ruins_probe.log`n`n"
-             . (filled > 0 ? "Send me the log — I'll read your placed board off it."
-                           : "No room textures resolved; the sample-strings section will show me where the room field is."), "Vaal Ruins board cell", 0x40)
+             . "It auto-locates the room field by diffing the cells. Send me the log.", "Vaal Ruins board cell", 0x40)
 }
 
 ; Insertion sort of collected cells by row (then col). Param: cells (Array of Maps).

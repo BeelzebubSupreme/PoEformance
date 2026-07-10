@@ -2945,5 +2945,16 @@ lives in the console UI, not ServerData.
   (Garrison/Commander/Armoury/Smithy/Generator/ViperSpymaster/ViperLegionBarracks/Synthflesh/
   FleshSurgeon/TranscendentBarracks/AlchemyLab/Thaumaturge/GolemWorks/Corruption/Vault/
   SacrificialChamber/Architect/AccessChamber/Atziri) — the bridge from a cell's texture to a room name.
-- **Next:** confirm the probe resolves the placed board, then wire the cells → the planner tab
-  (read cell room + tier per `(r,c)`, postMessage into the iframe) so the planner auto-populates live.
+- **Follow-up (0.45.13.347):** first run resolved 0 rooms — the cells reference NO `.dds`/room string
+  within a 1-level pointer scan (the deref'd pointers lead into shared/global UI objects — chat names,
+  `title_layout`, etc.). So the room is an INT field (enum/sprite id) or a dedicated pointer on the
+  cell, not a texture path. The probe was rewritten to **auto-locate the room field by diffing all 82
+  cells**: `_VrAnalyzeInts` reports every struct offset whose value is dominant on most cells (empty)
+  yet deviates on a minority (the placed rooms) — for the element struct (elem+0x000..0x200) AND the
+  `+0x4F8` object (obj+0x000..0x100); `_VrAnalyzePtrs` reports 8-aligned offsets holding a heap pointer
+  on only a minority of cells (a "filled marker") and derefs each for room ints/`.dds`; plus a raw
+  per-cell `[1..40]` int dump as an eyeball fallback. One run surfaces the room field regardless of
+  encoding.
+- **Next:** run the rewritten probe (console open), read the deviating offset off the log, then wire the
+  cells → the planner tab (read cell room + tier per `(r,c)`, postMessage into the iframe) so the
+  planner auto-populates live.
