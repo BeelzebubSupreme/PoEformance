@@ -5402,6 +5402,7 @@
           <button class="uib-btn" onclick="ahkCall('DiagSkillSlotLink')" data-tip="RE: probe whether each skill-bar slot references a player skill by pointer (detailsPtr/geplRow/ActiveSkillsDat) — writes debug\skill_slot_link_*.txt to enable automatic skill-name↔slot mapping">🔗 Skill↔Slot Link</button>
           <button class="uib-btn" onclick="ahkCall('SkillBarArrayProbe')" data-tip="RE: hunt the PLAYER-SIDE skill-bar array (slot→skill) — scans the player entity, Actor, and every component for the equipped skills' stable pointers. Writes debug\skillbar_array_*.txt. Run in a map with all skills equipped.">🎯 Skill-bar Array Hunt</button>
           <button class="uib-btn" onclick="ahkCall('SkillGemProbe')" data-tip="RE: dump player inventories (flagging skill gems + grid position) and scan PlayerServerData for the equipped skills' pointers — hunts the skill-gem / server-side assignment data model. Writes debug\skillgem_probe_*.txt.">💎 Skill-gem / Server Probe</button>
+          <button class="uib-btn" onclick="ahkCall('VaalRuinsProbe')" data-tip="RE: hunt the live Vaal Ruins temple BOARD in memory (ServerData/PlayerServerData/InGameState) — scans for a ~81-int run of room indices (9x9 grid). Run WHILE IN a Vaal Ruins temple with the board populated. Writes logs\...vaal_ruins_probe.log.">🏛 Vaal Ruins Board Probe</button>
         </div>
         <div id="uib-search-row">
           <input id="uib-search-input" type="text" placeholder="Search StringId…"
