@@ -80,8 +80,8 @@
       <option value="currency">Currency / Rarity</option>
       <option value="bossRush">Boss / Reward rush</option>
     </select>
-    <label>Hand for auto-plan (comma-separated room keys, or "path")</label>
-    <input type="text" id="hand" value="vault,spymaster,garrison,path">
+    <label>Hand for auto-plan (comma-separated room names — e.g. Garrison, Spymaster — or "path")</label>
+    <input type="text" id="hand" value="Commander, Commander, Garrison, Thaumaturge, Spymaster, Spymaster">
     <div style="display:flex;gap:6px;margin-top:12px">
       <button class="primary" onclick="analyze()">Analyze board</button>
       <button onclick="autoPlan()">Auto-plan hand</button>
@@ -229,11 +229,27 @@ function analyze(){
   document.getElementById('recs').innerHTML=
     (res.deadRooms.length?`<div class="rec flag">⚠ ${res.deadRooms.length} DEAD room(s): ${dead} — not traced to the entrance, contributing 0.</div>`:`<div class="rec" style="color:var(--good)">✓ No dead rooms — everything connects.</div>`);
 }
+// Resolve a hand token to a room key: accepts keys, display labels, and the
+// in-game full room names (case-insensitive), so you can type what you see.
+const ROOM_ALIASES={
+  "guardhouse":"garrison","commander's chamber":"commander","spymaster's study":"spymaster",
+  "sealed vault":"vault","thaumaturge's laboratory":"thaumaturge","alchemy lab":"alchemy",
+  "sacrificial chamber":"sacrifice","corruption chamber":"corruption","synthflesh lab":"synthflesh",
+};
+function resolveRoomKey(tok){
+  const t=tok.trim().toLowerCase();
+  if(t==='path')return 'path';
+  if(ROOMS[t])return t;
+  if(ROOM_ALIASES[t])return ROOM_ALIASES[t];
+  for(const k in ROOMS)if(ROOMS[k].label.toLowerCase()===t)return k;
+  return null;
+}
 function autoPlan(){
   const w=PRESETS[document.getElementById('preset').value];
-  const hand=document.getElementById('hand').value.split(',').map(s=>s.trim()).filter(Boolean);
-  const bad=hand.filter(h=>h!=='path'&&!ROOMS[h]);
-  if(bad.length){document.getElementById('recs').innerHTML=`<div class="rec flag">Unknown room key(s): ${bad.join(', ')}</div>`;return;}
+  const raw=document.getElementById('hand').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const bad=raw.filter(h=>!resolveRoomKey(h));
+  if(bad.length){document.getElementById('recs').innerHTML=`<div class="rec flag">Unknown room(s): ${bad.join(', ')}<br><span class="bd">Use a room name (Garrison, Spymaster…) or key. Full names like "Commander's Chamber" / "Guardhouse" work too.</span></div>`;return;}
+  const hand=raw.map(resolveRoomKey);
   const plan=planHand(board,hand,w,{topK:1});render();analyze();
   const dirs=['N','E','S','W'];
   document.getElementById('recs').innerHTML=
