@@ -1183,4 +1183,7 @@ _AIP_RegisterProbeHotkeys()
     ; Ctrl+Alt+Shift+H = UIHover hover-diff — fire it via the keyboard so the
     ; cursor stays on the hovered item (a button click would drop the hover).
     try Hotkey("^!+h", (*) => UiHoverProbeRun(), "On")
+    ; Ctrl+Alt+Shift+V = Vaal Ruins board hover — hover a room tile on the open Temple
+    ; Console and fire it so the cursor stays on the tile (a button click drops it).
+    try Hotkey("^!+v", (*) => VaalRuinsBoardHoverProbeRun(), "On")
 }

@@ -792,3 +792,183 @@ _VrSortCells(cells)
         i += 1
     }
 }
+
+; ── HOVER probe (hotkey Ctrl+Alt+Shift+V) ────────────────────────────────────────
+; Surgical version of the board-cell probe: hover a KNOWN room on the open Temple
+; Console and press the hotkey — it identifies the "(r, c)" cell under the cursor and
+; dumps THAT one cell's full struct (element int[1..40] fields + every pointer field
+; that derefs to room ints). With a few (known-room → cell-dump) pairs the offset that
+; consistently holds the room enum is obvious, which becomes the live-read field.
+; Fired via a HOTKEY (not a button) so the cursor stays on the tile.
+
+; BFS-collect every board cell (StringId "(r, c)") under <root>. Returns an Array of
+; Map("r","c","addr"). Params: reader, root.
+_VrCollectBoardCells(reader, root)
+{
+    sidOff := PoE2Offsets.UiElementBase["StringIdPtr"]
+    cells := [], queue := [root], visited := Map(), nodes := 0
+    deadline := A_TickCount + 12000
+    while (queue.Length > 0 && nodes < 24000)
+    {
+        if (A_TickCount > deadline)
+            break
+        ptr := queue.RemoveAt(1)
+        if (visited.Has(ptr))
+            continue
+        visited[ptr] := true
+        nodes += 1
+        g := _UiHitGeom(reader, ptr)
+        if !IsObject(g)
+            continue
+        sid := ""
+        try sid := reader.ReadStdWStringAt(ptr + sidOff, 32)
+        if RegExMatch(sid, "^\((\d+),\s*(\d+)\)$", &mm)
+            cells.Push(Map("r", mm[1] + 0, "c", mm[2] + 0, "addr", ptr))
+        cf := g["childFirst"], cl := g["childLast"]
+        if (reader.IsProbablyValidPointer(cf) && cl > cf)
+        {
+            n := Min((cl - cf) // A_PtrSize, 512)
+            buf := reader.Mem.ReadBytes(cf, n * A_PtrSize)
+            if buf
+            {
+                Loop n
+                {
+                    cp := NumGet(buf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
+                    if (reader.IsProbablyValidPointer(cp) && !visited.Has(cp))
+                        queue.Push(cp)
+                }
+            }
+        }
+    }
+    return cells
+}
+
+; Full dump of ONE board cell (element ints + pointer-object room ints). Params:
+; reader, addr, r, c. Returns a report string.
+_VrDumpOneCell(reader, addr, r, c)
+{
+    nl := "`r`n"
+    s := Format("HOVER cell ({}, {})  addr=0x{:X}", r, c, addr) nl
+    b := reader.Mem.ReadBytes(addr, 0x400)
+    ints := ""
+    if b
+    {
+        o := 0
+        while (o + 4 <= 0x200)
+        {
+            iv := NumGet(b.Ptr, o, "Int")
+            if (iv >= 1 && iv <= 40)
+                ints .= Format("@{:X}={}({}) ", o, iv, _VrRoomName(iv))
+            o += 4
+        }
+    }
+    s .= "  elem ints[1..40]: " (ints = "" ? "(none)" : Trim(ints)) nl
+    s .= "  pointer objects with room ints (elem+0x000..0x400):" nl
+    any := false
+    if b
+    {
+        o := 0
+        while (o + 8 <= 0x400)
+        {
+            pv := (o + 8 <= b.Size) ? NumGet(b.Ptr, o, "Int64") : 0
+            o += 8
+            if (!_VrIsHeap(pv))
+                continue
+            info := _VrDerefRoom(reader, pv)
+            if (info != "ints[]" && info != "(bad)")
+            {
+                s .= Format("     @+0x{:X} -> 0x{:X}  {}", o - 8, pv, info) nl
+                any := true
+            }
+        }
+    }
+    if !any
+        s .= "     (no pointer object carried room ints)" nl
+    return s
+}
+
+; One-shot hover reader (hotkey). Finds the board cell under the cursor and dumps it.
+; No params; appends to the probe log + a short MsgBox naming the cell coordinate.
+VaalRuinsBoardHoverProbeRun()
+{
+    global g_reader
+    if !(IsObject(g_reader) && IsObject(g_reader.Mem) && g_reader.Mem.Handle)
+    {
+        try MsgBox("Hover probe: not connected to PoE2.", "Vaal Ruins hover", 0x10)
+        return
+    }
+    reader := g_reader
+    root := _UiBrowser_GetGameUiPtr()
+    if !(root && reader.IsProbablyValidPointer(root))
+    {
+        try MsgBox("No GameUI root yet — open the Temple Console, then retry.", "Vaal Ruins hover", 0x10)
+        return
+    }
+
+    CoordMode("Mouse", "Screen")
+    MouseGetPos(&mx, &my)
+    gameHwnd := ResolvePoEWindow()
+    sc := gameHwnd ? UiTree_ScaleCtx(reader, gameHwnd) : 0
+
+    cellAddr := 0, cr := "", cc := ""
+    ; 1) Hit-test the cursor, walk the chain for a "(r, c)" cell (uniform retry).
+    if IsObject(sc)
+    {
+        chain := UiTree_HitTest(reader, root, mx, my, sc)
+        if !_VrCoordInChain(reader, chain, &cellAddr, &cr, &cc)
+        {
+            sc["uniform"] := true
+            chain := UiTree_HitTest(reader, root, mx, my, sc)
+            _VrCoordInChain(reader, chain, &cellAddr, &cr, &cc)
+        }
+    }
+    ; 2) Fallback: rect-scan every board cell for the one containing the cursor.
+    if !cellAddr
+    {
+        for _, cell in _VrCollectBoardCells(reader, root)
+        {
+            rc := 0
+            try rc := UiTree_ScreenRectOf(reader, cell["addr"], sc)
+            if (IsObject(rc) && mx >= rc["x"] && mx <= rc["x"] + rc["w"]
+                             && my >= rc["y"] && my <= rc["y"] + rc["h"])
+            {
+                cellAddr := cell["addr"], cr := cell["r"], cc := cell["c"]
+                break
+            }
+        }
+    }
+    if !cellAddr
+    {
+        try MsgBox("No board cell under the cursor.`n`nHover a room tile on the OPEN Temple Console, then press Ctrl+Alt+Shift+V.", "Vaal Ruins hover", 0x30)
+        return
+    }
+
+    nl := "`r`n"
+    rpt := _VrDumpOneCell(reader, cellAddr, cr, cc)
+    outDir := A_ScriptDir "\logs"
+    if !DirExist(outDir)
+        DirCreate(outDir)
+    outPath := outDir "\InGameStateMonitor.vaal_ruins_probe.log"
+    try FileAppend(FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") " [HOVER]" nl rpt nl nl, outPath, "UTF-8")
+    try MsgBox("Hovered board cell: (" cr ", " cc ")`n`nDumped to logs\InGameStateMonitor.vaal_ruins_probe.log`n`nHover the NEXT known room and press Ctrl+Alt+Shift+V again. Do 3-4 distinctive rooms (Architect, Atziri, a Commander, Legion Barracks), then tell me which room was at which coordinate.", "Vaal Ruins hover", 0x40)
+}
+
+; Walk a hit-test chain for a "(r, c)" cell; sets &addr/&r/&c to the deepest match.
+; Returns true if found. Params: reader, chain (Array or 0), &addr, &r, &c.
+_VrCoordInChain(reader, chain, &addr, &r, &c)
+{
+    if !(IsObject(chain) && chain.Length >= 1)
+        return false
+    sidOff := PoE2Offsets.UiElementBase["StringIdPtr"]
+    found := false
+    for _, el in chain
+    {
+        sid := ""
+        try sid := reader.ReadStdWStringAt(el + sidOff, 32)
+        if RegExMatch(sid, "^\((\d+),\s*(\d+)\)$", &mm)
+        {
+            addr := el, r := mm[1] + 0, c := mm[2] + 0, found := true
+        }
+    }
+    return found
+}
