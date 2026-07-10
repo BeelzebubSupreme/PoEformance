@@ -2898,3 +2898,26 @@ dataset (was: doorway-edge BFS + 11 hardcoded rooms).
   DEAD, valid cells + scoring all correct. Inline `<script>` passes node --check.
 - **Next:** in-browser UX sign-off, then inline into `ui/index.html` as a tab + swap the manual board
   for the live ServerData memory adapter (read the current run's board behind the same solver API).
+
+## Vaal Ruins planner — in-program tab (shipped 0.45.13.341)
+
+The planner is now a TAB in the tool (Game → 🏛 Vaal Ruins), not just a standalone browser file.
+Embedded via `<iframe src="vaal_ruins_planner.html">` inside `#panel-vaalruins` so the planner's
+self-contained solver + CSS never collide with the main UI's 14k-line inline script, and there's one
+source of truth (the iframe loads the same file, which the build script injects data into). The page
+is served from the WebView2 virtual host (`https://<host>/ui/index.html`), so the relative iframe src
+resolves to the sibling `ui/vaal_ruins_planner.html`.
+- Wiring: tab chip in the `game` subtab-row + `tabCategory.vaalruins='game'` + the panel div.
+- Board is still MANUALLY entered; the live-board memory adapter (VaalRuinsProbe → decode →
+  postMessage into the iframe) drops in behind the same page once the board RE (below) is cracked.
+- **Pending in-game verification:** reload the tool → the "Vaal Ruins" tab under Game shows the
+  planner; Demo/Analyze/Auto-plan work inside the tab.
+
+## Vaal Ruins — live board probe (shipped 0.45.13.340)
+
+`ahk/VaalRuinsProbe.ahk` (bridge `VaalRuinsProbe`; UI "🏛 Vaal Ruins Board Probe" in the RE tools).
+Hunts the live temple board in memory (the board is NOT in the UI tree — desktop RE established it's
+server-side). Scans ServerData / PlayerServerData / InGameState for a board-shaped run of ~81 small
+ints (room indices 0..36 = the incursion2rooms rows) at byte/int16/int32 element sizes, decoding each
+candidate run to room names. Reuses `_SmResolveServerData`. **Run WHILE IN a Vaal Ruins temple with
+the board populated** → `logs\InGameStateMonitor.vaal_ruins_probe.log`; send it to pin the board offset.

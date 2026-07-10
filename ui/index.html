@@ -4987,6 +4987,9 @@
           <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
           <polyline points="3.3 7 12 12 20.7 7" /><line x1="12" y1="12" x2="12" y2="22" />
         </svg><span class="nav-label">Loot</span></div>
+      <div class="tab" data-tab="vaalruins" onclick="switchTab('vaalruins')"><svg viewBox="0 0 24 24">
+          <path d="M3 21h18M4 21V10l8-6 8 6v11M9 21v-6h6v6" />
+        </svg><span class="nav-label">Vaal Ruins</span></div>
       <div class="bar-marker tab-marker"></div>
     </div>
 
@@ -5351,6 +5354,16 @@
     </div>
 
     <!-- SKILLS & BUFFS TAB (merged) -->
+    <!-- VAAL RUINS — the Route Planner, embedded via iframe so its self-contained
+         solver/CSS never collides with the main UI's 14k-line script. The board is
+         still manually entered for now; the live-board memory adapter (VaalRuinsProbe
+         → postMessage) drops in behind the same page once the board RE is cracked. -->
+    <div class="tab-panel" id="panel-vaalruins" style="padding:0">
+      <iframe id="vaalruins-frame" src="vaal_ruins_planner.html"
+              style="width:100%;height:calc(100vh - 120px);min-height:520px;border:0;background:#141210"
+              title="Vaal Ruins Route Planner"></iframe>
+    </div>
+
     <div class="tab-panel" id="panel-skills">
       <!-- Skills & Buffs blacklist (moved here from the retired Config >
            Filters sub-tab — the filter only ever affected this tab). The
@@ -7892,6 +7905,7 @@
       groups:    'game',
       alerts:    'game',
       loot:      'game',
+      vaalruins: 'game',
       ui:        're',
       gamestate: 're',
       memdiff:   're',
