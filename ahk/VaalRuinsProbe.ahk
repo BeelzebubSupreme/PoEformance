@@ -104,6 +104,58 @@ _VrScanRegion(reader, base, len, elemSize, label, &rpt)
     }
 }
 
+; Targeted pass: find DISTINCTIVE board rooms (index 19..28 = SacrificeRoom /
+; Architect / the reward vaults / AccessChamber / Atziri — rare in random memory
+; and present on a real endgame board) and dump the FULL decoded window around each
+; so the actual board layout + stride are visible (the survey pass truncates at 24).
+; Params: reader, base, len, elemSize (1/2/4), label, &rpt.
+_VrTargeted(reader, base, len, elemSize, label, &rpt)
+{
+    if !reader.IsProbablyValidPointer(base)
+        return
+    blk := reader.Mem.ReadBytes(base, len)
+    if !blk
+        return
+    typ := (elemSize = 1) ? "UChar" : (elemSize = 2) ? "Short" : "Int"
+    n := len // elemSize
+    hits := []
+    i := 0
+    while (i < n)
+    {
+        v := NumGet(blk.Ptr, i * elemSize, typ)
+        if (v >= 19 && v <= 28)          ; SacrificeRoom(19)..Atziri(28)
+            hits.Push(i)
+        i += 1
+    }
+    if (hits.Length = 0)
+        return
+    header := false, lastRep := -9999, shown := 0
+    for _, pos in hits
+    {
+        if (pos - lastRep < 40)          ; collapse hits inside the same window
+            continue
+        lastRep := pos
+        if (!header)
+        {
+            rpt .= Format("`n[{} @0x{:X}  elem={}B]  {} distinctive-room hit(s)`n", label, base, elemSize, hits.Length)
+            header := true
+        }
+        ws := Max(0, pos - 8), we := Min(n, pos + 80)
+        decoded := "", j := ws
+        while (j < we)
+        {
+            decoded .= _VrRoomName(NumGet(blk.Ptr, j * elemSize, typ)) " "
+            j += 1
+        }
+        rpt .= Format("   @+0x{:X} (idx {}, val={}):`n      {}`n", pos * elemSize, pos, _VrRoomName(NumGet(blk.Ptr, pos * elemSize, typ)), decoded)
+        if (++shown >= 8)
+        {
+            rpt .= "   … (more windows truncated)`n"
+            break
+        }
+    }
+}
+
 _VrSortByCount(arr)   ; insertion sort desc by ["count"] — small N
 {
     i := 2
@@ -159,9 +211,18 @@ VaalRuinsProbeRun()
     if (regions.Length = 0)
         rpt .= "`n(could not resolve any region — get in-game first)`n"
 
+    rpt .= "`n===== SURVEY (board-shaped small-int runs) =====`n"
     for rg in regions
         for _, es in [1, 2, 4]
             _VrScanRegion(g_reader, rg["base"], rg["len"], es, rg["name"], &rpt)
+
+    ; Targeted: dump the full window around every distinctive board room (Architect /
+    ; reward vaults / Atziri, idx 19..28) — the real board shows up here even when the
+    ; placed rooms sit past the survey preview's 24-value cutoff.
+    rpt .= "`n===== TARGETED (windows around distinctive rooms idx 19..28) =====`n"
+    for rg in regions
+        for _, es in [1, 2, 4]
+            _VrTargeted(g_reader, rg["base"], rg["len"], es, rg["name"], &rpt)
 
     outDir := A_ScriptDir "\logs"
     if !DirExist(outDir)
