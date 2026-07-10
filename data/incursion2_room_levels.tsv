@@ -1,0 +1,79 @@
+id	room_index	level	name	description	mod_values
+garrison_lvl1	3	1	Guardhouse		6357095;7471218
+garrison_lvl2	3	2	Barracks		6357095;7471218
+garrison_lvl3	3	3	Hall of War		6357095;7471218
+garrison_lvl4	3	4	Warrior Assembly		7274595;7143533
+commander_lvl1	4	1	Commander's Chamber		2097273
+commander_lvl2	4	2	Commander's Hall		7143533
+commander_lvl3	4	3	Commander's Headquarters		2097273
+commander_lvl4	4	4	Commander's Station		7471218
+armoury_lvl1	5	1	Depot	Contains [Equipment]	2097273
+armoury_lvl2	5	2	Arsenal	Contains [Equipment]	7143533
+armoury_lvl3	5	3	Gallery	Contains [Rarity|Rare] [Equipment]	2097273
+armoury_lvl4	5	4	Royal Reserves	Contains [Rarity|Rare] [Equipment]	7471218
+smithy_lvl1	6	1	Bronzeworks	Contains the Forging Workbench which can be used to improve [Quality] of [Equipment]	7602281
+smithy_lvl2	6	2	Chamber of Iron	Contains the Forging Mechanism which can be used to add an [Augment] socket to [Equipment]	7602281
+smithy_lvl3	6	3	Golden Forge	Contains the Masterwork Forge which can be used to increase the [Quality] of an [Equipment] item that already has 20% [Quality]	2097273
+smithy_lvl4	6	4	Immaculate Forge	Contains the Masterwork Forge which can be used to increase the [Quality] of an [Equipment] item that already has 20% [Quality]  [Rarity|Unique] Boss drops additional Infusers	6619246
+generator_lvl1	7	1	Dynamo	Provides [IncursionPower|Power] to nearby rooms, increasing in distance with Room tier	6619239;6619246
+generator_lvl2	7	2	Shrine of Empowerment	Provides [IncursionPower|Power] to nearby rooms, increasing in distance with Room tier	6619239;6619246
+generator_lvl3	7	3	Solar Nexus	Provides [IncursionPower|Power] to nearby rooms, increasing in distance with Room tier	6619239;6619246
+generator_lvl4	7	4	Infinite Horizon	Provides [IncursionPower|Power] to nearby rooms, increasing in distance with Room tier	6881398;6619248
+viperspymaster_lvl1	8	1	Spymaster's Study	Room Tier can be increased by defeating other Spymasters	6357095;7471218
+viperspymaster_lvl2	8	2	Hall of Shadows	Room Tier can be increased by defeating other Spymasters	6881398;6619248
+viperspymaster_lvl3	8	3	Omnipresent Panopticon	Room Tier can be increased by defeating other Spymasters	6357069;2097273
+viperspymaster_lvl4	8	4	Espionage Core		6881398;6619248
+viperlegionbarracks_lvl2	9	2	Viper's Loyals		7143533
+viperlegionbarracks_lvl3	9	3	Elite Legion		2097273
+viperlegionbarracks_lvl4	9	4	Unmatched Legionnaires		7471218
+synthfleshlab_lvl1	10	1	Prosthetic Research		2097273
+synthfleshlab_lvl2	10	2	Synthflesh Sanctum		7602286
+synthfleshlab_lvl3	10	3	Crucible of Transcendence		7602281
+synthfleshlab_lvl4	10	4	Supremacy of Function		2097273
+fleshsurgeon_lvl1	11	1	Surgeon's Ward		2097273
+fleshsurgeon_lvl2	11	2	Surgeon's Theatre		7602286
+fleshsurgeon_lvl3	11	3	Surgeon's Symphony	Contains the Transcension Device, allowing for [IncursionLimbModification|Limb Modification]	7602281
+fleshsurgeon_lvl4	11	4	Surgical Glory	Contains the Transcension Device, allowing for [IncursionLimbModification|Limb Modification], which can be used twice	2097273
+transcendentbarracks_lvl2	12	2	Steelflesh Quarters		7143533
+transcendentbarracks_lvl3	12	3	Collective Legion		2097273
+transcendentbarracks_lvl4	12	4	Chamber of the Perfected		7471218
+alchemylab_lvl1	13	1	Chamber of Souls		2097273
+alchemylab_lvl2	13	2	Core Machinarium		7143533
+alchemylab_lvl3	13	3	Grand Phylactory	Contains the Soul Core Infuser which can be used to modify [SoulCore|Soul Cores]  Room [IncursionDestabilization|Destabilises] once device is used	7077985;6815843
+alchemylab_lvl4	13	4	Decorous Phylactory	Contains the Soul Core Infuser which can be used to modify [SoulCore|Soul Cores]  Room [IncursionDestabilization|Destabilises] once device is used  [Rarity|Unique] Boss drops additional Soul Cores	6815860;7667809
+thaumaturge_lvl1	14	1	Thaumaturge's Laboratory		6357095;7471218
+thaumaturge_lvl2	14	2	Thaumaturge's Cuttery	Contains the Gemcutting Mechanism which can be used to increase the [Quality] of a Skill Gem	6881398;6619248
+thaumaturge_lvl3	14	3	Thaumaturge's Cathedral	Contains the Gem Corrupter which can be used to modify a [Corrupted] Skill Gem unpredictably  Room [IncursionDestabilization|Destabilises] once device is used	6357069;2097273
+thaumaturge_lvl4	14	4	Thaumaturge's Culmination	Contains the Gem Corrupter which can be used to modify a [Corrupted] Skill Gem unpredictably  Room [IncursionDestabilization|Destabilises] once device is used	6881398;6619248
+golemworks_lvl1	15	1	Workshop		6357095;7471218
+golemworks_lvl2	15	2	Automaton Lab		6881398;6619248
+golemworks_lvl3	15	3	Stone Legion		6357069;2097273
+golemworks_lvl4	15	4	Precision of Science		6881398;6619248
+corruption_lvl1	16	1	Crimson Hall	Contains a Corruption Altar which can be used to [Corrupted|Corrupt] items	6619239;6619246
+corruption_lvl2	16	2	Catalyst of Corruption	Contains a Corruption Altar which can be used to [Corrupted|Corrupt] items	6619239;6619246
+corruption_lvl3	16	3	Locus of Corruption	Contains a Corruption Altar which can be used to modify [Corrupted] [Equipment] or Jewels unpredictably  Room [IncursionDestabilization|Destabilises] once device is used	6619239;6619246
+corruption_lvl4	16	4	Rapture of Corruption	Contains a Corruption Altar which can be used to modify [Corrupted] [Equipment] or Jewels unpredictably  Room [IncursionDestabilization|Destabilises] once device is used	6881398;6619248
+vault	17	1	Sealed Vault	Contains a variety of valuable Chests based on surrounding Rooms  Room [IncursionDestabilization|Destabilises] once the central Vault is opened	7143533
+sacrificechamber_lvl1	18	1	Altar of Sacrifice	Contains a Unique Item	6881398;6619248
+sacrificechamber_lvl2	18	2	Hall of Offerings	Contains a Unique Item	6357107;7471203
+sacrificechamber_lvl3	18	3	Apex of Oblation	Contains a Unique Item  Contains the Morphology Mechanism which can be used to modify [Corrupted] Unique Items  Room [IncursionDestabilization|Destabilises] once device is used	6357107;7471203
+sacrificechamber_lvl4	18	4	Empyrean of Blood	Contains a Unique Item  Contains the Morphology Mechanism which can be used to modify [Corrupted] Unique Items  Room [IncursionDestabilization|Destabilises] once device is used	7471201;6815843
+architect	20	1	Architect's Chamber	Defeating the Architect allows use of Xipocado's Console which can be used to place various [IncursionRestrictedRoom|Restricted Rooms]  Defeating the Architect also unlocks [IncursionMedallions|Medallions]	
+entrance	21	1	Foyer		
+currency_reward	22	1	Kishara's Vault	Contains Rare Treasury Chests containing Currency  Room [IncursionDestabilization|Destabilises] once accessible	
+lineage_support_reward	23	1	Vault of Reverence	Contains a Historic Chest containing a random [LineageSupports|Lineage Support Gem]  Room [IncursionDestabilization|Destabilises] once accessible	
+socketable_reward	24	1	Jiquani's Vault	Contains a Rune Cache containing [Rune|Runes]  Room [IncursionDestabilization|Destabilises] once accessible	
+tablet_reward	25	1	Tablet Research Vault	Contains the Corrupted Precursor Machine which allows the [Corrupted|Corruption] of a [Tablet|Tablet]  Room [IncursionDestabilization|Destabilises] once accessible	
+unique_reward	26	1	Ancient Reliquary Vault	Contains a Reliquary Display which holds a Unique item  Room [IncursionDestabilization|Destabilises] once accessible	
+access_chamber	27	1	Royal Access Chamber	Completion unlocks access to Atziri's Chamber  Room [IncursionDestabilization|Destabilises] once accessible	
+unsocketing_reward	29	1	Extraction Chamber	Contains the Extraction Workbench which can be used to destroy an [Equipment] item, returning any [Augment|Augments] socketed in it  Room [IncursionDestabilization|Destabilises] once accessible	
+viperspymaster_defeated_lvl1	30	1	Spymaster's Study		
+viperspymaster_defeated_lvl2	30	2	Hall of Shadows		
+viperspymaster_defeated_lvl3	30	3	Omnipresent Panopticon		
+viperspymaster_defeated_lvl4	30	4	Espionage Core		
+biome_water	31	1	Terraforming Research: Water	Room [IncursionDestabilization|Destabilises] once accessible	7143535
+biome_mountain	32	1	Terraforming Research: Mountain	Room [IncursionDestabilization|Destabilises] once accessible	7143535
+biome_grass	33	1	Terraforming Research: Grass	Room [IncursionDestabilization|Destabilises] once accessible	7143535
+biome_forest	34	1	Terraforming Research: Forest	Room [IncursionDestabilization|Destabilises] once accessible	7143535
+biome_swamp	35	1	Terraforming Research: Swamp	Room [IncursionDestabilization|Destabilises] once accessible	7143535
+biome_desert	36	1	Terraforming Research: Desert	Room [IncursionDestabilization|Destabilises] once accessible	7143535

@@ -2821,3 +2821,39 @@ Fix — two parts, no new offsets:
   run the enriched `🔗 Skill↔Slot Link` probe on a char with un-cast slots and send the file so the stable
   offset can be pinned.
 
+
+## Vaal Ruins planner — GGPK room-data extractor (shipped 0.45.13.337)
+
+Track #1 from the Vaal Ruins Route Planner handoff: pull the REAL room data out of the GGPK so
+the planner stops relying on hand-typed rooms. Vaal Ruins is internally **Incursion** (reworked
+Temple of Atzoatl); PoE2 prefixes the tables `incursion2`.
+
+- **Discovery (via the existing generic `ls`/`inspect` verbs — no new code needed):**
+  `ls --match incursion` → `data/balance/incursion2rooms.datc64` (37 rows), `incursion2roomperlevel`
+  (81), `incursion2encountertileperarea` (144 → `.tdt` terrain tiles), plus medallions/crafting/etc.
+- **Authoritative schema from poe-tool-dev/dat-schema** (release `schema.min.json`), cross-checked
+  against the tool's own `inspect` — the computed row sizes match EXACTLY (Incursion2Rooms = 95 B,
+  Incursion2RoomPerLevel = 92 B), so the column offsets are verified.
+- **KEY RE FINDING: there is NO door/connection/direction column in ANY incursion table.** The room
+  schema is `Id, IsPathway(bool), UpgradedBy[], ConvertedBy[], ConvertedTo[], UpgradedByPower,
+  IsPresentDay, IsBossReward, Name, Icon, RewardUnlockStat`. So the physical **doorway geometry lives
+  only in the `.tdt` terrain tiles**, not the dat — the "fixed door pattern per room" question is a
+  separate tile-parsing task (or Vaal Ruins uses a fixed temple grid where connectivity is positional).
+- **New extractors (`ggpk-tools/PoeDataExtract/Extractors/`):**
+  - `Incursion2Rooms.cs` → `data/incursion2_rooms.tsv` — the room FAMILY catalog + upgrade graph:
+    `id · is_pathway · is_boss_reward · upgrade_power · upgraded_by · converted_to · name · icon`
+    (upgraded_by/converted_to are `;`-joined room ids resolved from the `row[]` refs). Verified real:
+    `Garrison → Armoury;SynthfleshLab`, `Armoury → AlchemyLab → Thaumaturge`, boss vaults
+    (`CurrencyReward`/`UniqueReward`/`Atziri`/`Biome*`), pathways (`Path`/`PoweredPath`/`Entrance`).
+  - `Incursion2RoomPerLevel.cs` → `data/incursion2_room_levels.tsv` — per-tier instances:
+    `id · room_index · level · name · description · mod_values`. Verified: `garrison_lvl1 Guardhouse
+    → lvl4 Warrior Assembly`; `description` carries the human-readable reward text (`Contains
+    [Equipment]`, `Contains a Corruption Altar which can be used to [Corrupted|Corrupt] items`).
+  - `DatReader.RowI32Array` added — a 4-byte-element array reader (the existing `RowArray` reads
+    8 bytes/element and returned `-1` sentinels for packed `i32[]` like `ModValues`).
+  - Registered in `Program.cs` extract dispatch (`incursion2rooms` / `incursion2roomperlevel`).
+- **Shipped TSVs** `data/incursion2_rooms.tsv` (37) + `data/incursion2_room_levels.tsv` (78) are
+  committed as source data (like the other `data/*.tsv`).
+- **Next:** wire these TSVs into `ui/vaal_ruins_planner.html` (replace the manual room entry with the
+  real catalog + upgrade graph + reward text); door geometry from `.tdt` (or confirm the fixed-grid
+  model) remains the one open piece; optionally add both to `extract-all` so a patch auto-refreshes them.

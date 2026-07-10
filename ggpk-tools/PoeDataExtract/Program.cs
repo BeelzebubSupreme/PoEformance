@@ -105,6 +105,8 @@ internal static class Program
             "mods"           or "modnamemap"         => new Mods(),
             "mapmods"        or "areamods"           => new MapMods(),
             "uniquenames"    or "uniqueitemnamemap"  => new UniqueNames(),
+            "incursion2rooms" or "incursionrooms"    => new Incursion2Rooms(),
+            "incursion2roomperlevel" or "incursionroomlevels" => new Incursion2RoomPerLevel(),
             _ => throw new ArgumentException($"Unknown table: {opts.Table}"),
         };
         // Optional --mod-domain N override for MapMods. Lets the user

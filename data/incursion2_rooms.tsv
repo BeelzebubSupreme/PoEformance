@@ -1,0 +1,38 @@
+id	is_pathway	is_boss_reward	upgrade_power	upgraded_by	converted_to	name	icon
+Nothing	0	0	0				
+Path	1	0	0				
+PoweredPath	1	0	0				
+Garrison	0	0	0	Armoury;SynthfleshLab	ViperLegionBarracks	Garrison	Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverGarrison.dds
+Commander	0	0	0	Garrison;Garrison;TranscendentBarracks;TranscendentBarracks;TranscendentBarracks		Commander	Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverCommander.dds
+Armoury	0	0	0	AlchemyLab		Armoury	Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverArmoury.dds
+Smithy	0	0	1			Smithy	Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverSmithy.dds
+Generator	0	0	0	SacrificialChamber		Generator	Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverGenerator.dds
+ViperSpymaster	0	0	0			Spymaster	Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverViperSpymaster.dds
+ViperLegionBarracks	0	0	0	ViperSpymaster;SynthfleshLab		Legion Barracks	Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverViperLegionBarracks.dds
+SynthfleshLab	0	0	1			Synthflesh Lab	Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverSynthflesh.dds
+FleshSurgeon	0	0	0			Flesh Surgeon	Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverFleshSurgeon.dds
+TranscendentBarracks	0	0	1			Transcendent Barracks	Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverTranscendentBarracks.dds
+AlchemyLab	0	0	0	Thaumaturge		Alchemy Lab	Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverAlchemyLab.dds
+Thaumaturge	0	0	0			Thaumaturge	Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverThaumaturge.dds
+GolemWorks	0	0	2			Golem Works	Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverGolemWorks.dds
+Corruption	0	0	0	SacrificialChamber		Corruption Chamber	Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverCorruption.dds
+Vault	0	0	0			Treasure Vault	Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverVault.dds
+SacrificialChamber	0	0	0			Sacrificial Chamber	Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverSacrificialChamber.dds
+SacrificeRoom	0	0	0			Sacrifice a Room to Upgrade Sacrificial Chamber	
+Architect	0	0	0			Architect's Chamber	Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverArchitect.dds
+Entrance	1	0	0				
+CurrencyReward	0	1	0			Currency Vault	
+LineageSupportReward	0	1	0			Lineage Gems Vault	
+SocketableReward	0	1	0			Augments Vault	
+TabletReward	0	1	0			Tablets Vault	
+UniqueReward	0	1	0			Uniques Vault	
+AccessChamber	0	1	0			Royal Access Chamber	Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverAccessChamber.dds
+Atziri	0	0	0			Atziri's Chamber	Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverAtziri.dds
+UnsocketingReward	0	1	0			Extraction Chamber	
+DeadSpymaster	0	0	0			Spymaster	Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverViperSpymaster.dds
+BiomeWater	0	1	0			Terraforming Research	
+BiomeMountain	0	1	0			Terraforming Research	
+BiomeGrass	0	1	0			Terraforming Research	
+BiomeForest	0	1	0			Terraforming Research	
+BiomeSwamp	0	1	0			Terraforming Research	
+BiomeDesert	0	1	0			Terraforming Research	

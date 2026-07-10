@@ -28,8 +28,15 @@
   - Board data is **NOT in the UI tree** (only tooltip text) → it lives in **ServerData**.
   - GameHelper2 reference has **no** incursion code (no shortcut).
   - Tiles have **fixed doorway patterns per room (+ likely rotation)**, not free 4-way — the connection rules still need a real data source.
-- **Next steps (two tracks):**
-  1. **GGPK static extraction (recommended first):** add an incursion-room extractor/inspector to `ggpk-tools/PoeDataExtract` (like the `.tsv` dictionaries) to pull each room's door pattern / tier / value from a PoE1-style `IncursionRoom` table. Find the table name first via the extractor's `inspect` verb. This answers "how do the tiles connect."
+- **Next steps:**
+  1. ✅ **GGPK static extraction — DONE (0.45.13.337).** `Incursion2Rooms`/`Incursion2RoomPerLevel`
+     extractors ship `data/incursion2_rooms.tsv` (37 rooms + upgrade graph + flags) and
+     `data/incursion2_room_levels.tsv` (78 tiers + reward text). **Finding: there is NO door column
+     in the dat** — doorway geometry lives in the `.tdt` terrain tiles (or Vaal Ruins uses a fixed
+     temple grid). See CHANGELOG "Vaal Ruins planner — GGPK room-data extractor". NEXT: wire these
+     TSVs into `ui/vaal_ruins_planner.html` (replace manual entry), then decide the door model
+     (parse `.tdt`, or confirm/adopt the PoE1 fixed-grid positional connectivity).
+  1b. **(superseded) GGPK static extraction (original):** add an incursion-room extractor/inspector to `ggpk-tools/PoeDataExtract` (like the `.tsv` dictionaries) to pull each room's door pattern / tier / value from a PoE1-style `IncursionRoom` table. Find the table name first via the extractor's `inspect` verb. This answers "how do the tiles connect."
   2. **ServerData Incursion probe:** RE the live board (rooms / positions / tiers / doorways) using the `N/60` token as the live anchor in the Memory Dissector.
   3. Then **inline the prototype into `ui/index.html` as a tab** and wire the memory adapter behind the existing solver interface.
 

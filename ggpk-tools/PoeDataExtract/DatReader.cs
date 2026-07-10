@@ -148,6 +148,28 @@ internal sealed class DatReader
     }
 
     /// <summary>
+    /// Read a variable-length array of plain 4-byte int32 elements (schema
+    /// type <c>i32[]</c>). Same 16-byte (count, dataOffset) header as
+    /// <see cref="RowArray"/>, but each element is 4 bytes — RowArray reads
+    /// 8 bytes/element and would mangle packed int32 arrays (they came back
+    /// as -1 sentinels). Returns empty for null/absurd refs.
+    /// </summary>
+    public int[] RowI32Array(int index, int offset)
+    {
+        var rowSpan = Row(index);
+        ulong count = BitConverter.ToUInt64(rowSpan[offset..(offset + 8)]);
+        ulong ptr   = BitConverter.ToUInt64(rowSpan[(offset + 8)..(offset + 16)]);
+        if (count == 0 || count > 4096) return Array.Empty<int>();
+        long byteStart = (long)ptr;
+        long byteEnd = byteStart + (long)count * 4;
+        if (byteStart < 0 || byteEnd > _data.Length) return Array.Empty<int>();
+        var result = new int[count];
+        for (int i = 0; i < (int)count; i++)
+            result[i] = BitConverter.ToInt32(_data.AsSpan((int)(byteStart + (long)i * 4), 4));
+        return result;
+    }
+
+    /// <summary>
     /// Read a foreign-key row index from inside a row. PoE schema types
     /// `row` (8 bytes) and `foreignrow` (16 bytes, second half is
     /// usually a table identifier or unused) both encode the target
