@@ -331,8 +331,14 @@ VaalRuinsPtrProbeRun()
                     shown := 0
                     for _, cell in nn
                     {
-                        rpt .= Format("   cell#{} +0x{:X} -> 0x{:X}: {}`n", cell["i"] - runStart, cell["i"] * 8, cell["p"], _VrDerefCell(g_reader, cell["p"]))
-                        if (++shown >= 14)
+                        line := _VrDerefCell(g_reader, cell["p"])
+                        ; Flag the board fingerprint: a cell exposing a distinctive
+                        ; placed room (Architect / AccessChamber / Atziri / Legion
+                        ; Barracks — 9/20/27/28) is very likely the real board.
+                        fp := (InStr(line, "(Architect)") || InStr(line, "(Atziri)")
+                            || InStr(line, "(AccessChamber)") || InStr(line, "(ViperLegionBarracks)")) ? "  <<< BOARD?" : ""
+                        rpt .= Format("   cell#{} +0x{:X} -> 0x{:X}: {}{}`n", cell["i"] - runStart, cell["i"] * 8, cell["p"], line, fp)
+                        if (++shown >= 90)
                         {
                             rpt .= "   … (more cells truncated)`n"
                             break
@@ -402,7 +408,7 @@ VaalRuinsPtrProbeRun()
         DirCreate(outDir)
     outPath := outDir "\InGameStateMonitor.vaal_ruins_probe.log"
     try FileAppend(FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") " [PTR/STRUCT]`n" rpt "`n`n", outPath, "UTF-8")
-    try MsgBox("Vaal Ruins ptr/struct probe written to:`n" outPath "`n`nRun it in the temple with the board populated, then send the log.", "Vaal Ruins ptr probe", 0x40)
+    try MsgBox("Vaal Ruins ptr/struct probe written to:`n" outPath "`n`nIMPORTANT: run this with the TEMPLE CONSOLE OPEN (the board visible on screen) — the placed-board grid may only exist in memory while the console is open. Then send the log.", "Vaal Ruins ptr probe", 0x40)
 }
 
 ; Best-effort world position of a snapshot entity Map (render component, or a
