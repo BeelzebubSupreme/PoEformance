@@ -2857,3 +2857,22 @@ Temple of Atzoatl); PoE2 prefixes the tables `incursion2`.
 - **Next:** wire these TSVs into `ui/vaal_ruins_planner.html` (replace the manual room entry with the
   real catalog + upgrade graph + reward text); door geometry from `.tdt` (or confirm the fixed-grid
   model) remains the one open piece; optionally add both to `extract-all` so a patch auto-refreshes them.
+
+## Vaal Ruins planner — room dataset build (shipped 0.45.13.338)
+
+Step 1 of wiring the real data into the planner. Confirmed via the mobalytics/maxroll guides that
+Vaal Ruins connect by **adjacency + path chaining** from the entrance (NOT doorway edge-matching) —
+so the desktop prototype's free-doorway model was over-engineering, and NO `.tdt` door parsing is
+needed. Rooms upgrade to higher tiers by having specific room types placed ADJACENT (e.g. Commander:
+2 adjacent Garrison → T2, 3 → T3; Garrison + adjacent Synthflesh Lab → Transcendent Barracks).
+
+- **`tools/build_vaal_ruins_data.py`** — merges the extracted `data/incursion2_rooms.tsv` +
+  `incursion2_room_levels.tsv` with a curated overlay of the guide's Temple-Mod bonuses + adjacency
+  upgrade/conversion rules → **`data/vaal_ruins_rooms.json`** (36 placeable rooms: id, name, cat,
+  isPath/isReward, value, bonus/reward text, `upgradeBy` {type,count,tier}, `convertsTo`
+  {whenAdjacent,to}, real per-tier names/descriptions, icon). Re-run after re-extracting the TSVs.
+- Notable: the dat `UpgradedBy` field is the adjacency requirement as a room MULTISET (Commander =
+  `Garrison;Garrison;TranscendentBarracks×3`) — matches the guide's counts; kept as `datUpgradedBy`.
+- **Next (step 2):** rewrite `ui/vaal_ruins_planner.html`'s solver — swap the doorway-edge BFS for
+  adjacency-through-paths, load this dataset (real 36 rooms replacing the 11 hardcoded), and score
+  real tier-ups from adjacency counts.

@@ -1,0 +1,955 @@
+{
+ "_source": "GGPK incursion2rooms/incursion2roomperlevel + curated guide overlay",
+ "_note": "Vaal Ruins connect by ADJACENCY + path chaining from the entrance; rooms upgrade via adjacent room types. Regenerate with tools/build_vaal_ruins_data.py after re-extracting the TSVs.",
+ "grid": 9,
+ "handSize": 6,
+ "medallionSlots": {
+  "default": 3,
+  "max": 6
+ },
+ "rooms": [
+  {
+   "id": "path",
+   "name": "Path",
+   "cat": "path",
+   "isPath": true,
+   "isReward": false,
+   "value": 0
+  },
+  {
+   "id": "poweredpath",
+   "name": "PoweredPath",
+   "cat": "path",
+   "isPath": true,
+   "isReward": false,
+   "value": 0,
+   "bonus": "Path that also Powers adjacent rooms"
+  },
+  {
+   "id": "garrison",
+   "name": "Garrison",
+   "cat": "room",
+   "isPath": false,
+   "isReward": false,
+   "value": 3,
+   "bonus": "#% increased Number of Magic Packs",
+   "convertsTo": [
+    {
+     "whenAdjacent": "synthfleshlab",
+     "to": "transcendentbarracks"
+    },
+    {
+     "whenAdjacent": "viperspymaster",
+     "to": "viperlegionbarracks"
+    }
+   ],
+   "datUpgradedBy": [
+    "armoury",
+    "synthfleshlab"
+   ],
+   "datConvertsTo": [
+    "viperlegionbarracks"
+   ],
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Guardhouse",
+     "desc": ""
+    },
+    {
+     "level": 2,
+     "name": "Barracks",
+     "desc": ""
+    },
+    {
+     "level": 3,
+     "name": "Hall of War",
+     "desc": ""
+    },
+    {
+     "level": 4,
+     "name": "Warrior Assembly",
+     "desc": ""
+    }
+   ],
+   "icon": "Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverGarrison.dds"
+  },
+  {
+   "id": "commander",
+   "name": "Commander",
+   "cat": "room",
+   "isPath": false,
+   "isReward": false,
+   "value": 4,
+   "bonus": "Rare Monsters have #% increased Effectiveness",
+   "upgradeBy": [
+    {
+     "type": "garrison",
+     "count": 2,
+     "tier": 2
+    },
+    {
+     "type": "garrison",
+     "count": 3,
+     "tier": 3
+    }
+   ],
+   "datUpgradedBy": [
+    "garrison",
+    "garrison",
+    "transcendentbarracks",
+    "transcendentbarracks",
+    "transcendentbarracks"
+   ],
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Commander's Chamber",
+     "desc": ""
+    },
+    {
+     "level": 2,
+     "name": "Commander's Hall",
+     "desc": ""
+    },
+    {
+     "level": 3,
+     "name": "Commander's Headquarters",
+     "desc": ""
+    },
+    {
+     "level": 4,
+     "name": "Commander's Station",
+     "desc": ""
+    }
+   ],
+   "icon": "Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverCommander.dds"
+  },
+  {
+   "id": "armoury",
+   "name": "Armoury",
+   "cat": "room",
+   "isPath": false,
+   "isReward": false,
+   "value": 3,
+   "bonus": "Humanoid Monsters have #% increased Effectiveness",
+   "upgradeBy": [
+    {
+     "type": "smithy"
+    },
+    {
+     "type": "alchemylab"
+    }
+   ],
+   "datUpgradedBy": [
+    "alchemylab"
+   ],
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Depot",
+     "desc": "Contains [Equipment]"
+    },
+    {
+     "level": 2,
+     "name": "Arsenal",
+     "desc": "Contains [Equipment]"
+    },
+    {
+     "level": 3,
+     "name": "Gallery",
+     "desc": "Contains [Rarity|Rare] [Equipment]"
+    },
+    {
+     "level": 4,
+     "name": "Royal Reserves",
+     "desc": "Contains [Rarity|Rare] [Equipment]"
+    }
+   ],
+   "icon": "Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverArmoury.dds"
+  },
+  {
+   "id": "smithy",
+   "name": "Smithy",
+   "cat": "room",
+   "isPath": false,
+   "isReward": false,
+   "value": 2,
+   "bonus": "Chests have #% increased Item Rarity",
+   "upgradeBy": [
+    {
+     "type": "golemworks"
+    },
+    {
+     "type": "generator"
+    }
+   ],
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Bronzeworks",
+     "desc": "Contains the Forging Workbench which can be used to improve [Quality] of [Equipment]"
+    },
+    {
+     "level": 2,
+     "name": "Chamber of Iron",
+     "desc": "Contains the Forging Mechanism which can be used to add an [Augment] socket to [Equipment]"
+    },
+    {
+     "level": 3,
+     "name": "Golden Forge",
+     "desc": "Contains the Masterwork Forge which can be used to increase the [Quality] of an [Equipment] item that already has 20% [Quality]"
+    },
+    {
+     "level": 4,
+     "name": "Immaculate Forge",
+     "desc": "Contains the Masterwork Forge which can be used to increase the [Quality] of an [Equipment] item that already has 20% [Quality]  [Rarity|Unique] Boss drops additional Infusers"
+    }
+   ],
+   "icon": "Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverSmithy.dds"
+  },
+  {
+   "id": "generator",
+   "name": "Generator",
+   "cat": "room",
+   "isPath": false,
+   "isReward": false,
+   "value": 3,
+   "bonus": "Construct Monsters have #% increased Effectiveness; Powers adjacent rooms",
+   "upgradeBy": [
+    {
+     "type": "thaumaturge"
+    },
+    {
+     "type": "sacrificialchamber"
+    }
+   ],
+   "datUpgradedBy": [
+    "sacrificialchamber"
+   ],
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Dynamo",
+     "desc": "Provides [IncursionPower|Power] to nearby rooms, increasing in distance with Room tier"
+    },
+    {
+     "level": 2,
+     "name": "Shrine of Empowerment",
+     "desc": "Provides [IncursionPower|Power] to nearby rooms, increasing in distance with Room tier"
+    },
+    {
+     "level": 3,
+     "name": "Solar Nexus",
+     "desc": "Provides [IncursionPower|Power] to nearby rooms, increasing in distance with Room tier"
+    },
+    {
+     "level": 4,
+     "name": "Infinite Horizon",
+     "desc": "Provides [IncursionPower|Power] to nearby rooms, increasing in distance with Room tier"
+    }
+   ],
+   "icon": "Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverGenerator.dds"
+  },
+  {
+   "id": "viperspymaster",
+   "name": "Spymaster",
+   "cat": "room",
+   "isPath": false,
+   "isReward": false,
+   "value": 5,
+   "bonus": "#% increased effect of Temple Mods from Garrisons, Commanders, Armouries, Smithies and Legion Barracks",
+   "upgradeBy": [
+    {
+     "type": "viperspymaster",
+     "note": "upgraded by defeating other Spymasters"
+    }
+   ],
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Spymaster's Study",
+     "desc": "Room Tier can be increased by defeating other Spymasters"
+    },
+    {
+     "level": 2,
+     "name": "Hall of Shadows",
+     "desc": "Room Tier can be increased by defeating other Spymasters"
+    },
+    {
+     "level": 3,
+     "name": "Omnipresent Panopticon",
+     "desc": "Room Tier can be increased by defeating other Spymasters"
+    },
+    {
+     "level": 4,
+     "name": "Espionage Core",
+     "desc": ""
+    }
+   ],
+   "icon": "Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverViperSpymaster.dds"
+  },
+  {
+   "id": "viperlegionbarracks",
+   "name": "Legion Barracks",
+   "cat": "room",
+   "isPath": false,
+   "isReward": false,
+   "value": 4,
+   "bonus": "Legion of Garrison + Spymaster",
+   "upgradeBy": [
+    {
+     "type": "viperspymaster"
+    },
+    {
+     "type": "synthfleshlab"
+    }
+   ],
+   "datUpgradedBy": [
+    "viperspymaster",
+    "synthfleshlab"
+   ],
+   "tiers": [
+    {
+     "level": 2,
+     "name": "Viper's Loyals",
+     "desc": ""
+    },
+    {
+     "level": 3,
+     "name": "Elite Legion",
+     "desc": ""
+    },
+    {
+     "level": 4,
+     "name": "Unmatched Legionnaires",
+     "desc": ""
+    }
+   ],
+   "icon": "Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverViperLegionBarracks.dds"
+  },
+  {
+   "id": "synthfleshlab",
+   "name": "Synthflesh Lab",
+   "cat": "room",
+   "isPath": false,
+   "isReward": false,
+   "value": 3,
+   "bonus": "Monsters grant #% increased Experience",
+   "upgradeBy": [
+    {
+     "type": "fleshsurgeon",
+     "tier": 2
+    },
+    {
+     "type": "generator",
+     "tier": 3
+    }
+   ],
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Prosthetic Research",
+     "desc": ""
+    },
+    {
+     "level": 2,
+     "name": "Synthflesh Sanctum",
+     "desc": ""
+    },
+    {
+     "level": 3,
+     "name": "Crucible of Transcendence",
+     "desc": ""
+    },
+    {
+     "level": 4,
+     "name": "Supremacy of Function",
+     "desc": ""
+    }
+   ],
+   "icon": "Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverSynthflesh.dds"
+  },
+  {
+   "id": "fleshsurgeon",
+   "name": "Flesh Surgeon",
+   "cat": "room",
+   "isPath": false,
+   "isReward": false,
+   "value": 3,
+   "bonus": "Unique Monsters have #% increased Effectiveness",
+   "upgradeBy": [
+    {
+     "type": "synthfleshlab",
+     "tier": 2
+    },
+    {
+     "type": "synthfleshlab",
+     "poweredBy": "generator",
+     "tier": 3
+    }
+   ],
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Surgeon's Ward",
+     "desc": ""
+    },
+    {
+     "level": 2,
+     "name": "Surgeon's Theatre",
+     "desc": ""
+    },
+    {
+     "level": 3,
+     "name": "Surgeon's Symphony",
+     "desc": "Contains the Transcension Device, allowing for [IncursionLimbModification|Limb Modification]"
+    },
+    {
+     "level": 4,
+     "name": "Surgical Glory",
+     "desc": "Contains the Transcension Device, allowing for [IncursionLimbModification|Limb Modification], which can be used twice"
+    }
+   ],
+   "icon": "Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverFleshSurgeon.dds"
+  },
+  {
+   "id": "transcendentbarracks",
+   "name": "Transcendent Barracks",
+   "cat": "room",
+   "isPath": false,
+   "isReward": false,
+   "value": 4,
+   "bonus": "Empowered Garrison (via Synthflesh Lab)",
+   "tiers": [
+    {
+     "level": 2,
+     "name": "Steelflesh Quarters",
+     "desc": ""
+    },
+    {
+     "level": 3,
+     "name": "Collective Legion",
+     "desc": ""
+    },
+    {
+     "level": 4,
+     "name": "Chamber of the Perfected",
+     "desc": ""
+    }
+   ],
+   "icon": "Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverTranscendentBarracks.dds"
+  },
+  {
+   "id": "alchemylab",
+   "name": "Alchemy Lab",
+   "cat": "room",
+   "isPath": false,
+   "isReward": false,
+   "value": 3,
+   "bonus": "#% increased Rarity of items dropped by Monsters and #% increased Gold",
+   "upgradeBy": [
+    {
+     "type": "thaumaturge",
+     "count": 1,
+     "tier": 2
+    },
+    {
+     "type": "thaumaturge",
+     "count": 2,
+     "tier": 3
+    }
+   ],
+   "datUpgradedBy": [
+    "thaumaturge"
+   ],
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Chamber of Souls",
+     "desc": ""
+    },
+    {
+     "level": 2,
+     "name": "Core Machinarium",
+     "desc": ""
+    },
+    {
+     "level": 3,
+     "name": "Grand Phylactory",
+     "desc": "Contains the Soul Core Infuser which can be used to modify [SoulCore|Soul Cores]  Room [IncursionDestabilization|Destabilises] once device is used"
+    },
+    {
+     "level": 4,
+     "name": "Decorous Phylactory",
+     "desc": "Contains the Soul Core Infuser which can be used to modify [SoulCore|Soul Cores]  Room [IncursionDestabilization|Destabilises] once device is used  [Rarity|Unique] Boss drops additional Soul Cores"
+    }
+   ],
+   "icon": "Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverAlchemyLab.dds"
+  },
+  {
+   "id": "thaumaturge",
+   "name": "Thaumaturge",
+   "cat": "room",
+   "isPath": false,
+   "isReward": false,
+   "value": 4,
+   "bonus": "#% increased Effect of Temple Mods from Corruption Chambers, Treasure Vaults and Sacrificial Chambers",
+   "upgradeBy": [
+    {
+     "type": "sacrificialchamber",
+     "tier": 2
+    }
+   ],
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Thaumaturge's Laboratory",
+     "desc": ""
+    },
+    {
+     "level": 2,
+     "name": "Thaumaturge's Cuttery",
+     "desc": "Contains the Gemcutting Mechanism which can be used to increase the [Quality] of a Skill Gem"
+    },
+    {
+     "level": 3,
+     "name": "Thaumaturge's Cathedral",
+     "desc": "Contains the Gem Corrupter which can be used to modify a [Corrupted] Skill Gem unpredictably  Room [IncursionDestabilization|Destabilises] once device is used"
+    },
+    {
+     "level": 4,
+     "name": "Thaumaturge's Culmination",
+     "desc": "Contains the Gem Corrupter which can be used to modify a [Corrupted] Skill Gem unpredictably  Room [IncursionDestabilization|Destabilises] once device is used"
+    }
+   ],
+   "icon": "Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverThaumaturge.dds"
+  },
+  {
+   "id": "golemworks",
+   "name": "Golem Works",
+   "cat": "room",
+   "isPath": false,
+   "isReward": false,
+   "value": 3,
+   "bonus": "#% increased Effect of Temple Mods from Generators, Synthflesh Labs, Flesh Surgeons, Transcendent Barracks and Alchemy Labs",
+   "upgradeBy": [
+    {
+     "type": "generator"
+    }
+   ],
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Workshop",
+     "desc": ""
+    },
+    {
+     "level": 2,
+     "name": "Automaton Lab",
+     "desc": ""
+    },
+    {
+     "level": 3,
+     "name": "Stone Legion",
+     "desc": ""
+    },
+    {
+     "level": 4,
+     "name": "Precision of Science",
+     "desc": ""
+    }
+   ],
+   "icon": "Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverGolemWorks.dds"
+  },
+  {
+   "id": "corruption",
+   "name": "Corruption Chamber",
+   "cat": "room",
+   "isPath": false,
+   "isReward": false,
+   "value": 4,
+   "bonus": "Rare Monsters have a #% chance to have an additional Modifier",
+   "upgradeBy": [
+    {
+     "type": "thaumaturge"
+    },
+    {
+     "type": "sacrificialchamber"
+    }
+   ],
+   "datUpgradedBy": [
+    "sacrificialchamber"
+   ],
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Crimson Hall",
+     "desc": "Contains a Corruption Altar which can be used to [Corrupted|Corrupt] items"
+    },
+    {
+     "level": 2,
+     "name": "Catalyst of Corruption",
+     "desc": "Contains a Corruption Altar which can be used to [Corrupted|Corrupt] items"
+    },
+    {
+     "level": 3,
+     "name": "Locus of Corruption",
+     "desc": "Contains a Corruption Altar which can be used to modify [Corrupted] [Equipment] or Jewels unpredictably  Room [IncursionDestabilization|Destabilises] once device is used"
+    },
+    {
+     "level": 4,
+     "name": "Rapture of Corruption",
+     "desc": "Contains a Corruption Altar which can be used to modify [Corrupted] [Equipment] or Jewels unpredictably  Room [IncursionDestabilization|Destabilises] once device is used"
+    }
+   ],
+   "icon": "Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverCorruption.dds"
+  },
+  {
+   "id": "vault",
+   "name": "Treasure Vault",
+   "cat": "room",
+   "isPath": false,
+   "isReward": false,
+   "value": 5,
+   "bonus": "Contains valuable Chests based on surrounding Rooms",
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Sealed Vault",
+     "desc": "Contains a variety of valuable Chests based on surrounding Rooms  Room [IncursionDestabilization|Destabilises] once the central Vault is opened"
+    }
+   ],
+   "icon": "Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverVault.dds"
+  },
+  {
+   "id": "sacrificialchamber",
+   "name": "Sacrificial Chamber",
+   "cat": "room",
+   "isPath": false,
+   "isReward": false,
+   "value": 5,
+   "bonus": "#% increased number of Rare Chests",
+   "upgradeBy": [
+    {
+     "type": "*",
+     "note": "upgrades when Sacrificing other placed Rooms"
+    }
+   ],
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Altar of Sacrifice",
+     "desc": "Contains a Unique Item"
+    },
+    {
+     "level": 2,
+     "name": "Hall of Offerings",
+     "desc": "Contains a Unique Item"
+    },
+    {
+     "level": 3,
+     "name": "Apex of Oblation",
+     "desc": "Contains a Unique Item  Contains the Morphology Mechanism which can be used to modify [Corrupted] Unique Items  Room [IncursionDestabilization|Destabilises] once device is used"
+    },
+    {
+     "level": 4,
+     "name": "Empyrean of Blood",
+     "desc": "Contains a Unique Item  Contains the Morphology Mechanism which can be used to modify [Corrupted] Unique Items  Room [IncursionDestabilization|Destabilises] once device is used"
+    }
+   ],
+   "icon": "Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverSacrificialChamber.dds"
+  },
+  {
+   "id": "sacrificeroom",
+   "name": "Sacrifice a Room to Upgrade Sacrificial Chamber",
+   "cat": "special",
+   "isPath": false,
+   "isReward": false,
+   "value": 1,
+   "reward": "Sacrifice a placed Room to upgrade a Sacrificial Chamber"
+  },
+  {
+   "id": "architect",
+   "name": "Architect's Chamber",
+   "cat": "special",
+   "isPath": false,
+   "isReward": false,
+   "value": 4,
+   "reward": "Defeat the Architect to unlock reward rooms",
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Architect's Chamber",
+     "desc": "Defeating the Architect allows use of Xipocado's Console which can be used to place various [IncursionRestrictedRoom|Restricted Rooms]  Defeating the Architect also unlocks [IncursionMedallions|Medallions]"
+    }
+   ],
+   "icon": "Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverArchitect.dds"
+  },
+  {
+   "id": "entrance",
+   "name": "Entrance",
+   "cat": "entrance",
+   "isPath": true,
+   "isReward": false,
+   "value": 0,
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Foyer",
+     "desc": ""
+    }
+   ]
+  },
+  {
+   "id": "currencyreward",
+   "name": "Currency Vault",
+   "cat": "reward",
+   "isPath": false,
+   "isReward": true,
+   "value": 6,
+   "reward": "Two Treasure Chests dropping a lot of Currency",
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Kishara's Vault",
+     "desc": "Contains Rare Treasury Chests containing Currency  Room [IncursionDestabilization|Destabilises] once accessible"
+    }
+   ]
+  },
+  {
+   "id": "lineagesupportreward",
+   "name": "Lineage Gems Vault",
+   "cat": "reward",
+   "isPath": false,
+   "isReward": true,
+   "value": 5,
+   "reward": "Random Lineage Support Gem",
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Vault of Reverence",
+     "desc": "Contains a Historic Chest containing a random [LineageSupports|Lineage Support Gem]  Room [IncursionDestabilization|Destabilises] once accessible"
+    }
+   ]
+  },
+  {
+   "id": "socketablereward",
+   "name": "Augments Vault",
+   "cat": "reward",
+   "isPath": false,
+   "isReward": true,
+   "value": 5,
+   "reward": "Rune Cache — a high-level endgame Rune",
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Jiquani's Vault",
+     "desc": "Contains a Rune Cache containing [Rune|Runes]  Room [IncursionDestabilization|Destabilises] once accessible"
+    }
+   ]
+  },
+  {
+   "id": "tabletreward",
+   "name": "Tablets Vault",
+   "cat": "reward",
+   "isPath": false,
+   "isReward": true,
+   "value": 5,
+   "reward": "Corrupted Precursor Machine (modifies a Tablet)",
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Tablet Research Vault",
+     "desc": "Contains the Corrupted Precursor Machine which allows the [Corrupted|Corruption] of a [Tablet|Tablet]  Room [IncursionDestabilization|Destabilises] once accessible"
+    }
+   ]
+  },
+  {
+   "id": "uniquereward",
+   "name": "Uniques Vault",
+   "cat": "reward",
+   "isPath": false,
+   "isReward": true,
+   "value": 5,
+   "reward": "Display granting a random Unique Item",
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Ancient Reliquary Vault",
+     "desc": "Contains a Reliquary Display which holds a Unique item  Room [IncursionDestabilization|Destabilises] once accessible"
+    }
+   ]
+  },
+  {
+   "id": "accesschamber",
+   "name": "Royal Access Chamber",
+   "cat": "reward",
+   "isPath": false,
+   "isReward": true,
+   "value": 6,
+   "reward": "Unlocks Atziri's Chamber",
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Royal Access Chamber",
+     "desc": "Completion unlocks access to Atziri's Chamber  Room [IncursionDestabilization|Destabilises] once accessible"
+    }
+   ],
+   "icon": "Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverAccessChamber.dds"
+  },
+  {
+   "id": "atziri",
+   "name": "Atziri's Chamber",
+   "cat": "boss",
+   "isPath": false,
+   "isReward": false,
+   "value": 10,
+   "reward": "Atziri encounter (final target)",
+   "icon": "Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverAtziri.dds"
+  },
+  {
+   "id": "unsocketingreward",
+   "name": "Extraction Chamber",
+   "cat": "reward",
+   "isPath": false,
+   "isReward": true,
+   "value": 4,
+   "reward": "Extraction Workbench (returns socketed Augments)",
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Extraction Chamber",
+     "desc": "Contains the Extraction Workbench which can be used to destroy an [Equipment] item, returning any [Augment|Augments] socketed in it  Room [IncursionDestabilization|Destabilises] once accessible"
+    }
+   ]
+  },
+  {
+   "id": "deadspymaster",
+   "name": "Spymaster",
+   "cat": "special",
+   "isPath": false,
+   "isReward": false,
+   "value": 0,
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Spymaster's Study",
+     "desc": ""
+    },
+    {
+     "level": 2,
+     "name": "Hall of Shadows",
+     "desc": ""
+    },
+    {
+     "level": 3,
+     "name": "Omnipresent Panopticon",
+     "desc": ""
+    },
+    {
+     "level": 4,
+     "name": "Espionage Core",
+     "desc": ""
+    }
+   ],
+   "icon": "Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverViperSpymaster.dds"
+  },
+  {
+   "id": "biomewater",
+   "name": "Terraforming Research",
+   "cat": "reward",
+   "isPath": false,
+   "isReward": true,
+   "value": 3,
+   "reward": "Terraforming Research (biome mod)",
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Terraforming Research: Water",
+     "desc": "Room [IncursionDestabilization|Destabilises] once accessible"
+    }
+   ]
+  },
+  {
+   "id": "biomemountain",
+   "name": "Terraforming Research",
+   "cat": "reward",
+   "isPath": false,
+   "isReward": true,
+   "value": 3,
+   "reward": "Terraforming Research (biome mod)",
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Terraforming Research: Mountain",
+     "desc": "Room [IncursionDestabilization|Destabilises] once accessible"
+    }
+   ]
+  },
+  {
+   "id": "biomegrass",
+   "name": "Terraforming Research",
+   "cat": "reward",
+   "isPath": false,
+   "isReward": true,
+   "value": 3,
+   "reward": "Terraforming Research (biome mod)",
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Terraforming Research: Grass",
+     "desc": "Room [IncursionDestabilization|Destabilises] once accessible"
+    }
+   ]
+  },
+  {
+   "id": "biomeforest",
+   "name": "Terraforming Research",
+   "cat": "reward",
+   "isPath": false,
+   "isReward": true,
+   "value": 3,
+   "reward": "Terraforming Research (biome mod)",
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Terraforming Research: Forest",
+     "desc": "Room [IncursionDestabilization|Destabilises] once accessible"
+    }
+   ]
+  },
+  {
+   "id": "biomeswamp",
+   "name": "Terraforming Research",
+   "cat": "reward",
+   "isPath": false,
+   "isReward": true,
+   "value": 3,
+   "reward": "Terraforming Research (biome mod)",
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Terraforming Research: Swamp",
+     "desc": "Room [IncursionDestabilization|Destabilises] once accessible"
+    }
+   ]
+  },
+  {
+   "id": "biomedesert",
+   "name": "Terraforming Research",
+   "cat": "reward",
+   "isPath": false,
+   "isReward": true,
+   "value": 3,
+   "reward": "Terraforming Research (biome mod)",
+   "tiers": [
+    {
+     "level": 1,
+     "name": "Terraforming Research: Desert",
+     "desc": "Room [IncursionDestabilization|Destabilises] once accessible"
+    }
+   ]
+  }
+ ]
+}
