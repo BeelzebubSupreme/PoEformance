@@ -231,3 +231,176 @@ VaalRuinsProbeRun()
     try FileAppend(FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") "`n" rpt "`n`n", outPath, "UTF-8")
     try MsgBox("Vaal Ruins board probe written to:`n" outPath "`n`nRun this while standing in a Vaal Ruins temple with the board populated, then send the log.", "Vaal Ruins probe", 0x40)
 }
+
+; True if v looks like a user-space HEAP pointer (the game's allocations sit around
+; 0x1xx..0x7FE xxxxxxxx). Used to detect the board's cell-POINTER array.
+_VrIsHeap(v) => (v >= 0x10000000000 && v < 0x7FF000000000)
+
+; From a cell-object pointer, dump the int32 fields in [0..40] (room-index / tier
+; candidates) and the first few sub-pointers, so the cell struct's room field can
+; be worked out. Returns a one-line string. Params: reader, ptr.
+_VrDerefCell(reader, ptr)
+{
+    if !reader.IsProbablyValidPointer(ptr)
+        return "(bad ptr)"
+    blk := reader.Mem.ReadBytes(ptr, 0x80)
+    if !blk
+        return "(unread)"
+    smalls := "", ptrs := "", o := 0
+    while (o + 4 <= 0x80)
+    {
+        iv := NumGet(blk.Ptr, o, "Int")
+        if (iv >= 0 && iv <= 40)
+            smalls .= Format("@+0x{:X}={}({}) ", o, iv, _VrRoomName(iv))
+        o += 4
+    }
+    o := 0
+    while (o + 8 <= 0x80)
+    {
+        pv := NumGet(blk.Ptr, o, "Int64")
+        if (_VrIsHeap(pv))
+            ptrs .= Format("@+0x{:X}=0x{:X} ", o, pv)
+        o += 8
+    }
+    return "ints[" Trim(smalls) "]  ptrs[" Trim(ptrs) "]"
+}
+
+; Pointer/struct board hunt (bridge "VaalRuinsPtrProbe"). Two hypotheses:
+;  (A) the board is an ARRAY OF POINTERS to room-cell objects — a run of int64 that
+;      are 0 (empty) or heap pointers (placed), ~81 long with a handful non-null;
+;  (B) an inline STRUCT-PER-CELL array — the room index sits at a fixed offset in a
+;      fixed-stride struct, so reading int32 at (base + fieldOff + i*stride) yields
+;      room indices for consecutive cells.
+; Scans ServerData / PlayerServerData / InGameState for both, dereferencing cell
+; pointers to expose the room-index field. Writes the same log. No params.
+VaalRuinsPtrProbeRun()
+{
+    global g_reader
+    if !IsObject(g_reader)
+    {
+        try MsgBox("Game not connected.", "Vaal Ruins ptr probe", 0x10)
+        return
+    }
+    rpt := "Vaal Ruins board POINTER/STRUCT hunt`n"
+
+    regions := []
+    sdPtr := 0
+    try sdPtr := _SmResolveServerData()
+    if g_reader.IsProbablyValidPointer(sdPtr)
+    {
+        regions.Push(Map("name", "ServerData", "base", sdPtr, "len", 0xC000))
+        pdv := 0, pdPtr := 0
+        try pdv := g_reader.Mem.ReadInt64(sdPtr + PoE2Offsets.ServerData["PlayerServerData"])
+        if (pdv > 0)
+            try pdPtr := g_reader.Mem.ReadPtr(pdv)
+        if g_reader.IsProbablyValidPointer(pdPtr)
+            regions.Push(Map("name", "PlayerServerData", "base", pdPtr, "len", 0xC000))
+    }
+    igs := 0
+    try igs := g_reader._radarInGameStateCache
+    if g_reader.IsProbablyValidPointer(igs)
+        regions.Push(Map("name", "InGameState", "base", igs, "len", 0xC000))
+
+    ; ── (A) pointer-array scan ─────────────────────────────────────────────
+    rpt .= "`n===== (A) cell-POINTER arrays (0/heap runs, deref'd) =====`n"
+    for rg in regions
+    {
+        blk := g_reader.Mem.ReadBytes(rg["base"], rg["len"])
+        if !blk
+            continue
+        n := rg["len"] // 8
+        runStart := -1, nn := []
+        i := 0
+        while (i <= n)
+        {
+            done := (i = n)
+            v := done ? 1 : NumGet(blk.Ptr, i * 8, "Int64")
+            ok := !done && (v = 0 || _VrIsHeap(v))
+            if (ok)
+            {
+                if (runStart < 0)
+                    runStart := i, nn := []
+                if (v != 0)
+                    nn.Push(Map("i", i, "p", v))
+            }
+            else
+            {
+                if (runStart >= 0 && (i - runStart) >= 20 && nn.Length >= 3 && nn.Length <= 60)
+                {
+                    rpt .= Format("`n[{} +0x{:X}]  span={} cells, {} non-null`n", rg["name"], runStart * 8, i - runStart, nn.Length)
+                    shown := 0
+                    for _, cell in nn
+                    {
+                        rpt .= Format("   cell#{} +0x{:X} -> 0x{:X}: {}`n", cell["i"] - runStart, cell["i"] * 8, cell["p"], _VrDerefCell(g_reader, cell["p"]))
+                        if (++shown >= 14)
+                        {
+                            rpt .= "   … (more cells truncated)`n"
+                            break
+                        }
+                    }
+                }
+                runStart := -1
+            }
+            i += 1
+        }
+    }
+
+    ; ── (B) strided-struct scan ────────────────────────────────────────────
+    rpt .= "`n===== (B) strided struct arrays (room index at fieldOff, stride) =====`n"
+    for rg in regions
+    {
+        blk := g_reader.Mem.ReadBytes(rg["base"], rg["len"])
+        if !blk
+            continue
+        for _, stride in [8, 12, 16, 20, 24, 32]
+        {
+            for _, fieldOff in [0, 4, 8]
+            {
+                bestStart := -1, bestLen := 0, bestReal := 0
+                curStart := -1, curReal := 0
+                maxI := (rg["len"] - fieldOff - 4) // stride
+                i := 0
+                while (i <= maxI)
+                {
+                    done := (i > maxI - 1)
+                    v := done ? 999 : NumGet(blk.Ptr, fieldOff + i * stride, "Int")
+                    ok := !done && (v >= 0 && v <= 40)
+                    if (ok)
+                    {
+                        if (curStart < 0)
+                            curStart := i, curReal := 0
+                        if (v >= 3)
+                            curReal += 1
+                    }
+                    else
+                    {
+                        if (curStart >= 0 && (i - curStart) > bestLen && curReal >= 4)
+                            bestStart := curStart, bestLen := i - curStart, bestReal := curReal
+                        curStart := -1
+                    }
+                    i += 1
+                }
+                ; A real board: ~40-90 cells long, ~5-20 real rooms.
+                if (bestLen >= 40 && bestLen <= 100 && bestReal >= 5 && bestReal <= 25)
+                {
+                    rpt .= Format("`n[{} stride=0x{:X} field=+{}]  base+0x{:X}  cells={}  real={}`n",
+                        rg["name"], stride, fieldOff, fieldOff + bestStart * stride, bestLen, bestReal)
+                    decoded := "", j := 0
+                    while (j < bestLen && j < 90)
+                    {
+                        decoded .= _VrRoomName(NumGet(blk.Ptr, fieldOff + (bestStart + j) * stride, "Int")) " "
+                        j += 1
+                    }
+                    rpt .= "   " decoded "`n"
+                }
+            }
+        }
+    }
+
+    outDir := A_ScriptDir "\logs"
+    if !DirExist(outDir)
+        DirCreate(outDir)
+    outPath := outDir "\InGameStateMonitor.vaal_ruins_probe.log"
+    try FileAppend(FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") " [PTR/STRUCT]`n" rpt "`n`n", outPath, "UTF-8")
+    try MsgBox("Vaal Ruins ptr/struct probe written to:`n" outPath "`n`nRun it in the temple with the board populated, then send the log.", "Vaal Ruins ptr probe", 0x40)
+}

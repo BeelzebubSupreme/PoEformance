@@ -988,6 +988,8 @@ _DispatchBridgeCall(method, args)
             SetTimer(() => SkillGemProbe(), -1)
         case "VaalRuinsProbe":
             SetTimer(() => VaalRuinsProbeRun(), -1)
+        case "VaalRuinsPtrProbe":
+            SetTimer(() => VaalRuinsPtrProbeRun(), -1)
         case "RefreshSkillKeys":
             SetTimer(PushHotkeyBindingsToWebView, -1)
         case "RefreshItemSizes":
