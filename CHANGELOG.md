@@ -2955,6 +2955,29 @@ lives in the console UI, not ServerData.
   on only a minority of cells (a "filled marker") and derefs each for room ints/`.dds`; plus a raw
   per-cell `[1..40]` int dump as an eyeball fallback. One run surfaces the room field regardless of
   encoding.
-- **Next:** run the rewritten probe (console open), read the deviating offset off the log, then wire the
-  cells → the planner tab (read cell room + tier per `(r,c)`, postMessage into the iframe) so the
-  planner auto-populates live.
+- **Surgical hover probe (0.45.13.348):** `VaalRuinsBoardHoverProbeRun` (hotkey Ctrl+Alt+Shift+V) —
+  hover a KNOWN room on the open console, it identifies the `(r,c)` cell under the cursor
+  (`UiTree_HitTest` + uniform retry + rect-scan fallback) and dumps that one cell's full struct. Ran on
+  Commander/Atziri/Legion Barracks.
+- **CONCLUSION — live board read is NOT cleanly feasible; hunt CLOSED (0.45.13.349).** Exhaustive RE
+  across every angle (element ints, `+0x4F8`, 2-level pointer objects, ServerData/PlayerServerData
+  regions, per-cell hover dumps) proves the placed room per cell is **not stored in any single,
+  consistently-addressable field**. Evidence from one board-cell run: the room lands at a DIFFERENT
+  offset on almost every cell — Entrance `@38`, Architect/Vault/SacrificialChamber `@1B0`, Garrison/
+  Commander `@28`, TranscendentBarracks `@78`, LegionBarracks `@168`, Garrison `@1F8`. The bottom half
+  of the board is pure `BiomeMountain(32)` fill; `@40` cycles through unrelated values (28/30/15) across
+  cells (noise, not room); cells like (3,2)/(4,6) carry a cluster of rooms at `@160-174` (the
+  upgrade-PREVIEW options, not the placed room); the `+0x28`/`+0x160` pointers hit the shared offered-
+  card object, `+0x70` the shared reward object, `+0x30`/`+0x168` per-cell path/connection segments. The
+  hover cross-check was equally inconsistent (Commander → `Commander+UniqueReward` at a deep pointer;
+  Legion Barracks cell read `DeadSpymaster`; Atziri cell had no room at all). The clean placed-room list
+  DOES exist (`PlayerServerData+0xC0`, one room type per entry) but carries NO grid coordinate, and the
+  UI grid has coordinates but no clean room — the two don't bridge. A priority-offset heuristic would
+  misfire on the upgrade clusters + biome fill. **Net: the board is composed at render time from
+  overlapping systems (biome / connections / reward previews / upgrade options) with sparse room markers
+  at inconsistent offsets — not a readable 81-entry room array.** DECISION: ship the **Vaal Ruins planner
+  with MANUAL room entry** (fully working); the live auto-populate is shelved as documented-but-infeasible.
+  What IS solid and reusable: the UI grid cells' StringId = `(row, col)` (81 + boss `(9,4)`), each a
+  154×132 UiElement whose address + screen rect we can read (`VaalRuinsBoardCellProbeRun` /
+  `VaalRuinsBoardHoverProbeRun` kept as RE aids). If revisited: try reading the room-ICON sprite/atlas id
+  per cell (never isolated), or a future patch may expose a cleaner structure.

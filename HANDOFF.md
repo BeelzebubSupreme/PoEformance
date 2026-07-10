@@ -3,8 +3,8 @@
 **Read this first, then the matching CLAUDE.md / CHANGELOG.md sections for detail.**
 
 - **Branch:** `PoEfdev/autopilot-pathing` (dev branch — owns the version; only ever push this, never `master`/upstream).
-- **Version:** `0.45.13.346`
-- **⭐ Latest (`.346`): the Vaal Ruins board is IN THE UI TREE, not ServerData.** With the Temple Console open, the grid cells' StringId is the coordinate `"(r, c)"` (`(0,0)`…`(8,8)` + boss `(9,4)`). New RE tool **"🏛 Vaal Ruins Board Cell Probe"** reads each cell's room-icon `.dds` → room name and renders the 9×9 grid. **NEXT:** owner runs it with the console open, sends `logs\...vaal_ruins_probe.log`; then wire cells → planner iframe so it auto-populates. (The three ServerData probes only ever found the room DEFINITION/reward tables — the placed board was never there.)
+- **Version:** `0.45.13.349`
+- **⭐ Latest (`.349`): Vaal Ruins live-board read CLOSED as infeasible; planner ships MANUAL.** Exhaustive RE (UI grid + ServerData + hover probes) proved the placed room per cell is not in any single addressable field — it lands at a different offset on nearly every cell (`@28`/`@38`/`@78`/`@168`/`@1B0`/`@1F8`), the board is mostly biome fill, and the clean room list (`PlayerServerData+0xC0`) has no grid coordinates. The Vaal Ruins planner tab works with **manual entry**. RE aids kept: **"🏛 Vaal Ruins Board Cell Probe"** + hover probe **Ctrl+Alt+Shift+V** (the UI grid cells' StringId `= "(r, c)"` is the one solid, reusable finding). See CHANGELOG "CONCLUSION — live board read is NOT cleanly feasible" for the full evidence.
 - **Sync on the other machine:** `git pull origin PoEfdev/autopilot-pathing`, then reload the AHK tool.
 - **Upstream:** imm0r **merged our feature work** (camera-zoom, data-dict regen, autopilot/combat) into `imm0r/PoEformance`. We keep developing on the dev branch as before.
 
