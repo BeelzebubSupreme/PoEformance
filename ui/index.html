@@ -5417,6 +5417,7 @@
           <button class="uib-btn" onclick="ahkCall('SkillGemProbe')" data-tip="RE: dump player inventories (flagging skill gems + grid position) and scan PlayerServerData for the equipped skills' pointers — hunts the skill-gem / server-side assignment data model. Writes debug\skillgem_probe_*.txt.">💎 Skill-gem / Server Probe</button>
           <button class="uib-btn" onclick="ahkCall('VaalRuinsProbe')" data-tip="RE: hunt the live Vaal Ruins temple BOARD in memory (ServerData/PlayerServerData/InGameState) — scans for a ~81-int run of room indices (9x9 grid). Run WHILE IN a Vaal Ruins temple with the board populated. Writes logs\...vaal_ruins_probe.log.">🏛 Vaal Ruins Board Probe</button>
           <button class="uib-btn" onclick="ahkCall('VaalRuinsPtrProbe')" data-tip="RE: hunt the Vaal Ruins board as an ARRAY OF POINTERS to room-cell objects (or a strided struct array) — derefs candidate cells to expose the room-index field. Run in a temple with the board populated. Appends to logs\...vaal_ruins_probe.log.">🏛 Vaal Ruins Ptr Probe</button>
+          <button class="uib-btn" onclick="ahkCall('VaalRuinsEntityProbe')" data-tip="RE: check whether the temple rooms are WORLD ENTITIES — dumps every distinct entity path in the current area (+ counts) and details incursion/temple/vaal-matching ones with position. Run in a temple. Appends to logs\...vaal_ruins_probe.log.">🏛 Vaal Ruins Entity Probe</button>
         </div>
         <div id="uib-search-row">
           <input id="uib-search-input" type="text" placeholder="Search StringId…"

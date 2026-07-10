@@ -404,3 +404,79 @@ VaalRuinsPtrProbeRun()
     try FileAppend(FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") " [PTR/STRUCT]`n" rpt "`n`n", outPath, "UTF-8")
     try MsgBox("Vaal Ruins ptr/struct probe written to:`n" outPath "`n`nRun it in the temple with the board populated, then send the log.", "Vaal Ruins ptr probe", 0x40)
 }
+
+; Best-effort world position of a snapshot entity Map (render component, or a
+; top-level position). Returns "x,y,z" or "".
+_VrEntPos(entity)
+{
+    dc := (entity.Has("decodedComponents")) ? entity["decodedComponents"] : 0
+    wp := 0
+    if (dc && dc is Map && dc.Has("render") && dc["render"] is Map && dc["render"].Has("worldPosition"))
+        wp := dc["render"]["worldPosition"]
+    else if (entity.Has("worldPosition"))
+        wp := entity["worldPosition"]
+    if (wp && wp is Map)
+        return Round(wp.Get("x", 0)) "," Round(wp.Get("y", 0)) "," Round(wp.Get("z", 0))
+    if (entity.Has("gridPosition") && entity["gridPosition"] is Map)
+        return "grid " Round(entity["gridPosition"].Get("x", 0)) "," Round(entity["gridPosition"].Get("y", 0))
+    return ""
+}
+
+; Entity-list board hunt (bridge "VaalRuinsEntityProbe"). Hypothesis: the placed
+; rooms are WORLD ENTITIES in the temple area (they render as rich icon objects),
+; so the radar's own entity snapshot may already carry them. Dumps every distinct
+; entity path (+ counts) in the current area, and details any entity whose path
+; hints at incursion / temple / vaal / a room / a reward with its position — which
+; would let the board be read straight from entities. No params. Uses g_radarLastSnap.
+VaalRuinsEntityProbeRun()
+{
+    global g_radarLastSnap
+    snap := (g_radarLastSnap && g_radarLastSnap is Map) ? g_radarLastSnap : 0
+    if !snap
+    {
+        try MsgBox("No snapshot yet — get in-game, then retry.", "Vaal Ruins entity probe", 0x30)
+        return
+    }
+    inGs := snap.Has("inGameState") ? snap["inGameState"] : 0
+    area := (inGs is Map && inGs.Has("areaInstance")) ? inGs["areaInstance"] : 0
+    awake := (area is Map && area.Has("awakeEntities")) ? area["awakeEntities"] : 0
+    sample := (awake is Map && awake.Has("sample")) ? awake["sample"] : 0
+    rpt := "Vaal Ruins ENTITY hunt`n"
+    if !(sample && sample is Array)
+    {
+        rpt .= "(no awake-entity sample)`n"
+    }
+    else
+    {
+        counts := Map(), hits := []
+        for _, en in sample
+        {
+            if !(en is Map && en.Has("entity"))
+                continue
+            entity := en["entity"]
+            if !(entity is Map)
+                continue
+            path := entity.Has("path") ? entity["path"] : ""
+            if (path = "")
+                continue
+            counts[path] := counts.Has(path) ? counts[path] + 1 : 1
+            lp := StrLower(path)
+            if (InStr(lp, "incursion") || InStr(lp, "temple") || InStr(lp, "vaal")
+                || InStr(lp, "atzoatl") || InStr(lp, "architect") || InStr(lp, "atziri"))
+                hits.Push(path " @ " _VrEntPos(entity))
+        }
+        rpt .= "`n=== incursion/temple/vaal-matching entities (" hits.Length ") ===`n"
+        for _, h in hits
+            rpt .= "   " h "`n"
+        rpt .= "`n=== ALL distinct entity paths in area (" counts.Count ") ===`n"
+        for p, c in counts
+            rpt .= "   x" c "  " p "`n"
+    }
+
+    outDir := A_ScriptDir "\logs"
+    if !DirExist(outDir)
+        DirCreate(outDir)
+    outPath := outDir "\InGameStateMonitor.vaal_ruins_probe.log"
+    try FileAppend(FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") " [ENTITY]`n" rpt "`n`n", outPath, "UTF-8")
+    try MsgBox("Vaal Ruins entity probe written to:`n" outPath "`n`nRun it in the temple, then send the log.", "Vaal Ruins entity probe", 0x40)
+}
