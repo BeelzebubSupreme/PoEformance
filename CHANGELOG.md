@@ -2921,3 +2921,29 @@ server-side). Scans ServerData / PlayerServerData / InGameState for a board-shap
 ints (room indices 0..36 = the incursion2rooms rows) at byte/int16/int32 element sizes, decoding each
 candidate run to room names. Reuses `_SmResolveServerData`. **Run WHILE IN a Vaal Ruins temple with
 the board populated** → `logs\InGameStateMonitor.vaal_ruins_probe.log`; send it to pin the board offset.
+
+## Vaal Ruins board FOUND in the UI tree — board-cell probe (shipped 0.45.13.346)
+
+Correction to the earlier RE assumption ("the board is NOT in the UI tree — it's server-side"). A
+full `UiTree_Dump` of the GameUI with the **Temple Console open** proved the placed board IS in the UI
+tree: the console's grid container holds 81 cells whose **StringId is literally the coordinate**
+`"(row, col)"` — `(0, 0)`…`(8, 8)` plus a boss cell `(9, 4)`, each a 154×132 UiElement in an isometric
+layout (`childCount=0`, no text). The three ServerData probes only ever found the incursion room
+DEFINITION / upgrade-graph / reward-pool tables, never a clean placed grid — because the placed grid
+lives in the console UI, not ServerData.
+
+- **`ahk/VaalRuinsProbe.ahk` — `VaalRuinsBoardCellProbeRun()` (bridge `VaalRuinsBoardCellProbe`; UI
+  "🏛 Vaal Ruins Board Cell Probe" in the RE tools).** BFS-finds every cell whose StringId matches
+  `^\((\d+),\s*(\d+)\)$`, then for each cell runs the same pointer-deref string scan as
+  `UiBrowseScanStrings` (`ReadStdWStringAt` over elem+0x000..0x400 → target+0x000..0x140) to find the
+  cell's room-icon `.dds` path, and maps it to a room via `_VrRoomFromTex` (strips folders/`.dds`/a
+  `RoomHover` prefix → e.g. `Garrison`, `ViperSpymaster`, `Architect`, `Atziri`). Logs a per-cell list,
+  a per-cell sample-strings section (so the room field is visible even if the `.dds` filter misses),
+  and a rendered 9×9 grid. Reuses `_UiBrowser_GetGameUiPtr` / `_UiHitGeom` / `_AtlasPrintable`.
+  **Run WITH THE TEMPLE CONSOLE OPEN** → appends `[BOARD-CELL]` to `logs\...vaal_ruins_probe.log`.
+- **Room-icon map:** `data/incursion2_rooms.tsv` `icon` column = `…/Incursion2/RoomHover/RoomHover<Room>.dds`
+  (Garrison/Commander/Armoury/Smithy/Generator/ViperSpymaster/ViperLegionBarracks/Synthflesh/
+  FleshSurgeon/TranscendentBarracks/AlchemyLab/Thaumaturge/GolemWorks/Corruption/Vault/
+  SacrificialChamber/Architect/AccessChamber/Atziri) — the bridge from a cell's texture to a room name.
+- **Next:** confirm the probe resolves the placed board, then wire the cells → the planner tab
+  (read cell room + tier per `(r,c)`, postMessage into the iframe) so the planner auto-populates live.

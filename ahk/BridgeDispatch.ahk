@@ -992,6 +992,8 @@ _DispatchBridgeCall(method, args)
             SetTimer(() => VaalRuinsPtrProbeRun(), -1)
         case "VaalRuinsEntityProbe":
             SetTimer(() => VaalRuinsEntityProbeRun(), -1)
+        case "VaalRuinsBoardCellProbe":
+            SetTimer(() => VaalRuinsBoardCellProbeRun(), -1)
         case "RefreshSkillKeys":
             SetTimer(PushHotkeyBindingsToWebView, -1)
         case "RefreshItemSizes":

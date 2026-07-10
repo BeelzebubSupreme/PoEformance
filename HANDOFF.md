@@ -3,7 +3,8 @@
 **Read this first, then the matching CLAUDE.md / CHANGELOG.md sections for detail.**
 
 - **Branch:** `PoEfdev/autopilot-pathing` (dev branch — owns the version; only ever push this, never `master`/upstream).
-- **Version:** `0.45.13.336`
+- **Version:** `0.45.13.346`
+- **⭐ Latest (`.346`): the Vaal Ruins board is IN THE UI TREE, not ServerData.** With the Temple Console open, the grid cells' StringId is the coordinate `"(r, c)"` (`(0,0)`…`(8,8)` + boss `(9,4)`). New RE tool **"🏛 Vaal Ruins Board Cell Probe"** reads each cell's room-icon `.dds` → room name and renders the 9×9 grid. **NEXT:** owner runs it with the console open, sends `logs\...vaal_ruins_probe.log`; then wire cells → planner iframe so it auto-populates. (The three ServerData probes only ever found the room DEFINITION/reward tables — the placed board was never there.)
 - **Sync on the other machine:** `git pull origin PoEfdev/autopilot-pathing`, then reload the AHK tool.
 - **Upstream:** imm0r **merged our feature work** (camera-zoom, data-dict regen, autopilot/combat) into `imm0r/PoEformance`. We keep developing on the dev branch as before.
 

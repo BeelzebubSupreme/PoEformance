@@ -486,3 +486,220 @@ VaalRuinsEntityProbeRun()
     try FileAppend(FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") " [ENTITY]`n" rpt "`n`n", outPath, "UTF-8")
     try MsgBox("Vaal Ruins entity probe written to:`n" outPath "`n`nRun it in the temple, then send the log.", "Vaal Ruins entity probe", 0x40)
 }
+
+; ── BOARD-CELL probe (bridge "VaalRuinsBoardCellProbe") ──────────────────────────
+; BREAKTHROUGH: the placed board IS in the UI tree after all. The Temple Console's
+; grid container holds 81+ cells whose StringId is literally its coordinate
+; "(row, col)" (e.g. "(3, 4)"). Each cell renders its room as a TEXTURE (childCount
+; 0, no text), so the room identity is the .dds path the cell references. This probe
+; BFS-finds every "(r, c)" cell, reads its referenced strings (the same deref scan
+; UiBrowseScanStrings uses), and maps the room-icon .dds to a room name — giving the
+; live placed board straight from the console UI. Run WITH THE TEMPLE CONSOLE OPEN.
+
+; Reduce a room-icon texture path to a short room key. Strips folders, the ".dds"
+; extension and a leading "RoomHover" prefix. Param: s (a texture path). Returns the
+; room key (e.g. "Garrison") or the raw filename if it doesn't match the pattern.
+_VrRoomFromTex(s)
+{
+    n := s
+    if (p := InStr(s, "/", false, -1))
+        n := SubStr(s, p + 1)
+    if (d := InStr(n, ".dds", false))
+        n := SubStr(n, 1, d - 1)
+    if (StrLower(SubStr(n, 1, 9)) = "roomhover")
+        n := SubStr(n, 10)
+    return n
+}
+
+; Scan one board-cell UiElement for its room-icon texture + a few sample strings.
+; Mirrors UiBrowseScanStrings: for each pointer field in elem+0x000..0x400, deref and
+; read wstrings at target+0x000..0x140, keeping any that look like a room texture
+; (".dds"/"roomhover"/"incursion2") plus up to a few other printable strings so the
+; log is conclusive even if the room naming differs. Params: reader, elem (cell addr).
+; Returns Map("tex", <best room string or "">, "at", <offset str>, "samples", Array).
+_VrCellDds(reader, elem)
+{
+    tex := "", at := "", samples := [], seen := Map()
+    o := 0
+    while (o < 0x400)
+    {
+        p := 0
+        try p := reader.Mem.ReadPtr(elem + o)
+        o += 8
+        if (!reader.IsProbablyValidPointer(p) || p = elem || p >= 0x7FF000000000)
+            continue
+        po := 0
+        while (po < 0x140)
+        {
+            s := ""
+            try s := reader.ReadStdWStringAt(p + po, 128)
+            po += 8
+            if (s = "" || StrLen(s) < 3 || !_AtlasPrintable(s))
+                continue
+            ls := StrLower(s)
+            if (tex = "" && (InStr(ls, ".dds") || InStr(ls, "roomhover") || InStr(ls, "incursion2")))
+            {
+                tex := s
+                at  := Format("@+0x{:X}->+0x{:X}", o - 8, po)
+            }
+            ; Collect a few distinct non-coordinate sample strings for diagnostics.
+            if (!seen.Has(s) && samples.Length < 6 && !RegExMatch(s, "^\(\d+,\s*\d+\)$"))
+            {
+                seen[s] := true
+                samples.Push(s)
+            }
+        }
+    }
+    return Map("tex", tex, "at", at, "samples", samples)
+}
+
+; One-shot board reader. BFS the GameUI for "(r, c)" cells, read each cell's room
+; texture, log a per-cell list + a rendered grid. No params; writes the log + MsgBox.
+VaalRuinsBoardCellProbeRun()
+{
+    global g_reader
+    if !(IsObject(g_reader) && IsObject(g_reader.Mem) && g_reader.Mem.Handle)
+    {
+        try MsgBox("Board-cell probe: not connected to PoE2.", "Vaal Ruins board cell", 0x10)
+        return
+    }
+    reader := g_reader
+    root := _UiBrowser_GetGameUiPtr()
+    if !(root && reader.IsProbablyValidPointer(root))
+    {
+        try MsgBox("No GameUI root yet — get in-game, open the Temple Console, then retry.", "Vaal Ruins board cell", 0x10)
+        return
+    }
+
+    ; ── 1) BFS-collect cells whose StringId is a "(r, c)" coordinate ──
+    sidOff := PoE2Offsets.UiElementBase["StringIdPtr"]
+    cells := []
+    queue := [root], visited := Map(), nodes := 0
+    deadline := A_TickCount + 12000
+    while (queue.Length > 0 && nodes < 24000)
+    {
+        if (A_TickCount > deadline)
+            break
+        ptr := queue.RemoveAt(1)
+        if (visited.Has(ptr))
+            continue
+        visited[ptr] := true
+        nodes += 1
+        g := _UiHitGeom(reader, ptr)
+        if !IsObject(g)
+            continue
+        sid := ""
+        try sid := reader.ReadStdWStringAt(ptr + sidOff, 32)
+        if RegExMatch(sid, "^\((\d+),\s*(\d+)\)$", &mm)
+            cells.Push(Map("r", mm[1] + 0, "c", mm[2] + 0, "addr", ptr))
+        cf := g["childFirst"], cl := g["childLast"]
+        if (reader.IsProbablyValidPointer(cf) && cl > cf)
+        {
+            n := Min((cl - cf) // A_PtrSize, 512)
+            buf := reader.Mem.ReadBytes(cf, n * A_PtrSize)
+            if buf
+            {
+                Loop n
+                {
+                    cp := NumGet(buf.Ptr, (A_Index - 1) * A_PtrSize, "Ptr")
+                    if (reader.IsProbablyValidPointer(cp) && !visited.Has(cp))
+                        queue.Push(cp)
+                }
+            }
+        }
+    }
+
+    ; ── 2) Read each cell's room texture ──
+    maxR := 0, maxC := 0, filled := 0
+    grid := Map()
+    for _, cell in cells
+    {
+        info := _VrCellDds(reader, cell["addr"])
+        cell["tex"] := info["tex"]
+        cell["at"]  := info["at"]
+        cell["samples"] := info["samples"]
+        cell["room"] := (info["tex"] != "") ? _VrRoomFromTex(info["tex"]) : ""
+        if (cell["room"] != "")
+            filled += 1
+        grid[cell["r"] "," cell["c"]] := cell["room"]
+        maxR := Max(maxR, cell["r"]), maxC := Max(maxC, cell["c"])
+    }
+
+    ; Sort cells by row then col for a stable listing.
+    _VrSortCells(cells)
+
+    nl := "`r`n"
+    rpt := "=== BOARD-CELL probe (UI grid, StringId '(r, c)') ===" nl
+    rpt .= "GameUI root=0x" Format("{:X}", root) "  nodes=" nodes "  cells=" cells.Length "  with-room=" filled nl
+    rpt .= "Run with the Temple Console OPEN. Each cell's room = its .dds icon path." nl nl
+
+    rpt .= "--- FILLED cells (room resolved) ---" nl
+    for _, cell in cells
+    {
+        if (cell["room"] = "")
+            continue
+        rpt .= Format("  ({}, {})  0x{:X}  = {}   [{} {}]", cell["r"], cell["c"], cell["addr"]
+                    , cell["room"], cell["at"], cell["tex"]) nl
+    }
+    if (filled = 0)
+        rpt .= "  (none resolved — see sample strings below to find the room field)" nl
+
+    ; Sample strings for the first cells that had strings but no room match — so if
+    ; the .dds filter missed, the real referenced strings are visible in the log.
+    rpt .= nl "--- sample strings per cell (first 30 cells with any string) ---" nl
+    shown := 0
+    for _, cell in cells
+    {
+        if (cell["samples"].Length = 0 || shown >= 30)
+            continue
+        shown += 1
+        line := ""
+        for _, s in cell["samples"]
+            line .= " | " s
+        rpt .= Format("  ({}, {}):{}", cell["r"], cell["c"], line) nl
+    }
+
+    ; Rendered grid (room key abbreviated to 4 chars; '.' = empty/unrevealed).
+    rpt .= nl "--- GRID (rows 0.." maxR ", cols 0.." maxC ") ---" nl
+    r := 0
+    while (r <= maxR)
+    {
+        row := Format("  r{:X} ", r)
+        c := 0
+        while (c <= maxC)
+        {
+            v := grid.Has(r "," c) ? grid[r "," c] : ""
+            row .= Format("{:-6}", (v = "" ? "." : SubStr(v, 1, 5)))
+            c += 1
+        }
+        rpt .= row nl
+        r += 1
+    }
+
+    outDir := A_ScriptDir "\logs"
+    if !DirExist(outDir)
+        DirCreate(outDir)
+    outPath := outDir "\InGameStateMonitor.vaal_ruins_probe.log"
+    try FileAppend(FormatTime(A_Now, "yyyy-MM-dd HH:mm:ss") " [BOARD-CELL]" nl rpt nl nl, outPath, "UTF-8")
+    try MsgBox("Board-cell probe done.`n`nCells found: " cells.Length "`nRooms resolved: " filled
+             . "`n`nLog: logs\InGameStateMonitor.vaal_ruins_probe.log`n`n"
+             . (filled > 0 ? "Send me the log — I'll read your placed board off it."
+                           : "No room textures resolved; the sample-strings section will show me where the room field is."), "Vaal Ruins board cell", 0x40)
+}
+
+; Insertion sort of collected cells by row (then col). Param: cells (Array of Maps).
+_VrSortCells(cells)
+{
+    i := 2
+    while (i <= cells.Length)
+    {
+        cur := cells[i], j := i - 1
+        while (j >= 1 && (cells[j]["r"] > cur["r"] || (cells[j]["r"] = cur["r"] && cells[j]["c"] > cur["c"])))
+        {
+            cells[j + 1] := cells[j]
+            j -= 1
+        }
+        cells[j + 1] := cur
+        i += 1
+    }
+}
