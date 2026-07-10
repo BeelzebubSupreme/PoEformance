@@ -374,8 +374,8 @@ _RunExploration(radarSnap, gameHwnd, measureOnly := false)
     static _lastNavTick := 0
 
     ; Precomputed exploration plan — built once per area from the (already
-    ; fully-known) walkable terrain grid. ~50-80 sample waypoints in a
-    ; sparse grid pattern, ordered by greedy-nearest-from-start TSP,
+    ; fully-known) walkable terrain grid. A dense grid of sample waypoints
+    ; ordered as a serpentine (boustrophedon) lawnmower sweep, with
     ; AreaTransitions appended last so the bot exits the zone at the end.
     ; See _BuildExplorationPlan at the bottom of the module for details.
     static _plan := []
@@ -1315,7 +1315,10 @@ _BuildExplorationPlan(terrain, radarSnap, startGX, startGY, walkableFine := 0
     ; walkable cells, the plan degenerated to a handful of stops and
     ; exploration fell into frontier ping-pong right away. Min 20 cells
     ; so individual waypoints stay visually distinct.
-    SAMPLE_TARGET := 60
+    ; Denser sampling (was 60): more/closer waypoints so the serpentine sweep
+    ; lines sit inside a vision-disc of each other and leave far fewer gaps,
+    ; which is what forced the old plan into a long backtracking cleanup phase.
+    SAMPLE_TARGET := 120
     area := (walkableFine > 0) ? walkableFine : gridW * rows
     spacing := Max(20, Round(Sqrt(area / SAMPLE_TARGET)))
     half := spacing // 2
@@ -1409,13 +1412,12 @@ _BuildExplorationPlan(terrain, radarSnap, startGX, startGY, walkableFine := 0
         }
     }
 
-    ; ── Greedy nearest-from-start + 2-opt local search over samples ────
-    ; Greedy alone tends to leave obvious "X" crossings in the tour. A
-    ; couple of 2-opt passes irons those out — typically 10-20% shorter
-    ; total travel distance, at ~5 ms for n≈60.
-    cur := [startGX, startGY]
-    plan := _GreedyTspOrder(samples, cur, "sample")
-    _TwoOptOptimize(plan, startGX, startGY)
+    ; ── Serpentine (boustrophedon) sweep over samples ──────────────────
+    ; A shortest tour (greedy + 2-opt) minimises straight-line length and so
+    ; zig-zags across walls on a real map — the "randomly running around"
+    ; report. A lawnmower sweep instead gives systematic top-to-bottom
+    ; coverage with almost no backtracking. See _SerpentineOrder.
+    plan := _SerpentineOrder(samples, startGX, startGY)
 
     ; ── Append transitions (same greedy + 2-opt from last plan stop) ──
     if (transitions.Length > 0)
@@ -1522,6 +1524,112 @@ _TwoOptOptimize(tour, startGX, startGY)
 _Hypot(dx, dy)
 {
     return Sqrt(dx * dx + dy * dy)
+}
+
+; ── Serpentine (boustrophedon) sweep ordering ─────────────────────────────
+; Orders sample waypoints as a lawnmower sweep instead of a shortest tour:
+; group into horizontal bands by row, then sweep each band in alternating
+; x-direction (→ then ← then → …). This gives systematic top-to-bottom
+; coverage with almost no backtracking, where a length-minimising tour would
+; zig-zag across walls. The sweep starts from the map edge nearest the player
+; and the first band runs toward the player's x, so exploration begins beside
+; the entry point instead of trekking to a far corner first.
+; Params: samples          - array of [gx, gy] fine-grid points (one gy per row)
+;         startGX, startGY  - player's fine-grid cell (sweep-origin bias)
+; Returns: a NEW array of [gx, gy] in sweep order
+_SerpentineOrder(samples, startGX, startGY)
+{
+    if (samples.Length <= 2)
+        return samples.Clone()
+
+    ; Bucket samples into bands keyed by row (gy). The grid sampler emits
+    ; points at regular gy steps, so each distinct gy is one sweep line.
+    bands := Map()
+    for _, s in samples
+    {
+        gy := s[2]
+        if !bands.Has(gy)
+            bands[gy] := []
+        bands[gy].Push(s)
+    }
+
+    ; Collect the band rows and insertion-sort ascending (few rows).
+    keys := []
+    for gy in bands
+        keys.Push(gy)
+    i := 2
+    while (i <= keys.Length)
+    {
+        kv := keys[i], j := i - 1
+        while (j >= 1 && keys[j] > kv)
+        {
+            keys[j + 1] := keys[j]
+            j -= 1
+        }
+        keys[j + 1] := kv
+        i += 1
+    }
+
+    ; Sweep from whichever end (top/bottom) is closer to the player.
+    if (Abs(startGY - keys[keys.Length]) < Abs(startGY - keys[1]))
+    {
+        a := 1, b := keys.Length
+        while (a < b)
+        {
+            t := keys[a], keys[a] := keys[b], keys[b] := t
+            a += 1, b -= 1
+        }
+    }
+
+    ; First band's initial direction: begin from the x-end nearest the player.
+    firstBand := bands[keys[1]]
+    fbMin := firstBand[1][1], fbMax := firstBand[1][1]
+    for _, s in firstBand
+    {
+        if (s[1] < fbMin)
+            fbMin := s[1]
+        if (s[1] > fbMax)
+            fbMax := s[1]
+    }
+    leftFirst := (Abs(startGX - fbMin) <= Abs(startGX - fbMax))
+
+    ordered := []
+    bi := 0
+    for _, gy in keys
+    {
+        band := bands[gy]
+        ; Insertion-sort this band by gx ascending (few points per band).
+        i := 2
+        while (i <= band.Length)
+        {
+            sv := band[i], j := i - 1
+            while (j >= 1 && band[j][1] > sv[1])
+            {
+                band[j + 1] := band[j]
+                j -= 1
+            }
+            band[j + 1] := sv
+            i += 1
+        }
+        ; Alternate sweep direction each band; the first honors leftFirst.
+        goAsc := leftFirst ? (Mod(bi, 2) = 0) : (Mod(bi, 2) = 1)
+        if (goAsc)
+        {
+            for _, s in band
+                ordered.Push(s)
+        }
+        else
+        {
+            k := band.Length
+            while (k >= 1)
+            {
+                ordered.Push(band[k])
+                k -= 1
+            }
+        }
+        bi += 1
+    }
+    return ordered
 }
 
 ; ── Walkability nudge ─────────────────────────────────────────────────────
