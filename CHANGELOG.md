@@ -2876,3 +2876,25 @@ needed. Rooms upgrade to higher tiers by having specific room types placed ADJAC
 - **Next (step 2):** rewrite `ui/vaal_ruins_planner.html`'s solver — swap the doorway-edge BFS for
   adjacency-through-paths, load this dataset (real 36 rooms replacing the 11 hardcoded), and score
   real tier-ups from adjacency counts.
+
+## Vaal Ruins planner — adjacency solver rewrite (shipped 0.45.13.339)
+
+Step 2: rewrote `ui/vaal_ruins_planner.html` on the confirmed ADJACENCY model + the real 36-room
+dataset (was: doorway-edge BFS + 11 hardcoded rooms).
+- **Connectivity** = flood from every Entrance through orthogonally-ADJACENT solid tiles (rooms +
+  paths); no doorways. Dead = a room not chained to the Entrance (contributes 0).
+- **Tier upgrades** computed from adjacency: `roomTier()` reads a room's `upgradeBy` rules
+  ({type,count,tier}) against adjacent room counts (Commander next to 2 Garrison → T2, 3 → T3);
+  `roomConversion()` applies `convertsTo` (Garrison next to Synthflesh Lab → Transcendent Barracks).
+  Both shown on the cell (T2/T3 badge + →converted name).
+- **Valid-placement highlight** = empty cells adjacent to the connected chain (the game's green
+  squares); the auto-planner only places there.
+- **Scoring** uses real room `value` × tier multiplier + synergy + reward vaults (Architect rooms,
+  which don't need chaining) + an Atziri-reach term (Royal Access Chamber connected) + expansion;
+  3 presets (Balanced / Currency / Atziri rush).
+- Data is INJECTED into the HTML by `tools/build_vaal_ruins_data.py` between `VAAL-DATA` markers, so
+  the standalone file (opened via file://) always carries the data with no fetch.
+- Verified headless: 36 rooms load; Commander→T2, Garrison→Transcendent conversion, isolated room =
+  DEAD, valid cells + scoring all correct. Inline `<script>` passes node --check.
+- **Next:** in-browser UX sign-off, then inline into `ui/index.html` as a tab + swap the manual board
+  for the live ServerData memory adapter (read the current run's board behind the same solver API).

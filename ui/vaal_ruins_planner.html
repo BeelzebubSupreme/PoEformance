@@ -1,11 +1,17 @@
 <!doctype html>
 <!--
-  Vaal Ruins Route Planner — STANDALONE PROTOTYPE (Phase 2/3).
-  Self-contained: the tested solver core (ui scratchpad temple_solver.js) is
-  inlined below, plus a manual grid editor + recommendations. Open directly in a
-  browser. Once the UX is signed off, this inlines into ui/index.html as a tab,
-  and the manual board is swapped for the ServerData memory adapter behind the
-  same interface. Advisory only — nothing is placed/automated.
+  Vaal Ruins Route Planner — STANDALONE PROTOTYPE (adjacency model).
+  Vaal Ruins = PoE2's reworked Incursion (Temple of Atzoatl). Rooms connect by
+  ADJACENCY + path chaining from the entrance (NOT doorway edge-matching), and
+  upgrade to higher tiers by having specific room types placed ADJACENT to them
+  (confirmed via the mobalytics/maxroll guides). Room data is REAL, extracted
+  from the GGPK (incursion2rooms / incursion2roomperlevel) + a curated overlay
+  of the guides' bonuses/upgrade rules — see data/vaal_ruins_rooms.json and
+  tools/build_vaal_ruins_data.py (which injects the block below).
+
+  Advisory only — nothing is placed/automated. Open directly in a browser.
+  Once signed off this inlines into ui/index.html as a tab and the manual board
+  is swapped for the ServerData memory adapter behind the same interface.
 -->
 <html lang="en">
 <head>
@@ -14,14 +20,14 @@
 <title>Vaal Ruins Route Planner</title>
 <style>
   :root { --bg:#141210; --panel:#1e1b17; --line:#3a332a; --gold:#c8a24a; --text:#e7ddc9;
-          --sub:#9a8f7a; --good:#8aff8a; --bad:#ff7a7a; --path:#6a5a3a; }
+          --sub:#9a8f7a; --good:#8aff8a; --bad:#ff7a7a; --path:#6a5a3a; --rew:#b06a2a; }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font:14px/1.4 "Segoe UI",system-ui,sans-serif; }
   h1 { font-size:18px; color:var(--gold); margin:0 0 2px; }
-  .sub { color:var(--sub); font-size:12px; margin-bottom:12px; }
+  .sub { color:var(--sub); font-size:12px; margin-bottom:12px; max-width:900px; }
   .wrap { display:flex; gap:18px; padding:16px; flex-wrap:wrap; align-items:flex-start; }
   .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; }
-  .controls { min-width:240px; max-width:280px; }
+  .controls { min-width:250px; max-width:290px; }
   .controls label { display:block; font-size:12px; color:var(--sub); margin:10px 0 3px; }
   select, input[type=text] { width:100%; background:#0f0d0b; color:var(--text); border:1px solid var(--line);
           border-radius:5px; padding:6px; font:inherit; }
@@ -33,66 +39,62 @@
   .palette button.sel { outline:2px solid var(--gold); }
   /* Grid */
   .grid { display:grid; gap:2px; }
-  .cell { position:relative; width:52px; height:52px; background:#100e0b; border:1px solid #2a2620;
+  .cell { position:relative; width:56px; height:56px; background:#100e0b; border:1px solid #2a2620;
           border-radius:4px; display:flex; align-items:center; justify-content:center; cursor:pointer;
-          font-size:9px; text-align:center; color:var(--sub); user-select:none; overflow:hidden; }
-  .cell .lbl { padding:1px; line-height:1.05; pointer-events:none; }
+          font-size:9px; text-align:center; color:var(--sub); user-select:none; overflow:hidden; padding:2px; }
+  .cell .lbl { line-height:1.05; pointer-events:none; }
   .cell.entrance { background:#2b3a1e; color:var(--good); }
-  .cell.path     { background:var(--path); }
-  .cell.target   { background:#3a2b1e; color:var(--gold); }
+  .cell.path     { background:var(--path); color:#e7ddc9; }
+  .cell.reward   { background:#3a2411; color:#f0c78a; box-shadow:inset 0 0 0 1px var(--rew); }
   .cell.room     { background:#241f18; color:var(--text); }
   .cell.dead     { outline:2px solid var(--bad); }
-  .cell.conn     { box-shadow:inset 0 0 0 2px rgba(138,255,138,.35); }
-  /* doorway edge toggles */
-  .edge { position:absolute; background:#4a4436; opacity:.25; }
-  .edge.on { background:var(--gold); opacity:.95; }
-  .edge.n { top:0; left:20%; width:60%; height:5px; }
-  .edge.s { bottom:0; left:20%; width:60%; height:5px; }
-  .edge.e { right:0; top:20%; height:60%; width:5px; }
-  .edge.w { left:0; top:20%; height:60%; width:5px; }
+  .cell.conn     { box-shadow:inset 0 0 0 2px rgba(138,255,138,.30); }
+  .cell.valid    { outline:2px dashed rgba(138,255,138,.55); }
+  .tier { position:absolute; top:1px; right:2px; font-size:8px; font-weight:700; color:var(--gold); }
+  .cvt  { position:absolute; bottom:1px; left:2px; font-size:8px; color:#9ad; }
   .rec { border-bottom:1px solid var(--line); padding:6px 0; font-size:12px; }
   .rec b { color:var(--gold); }
   .bd { color:var(--sub); font-size:11px; }
   .flag { color:var(--bad); font-weight:600; }
   .legend { font-size:11px; color:var(--sub); margin-top:8px; }
-  .out { min-width:280px; max-width:340px; }
+  .out { min-width:300px; max-width:360px; }
   .scorebar { display:flex; justify-content:space-between; font-size:12px; padding:2px 0; border-bottom:1px dotted var(--line); }
+  .hint { font-size:11px; color:var(--sub); margin-top:2px; }
 </style>
 </head>
 <body>
 <div style="padding:16px 16px 0">
-  <h1>Vaal Ruins Route Planner <span style="font-size:11px;color:var(--sub)">— prototype</span></h1>
-  <div class="sub">Advisory only. Fill the board manually (this becomes the ServerData memory adapter later). Click a cell to place the selected piece; click a cell's edge to toggle a doorway. Doorways must match on both sides to connect.</div>
+  <h1>Vaal Ruins Route Planner <span style="font-size:11px;color:var(--sub)">— prototype (real GGPK room data)</span></h1>
+  <div class="sub">Advisory only. Rooms connect by being <b>adjacent</b> and chained back to the Entrance (use Path tiles to bridge). Rooms upgrade tier when the right room types sit next to them. Click a cell to place the selected piece; the dashed cells are valid (adjacent-to-chain) placements. Reward vaults are Architect rooms and don't need to be chained.</div>
 </div>
 <div class="wrap">
   <div class="panel controls">
-    <label>Grid size</label>
-    <select id="gridN" onchange="rebuild()">
-      <option>7</option><option selected>9</option><option>11</option>
-    </select>
     <label>Place (click a cell)</label>
     <div class="palette" id="palette"></div>
-    <label>Room type (when placing Room)</label>
+    <label>Room (when placing "Room")</label>
     <select id="roomSel"></select>
+    <label>Reward vault (when placing "Reward")</label>
+    <select id="rewSel"></select>
     <label>Scoring preset</label>
     <select id="preset" onchange="analyze()">
       <option value="balanced">Balanced</option>
       <option value="currency">Currency / Rarity</option>
-      <option value="bossRush">Boss / Reward rush</option>
+      <option value="bossRush">Atziri / Reward rush</option>
     </select>
-    <label>Hand for auto-plan (comma-separated room names — e.g. Garrison, Spymaster — or "path")</label>
-    <input type="text" id="hand" value="Commander, Commander, Garrison, Thaumaturge, Spymaster, Spymaster">
+    <label>Hand for auto-plan (comma-separated room names; use "path" for a Path)</label>
+    <input type="text" id="hand" value="Garrison, Garrison, Commander, Thaumaturge, Alchemy Lab, path">
+    <div class="hint" id="handHint"></div>
     <div style="display:flex;gap:6px;margin-top:12px">
       <button class="primary" onclick="analyze()">Analyze board</button>
       <button onclick="autoPlan()">Auto-plan hand</button>
     </div>
     <div style="display:flex;gap:6px;margin-top:6px">
       <button onclick="rebuild()">Clear</button>
-      <button onclick="demo()">Demo board</button>
+      <button onclick="demo()">Demo</button>
     </div>
     <div class="legend">
-      Green ring = connected · <span class="flag">red ring</span> = DEAD (disconnected → 0 value).<br>
-      Room keys: <span id="roomkeys"></span>
+      Green ring = connected · <span class="flag">red ring</span> = DEAD (not chained → 0).<br>
+      Dashed = valid placement (adjacent to the chain). T2/T3 = upgraded tier from neighbours.
     </div>
   </div>
 
@@ -104,169 +106,191 @@
     <div style="font-weight:600;color:var(--gold);margin-bottom:6px">Score</div>
     <div id="score"></div>
     <div style="font-weight:600;color:var(--gold);margin:12px 0 6px">Recommendations / plan</div>
-    <div id="recs" class="bd">Analyze the board to see dead rooms + a placement plan.</div>
+    <div id="recs" class="bd">Analyze the board to see dead rooms, tier upgrades + a placement plan.</div>
   </div>
 </div>
 
 <script>
-/* ===================== SOLVER CORE (inlined, tested) ===================== */
-const DIRS=[[-1,0],[0,1],[1,0],[0,-1]], OPP=[2,3,0,1];
-const KIND={EMPTY:'empty',ENTRANCE:'entrance',PATH:'path',TARGET:'target',ROOM:'room'};
-const ROOMS={
-  garrison:{key:'garrison',label:'Garrison',value:3,synergy:['spymaster','synthflesh']},
-  commander:{key:'commander',label:'Commander',value:2,synergy:['garrison']},
-  spymaster:{key:'spymaster',label:'Spymaster',value:5,synergy:['garrison','commander','armoury','smithy']},
-  vault:{key:'vault',label:'Sealed Vault',value:5,synergy:[]},
-  thaumaturge:{key:'thaumaturge',label:'Thaumaturge',value:4,synergy:['alchemy','sacrifice','corruption']},
-  alchemy:{key:'alchemy',label:'Alchemy Lab',value:3,synergy:['thaumaturge']},
-  sacrifice:{key:'sacrifice',label:'Sacrificial Chamber',value:5,synergy:['thaumaturge']},
-  corruption:{key:'corruption',label:'Corruption Chamber',value:3,synergy:['thaumaturge']},
-  armoury:{key:'armoury',label:'Armoury',value:3,synergy:['garrison','spymaster','smithy']},
-  smithy:{key:'smithy',label:'Smithy',value:2,synergy:['armoury','spymaster']},
-  synthflesh:{key:'synthflesh',label:'Synthflesh Lab',value:3,synergy:['garrison','commander']},
-};
+/* ===================== REAL ROOM DATA (generated) ===================== */
+/* VAAL-DATA-START (generated by tools/build_vaal_ruins_data.py — do not edit by hand) */
+const VAAL = {"_source":"GGPK incursion2rooms/incursion2roomperlevel + curated guide overlay","_note":"Vaal Ruins connect by ADJACENCY + path chaining from the entrance; rooms upgrade via adjacent room types. Regenerate with tools/build_vaal_ruins_data.py after re-extracting the TSVs.","grid":9,"handSize":6,"medallionSlots":{"default":3,"max":6},"rooms":[{"id":"path","name":"Path","cat":"path","isPath":true,"isReward":false,"value":0},{"id":"poweredpath","name":"PoweredPath","cat":"path","isPath":true,"isReward":false,"value":0,"bonus":"Path that also Powers adjacent rooms"},{"id":"garrison","name":"Garrison","cat":"room","isPath":false,"isReward":false,"value":3,"bonus":"#% increased Number of Magic Packs","convertsTo":[{"whenAdjacent":"synthfleshlab","to":"transcendentbarracks"},{"whenAdjacent":"viperspymaster","to":"viperlegionbarracks"}],"datUpgradedBy":["armoury","synthfleshlab"],"datConvertsTo":["viperlegionbarracks"],"tiers":[{"level":1,"name":"Guardhouse","desc":""},{"level":2,"name":"Barracks","desc":""},{"level":3,"name":"Hall of War","desc":""},{"level":4,"name":"Warrior Assembly","desc":""}],"icon":"Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverGarrison.dds"},{"id":"commander","name":"Commander","cat":"room","isPath":false,"isReward":false,"value":4,"bonus":"Rare Monsters have #% increased Effectiveness","upgradeBy":[{"type":"garrison","count":2,"tier":2},{"type":"garrison","count":3,"tier":3}],"datUpgradedBy":["garrison","garrison","transcendentbarracks","transcendentbarracks","transcendentbarracks"],"tiers":[{"level":1,"name":"Commander's Chamber","desc":""},{"level":2,"name":"Commander's Hall","desc":""},{"level":3,"name":"Commander's Headquarters","desc":""},{"level":4,"name":"Commander's Station","desc":""}],"icon":"Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverCommander.dds"},{"id":"armoury","name":"Armoury","cat":"room","isPath":false,"isReward":false,"value":3,"bonus":"Humanoid Monsters have #% increased Effectiveness","upgradeBy":[{"type":"smithy"},{"type":"alchemylab"}],"datUpgradedBy":["alchemylab"],"tiers":[{"level":1,"name":"Depot","desc":"Contains [Equipment]"},{"level":2,"name":"Arsenal","desc":"Contains [Equipment]"},{"level":3,"name":"Gallery","desc":"Contains [Rarity|Rare] [Equipment]"},{"level":4,"name":"Royal Reserves","desc":"Contains [Rarity|Rare] [Equipment]"}],"icon":"Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverArmoury.dds"},{"id":"smithy","name":"Smithy","cat":"room","isPath":false,"isReward":false,"value":2,"bonus":"Chests have #% increased Item Rarity","upgradeBy":[{"type":"golemworks"},{"type":"generator"}],"tiers":[{"level":1,"name":"Bronzeworks","desc":"Contains the Forging Workbench which can be used to improve [Quality] of [Equipment]"},{"level":2,"name":"Chamber of Iron","desc":"Contains the Forging Mechanism which can be used to add an [Augment] socket to [Equipment]"},{"level":3,"name":"Golden Forge","desc":"Contains the Masterwork Forge which can be used to increase the [Quality] of an [Equipment] item that already has 20% [Quality]"},{"level":4,"name":"Immaculate Forge","desc":"Contains the Masterwork Forge which can be used to increase the [Quality] of an [Equipment] item that already has 20% [Quality]  [Rarity|Unique] Boss drops additional Infusers"}],"icon":"Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverSmithy.dds"},{"id":"generator","name":"Generator","cat":"room","isPath":false,"isReward":false,"value":3,"bonus":"Construct Monsters have #% increased Effectiveness; Powers adjacent rooms","upgradeBy":[{"type":"thaumaturge"},{"type":"sacrificialchamber"}],"datUpgradedBy":["sacrificialchamber"],"tiers":[{"level":1,"name":"Dynamo","desc":"Provides [IncursionPower|Power] to nearby rooms, increasing in distance with Room tier"},{"level":2,"name":"Shrine of Empowerment","desc":"Provides [IncursionPower|Power] to nearby rooms, increasing in distance with Room tier"},{"level":3,"name":"Solar Nexus","desc":"Provides [IncursionPower|Power] to nearby rooms, increasing in distance with Room tier"},{"level":4,"name":"Infinite Horizon","desc":"Provides [IncursionPower|Power] to nearby rooms, increasing in distance with Room tier"}],"icon":"Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverGenerator.dds"},{"id":"viperspymaster","name":"Spymaster","cat":"room","isPath":false,"isReward":false,"value":5,"bonus":"#% increased effect of Temple Mods from Garrisons, Commanders, Armouries, Smithies and Legion Barracks","upgradeBy":[{"type":"viperspymaster","note":"upgraded by defeating other Spymasters"}],"tiers":[{"level":1,"name":"Spymaster's Study","desc":"Room Tier can be increased by defeating other Spymasters"},{"level":2,"name":"Hall of Shadows","desc":"Room Tier can be increased by defeating other Spymasters"},{"level":3,"name":"Omnipresent Panopticon","desc":"Room Tier can be increased by defeating other Spymasters"},{"level":4,"name":"Espionage Core","desc":""}],"icon":"Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverViperSpymaster.dds"},{"id":"viperlegionbarracks","name":"Legion Barracks","cat":"room","isPath":false,"isReward":false,"value":4,"bonus":"Legion of Garrison + Spymaster","upgradeBy":[{"type":"viperspymaster"},{"type":"synthfleshlab"}],"datUpgradedBy":["viperspymaster","synthfleshlab"],"tiers":[{"level":2,"name":"Viper's Loyals","desc":""},{"level":3,"name":"Elite Legion","desc":""},{"level":4,"name":"Unmatched Legionnaires","desc":""}],"icon":"Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverViperLegionBarracks.dds"},{"id":"synthfleshlab","name":"Synthflesh Lab","cat":"room","isPath":false,"isReward":false,"value":3,"bonus":"Monsters grant #% increased Experience","upgradeBy":[{"type":"fleshsurgeon","tier":2},{"type":"generator","tier":3}],"tiers":[{"level":1,"name":"Prosthetic Research","desc":""},{"level":2,"name":"Synthflesh Sanctum","desc":""},{"level":3,"name":"Crucible of Transcendence","desc":""},{"level":4,"name":"Supremacy of Function","desc":""}],"icon":"Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverSynthflesh.dds"},{"id":"fleshsurgeon","name":"Flesh Surgeon","cat":"room","isPath":false,"isReward":false,"value":3,"bonus":"Unique Monsters have #% increased Effectiveness","upgradeBy":[{"type":"synthfleshlab","tier":2},{"type":"synthfleshlab","poweredBy":"generator","tier":3}],"tiers":[{"level":1,"name":"Surgeon's Ward","desc":""},{"level":2,"name":"Surgeon's Theatre","desc":""},{"level":3,"name":"Surgeon's Symphony","desc":"Contains the Transcension Device, allowing for [IncursionLimbModification|Limb Modification]"},{"level":4,"name":"Surgical Glory","desc":"Contains the Transcension Device, allowing for [IncursionLimbModification|Limb Modification], which can be used twice"}],"icon":"Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverFleshSurgeon.dds"},{"id":"transcendentbarracks","name":"Transcendent Barracks","cat":"room","isPath":false,"isReward":false,"value":4,"bonus":"Empowered Garrison (via Synthflesh Lab)","tiers":[{"level":2,"name":"Steelflesh Quarters","desc":""},{"level":3,"name":"Collective Legion","desc":""},{"level":4,"name":"Chamber of the Perfected","desc":""}],"icon":"Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverTranscendentBarracks.dds"},{"id":"alchemylab","name":"Alchemy Lab","cat":"room","isPath":false,"isReward":false,"value":3,"bonus":"#% increased Rarity of items dropped by Monsters and #% increased Gold","upgradeBy":[{"type":"thaumaturge","count":1,"tier":2},{"type":"thaumaturge","count":2,"tier":3}],"datUpgradedBy":["thaumaturge"],"tiers":[{"level":1,"name":"Chamber of Souls","desc":""},{"level":2,"name":"Core Machinarium","desc":""},{"level":3,"name":"Grand Phylactory","desc":"Contains the Soul Core Infuser which can be used to modify [SoulCore|Soul Cores]  Room [IncursionDestabilization|Destabilises] once device is used"},{"level":4,"name":"Decorous Phylactory","desc":"Contains the Soul Core Infuser which can be used to modify [SoulCore|Soul Cores]  Room [IncursionDestabilization|Destabilises] once device is used  [Rarity|Unique] Boss drops additional Soul Cores"}],"icon":"Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverAlchemyLab.dds"},{"id":"thaumaturge","name":"Thaumaturge","cat":"room","isPath":false,"isReward":false,"value":4,"bonus":"#% increased Effect of Temple Mods from Corruption Chambers, Treasure Vaults and Sacrificial Chambers","upgradeBy":[{"type":"sacrificialchamber","tier":2}],"tiers":[{"level":1,"name":"Thaumaturge's Laboratory","desc":""},{"level":2,"name":"Thaumaturge's Cuttery","desc":"Contains the Gemcutting Mechanism which can be used to increase the [Quality] of a Skill Gem"},{"level":3,"name":"Thaumaturge's Cathedral","desc":"Contains the Gem Corrupter which can be used to modify a [Corrupted] Skill Gem unpredictably  Room [IncursionDestabilization|Destabilises] once device is used"},{"level":4,"name":"Thaumaturge's Culmination","desc":"Contains the Gem Corrupter which can be used to modify a [Corrupted] Skill Gem unpredictably  Room [IncursionDestabilization|Destabilises] once device is used"}],"icon":"Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverThaumaturge.dds"},{"id":"golemworks","name":"Golem Works","cat":"room","isPath":false,"isReward":false,"value":3,"bonus":"#% increased Effect of Temple Mods from Generators, Synthflesh Labs, Flesh Surgeons, Transcendent Barracks and Alchemy Labs","upgradeBy":[{"type":"generator"}],"tiers":[{"level":1,"name":"Workshop","desc":""},{"level":2,"name":"Automaton Lab","desc":""},{"level":3,"name":"Stone Legion","desc":""},{"level":4,"name":"Precision of Science","desc":""}],"icon":"Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverGolemWorks.dds"},{"id":"corruption","name":"Corruption Chamber","cat":"room","isPath":false,"isReward":false,"value":4,"bonus":"Rare Monsters have a #% chance to have an additional Modifier","upgradeBy":[{"type":"thaumaturge"},{"type":"sacrificialchamber"}],"datUpgradedBy":["sacrificialchamber"],"tiers":[{"level":1,"name":"Crimson Hall","desc":"Contains a Corruption Altar which can be used to [Corrupted|Corrupt] items"},{"level":2,"name":"Catalyst of Corruption","desc":"Contains a Corruption Altar which can be used to [Corrupted|Corrupt] items"},{"level":3,"name":"Locus of Corruption","desc":"Contains a Corruption Altar which can be used to modify [Corrupted] [Equipment] or Jewels unpredictably  Room [IncursionDestabilization|Destabilises] once device is used"},{"level":4,"name":"Rapture of Corruption","desc":"Contains a Corruption Altar which can be used to modify [Corrupted] [Equipment] or Jewels unpredictably  Room [IncursionDestabilization|Destabilises] once device is used"}],"icon":"Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverCorruption.dds"},{"id":"vault","name":"Treasure Vault","cat":"room","isPath":false,"isReward":false,"value":5,"bonus":"Contains valuable Chests based on surrounding Rooms","tiers":[{"level":1,"name":"Sealed Vault","desc":"Contains a variety of valuable Chests based on surrounding Rooms  Room [IncursionDestabilization|Destabilises] once the central Vault is opened"}],"icon":"Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverVault.dds"},{"id":"sacrificialchamber","name":"Sacrificial Chamber","cat":"room","isPath":false,"isReward":false,"value":5,"bonus":"#% increased number of Rare Chests","upgradeBy":[{"type":"*","note":"upgrades when Sacrificing other placed Rooms"}],"tiers":[{"level":1,"name":"Altar of Sacrifice","desc":"Contains a Unique Item"},{"level":2,"name":"Hall of Offerings","desc":"Contains a Unique Item"},{"level":3,"name":"Apex of Oblation","desc":"Contains a Unique Item  Contains the Morphology Mechanism which can be used to modify [Corrupted] Unique Items  Room [IncursionDestabilization|Destabilises] once device is used"},{"level":4,"name":"Empyrean of Blood","desc":"Contains a Unique Item  Contains the Morphology Mechanism which can be used to modify [Corrupted] Unique Items  Room [IncursionDestabilization|Destabilises] once device is used"}],"icon":"Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverSacrificialChamber.dds"},{"id":"sacrificeroom","name":"Sacrifice a Room to Upgrade Sacrificial Chamber","cat":"special","isPath":false,"isReward":false,"value":1,"reward":"Sacrifice a placed Room to upgrade a Sacrificial Chamber"},{"id":"architect","name":"Architect's Chamber","cat":"special","isPath":false,"isReward":false,"value":4,"reward":"Defeat the Architect to unlock reward rooms","tiers":[{"level":1,"name":"Architect's Chamber","desc":"Defeating the Architect allows use of Xipocado's Console which can be used to place various [IncursionRestrictedRoom|Restricted Rooms]  Defeating the Architect also unlocks [IncursionMedallions|Medallions]"}],"icon":"Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverArchitect.dds"},{"id":"entrance","name":"Entrance","cat":"entrance","isPath":true,"isReward":false,"value":0,"tiers":[{"level":1,"name":"Foyer","desc":""}]},{"id":"currencyreward","name":"Currency Vault","cat":"reward","isPath":false,"isReward":true,"value":6,"reward":"Two Treasure Chests dropping a lot of Currency","tiers":[{"level":1,"name":"Kishara's Vault","desc":"Contains Rare Treasury Chests containing Currency  Room [IncursionDestabilization|Destabilises] once accessible"}]},{"id":"lineagesupportreward","name":"Lineage Gems Vault","cat":"reward","isPath":false,"isReward":true,"value":5,"reward":"Random Lineage Support Gem","tiers":[{"level":1,"name":"Vault of Reverence","desc":"Contains a Historic Chest containing a random [LineageSupports|Lineage Support Gem]  Room [IncursionDestabilization|Destabilises] once accessible"}]},{"id":"socketablereward","name":"Augments Vault","cat":"reward","isPath":false,"isReward":true,"value":5,"reward":"Rune Cache — a high-level endgame Rune","tiers":[{"level":1,"name":"Jiquani's Vault","desc":"Contains a Rune Cache containing [Rune|Runes]  Room [IncursionDestabilization|Destabilises] once accessible"}]},{"id":"tabletreward","name":"Tablets Vault","cat":"reward","isPath":false,"isReward":true,"value":5,"reward":"Corrupted Precursor Machine (modifies a Tablet)","tiers":[{"level":1,"name":"Tablet Research Vault","desc":"Contains the Corrupted Precursor Machine which allows the [Corrupted|Corruption] of a [Tablet|Tablet]  Room [IncursionDestabilization|Destabilises] once accessible"}]},{"id":"uniquereward","name":"Uniques Vault","cat":"reward","isPath":false,"isReward":true,"value":5,"reward":"Display granting a random Unique Item","tiers":[{"level":1,"name":"Ancient Reliquary Vault","desc":"Contains a Reliquary Display which holds a Unique item  Room [IncursionDestabilization|Destabilises] once accessible"}]},{"id":"accesschamber","name":"Royal Access Chamber","cat":"reward","isPath":false,"isReward":true,"value":6,"reward":"Unlocks Atziri's Chamber","tiers":[{"level":1,"name":"Royal Access Chamber","desc":"Completion unlocks access to Atziri's Chamber  Room [IncursionDestabilization|Destabilises] once accessible"}],"icon":"Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverAccessChamber.dds"},{"id":"atziri","name":"Atziri's Chamber","cat":"boss","isPath":false,"isReward":false,"value":10,"reward":"Atziri encounter (final target)","icon":"Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverAtziri.dds"},{"id":"unsocketingreward","name":"Extraction Chamber","cat":"reward","isPath":false,"isReward":true,"value":4,"reward":"Extraction Workbench (returns socketed Augments)","tiers":[{"level":1,"name":"Extraction Chamber","desc":"Contains the Extraction Workbench which can be used to destroy an [Equipment] item, returning any [Augment|Augments] socketed in it  Room [IncursionDestabilization|Destabilises] once accessible"}]},{"id":"deadspymaster","name":"Spymaster","cat":"special","isPath":false,"isReward":false,"value":0,"tiers":[{"level":1,"name":"Spymaster's Study","desc":""},{"level":2,"name":"Hall of Shadows","desc":""},{"level":3,"name":"Omnipresent Panopticon","desc":""},{"level":4,"name":"Espionage Core","desc":""}],"icon":"Art/Textures/Interface/2D/2DArt/UIImages/InGame/Incursion2/RoomHover/RoomHoverViperSpymaster.dds"},{"id":"biomewater","name":"Terraforming Research","cat":"reward","isPath":false,"isReward":true,"value":3,"reward":"Terraforming Research (biome mod)","tiers":[{"level":1,"name":"Terraforming Research: Water","desc":"Room [IncursionDestabilization|Destabilises] once accessible"}]},{"id":"biomemountain","name":"Terraforming Research","cat":"reward","isPath":false,"isReward":true,"value":3,"reward":"Terraforming Research (biome mod)","tiers":[{"level":1,"name":"Terraforming Research: Mountain","desc":"Room [IncursionDestabilization|Destabilises] once accessible"}]},{"id":"biomegrass","name":"Terraforming Research","cat":"reward","isPath":false,"isReward":true,"value":3,"reward":"Terraforming Research (biome mod)","tiers":[{"level":1,"name":"Terraforming Research: Grass","desc":"Room [IncursionDestabilization|Destabilises] once accessible"}]},{"id":"biomeforest","name":"Terraforming Research","cat":"reward","isPath":false,"isReward":true,"value":3,"reward":"Terraforming Research (biome mod)","tiers":[{"level":1,"name":"Terraforming Research: Forest","desc":"Room [IncursionDestabilization|Destabilises] once accessible"}]},{"id":"biomeswamp","name":"Terraforming Research","cat":"reward","isPath":false,"isReward":true,"value":3,"reward":"Terraforming Research (biome mod)","tiers":[{"level":1,"name":"Terraforming Research: Swamp","desc":"Room [IncursionDestabilization|Destabilises] once accessible"}]},{"id":"biomedesert","name":"Terraforming Research","cat":"reward","isPath":false,"isReward":true,"value":3,"reward":"Terraforming Research (biome mod)","tiers":[{"level":1,"name":"Terraforming Research: Desert","desc":"Room [IncursionDestabilization|Destabilises] once accessible"}]}]};
+/* VAAL-DATA-END */
+
+/* ===================== SOLVER CORE (adjacency model) ===================== */
+const DIRS=[[-1,0],[1,0],[0,-1],[0,1]];
+const KIND={EMPTY:'empty',ENTRANCE:'entrance',PATH:'path',ROOM:'room',REWARD:'reward'};
+const GRID_N = VAAL.grid || 9;
+const ROOMS = {}; for (const r of (VAAL.rooms||[])) ROOMS[r.id]=r;
+const PLACEABLE = (VAAL.rooms||[]).filter(r=>r.cat==='room');
+const REWARDS   = (VAAL.rooms||[]).filter(r=>r.cat==='reward');
+// A generous tier→value multiplier (higher tiers are worth more).
+const TIERMULT=[0,1,1.6,2.3,3.0];
 const PRESETS={
-  balanced:{connectedValue:1,synergy:1,survivability:1,targetReach:1,crystalEff:.5,expansion:.3},
-  currency:{connectedValue:1.5,synergy:1,survivability:.8,targetReach:.5,crystalEff:.5,expansion:.3,roomBias:{vault:2,alchemy:1.5,armoury:1.5,sacrifice:2}},
-  bossRush:{connectedValue:.7,synergy:.7,survivability:.6,targetReach:3,crystalEff:.3,expansion:.4},
+  balanced:{connectedValue:1,synergy:1,reward:1.5,atziri:1,expansion:.3},
+  currency:{connectedValue:1.3,synergy:.8,reward:2.2,atziri:.4,expansion:.3,
+            bias:{vault:1.6,alchemylab:1.6,armoury:1.4,currencyreward:2,uniquereward:1.6}},
+  bossRush:{connectedValue:.8,synergy:.7,reward:1,atziri:4,expansion:.4},
 };
-function computeConnectivity(b){const{N,grid}=b,seen=new Set(),q=[];
-  for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(grid[r][c].kind===KIND.ENTRANCE){const k=r+','+c;if(!seen.has(k)){seen.add(k);q.push([r,c]);}}
-  while(q.length){const[r,c]=q.pop(),cell=grid[r][c];for(let d=0;d<4;d++){if(!cell.edges[d])continue;
-    const nr=r+DIRS[d][0],nc=c+DIRS[d][1];if(nr<0||nc<0||nr>=N||nc>=N)continue;const nb=grid[nr][nc];
-    if(nb.kind===KIND.EMPTY)continue;if(!nb.edges[OPP[d]])continue;const nk=nr+','+nc;if(!seen.has(nk)){seen.add(nk);q.push([nr,nc]);}}}
-  return seen;}
-function openLinkCount(b,r,c){const{N,grid}=b,cell=grid[r][c];let n=0;
-  for(let d=0;d<4;d++){if(!cell.edges[d])continue;const nr=r+DIRS[d][0],nc=c+DIRS[d][1];
-    if(nr<0||nc<0||nr>=N||nc>=N)continue;if(grid[nr][nc].kind!==KIND.EMPTY&&grid[nr][nc].edges[OPP[d]])n++;}return n;}
-function scoreBoard(b,w,opts={}){const{N,grid}=b,targets=opts.targets||[],roomBias=w.roomBias||{};
-  const conn=computeConnectivity(b);let connectedValue=0,survivability=0,deadRooms=[];
-  for(let r=0;r<N;r++)for(let c=0;c<N;c++){const cell=grid[r][c];
-    if(cell.kind!==KIND.ROOM&&cell.kind!==KIND.TARGET)continue;const def=cell.room?ROOMS[cell.room]:null;
-    const baseVal=def?def.value:(cell.kind===KIND.TARGET?4:1),bias=def&&roomBias[def.key]?roomBias[def.key]:1;
-    if(!conn.has(r+','+c)){deadRooms.push([r,c]);continue;}connectedValue+=baseVal*bias;
-    survivability+=(openLinkCount(b,r,c)>=2?baseVal:-baseVal*.5);}
-  let synergy=0;
-  for(let r=0;r<N;r++)for(let c=0;c<N;c++){const cell=grid[r][c];
-    if(cell.kind!==KIND.ROOM||!cell.room||!conn.has(r+','+c))continue;const def=ROOMS[cell.room];if(!def)continue;
-    for(let d=0;d<4;d++){if(!cell.edges[d])continue;const nr=r+DIRS[d][0],nc=c+DIRS[d][1];
-      if(nr<0||nc<0||nr>=N||nc>=N)continue;const nb=grid[nr][nc];
-      if(nb.kind===KIND.ROOM&&nb.room&&nb.edges[OPP[d]]&&conn.has(nr+','+nc)&&def.synergy.includes(nb.room))synergy+=1;}}
-  synergy/=2;
-  let targetReach=0;if(targets.length){let h=0;for(const[tr,tc]of targets)if(conn.has(tr+','+tc))h++;targetReach=h/targets.length;}
-  let crystals=0;for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(grid[r][c].kind===KIND.ROOM)crystals+=(opts.crystalCost||1);
-  const crystalEff=crystals>0?connectedValue/crystals:0;
-  let expansion=0;for(let r=0;r<N;r++)for(let c=0;c<N;c++){const cell=grid[r][c];
-    if(cell.kind===KIND.EMPTY||!conn.has(r+','+c))continue;for(let d=0;d<4;d++){if(!cell.edges[d])continue;
-      const nr=r+DIRS[d][0],nc=c+DIRS[d][1];if(nr<0||nc<0||nr>=N||nc>=N)continue;if(grid[nr][nc].kind===KIND.EMPTY)expansion+=1;}}
-  const total=w.connectedValue*connectedValue+w.synergy*synergy+w.survivability*survivability
-    +w.targetReach*targetReach*10+w.crystalEff*crystalEff+(w.expansion||0)*expansion;
-  return{total,breakdown:{connectedValue,synergy,survivability,targetReach,crystalEff,expansion},deadRooms,connected:conn};}
-function rankPlacements(b,card,w,opts={}){const{N,grid}=b,res=[],conn=computeConnectivity(b);
-  for(let r=0;r<N;r++)for(let c=0;c<N;c++){if(grid[r][c].kind!==KIND.EMPTY)continue;let best=null;
-    for(let mask=1;mask<16;mask++){const edges=[!!(mask&1),!!(mask&2),!!(mask&4),!!(mask&8)];let hooks=false;
-      for(let d=0;d<4;d++){if(!edges[d])continue;const nr=r+DIRS[d][0],nc=c+DIRS[d][1];
-        if(nr<0||nc<0||nr>=N||nc>=N)continue;const nb=grid[nr][nc];
-        if(nb.kind!==KIND.EMPTY&&nb.edges[OPP[d]]&&conn.has(nr+','+nc))hooks=true;}
-      if(!hooks)continue;const kind=(card==='path')?KIND.PATH:KIND.ROOM;
-      grid[r][c]={kind,room:kind===KIND.ROOM?card:undefined,edges};const s=scoreBoard(b,w,opts);
-      grid[r][c]={kind:KIND.EMPTY,edges:[false,false,false,false]};
-      if(!best||s.total>best.score)best={tile:[r,c],card,doorways:edges.slice(),score:s.total,breakdown:s.breakdown};}
-    if(best)res.push(best);}
-  res.sort((a,b)=>b.score-a.score);return res.slice(0,opts.topK||6);}
-function planHand(b,hand,w,opts={}){const plan=[],rem=hand.slice();
-  while(rem.length){let bo=null,bi=-1;for(let i=0;i<rem.length;i++){const t=rankPlacements(b,rem[i],w,{...opts,topK:1})[0];
-    if(t&&(!bo||t.score>bo.score)){bo=t;bi=i;}}if(!bo)break;const{grid}=b,[r,c]=bo.tile;
-    const kind=(bo.card==='path')?KIND.PATH:KIND.ROOM;grid[r][c]={kind,room:kind===KIND.ROOM?bo.card:undefined,edges:bo.doorways.slice()};
-    plan.push(bo);rem.splice(bi,1);}return plan;}
-function emptyTile(){return{kind:KIND.EMPTY,edges:[false,false,false,false]};}
+
+function emptyTile(){return{kind:KIND.EMPTY};}
 function blankBoard(N){const grid=[];for(let r=0;r<N;r++){const row=[];for(let c=0;c<N;c++)row.push(emptyTile());grid.push(row);}return{N,grid};}
+function inb(b,r,c){return r>=0&&c>=0&&r<b.N&&c<b.N;}
+function solid(cell){return cell.kind!==KIND.EMPTY;}
+function neighbors(b,r,c){const o=[];for(const[dr,dc]of DIRS){const nr=r+dr,nc=c+dc;if(inb(b,nr,nc))o.push([nr,nc]);}return o;}
+
+// Connectivity: flood from every Entrance through orthogonally-adjacent solid
+// tiles (rooms + paths). No doorways — adjacency is the connection.
+function computeConnectivity(b){const seen=new Set(),q=[];
+  for(let r=0;r<b.N;r++)for(let c=0;c<b.N;c++)if(b.grid[r][c].kind===KIND.ENTRANCE){const k=r+','+c;if(!seen.has(k)){seen.add(k);q.push([r,c]);}}
+  while(q.length){const[r,c]=q.pop();for(const[nr,nc]of neighbors(b,r,c)){if(!solid(b.grid[nr][nc]))continue;const nk=nr+','+nc;if(!seen.has(nk)){seen.add(nk);q.push([nr,nc]);}}}
+  return seen;}
+
+// Count adjacent placed ROOMs by id, for tier/conversion rules.
+function adjRoomCounts(b,r,c){const m={};for(const[nr,nc]of neighbors(b,r,c)){const cell=b.grid[nr][nc];if(cell.kind===KIND.ROOM&&cell.room)m[cell.room]=(m[cell.room]||0)+1;}return m;}
+
+// A room's tier (1..4) from its adjacency upgrade rules + adjacent room types.
+function roomTier(b,r,c){const cell=b.grid[r][c];if(cell.kind!==KIND.ROOM||!cell.room)return 1;
+  const def=ROOMS[cell.room];if(!def||!def.upgradeBy)return 1;const adj=adjRoomCounts(b,r,c);let tier=1;
+  for(const rule of def.upgradeBy){if(!rule.type||rule.type==='*')continue;const have=adj[rule.type]||0;
+    if(have>=(rule.count||1))tier=Math.max(tier,rule.tier||2);}
+  return Math.min(tier,4);}
+
+// A room's conversion (if adjacent to a trigger type) → converted room id or null.
+function roomConversion(b,r,c){const cell=b.grid[r][c];if(cell.kind!==KIND.ROOM||!cell.room)return null;
+  const def=ROOMS[cell.room];if(!def||!def.convertsTo)return null;const adj=adjRoomCounts(b,r,c);
+  for(const cv of def.convertsTo)if((adj[cv.whenAdjacent]||0)>0)return cv.to;return null;}
+
+function tierName(def,tier){if(def&&def.tiers){const t=def.tiers.find(x=>x.level===tier)||def.tiers[0];return t?t.name:def.name;}return def?def.name:'';}
+
+function scoreBoard(b,w){const conn=computeConnectivity(b),bias=w.bias||{};
+  let connectedValue=0,synergy=0,rewardVal=0,expansion=0,atziri=0,deadRooms=[];const tiers={};
+  for(let r=0;r<b.N;r++)for(let c=0;c<b.N;c++){const cell=b.grid[r][c];
+    if(cell.kind!==KIND.ROOM&&cell.kind!==KIND.REWARD)continue;
+    const id=cell.room,def=ROOMS[id];const on=conn.has(r+','+c);
+    if(cell.kind===KIND.REWARD){ // rewards don't need chaining (Architect exception) but score more if reached
+      const v=(def?def.value:4)*(bias[id]||1);rewardVal+=on?v:v*0.6;
+      if(id==='accesschamber'&&on)atziri+=1;continue;}
+    if(!on){deadRooms.push([r,c]);continue;}
+    const tier=roomTier(b,r,c);tiers[r+','+c]=tier;
+    const v=(def?def.value:2)*(bias[id]||1)*TIERMULT[tier];connectedValue+=v;
+    if(tier>=2)synergy+=(tier-1);}
+  // expansion = open empty cells adjacent to the connected chain (room to grow)
+  const seenEmpty=new Set();
+  for(const key of conn){const[r,c]=key.split(',').map(Number);for(const[nr,nc]of neighbors(b,r,c))if(b.grid[nr][nc].kind===KIND.EMPTY)seenEmpty.add(nr+','+nc);}
+  expansion=seenEmpty.size;
+  const total=w.connectedValue*connectedValue+w.synergy*synergy+w.reward*rewardVal+w.atziri*atziri*8+(w.expansion||0)*expansion;
+  return{total,breakdown:{connectedValue,synergy,reward:rewardVal,atziri,expansion},deadRooms,connected:conn,tiers};}
+
+// Valid placement cells = empty cells adjacent to a connected solid tile
+// (the game's "highlighted green squares"). Entrance seeds the chain.
+function validCells(b){const conn=computeConnectivity(b),out=[];const seen=new Set();
+  const anchor=conn.size?[...conn].map(k=>k.split(',').map(Number)):[];
+  // if nothing connected yet, allow placing adjacent to any entrance; if no entrance, allow center
+  const src=anchor.length?anchor:[];
+  for(const[r,c]of src)for(const[nr,nc]of neighbors(b,r,c))if(b.grid[nr][nc].kind===KIND.EMPTY){const k=nr+','+nc;if(!seen.has(k)){seen.add(k);out.push([nr,nc]);}}
+  return out;}
+
+function placeTemp(b,r,c,card){const prev=b.grid[r][c];
+  if(card==='path')b.grid[r][c]={kind:KIND.PATH};
+  else if(ROOMS[card]&&ROOMS[card].cat==='reward')b.grid[r][c]={kind:KIND.REWARD,room:card};
+  else b.grid[r][c]={kind:KIND.ROOM,room:card};
+  return prev;}
+
+function rankPlacements(b,card,w,topK){const cells=validCells(b),res=[];
+  for(const[r,c]of cells){const prev=b.grid[r][c];placeTemp(b,r,c,card);const s=scoreBoard(b,w);b.grid[r][c]=prev;
+    res.push({tile:[r,c],card,score:s.total,breakdown:s.breakdown});}
+  res.sort((a,b)=>b.score-a.score);return res.slice(0,topK||6);}
+
+function planHand(b,hand,w){const plan=[],rem=hand.slice();
+  while(rem.length){let bo=null,bi=-1;for(let i=0;i<rem.length;i++){const t=rankPlacements(b,rem[i],w,1)[0];
+    if(t&&(!bo||t.score>bo.score)){bo=t;bi=i;}}if(!bo)break;const[r,c]=bo.tile;placeTemp(b,r,c,bo.card);
+    plan.push(bo);rem.splice(bi,1);}return plan;}
 
 /* ===================== EDITOR UI ===================== */
 let board, place='entrance';
-const PALETTE=[['entrance','Entrance'],['path','Path'],['target','Target'],['room','Room'],['erase','Erase']];
+const PALETTE=[['entrance','Entrance'],['path','Path'],['room','Room'],['reward','Reward'],['erase','Erase']];
 function initControls(){
-  const pal=document.getElementById('palette');
-  pal.innerHTML=PALETTE.map(([k,l])=>`<button data-k="${k}" onclick="setPlace('${k}')">${l}</button>`).join('');
-  const rs=document.getElementById('roomSel');
-  rs.innerHTML=Object.values(ROOMS).map(r=>`<option value="${r.key}">${r.label} (v${r.value})</option>`).join('');
-  document.getElementById('roomkeys').textContent=Object.keys(ROOMS).join(', ');
+  document.getElementById('palette').innerHTML=PALETTE.map(([k,l])=>`<button data-k="${k}" onclick="setPlace('${k}')">${l}</button>`).join('');
+  document.getElementById('roomSel').innerHTML=PLACEABLE.map(r=>`<option value="${r.id}">${esc(r.name)} (v${r.value})</option>`).join('');
+  document.getElementById('rewSel').innerHTML=REWARDS.map(r=>`<option value="${r.id}">${esc(r.name)}</option>`).join('');
   setPlace('entrance');
 }
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function setPlace(k){place=k;[...document.querySelectorAll('#palette button')].forEach(b=>b.classList.toggle('sel',b.dataset.k===k));}
-function rebuild(){board=blankBoard(+document.getElementById('gridN').value);render();document.getElementById('recs').textContent='Analyze the board to see dead rooms + a placement plan.';document.getElementById('score').innerHTML='';}
-function cellClick(r,c){const cell=board.grid[r][c];
-  if(place==='erase'){board.grid[r][c]=emptyTile();}
-  else if(place==='room'){board.grid[r][c]={kind:KIND.ROOM,room:document.getElementById('roomSel').value,edges:cell.edges.slice()};}
-  else{board.grid[r][c]={kind:KIND[place.toUpperCase()],edges:cell.edges.slice()};}
+function rebuild(){board=blankBoard(GRID_N);render();document.getElementById('recs').textContent='Analyze the board to see dead rooms, tier upgrades + a placement plan.';document.getElementById('score').innerHTML='';}
+function cellClick(r,c){const cur=board.grid[r][c];
+  if(place==='erase')board.grid[r][c]=emptyTile();
+  else if(place==='room')board.grid[r][c]={kind:KIND.ROOM,room:document.getElementById('roomSel').value};
+  else if(place==='reward')board.grid[r][c]={kind:KIND.REWARD,room:document.getElementById('rewSel').value};
+  else if(place==='entrance')board.grid[r][c]={kind:KIND.ENTRANCE};
+  else if(place==='path')board.grid[r][c]={kind:KIND.PATH};
   render();}
-function edgeClick(r,c,d,ev){ev.stopPropagation();const cell=board.grid[r][c];if(cell.kind===KIND.EMPTY)return;cell.edges[d]=!cell.edges[d];render();}
-function render(){
-  const g=document.getElementById('grid');g.style.gridTemplateColumns=`repeat(${board.N},52px)`;
+function render(res){
+  const g=document.getElementById('grid');g.style.gridTemplateColumns=`repeat(${board.N},56px)`;
+  const conn=res?res.connected:computeConnectivity(board);
+  const valid=new Set(validCells(board).map(([r,c])=>r+','+c));
   let html='';
-  for(let r=0;r<board.N;r++)for(let c=0;c<board.N;c++){const cell=board.grid[r][c];
-    const def=cell.room?ROOMS[cell.room]:null;
-    const lbl=cell.kind===KIND.ENTRANCE?'IN':cell.kind===KIND.TARGET?'TARGET':cell.kind===KIND.PATH?'·':def?def.label:'';
-    const en=['n','e','s','w'].map((nm,d)=>`<div class="edge ${nm} ${cell.edges[d]?'on':''}" onclick="edgeClick(${r},${c},${d},event)"></div>`).join('');
-    html+=`<div class="cell ${cell.kind}" id="cell-${r}-${c}" onclick="cellClick(${r},${c})">${en}<span class="lbl">${lbl}</span></div>`;}
+  for(let r=0;r<board.N;r++)for(let c=0;c<board.N;c++){const cell=board.grid[r][c],def=cell.room?ROOMS[cell.room]:null;
+    let cls=cell.kind, extra='', tierBadge='', cvtBadge='';
+    if(conn.has(r+','+c))cls+=' conn';
+    if(valid.has(r+','+c)&&cell.kind===KIND.EMPTY)cls+=' valid';
+    let lbl='';
+    if(cell.kind===KIND.ENTRANCE)lbl='ENTRANCE';
+    else if(cell.kind===KIND.PATH)lbl='·';
+    else if(def){const tier=cell.kind===KIND.ROOM?roomTier(board,r,c):1;
+      lbl=esc(tierName(def,tier));
+      if(cell.kind===KIND.ROOM&&tier>1)tierBadge=`<span class="tier">T${tier}</span>`;
+      const cv=cell.kind===KIND.ROOM?roomConversion(board,r,c):null;
+      if(cv)cvtBadge=`<span class="cvt">→${esc(ROOMS[cv]?ROOMS[cv].name:cv).slice(0,10)}</span>`;
+      if(res&&(cell.kind===KIND.ROOM)&&!conn.has(r+','+c))cls+=' dead';}
+    html+=`<div class="cell ${cls}" onclick="cellClick(${r},${c})">${tierBadge}${cvtBadge}<span class="lbl">${lbl}</span></div>`;}
   g.innerHTML=html;
 }
-function paintAnalysis(res){
-  for(let r=0;r<board.N;r++)for(let c=0;c<board.N;c++){const el=document.getElementById(`cell-${r}-${c}`);el.classList.remove('dead','conn');
-    const cell=board.grid[r][c];if(cell.kind===KIND.EMPTY)continue;
-    if(res.connected.has(r+','+c))el.classList.add('conn');
-    else if(cell.kind===KIND.ROOM||cell.kind===KIND.TARGET)el.classList.add('dead');}
-}
+function resolveRoomKey(tok){const t=tok.trim().toLowerCase();if(t==='path')return 'path';
+  if(ROOMS[t]&&ROOMS[t].cat==='room')return t;
+  for(const r of PLACEABLE)if(r.name.toLowerCase()===t)return r.id;
+  // tier names (e.g. "Guardhouse") → family
+  for(const r of PLACEABLE)if(r.tiers&&r.tiers.some(x=>x.name.toLowerCase()===t))return r.id;
+  return null;}
 function analyze(){
   const w=PRESETS[document.getElementById('preset').value];
-  const targets=[];for(let r=0;r<board.N;r++)for(let c=0;c<board.N;c++)if(board.grid[r][c].kind===KIND.TARGET)targets.push([r,c]);
-  const res=scoreBoard(board,w,{targets});paintAnalysis(res);
-  const b=res.breakdown;
+  const res=scoreBoard(board,w);render(res);const b=res.breakdown;
   document.getElementById('score').innerHTML=
     `<div class="scorebar"><b>TOTAL</b><b style="color:var(--gold)">${res.total.toFixed(1)}</b></div>`+
     Object.entries(b).map(([k,v])=>`<div class="scorebar"><span>${k}</span><span>${(+v).toFixed(2)}</span></div>`).join('');
   const dead=res.deadRooms.map(([r,c])=>`(${r},${c})`).join(' ');
+  const ups=Object.entries(res.tiers).filter(([,t])=>t>1).length;
   document.getElementById('recs').innerHTML=
-    (res.deadRooms.length?`<div class="rec flag">⚠ ${res.deadRooms.length} DEAD room(s): ${dead} — not traced to the entrance, contributing 0.</div>`:`<div class="rec" style="color:var(--good)">✓ No dead rooms — everything connects.</div>`);
-}
-// Resolve a hand token to a room key: accepts keys, display labels, and the
-// in-game full room names (case-insensitive), so you can type what you see.
-const ROOM_ALIASES={
-  "guardhouse":"garrison","commander's chamber":"commander","spymaster's study":"spymaster",
-  "sealed vault":"vault","thaumaturge's laboratory":"thaumaturge","alchemy lab":"alchemy",
-  "sacrificial chamber":"sacrifice","corruption chamber":"corruption","synthflesh lab":"synthflesh",
-};
-function resolveRoomKey(tok){
-  const t=tok.trim().toLowerCase();
-  if(t==='path')return 'path';
-  if(ROOMS[t])return t;
-  if(ROOM_ALIASES[t])return ROOM_ALIASES[t];
-  for(const k in ROOMS)if(ROOMS[k].label.toLowerCase()===t)return k;
-  return null;
+    (res.deadRooms.length?`<div class="rec flag">⚠ ${res.deadRooms.length} DEAD room(s): ${dead} — not chained to the Entrance, contributing 0. Add a Path to connect them.</div>`
+                         :`<div class="rec" style="color:var(--good)">✓ No dead rooms — everything chains to the Entrance.</div>`)+
+    `<div class="rec">${ups} room(s) upgraded above Tier 1 by adjacency.</div>`;
 }
 function autoPlan(){
   const w=PRESETS[document.getElementById('preset').value];
   const raw=document.getElementById('hand').value.split(',').map(s=>s.trim()).filter(Boolean);
   const bad=raw.filter(h=>!resolveRoomKey(h));
-  if(bad.length){document.getElementById('recs').innerHTML=`<div class="rec flag">Unknown room(s): ${bad.join(', ')}<br><span class="bd">Use a room name (Garrison, Spymaster…) or key. Full names like "Commander's Chamber" / "Guardhouse" work too.</span></div>`;return;}
+  if(bad.length){document.getElementById('handHint').innerHTML=`<span class="flag">Unknown: ${esc(bad.join(', '))}</span> — use a room name (e.g. Garrison, Spymaster) or "path".`;return;}
+  document.getElementById('handHint').textContent='';
   const hand=raw.map(resolveRoomKey);
-  const plan=planHand(board,hand,w,{topK:1});render();analyze();
-  const dirs=['N','E','S','W'];
+  const plan=planHand(board,hand,w);const res=scoreBoard(board,w);render(res);
+  const b=res.breakdown;
+  document.getElementById('score').innerHTML=`<div class="scorebar"><b>TOTAL</b><b style="color:var(--gold)">${res.total.toFixed(1)}</b></div>`+
+    Object.entries(b).map(([k,v])=>`<div class="scorebar"><span>${k}</span><span>${(+v).toFixed(2)}</span></div>`).join('');
   document.getElementById('recs').innerHTML=
     `<div class="rec"><b>Ordered placement plan</b> (${plan.length}/${hand.length} placed)</div>`+
-    plan.map((p,i)=>{const doors=p.doorways.map((o,d)=>o?dirs[d]:'').filter(Boolean).join('');
-      const name=p.card==='path'?'Path':(ROOMS[p.card]?.label||p.card);
-      return `<div class="rec">${i+1}. <b>${name}</b> → tile (${p.tile[0]},${p.tile[1]}) doors:${doors||'—'} <span class="bd">score ${p.score.toFixed(1)}</span></div>`;}).join('')+
-    (plan.length<hand.length?`<div class="rec bd">(${hand.length-plan.length} card(s) had nowhere to connect — add a Path or open a doorway.)</div>`:'');
+    plan.map((p,i)=>{const name=p.card==='path'?'Path':(ROOMS[p.card]?ROOMS[p.card].name:p.card);
+      return `<div class="rec">${i+1}. <b>${esc(name)}</b> → tile (${p.tile[0]},${p.tile[1]}) <span class="bd">score ${p.score.toFixed(1)}</span></div>`;}).join('')+
+    (plan.length<hand.length?`<div class="rec bd">(${hand.length-plan.length} card(s) had no valid adjacent cell — place an Entrance/Path first.)</div>`:'');
 }
 function demo(){
-  board=blankBoard(9);const g=board.grid;
-  g[4][0]={kind:KIND.ENTRANCE,edges:[false,true,false,false]};
-  g[4][1]={kind:KIND.PATH,edges:[false,true,false,true]};
-  g[4][2]={kind:KIND.ROOM,room:'spymaster',edges:[true,false,false,true]};
-  g[3][2]={kind:KIND.ROOM,room:'garrison',edges:[false,false,true,false]}; // note: S door faces spymaster's N → connects
-  g[4][4]={kind:KIND.TARGET,edges:[false,false,false,true]};               // isolated target → shows DEAD
-  render();analyze();
+  board=blankBoard(GRID_N);const g=board.grid;
+  g[4][1]={kind:KIND.ENTRANCE};
+  g[4][2]={kind:KIND.PATH};
+  g[4][3]={kind:KIND.ROOM,room:'commander'};
+  g[3][3]={kind:KIND.ROOM,room:'garrison'};
+  g[5][3]={kind:KIND.ROOM,room:'garrison'};   // 2 adjacent Garrison → Commander T2
+  g[4][5]={kind:KIND.ROOM,room:'thaumaturge'}; // isolated → DEAD until pathed
+  analyze();
 }
 initControls();rebuild();demo();
 </script>
