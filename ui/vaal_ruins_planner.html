@@ -1,0 +1,258 @@
+<!doctype html>
+<!--
+  Vaal Ruins Route Planner — STANDALONE PROTOTYPE (Phase 2/3).
+  Self-contained: the tested solver core (ui scratchpad temple_solver.js) is
+  inlined below, plus a manual grid editor + recommendations. Open directly in a
+  browser. Once the UX is signed off, this inlines into ui/index.html as a tab,
+  and the manual board is swapped for the ServerData memory adapter behind the
+  same interface. Advisory only — nothing is placed/automated.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vaal Ruins Route Planner</title>
+<style>
+  :root { --bg:#141210; --panel:#1e1b17; --line:#3a332a; --gold:#c8a24a; --text:#e7ddc9;
+          --sub:#9a8f7a; --good:#8aff8a; --bad:#ff7a7a; --path:#6a5a3a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.4 "Segoe UI",system-ui,sans-serif; }
+  h1 { font-size:18px; color:var(--gold); margin:0 0 2px; }
+  .sub { color:var(--sub); font-size:12px; margin-bottom:12px; }
+  .wrap { display:flex; gap:18px; padding:16px; flex-wrap:wrap; align-items:flex-start; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:12px; }
+  .controls { min-width:240px; max-width:280px; }
+  .controls label { display:block; font-size:12px; color:var(--sub); margin:10px 0 3px; }
+  select, input[type=text] { width:100%; background:#0f0d0b; color:var(--text); border:1px solid var(--line);
+          border-radius:5px; padding:6px; font:inherit; }
+  button { background:#2a251d; color:var(--text); border:1px solid var(--line); border-radius:5px;
+          padding:7px 10px; cursor:pointer; font:inherit; }
+  button:hover { border-color:var(--gold); }
+  button.primary { background:var(--gold); color:#1a1206; font-weight:600; border-color:var(--gold); }
+  .palette { display:flex; flex-wrap:wrap; gap:5px; margin-top:4px; }
+  .palette button.sel { outline:2px solid var(--gold); }
+  /* Grid */
+  .grid { display:grid; gap:2px; }
+  .cell { position:relative; width:52px; height:52px; background:#100e0b; border:1px solid #2a2620;
+          border-radius:4px; display:flex; align-items:center; justify-content:center; cursor:pointer;
+          font-size:9px; text-align:center; color:var(--sub); user-select:none; overflow:hidden; }
+  .cell .lbl { padding:1px; line-height:1.05; pointer-events:none; }
+  .cell.entrance { background:#2b3a1e; color:var(--good); }
+  .cell.path     { background:var(--path); }
+  .cell.target   { background:#3a2b1e; color:var(--gold); }
+  .cell.room     { background:#241f18; color:var(--text); }
+  .cell.dead     { outline:2px solid var(--bad); }
+  .cell.conn     { box-shadow:inset 0 0 0 2px rgba(138,255,138,.35); }
+  /* doorway edge toggles */
+  .edge { position:absolute; background:#4a4436; opacity:.25; }
+  .edge.on { background:var(--gold); opacity:.95; }
+  .edge.n { top:0; left:20%; width:60%; height:5px; }
+  .edge.s { bottom:0; left:20%; width:60%; height:5px; }
+  .edge.e { right:0; top:20%; height:60%; width:5px; }
+  .edge.w { left:0; top:20%; height:60%; width:5px; }
+  .rec { border-bottom:1px solid var(--line); padding:6px 0; font-size:12px; }
+  .rec b { color:var(--gold); }
+  .bd { color:var(--sub); font-size:11px; }
+  .flag { color:var(--bad); font-weight:600; }
+  .legend { font-size:11px; color:var(--sub); margin-top:8px; }
+  .out { min-width:280px; max-width:340px; }
+  .scorebar { display:flex; justify-content:space-between; font-size:12px; padding:2px 0; border-bottom:1px dotted var(--line); }
+</style>
+</head>
+<body>
+<div style="padding:16px 16px 0">
+  <h1>Vaal Ruins Route Planner <span style="font-size:11px;color:var(--sub)">— prototype</span></h1>
+  <div class="sub">Advisory only. Fill the board manually (this becomes the ServerData memory adapter later). Click a cell to place the selected piece; click a cell's edge to toggle a doorway. Doorways must match on both sides to connect.</div>
+</div>
+<div class="wrap">
+  <div class="panel controls">
+    <label>Grid size</label>
+    <select id="gridN" onchange="rebuild()">
+      <option>7</option><option selected>9</option><option>11</option>
+    </select>
+    <label>Place (click a cell)</label>
+    <div class="palette" id="palette"></div>
+    <label>Room type (when placing Room)</label>
+    <select id="roomSel"></select>
+    <label>Scoring preset</label>
+    <select id="preset" onchange="analyze()">
+      <option value="balanced">Balanced</option>
+      <option value="currency">Currency / Rarity</option>
+      <option value="bossRush">Boss / Reward rush</option>
+    </select>
+    <label>Hand for auto-plan (comma-separated room keys, or "path")</label>
+    <input type="text" id="hand" value="vault,spymaster,garrison,path">
+    <div style="display:flex;gap:6px;margin-top:12px">
+      <button class="primary" onclick="analyze()">Analyze board</button>
+      <button onclick="autoPlan()">Auto-plan hand</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-top:6px">
+      <button onclick="rebuild()">Clear</button>
+      <button onclick="demo()">Demo board</button>
+    </div>
+    <div class="legend">
+      Green ring = connected · <span class="flag">red ring</span> = DEAD (disconnected → 0 value).<br>
+      Room keys: <span id="roomkeys"></span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div id="grid" class="grid"></div>
+  </div>
+
+  <div class="panel out">
+    <div style="font-weight:600;color:var(--gold);margin-bottom:6px">Score</div>
+    <div id="score"></div>
+    <div style="font-weight:600;color:var(--gold);margin:12px 0 6px">Recommendations / plan</div>
+    <div id="recs" class="bd">Analyze the board to see dead rooms + a placement plan.</div>
+  </div>
+</div>
+
+<script>
+/* ===================== SOLVER CORE (inlined, tested) ===================== */
+const DIRS=[[-1,0],[0,1],[1,0],[0,-1]], OPP=[2,3,0,1];
+const KIND={EMPTY:'empty',ENTRANCE:'entrance',PATH:'path',TARGET:'target',ROOM:'room'};
+const ROOMS={
+  garrison:{key:'garrison',label:'Garrison',value:3,synergy:['spymaster','synthflesh']},
+  commander:{key:'commander',label:'Commander',value:2,synergy:['garrison']},
+  spymaster:{key:'spymaster',label:'Spymaster',value:5,synergy:['garrison','commander','armoury','smithy']},
+  vault:{key:'vault',label:'Sealed Vault',value:5,synergy:[]},
+  thaumaturge:{key:'thaumaturge',label:'Thaumaturge',value:4,synergy:['alchemy','sacrifice','corruption']},
+  alchemy:{key:'alchemy',label:'Alchemy Lab',value:3,synergy:['thaumaturge']},
+  sacrifice:{key:'sacrifice',label:'Sacrificial Chamber',value:5,synergy:['thaumaturge']},
+  corruption:{key:'corruption',label:'Corruption Chamber',value:3,synergy:['thaumaturge']},
+  armoury:{key:'armoury',label:'Armoury',value:3,synergy:['garrison','spymaster','smithy']},
+  smithy:{key:'smithy',label:'Smithy',value:2,synergy:['armoury','spymaster']},
+  synthflesh:{key:'synthflesh',label:'Synthflesh Lab',value:3,synergy:['garrison','commander']},
+};
+const PRESETS={
+  balanced:{connectedValue:1,synergy:1,survivability:1,targetReach:1,crystalEff:.5,expansion:.3},
+  currency:{connectedValue:1.5,synergy:1,survivability:.8,targetReach:.5,crystalEff:.5,expansion:.3,roomBias:{vault:2,alchemy:1.5,armoury:1.5,sacrifice:2}},
+  bossRush:{connectedValue:.7,synergy:.7,survivability:.6,targetReach:3,crystalEff:.3,expansion:.4},
+};
+function computeConnectivity(b){const{N,grid}=b,seen=new Set(),q=[];
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(grid[r][c].kind===KIND.ENTRANCE){const k=r+','+c;if(!seen.has(k)){seen.add(k);q.push([r,c]);}}
+  while(q.length){const[r,c]=q.pop(),cell=grid[r][c];for(let d=0;d<4;d++){if(!cell.edges[d])continue;
+    const nr=r+DIRS[d][0],nc=c+DIRS[d][1];if(nr<0||nc<0||nr>=N||nc>=N)continue;const nb=grid[nr][nc];
+    if(nb.kind===KIND.EMPTY)continue;if(!nb.edges[OPP[d]])continue;const nk=nr+','+nc;if(!seen.has(nk)){seen.add(nk);q.push([nr,nc]);}}}
+  return seen;}
+function openLinkCount(b,r,c){const{N,grid}=b,cell=grid[r][c];let n=0;
+  for(let d=0;d<4;d++){if(!cell.edges[d])continue;const nr=r+DIRS[d][0],nc=c+DIRS[d][1];
+    if(nr<0||nc<0||nr>=N||nc>=N)continue;if(grid[nr][nc].kind!==KIND.EMPTY&&grid[nr][nc].edges[OPP[d]])n++;}return n;}
+function scoreBoard(b,w,opts={}){const{N,grid}=b,targets=opts.targets||[],roomBias=w.roomBias||{};
+  const conn=computeConnectivity(b);let connectedValue=0,survivability=0,deadRooms=[];
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){const cell=grid[r][c];
+    if(cell.kind!==KIND.ROOM&&cell.kind!==KIND.TARGET)continue;const def=cell.room?ROOMS[cell.room]:null;
+    const baseVal=def?def.value:(cell.kind===KIND.TARGET?4:1),bias=def&&roomBias[def.key]?roomBias[def.key]:1;
+    if(!conn.has(r+','+c)){deadRooms.push([r,c]);continue;}connectedValue+=baseVal*bias;
+    survivability+=(openLinkCount(b,r,c)>=2?baseVal:-baseVal*.5);}
+  let synergy=0;
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){const cell=grid[r][c];
+    if(cell.kind!==KIND.ROOM||!cell.room||!conn.has(r+','+c))continue;const def=ROOMS[cell.room];if(!def)continue;
+    for(let d=0;d<4;d++){if(!cell.edges[d])continue;const nr=r+DIRS[d][0],nc=c+DIRS[d][1];
+      if(nr<0||nc<0||nr>=N||nc>=N)continue;const nb=grid[nr][nc];
+      if(nb.kind===KIND.ROOM&&nb.room&&nb.edges[OPP[d]]&&conn.has(nr+','+nc)&&def.synergy.includes(nb.room))synergy+=1;}}
+  synergy/=2;
+  let targetReach=0;if(targets.length){let h=0;for(const[tr,tc]of targets)if(conn.has(tr+','+tc))h++;targetReach=h/targets.length;}
+  let crystals=0;for(let r=0;r<N;r++)for(let c=0;c<N;c++)if(grid[r][c].kind===KIND.ROOM)crystals+=(opts.crystalCost||1);
+  const crystalEff=crystals>0?connectedValue/crystals:0;
+  let expansion=0;for(let r=0;r<N;r++)for(let c=0;c<N;c++){const cell=grid[r][c];
+    if(cell.kind===KIND.EMPTY||!conn.has(r+','+c))continue;for(let d=0;d<4;d++){if(!cell.edges[d])continue;
+      const nr=r+DIRS[d][0],nc=c+DIRS[d][1];if(nr<0||nc<0||nr>=N||nc>=N)continue;if(grid[nr][nc].kind===KIND.EMPTY)expansion+=1;}}
+  const total=w.connectedValue*connectedValue+w.synergy*synergy+w.survivability*survivability
+    +w.targetReach*targetReach*10+w.crystalEff*crystalEff+(w.expansion||0)*expansion;
+  return{total,breakdown:{connectedValue,synergy,survivability,targetReach,crystalEff,expansion},deadRooms,connected:conn};}
+function rankPlacements(b,card,w,opts={}){const{N,grid}=b,res=[],conn=computeConnectivity(b);
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){if(grid[r][c].kind!==KIND.EMPTY)continue;let best=null;
+    for(let mask=1;mask<16;mask++){const edges=[!!(mask&1),!!(mask&2),!!(mask&4),!!(mask&8)];let hooks=false;
+      for(let d=0;d<4;d++){if(!edges[d])continue;const nr=r+DIRS[d][0],nc=c+DIRS[d][1];
+        if(nr<0||nc<0||nr>=N||nc>=N)continue;const nb=grid[nr][nc];
+        if(nb.kind!==KIND.EMPTY&&nb.edges[OPP[d]]&&conn.has(nr+','+nc))hooks=true;}
+      if(!hooks)continue;const kind=(card==='path')?KIND.PATH:KIND.ROOM;
+      grid[r][c]={kind,room:kind===KIND.ROOM?card:undefined,edges};const s=scoreBoard(b,w,opts);
+      grid[r][c]={kind:KIND.EMPTY,edges:[false,false,false,false]};
+      if(!best||s.total>best.score)best={tile:[r,c],card,doorways:edges.slice(),score:s.total,breakdown:s.breakdown};}
+    if(best)res.push(best);}
+  res.sort((a,b)=>b.score-a.score);return res.slice(0,opts.topK||6);}
+function planHand(b,hand,w,opts={}){const plan=[],rem=hand.slice();
+  while(rem.length){let bo=null,bi=-1;for(let i=0;i<rem.length;i++){const t=rankPlacements(b,rem[i],w,{...opts,topK:1})[0];
+    if(t&&(!bo||t.score>bo.score)){bo=t;bi=i;}}if(!bo)break;const{grid}=b,[r,c]=bo.tile;
+    const kind=(bo.card==='path')?KIND.PATH:KIND.ROOM;grid[r][c]={kind,room:kind===KIND.ROOM?bo.card:undefined,edges:bo.doorways.slice()};
+    plan.push(bo);rem.splice(bi,1);}return plan;}
+function emptyTile(){return{kind:KIND.EMPTY,edges:[false,false,false,false]};}
+function blankBoard(N){const grid=[];for(let r=0;r<N;r++){const row=[];for(let c=0;c<N;c++)row.push(emptyTile());grid.push(row);}return{N,grid};}
+
+/* ===================== EDITOR UI ===================== */
+let board, place='entrance';
+const PALETTE=[['entrance','Entrance'],['path','Path'],['target','Target'],['room','Room'],['erase','Erase']];
+function initControls(){
+  const pal=document.getElementById('palette');
+  pal.innerHTML=PALETTE.map(([k,l])=>`<button data-k="${k}" onclick="setPlace('${k}')">${l}</button>`).join('');
+  const rs=document.getElementById('roomSel');
+  rs.innerHTML=Object.values(ROOMS).map(r=>`<option value="${r.key}">${r.label} (v${r.value})</option>`).join('');
+  document.getElementById('roomkeys').textContent=Object.keys(ROOMS).join(', ');
+  setPlace('entrance');
+}
+function setPlace(k){place=k;[...document.querySelectorAll('#palette button')].forEach(b=>b.classList.toggle('sel',b.dataset.k===k));}
+function rebuild(){board=blankBoard(+document.getElementById('gridN').value);render();document.getElementById('recs').textContent='Analyze the board to see dead rooms + a placement plan.';document.getElementById('score').innerHTML='';}
+function cellClick(r,c){const cell=board.grid[r][c];
+  if(place==='erase'){board.grid[r][c]=emptyTile();}
+  else if(place==='room'){board.grid[r][c]={kind:KIND.ROOM,room:document.getElementById('roomSel').value,edges:cell.edges.slice()};}
+  else{board.grid[r][c]={kind:KIND[place.toUpperCase()],edges:cell.edges.slice()};}
+  render();}
+function edgeClick(r,c,d,ev){ev.stopPropagation();const cell=board.grid[r][c];if(cell.kind===KIND.EMPTY)return;cell.edges[d]=!cell.edges[d];render();}
+function render(){
+  const g=document.getElementById('grid');g.style.gridTemplateColumns=`repeat(${board.N},52px)`;
+  let html='';
+  for(let r=0;r<board.N;r++)for(let c=0;c<board.N;c++){const cell=board.grid[r][c];
+    const def=cell.room?ROOMS[cell.room]:null;
+    const lbl=cell.kind===KIND.ENTRANCE?'IN':cell.kind===KIND.TARGET?'TARGET':cell.kind===KIND.PATH?'·':def?def.label:'';
+    const en=['n','e','s','w'].map((nm,d)=>`<div class="edge ${nm} ${cell.edges[d]?'on':''}" onclick="edgeClick(${r},${c},${d},event)"></div>`).join('');
+    html+=`<div class="cell ${cell.kind}" id="cell-${r}-${c}" onclick="cellClick(${r},${c})">${en}<span class="lbl">${lbl}</span></div>`;}
+  g.innerHTML=html;
+}
+function paintAnalysis(res){
+  for(let r=0;r<board.N;r++)for(let c=0;c<board.N;c++){const el=document.getElementById(`cell-${r}-${c}`);el.classList.remove('dead','conn');
+    const cell=board.grid[r][c];if(cell.kind===KIND.EMPTY)continue;
+    if(res.connected.has(r+','+c))el.classList.add('conn');
+    else if(cell.kind===KIND.ROOM||cell.kind===KIND.TARGET)el.classList.add('dead');}
+}
+function analyze(){
+  const w=PRESETS[document.getElementById('preset').value];
+  const targets=[];for(let r=0;r<board.N;r++)for(let c=0;c<board.N;c++)if(board.grid[r][c].kind===KIND.TARGET)targets.push([r,c]);
+  const res=scoreBoard(board,w,{targets});paintAnalysis(res);
+  const b=res.breakdown;
+  document.getElementById('score').innerHTML=
+    `<div class="scorebar"><b>TOTAL</b><b style="color:var(--gold)">${res.total.toFixed(1)}</b></div>`+
+    Object.entries(b).map(([k,v])=>`<div class="scorebar"><span>${k}</span><span>${(+v).toFixed(2)}</span></div>`).join('');
+  const dead=res.deadRooms.map(([r,c])=>`(${r},${c})`).join(' ');
+  document.getElementById('recs').innerHTML=
+    (res.deadRooms.length?`<div class="rec flag">⚠ ${res.deadRooms.length} DEAD room(s): ${dead} — not traced to the entrance, contributing 0.</div>`:`<div class="rec" style="color:var(--good)">✓ No dead rooms — everything connects.</div>`);
+}
+function autoPlan(){
+  const w=PRESETS[document.getElementById('preset').value];
+  const hand=document.getElementById('hand').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const bad=hand.filter(h=>h!=='path'&&!ROOMS[h]);
+  if(bad.length){document.getElementById('recs').innerHTML=`<div class="rec flag">Unknown room key(s): ${bad.join(', ')}</div>`;return;}
+  const plan=planHand(board,hand,w,{topK:1});render();analyze();
+  const dirs=['N','E','S','W'];
+  document.getElementById('recs').innerHTML=
+    `<div class="rec"><b>Ordered placement plan</b> (${plan.length}/${hand.length} placed)</div>`+
+    plan.map((p,i)=>{const doors=p.doorways.map((o,d)=>o?dirs[d]:'').filter(Boolean).join('');
+      const name=p.card==='path'?'Path':(ROOMS[p.card]?.label||p.card);
+      return `<div class="rec">${i+1}. <b>${name}</b> → tile (${p.tile[0]},${p.tile[1]}) doors:${doors||'—'} <span class="bd">score ${p.score.toFixed(1)}</span></div>`;}).join('')+
+    (plan.length<hand.length?`<div class="rec bd">(${hand.length-plan.length} card(s) had nowhere to connect — add a Path or open a doorway.)</div>`:'');
+}
+function demo(){
+  board=blankBoard(9);const g=board.grid;
+  g[4][0]={kind:KIND.ENTRANCE,edges:[false,true,false,false]};
+  g[4][1]={kind:KIND.PATH,edges:[false,true,false,true]};
+  g[4][2]={kind:KIND.ROOM,room:'spymaster',edges:[true,false,false,true]};
+  g[3][2]={kind:KIND.ROOM,room:'garrison',edges:[false,false,true,false]}; // note: S door faces spymaster's N → connects
+  g[4][4]={kind:KIND.TARGET,edges:[false,false,false,true]};               // isolated target → shows DEAD
+  render();analyze();
+}
+initControls();rebuild();demo();
+</script>
+</body>
+</html>
