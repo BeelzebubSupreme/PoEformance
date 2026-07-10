@@ -1,81 +1,56 @@
 # Session handoff — where to pick up
 
-**Read this first, then read the matching CLAUDE.md sections for full detail.**
+**Read this first, then the matching CLAUDE.md / CHANGELOG.md sections for detail.**
 
-- **Branch:** `PoEfdev/autopilot-pathing` (dev branch — owns the version; merge onto `master` locally later).
-- **Version:** `0.45.13.329`
+- **Branch:** `PoEfdev/autopilot-pathing` (dev branch — owns the version; only ever push this, never `master`/upstream).
+- **Version:** `0.45.13.336`
 - **Sync on the other machine:** `git pull origin PoEfdev/autopilot-pathing`, then reload the AHK tool.
-- Repo layout is the two-folder workflow (master reference clone + this dev clone). Only ever push the dev branch; never push to `master`/upstream. See the memory `two-folder-git-workflow`.
+- **Upstream:** imm0r **merged our feature work** (camera-zoom, data-dict regen, autopilot/combat) into `imm0r/PoEformance`. We keep developing on the dev branch as before.
 
 ---
 
-## Shipped this session (0.45.13.322 → .329)
+## Shipped THIS session (0.45.13.330 → .335) — ALL need in-game verification
 
-### AutoPilot exploration — re-exploring / circling (VERIFIED FIXED in-game)
-- `.327` — region-completion no longer does a full plan rebuild; it **filters the plan in place**
-  (keeps tour order + forward progress) and recounts coverage fresh. Confirmed in the status log:
-  clean single tour, coverage climbs monotonically, no backward jumps.
-- `.328` — follow-up: `_FindNearestFrontier`/`_CheckFrontierCell` now **reject off-floor frontiers**
-  so the bot stops standing still grinding an unreachable upper storey (`off-floor-skip` stall).
-  → **Pending owner re-test** on a multi-level map (should have no long off-floor stalls).
-- CLAUDE.md: "Exploration: region-completion plan rebuild…" + "reject off-floor frontiers".
+- **`.330` Combat Assist mode** — "you move (WASD), the tool targets + fires + auto-dodges." Independent toggle `g_combatAssistMode` (bridge `ToggleCombatAssist`); runs combat with every click-to-move suppressed. **TEST:** enable, run a map on WASD — it should aim + fire but never steer you.
+- **`.331` Blank/disconnected-launch fix + GGPK auto-refresh crash-loop fix.** Top Refresh is now a full reconnect+re-push; `PageReady` re-pushes state; GGPK auto-refresh only runs while the game is CLOSED. **TEST:** launch several times (no blank UI; if blank, one Refresh click recovers; no ~8 s freeze; error.log clean of the poe-data-extract crash).
+- **`d56542c` Serpentine exploration + denser sampling** — fixes "random running / backtrack to start." **TEST:** watch a full clear — methodical back-and-forth sweep, starts near entry, no trek-back.
+- **`.333` "🌳 Dump UI Tree" RE probe** — NOTE: redundant with the existing `debug/ui_tree_*.tsv` dumper; can retire later.
+- **`.334/.335` Vaal Ruins Route Planner prototype** — see below.
 
-### Loot filter (`.329`)
-- **Gems now picked up** — new "Gems" pickup category (default ON), matched by path
-  (`Metadata/Items/Gem[s]/…`). Fixes "not picking up skill/support gems" (they carried no rarity
-  → were classified Normal → filtered).
-- **"picking up magic" = defaults, not a bug** — config had no `[LootPickup]` section, so Magic was
-  ON by default. Owner just needs to uncheck Magic (now persists).
-- Pickup status log now shows the item base-name: `pickup(<rarity> … [<BaseName>])` — a built-in
-  diagnostic for any remaining mis-classification.
-- → **Pending owner re-test:** uncheck Magic (confirm `[LootPickup]` gets written), confirm gems
-  collected (`pickup(Gems …)`). If normal/magic still get grabbed, the `[BaseName]` tag pins whether
-  it's a `ReadItemRarity` offset drift (Mods 0x94 / OMP 0x144) vs. just the default.
-- CLAUDE.md: "Loot filter: Gems category + Magic-on-by-default diagnosis".
+## Vaal Ruins Route Planner (IN PROGRESS — advisory only, no memory writes)
 
-### Combat auto-config / skill-bar mapping
-- `.322–.323` — fast-poll **learner**: the skill-bar slot's ActiveSkill ptr (+0x2F0) is only live
-  WHILE a skill is mid-cast, so a throttled learner missed it. Now caches the 8 slot addrs and
-  fast-polls +0x2F0 every ~150 ms → learns each skill as it's cast. Persists to `[SkillBarLearned]`.
-  Owner confirmed auto-config works after this.
-- `.326` — **seamless auto-apply**: `g_combatRotationAuto` (default ON) rebuilds the rotation as
-  skills are learned, no button click; a hand-edit latches `g_combatRotationUserEdited` to stop
-  overwriting (auto-config click re-enables). This is the **public-grade solution**.
+- **Solver core: DONE + tested (9/9).** Doorway-matching connectivity BFS, dead-room detection, weighted scorer (connectedValue/synergy/survivability/targetReach/crystalEff/expansion), 3 presets, placement ranking, greedy hand planner. **Canonical copy is INLINED in `ui/vaal_ruins_planner.html`** (the standalone `temple_solver.js` lived in a session scratchpad and does NOT transfer — the repo prototype carries the solver).
+- **Manual prototype: `ui/vaal_ruins_planner.html`** — open in a browser. Grid editor + solver output (connectivity highlight, DEAD-room flags, score breakdown, presets, auto-plan over a hand). Hand accepts room names. **Free 4-way doorway toggle is a STOPGAP.**
+- **Key RE findings:**
+  - Mechanic is internally **Incursion** (Vaal Ruins = reworked Temple of Atzoatl).
+  - Budget counter UI element: `incursion_temple_tokens` shows `N/60`.
+  - `DoryaniIncursionHub` / `AlvaIncursionHub` / `HubInteractible` in the UI tree are **UI elements, not world entities** → "Dump Components" returns blank on them.
+  - Board data is **NOT in the UI tree** (only tooltip text) → it lives in **ServerData**.
+  - GameHelper2 reference has **no** incursion code (no shortcut).
+  - Tiles have **fixed doorway patterns per room (+ likely rotation)**, not free 4-way — the connection rules still need a real data source.
+- **Next steps (two tracks):**
+  1. **GGPK static extraction (recommended first):** add an incursion-room extractor/inspector to `ggpk-tools/PoeDataExtract` (like the `.tsv` dictionaries) to pull each room's door pattern / tier / value from a PoE1-style `IncursionRoom` table. Find the table name first via the extractor's `inspect` verb. This answers "how do the tiles connect."
+  2. **ServerData Incursion probe:** RE the live board (rooms / positions / tiers / doorways) using the `N/60` token as the live anchor in the Memory Dissector.
+  3. Then **inline the prototype into `ui/index.html` as a tab** and wire the memory adapter behind the existing solver interface.
 
----
+## Open / unconfirmed threads
 
-## OPEN THREAD — instant (zero-play) skill→key mapping hunt (owner opted "keep hunting")
-
-Goal: map skill-bar slot → skill WITHOUT needing the learner (truly instant). Status: **ruled out**
-the UI tree, player entity, Actor, all components, GameUI, ActiveSkillsDat ptr, and PlayerServerData
-(no equipped-skill pointers anywhere; the UI slot only holds the transient cast ptr + graphics).
-
-**Best remaining lead (from the last `SkillGemProbe` run):** skill gems ARE in **position-ordered
-inventories** — e.g. inv id=47 held gems at x=0..4 (`SkillGemEntangle`, `SkillGemContagion`, …), and
-the **gem base path IS the skill** (no granted-effect resolution needed). BUT:
-1. inv 47 didn't match the *active* bar (looked like a stored/weapon-set loadout) — PoE2 weapon-swap
-   means multiple gem loadouts; need to correlate which is live.
-2. Inventory type labels are wrong (id 47 mislabeled "HeistNpcEquipment2").
-3. Position → keyboard key still unmapped (5 gems at x=0..4 vs 8 bar slots incl. 3 mouse).
-
-**Next concrete step IF continuing:** one probe that resolves every gem-inventory's positions→skill
-names, reads the live UI bar keys (`ReadSkillBarHotkeys`), and cross-references to (a) identify the
-active-bar inventory and (b) derive position→key. If clean → hardcode it, drop the learner. If tangled
-by weapon sets → the learner stays the answer (it already works). **Owner leaned toward "the learner
-is fine" being an acceptable fallback.** RE tools: `🎯 Skill-bar Array Hunt`, `💎 Skill-gem / Server
-Probe`, `🔗 Skill↔Slot Link` (all in the RE-tools row). CLAUDE.md: "Combat rotation: seamless
-auto-apply + skill-bar link hunt".
-
----
+- **Chest bug:** rare chests reportedly not opening (magic is skipped by design — `rareOnly` default). Suspect the **rarity offset drifted after the 4.5.4.3 patch** → `ReadEntityRarityId` returns the wrong id for rare chests ([ahk/ChestOpen.ahk:325](ahk/ChestOpen.ahk)). Cross-check: do rare-monster rings still render? UNTESTED.
+- **Instant skill→key mapping hunt** (carried from prior session; owner leaned "the learner is fine"): skill gems live in position-ordered inventories and the gem base path IS the skill, but PoE2 weapon-swap means multiple loadouts and position→key is unmapped. If revisited: one probe that resolves every gem-inventory position→skill, reads live bar keys, and correlates the active bar. RE tools: `🎯 Skill-bar Array Hunt`, `💎 Skill-gem / Server Probe`, `🔗 Skill↔Slot Link`.
 
 ## Non-code context
-- **Camera zoom** is applied to the GGPK (character.ot + all camerazoom scene nodes = 1.9×) via the
-  owner's own `ggpk-tools/PoePatcher`. The pulsing fix is done. Don't re-apply; use the UI toggle to
-  change/revert. `oo2core.dll` is user-supplied and intentionally NOT in git.
-- Owner runs a 3rd-party "POE 2 Assistant" bundle separately (its `DrYmEydV.exe` launcher) — unrelated
-  to this repo; flagged as untrusted but owner confirmed they use it.
+- **Camera zoom** is applied to the GGPK via `ggpk-tools/PoePatcher` (native, reversible via the UI toggle). `oo2core.dll` is user-supplied and intentionally NOT in git.
+- Owner is a native German speaker; **repo/commits/PRs stay English**, chat may be German.
 
-## Testing / tooling reminders (from CLAUDE.md)
-- Validate AHK via **PowerShell**, not git-bash: `cmd /c '"…AutoHotkey64.exe" /ErrorStdOut /validate "…InGameStateMonitor.ahk" & echo EXITCODE=%errorlevel%'` (exit 0 = OK). Git-bash mangles `/ErrorStdOut` and hangs on a modal.
+## Testing / tooling reminders
+- **Validate AHK via PowerShell, not git-bash** — git-bash mangles the `/validate` flag into a bogus path (`C:/Program Files/Git/validate`) and pops a modal. Use: `& "C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe" "/ErrorStdOut" "/validate" "<file>"`. Also: validating a single `#Include` module standalone raises false `LocalSameAsGlobal`/VarUnset warnings for cross-module functions (e.g. `LogError`) — not real errors.
 - Never `Stop-Process AutoHotkey64` (can kill the owner's running tool).
-- UI: extract inline `<script>` and `node --check`. Bump version in all three files each change.
+- UI: extract inline `<script>` and `node --check`; keep `<div>` balance unchanged. Preserve line endings (CRLF: BridgeDispatch.ahk, WebViewBridge.ahk; LF: everything else). Bump the version in all three files each change.
+
+---
+
+## What to tell the other PC
+```
+git pull origin PoEfdev/autopilot-pathing
+```
+Then reload the AHK tool. To use the Vaal Ruins planner, open `ui/vaal_ruins_planner.html` in a browser.
